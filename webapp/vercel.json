@@ -6,9 +6,7 @@
     "api/*.js": {
       "runtime": "nodejs20.x",
       "maxDuration": 15,
-      "includeFiles": [
-        "../backend/**"
-      ]
+      "includeFiles": "../backend/**"
     }
   }
 }
