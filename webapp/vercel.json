@@ -1,5 +1,14 @@
 {
   "version": 2,
   "buildCommand": "npm run build",
-  "outputDirectory": "dist"
+  "outputDirectory": "dist",
+  "functions": {
+    "api/*.js": {
+      "runtime": "nodejs20.x",
+      "maxDuration": 15,
+      "includeFiles": [
+        "../backend/**"
+      ]
+    }
+  }
 }
