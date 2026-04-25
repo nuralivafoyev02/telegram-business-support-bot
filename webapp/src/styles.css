@@ -146,8 +146,7 @@ button:disabled { cursor: wait; opacity: .72; }
   padding: 9px 12px;
   transition: background .14s ease, border-color .14s ease, color .14s ease, transform .14s ease;
 }
-.btn:hover { background: rgba(255,255,255,.09); border-color: rgba(255,255,255,.2); transform: translateY(-1px); }
-.btn:active { transform: translateY(0); }
+.btn:hover { background: rgba(255,255,255,.09); border-color: rgba(255,255,255,.2); }
 .btn.primary {
   color: #061223;
   background: #fff;

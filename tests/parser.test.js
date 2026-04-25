@@ -1,15 +1,31 @@
 'use strict';
 
 const assert = require('assert');
-const { classifyMessage, isDoneMessage, isRequestIntent } = require('../backend/lib/parser');
+const { classifyMessage, isDoneMessage, isGreetingOnly, isSmallTalk, isRequestIntent } = require('../backend/lib/parser');
 
 assert.strictEqual(isDoneMessage('#done'), true);
 assert.strictEqual(isDoneMessage('hal bo‘ldi #done rahmat'), true);
 assert.strictEqual(isRequestIntent('Assalamu aleykum taminot bo‘limida yordam kerak qarab yuboringlar'), true);
+assert.strictEqual(isRequestIntent('Salom'), false);
+assert.strictEqual(isRequestIntent('Assalomu alaykum'), false);
+assert.strictEqual(isRequestIntent('Qalaysiz?'), false);
+assert.strictEqual(isRequestIntent('Rahmat'), false);
+assert.strictEqual(isGreetingOnly('Assalomu alaykum admin'), true);
+assert.strictEqual(isSmallTalk('Yaxshi rahmat'), true);
+assert.strictEqual(isRequestIntent('Admin bormi? Login qilolmayapman'), true);
+assert.strictEqual(isRequestIntent('Narxi qancha?'), true);
+assert.strictEqual(isRequestIntent('To‘lov qildim, tasdiqlab bering'), true);
+assert.strictEqual(isRequestIntent('Bot guruhda ko‘rinmayapti'), true);
+assert.strictEqual(isRequestIntent('Привет'), false);
+assert.strictEqual(isRequestIntent('Не работает оплата, проверьте пожалуйста'), true);
+assert.strictEqual(isRequestIntent('Hello, I need help with login'), true);
 assert.strictEqual(classifyMessage({ text: '#done', chatType: 'supergroup' }), 'done');
 assert.strictEqual(classifyMessage({ text: '/start', chatType: 'private' }), 'command');
 assert.strictEqual(classifyMessage({ text: 'Assalomu aleykum yordam kerak', chatType: 'supergroup' }), 'request');
 assert.strictEqual(classifyMessage({ text: 'Rahmat', chatType: 'supergroup', isKnownEmployee: true }), 'employee_message');
-assert.strictEqual(classifyMessage({ text: 'Salom', chatType: 'private', isBusiness: true }), 'request');
+assert.strictEqual(classifyMessage({ text: 'Salom', chatType: 'private', isBusiness: true }), 'message');
+assert.strictEqual(classifyMessage({ text: 'Salom, parolni tiklash kerak', chatType: 'private', isBusiness: true }), 'request');
+assert.strictEqual(classifyMessage({ text: 'Admin bormi?', chatType: 'supergroup' }), 'request');
+assert.strictEqual(classifyMessage({ text: 'Assalomu alaykum', chatType: 'supergroup' }), 'message');
 
 console.log('Parser tests passed');
