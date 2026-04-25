@@ -8,6 +8,7 @@ const metrics = require('../lib/metrics');
 
 const START_RE = /^\/start(?:@\w+)?(?:\s|$)/i;
 const HELP_RE = /^\/help(?:@\w+)?(?:\s|$)/i;
+const REGISTER_RE = /^\/(?:register|id|chatid)(?:@\w+)?(?:\s|$)/i;
 
 function verifyWebhook(req) {
   const secret = optionalEnv('TELEGRAM_WEBHOOK_SECRET', '');
@@ -51,6 +52,36 @@ async function handleStart(message) {
   await sendMessage(message.chat.id, text);
 }
 
+function isGroupChat(chat = {}) {
+  return ['group', 'supergroup'].includes(chat.type);
+}
+
+function shortError(error) {
+  return String(error && error.message || error || 'Noma’lum xato').slice(0, 220);
+}
+
+async function handleGroupRegistration(message, tracking) {
+  const chat = message.chat || {};
+  try {
+    await tracking;
+    await sendMessage(chat.id, [
+      '✅ Guruh webapp ro‘yxatiga qo‘shildi.',
+      `Chat ID: <code>${escapeHtml(chat.id)}</code>`,
+      '',
+      'Endi admin paneldagi Guruhlar bo‘limida ko‘rinishi kerak.'
+    ].join('\n'));
+  } catch (error) {
+    console.error('[bot:register-group:error]', error);
+    await sendMessage(chat.id, [
+      '⚠️ Guruhni webapp ro‘yxatiga yozib bo‘lmadi.',
+      `Chat ID: <code>${escapeHtml(chat.id)}</code>`,
+      `Sabab: ${escapeHtml(shortError(error))}`,
+      '',
+      'Vercel env va Supabase schema sozlamalarini tekshiring.'
+    ].join('\n')).catch(replyError => logBackgroundError('reply-register-group', replyError));
+  }
+}
+
 async function handleHelp(message) {
   await sendMessage(message.chat.id, [
     '📌 <b>Qisqa qo‘llanma</b>',
@@ -59,6 +90,7 @@ async function handleHelp(message) {
     '2) Bot murojaatni <b>open request</b> sifatida saqlaydi.',
     '3) Xodim ishni tugatgach <b>#done</b> yozadi.',
     '4) Statistika webappda yangilanadi.',
+    '5) Guruh webappda ko‘rinmasa guruh ichida <b>/register</b> yuboring.',
     '',
     'Masalan: <code>#done hal qilindi</code>'
   ].join('\n'));
@@ -95,14 +127,24 @@ async function recordIncomingMessage(updateKind, message, sourceType, classifica
 }
 
 async function handleCommand(updateKind, message, sourceType, text, classification) {
-  const tracking = recordIncomingMessage(updateKind, message, sourceType, classification)
-    .catch(error => logBackgroundError('record-command', error));
+  const tracking = recordIncomingMessage(updateKind, message, sourceType, classification);
+  const chat = message.chat || {};
+
+  if (isGroupChat(chat) && (START_RE.test(text) || REGISTER_RE.test(text))) {
+    await handleGroupRegistration(message, tracking);
+    return;
+  }
+
+  const safeTracking = tracking.catch(error => logBackgroundError('record-command', error));
 
   let reply = Promise.resolve();
   if (START_RE.test(text)) reply = handleStart(message);
   if (HELP_RE.test(text)) reply = handleHelp(message);
+  if (REGISTER_RE.test(text)) {
+    reply = sendMessage(message.chat.id, `Chat ID: <code>${escapeHtml(message.chat.id)}</code>`);
+  }
 
-  await Promise.all([tracking, reply]);
+  await Promise.all([safeTracking, reply]);
 }
 
 async function processMessage(updateKind, message) {

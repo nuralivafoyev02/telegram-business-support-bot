@@ -115,7 +115,7 @@
               <div class="card-note">Bot qaysi guruhga qo‘shilsa avtomatik shu yerda ko‘rinadi</div>
             </div>
           </div>
-          <DataTable :columns="groupColumns" :rows="filteredGroups" empty="Guruh topilmadi">
+          <DataTable :columns="groupColumns" :rows="filteredGroups" empty="Guruh topilmadi. Bot qo‘shilgan har bir guruhda /register yuboring.">
             <template #actions="{ row }">
               <button class="btn small" @click="openSend(row)">Xabar</button>
               <button class="btn small" @click="loadRequests(row)">So‘rovlar</button>

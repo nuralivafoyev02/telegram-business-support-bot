@@ -121,6 +121,91 @@ async function testChatMemberUpdateRegistersGroup() {
   }
 }
 
+async function testGroupStartRegistersGroupAndRepliesWithChatId() {
+  const originalInsert = supabase.insert;
+  const originalSelect = supabase.select;
+  const originalFetch = global.fetch;
+  const telegramCalls = [];
+  let chatRow = null;
+
+  supabase.insert = async (table, rows) => {
+    if (table === 'tg_chats') chatRow = rows[0];
+    return rows;
+  };
+  supabase.select = async () => [];
+  global.fetch = async (_url, options) => {
+    telegramCalls.push(JSON.parse(options.body));
+    return {
+      ok: true,
+      json: async () => ({ ok: true, result: { message_id: 101 } })
+    };
+  };
+
+  try {
+    const result = await callHandler({
+      update_id: 4,
+      message: {
+        message_id: 12,
+        date: 1777100000,
+        text: '/start',
+        chat: { id: -100777, type: 'supergroup', title: 'Support group' },
+        from: { id: 777, first_name: 'Ali', is_bot: false }
+      }
+    });
+
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.handled, 'message');
+    assert.strictEqual(chatRow.chat_id, -100777);
+    assert.strictEqual(chatRow.source_type, 'group');
+    assert.strictEqual(telegramCalls.length, 1);
+    assert.match(telegramCalls[0].text, /Guruh webapp ro‘yxatiga qo‘shildi/);
+    assert.match(telegramCalls[0].text, /-100777/);
+  } finally {
+    supabase.insert = originalInsert;
+    supabase.select = originalSelect;
+    global.fetch = originalFetch;
+  }
+}
+
+async function testGroupRegisterReportsDbFailure() {
+  const originalInsert = supabase.insert;
+  const originalFetch = global.fetch;
+  const originalConsoleError = console.error;
+  const telegramCalls = [];
+
+  supabase.insert = async () => { throw new Error('tg_chats write failed'); };
+  console.error = () => {};
+  global.fetch = async (_url, options) => {
+    telegramCalls.push(JSON.parse(options.body));
+    return {
+      ok: true,
+      json: async () => ({ ok: true, result: { message_id: 102 } })
+    };
+  };
+
+  try {
+    const result = await callHandler({
+      update_id: 5,
+      message: {
+        message_id: 13,
+        date: 1777100000,
+        text: '/register',
+        chat: { id: -100888, type: 'supergroup', title: 'Support group' },
+        from: { id: 777, first_name: 'Ali', is_bot: false }
+      }
+    });
+
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(telegramCalls.length, 1);
+    assert.match(telegramCalls[0].text, /yozib bo‘lmadi/);
+    assert.match(telegramCalls[0].text, /tg_chats write failed/);
+  } finally {
+    supabase.insert = originalInsert;
+    global.fetch = originalFetch;
+    console.error = originalConsoleError;
+  }
+}
+
 async function testBotRemovalMarksGroupInactive() {
   const originalInsert = supabase.insert;
   let row = null;
@@ -148,6 +233,8 @@ async function testBotRemovalMarksGroupInactive() {
 (async () => {
   await testStartRepliesWhenDbTrackingFails();
   await testChatMemberUpdateRegistersGroup();
+  await testGroupStartRegistersGroupAndRepliesWithChatId();
+  await testGroupRegisterReportsDbFailure();
   await testBotRemovalMarksGroupInactive();
   console.log('Bot tests passed');
 })().catch(error => {
