@@ -28,11 +28,21 @@ function limitQuery(query, fallback = 100) {
   return String(limit);
 }
 
+function nowIso() {
+  return new Date().toISOString();
+}
+
+function normalizeTelegramId(value) {
+  if (value === undefined || value === null || value === '') return null;
+  const text = String(value).trim();
+  if (!/^-?\d+$/.test(text)) throw new Error('Telegram ID faqat raqam bo‘lishi kerak');
+  return Number(text);
+}
+
 async function getDashboard() {
-  const [employeeStats, chatStats, companyStats, openRequests, today] = await Promise.all([
+  const [employeeStats, chatStats, openRequests, today] = await Promise.all([
     stats.selectEmployeeStatistics({ select: '*', order: 'closed_requests.desc', limit: '100' }),
     stats.selectChatStatistics({ select: '*', order: 'total_requests.desc', limit: '100' }),
-    stats.selectCompanyStatistics({ select: '*', order: 'total_requests.desc', limit: '100' }),
     supabase.select('support_requests', { select: 'id,source_type,chat_id,customer_name,initial_text,status,created_at,company_id', status: 'eq.open', order: supabase.order('created_at', false), limit: '50' }),
     stats.selectTodaySummary({ select: '*' })
   ]);
@@ -40,7 +50,6 @@ async function getDashboard() {
     summary: today[0] || stats.DEFAULT_SUMMARY,
     employeeStats,
     chatStats,
-    companyStats,
     openRequests
   };
 }
@@ -49,6 +58,7 @@ async function listGroups(query) {
   return stats.selectChatStatistics({
     select: '*',
     source_type: 'eq.group',
+    is_active: 'eq.true',
     order: supabase.order(query.orderBy || 'last_message_at', false),
     limit: limitQuery(query)
   });
@@ -80,6 +90,50 @@ async function listCompanies(query) {
     select: '*',
     order: supabase.order(query.orderBy || 'total_requests', false),
     limit: limitQuery(query)
+  });
+}
+
+async function listEmployees(query) {
+  const [employees, requests, chats, messages] = await Promise.all([
+    supabase.select('employees', {
+      select: 'id,tg_user_id,full_name,username,phone,role,is_active,last_activity_at,created_at',
+      order: supabase.order(query.orderBy || 'created_at', false),
+      limit: limitQuery(query)
+    }),
+    supabase.select('support_requests', {
+      select: 'id,closed_by_employee_id,status,chat_id,closed_at,created_at',
+      limit: '5000'
+    }).catch(() => []),
+    supabase.select('tg_chats', {
+      select: 'chat_id,title,source_type,business_connection_id,is_active,last_message_at',
+      source_type: 'in.(private,business)',
+      is_active: 'eq.true',
+      limit: '5000'
+    }).catch(() => []),
+    supabase.select('messages', {
+      select: 'chat_id,from_tg_user_id,business_connection_id,source_type,created_at',
+      source_type: 'in.(private,business)',
+      order: supabase.order('created_at', false),
+      limit: '5000'
+    }).catch(() => [])
+  ]);
+
+  return employees.map(employee => {
+    const related = requests.filter(request => request.closed_by_employee_id === employee.id);
+    const closed = related.filter(request => request.status === 'closed');
+    const directChat = chats.find(chat => String(chat.chat_id) === String(employee.tg_user_id));
+    const latestMessage = messages.find(message => String(message.from_tg_user_id) === String(employee.tg_user_id));
+    const businessConnectionId = (directChat && directChat.business_connection_id) || (latestMessage && latestMessage.business_connection_id) || '';
+    return {
+      ...employee,
+      received_requests: related.length,
+      closed_requests: closed.length,
+      handled_chats: new Set(related.map(request => request.chat_id).filter(Boolean)).size,
+      last_closed_at: closed.map(request => request.closed_at).filter(Boolean).sort().at(-1) || null,
+      contact_chat_id: directChat ? directChat.chat_id : (latestMessage && latestMessage.chat_id) || employee.tg_user_id || null,
+      business_connection_id: businessConnectionId || null,
+      can_message: !!(employee.tg_user_id && (directChat || latestMessage || businessConnectionId))
+    };
   });
 }
 
@@ -166,6 +220,17 @@ async function sendToChat(body) {
   return { sent: true, telegram: result };
 }
 
+async function deactivateGroup(body) {
+  const chatId = normalizeTelegramId(body.chat_id);
+  if (!chatId) throw new Error('chat_id majburiy');
+  const rows = await supabase.patch('tg_chats', { chat_id: supabase.eq(chatId) }, {
+    is_active: false,
+    member_status: 'hidden',
+    last_member_update_at: nowIso()
+  });
+  return rows[0] || { chat_id: chatId, is_active: false };
+}
+
 async function broadcast(body) {
   if (!body.text) throw new Error('text majburiy');
   const targetType = body.target_type || 'groups';
@@ -244,6 +309,102 @@ async function upsertCompany(body) {
   return rows[0];
 }
 
+async function upsertEmployee(body) {
+  const tgUserId = normalizeTelegramId(body.tg_user_id);
+  const values = {
+    full_name: body.full_name,
+    username: body.username ? String(body.username).replace(/^@/, '') : null,
+    phone: body.phone || null,
+    role: body.role || 'support',
+    is_active: body.is_active !== false,
+    last_activity_at: nowIso()
+  };
+  if (!values.full_name) throw new Error('Xodim ismi majburiy');
+  if (tgUserId) values.tg_user_id = tgUserId;
+
+  if (tgUserId) {
+    await supabase.insert('tg_users', [{
+      tg_user_id: tgUserId,
+      username: values.username,
+      first_name: values.full_name,
+      last_seen_at: nowIso(),
+      raw: { source: 'admin_employee_bind' }
+    }], { upsert: true, onConflict: 'tg_user_id' });
+  }
+
+  if (body.id) {
+    const rows = await supabase.patch('employees', { id: supabase.eq(body.id) }, values);
+    return rows[0];
+  }
+
+  const options = tgUserId ? { upsert: true, onConflict: 'tg_user_id' } : {};
+  const rows = await supabase.insert('employees', [values], options);
+  return rows[0];
+}
+
+async function getEmployeeByBody(body) {
+  if (body.employee_id) {
+    const rows = await supabase.select('employees', {
+      select: 'id,tg_user_id,full_name,username,phone,role,is_active',
+      id: supabase.eq(body.employee_id),
+      limit: '1'
+    });
+    return rows[0];
+  }
+  const tgUserId = normalizeTelegramId(body.tg_user_id);
+  if (!tgUserId) throw new Error('employee_id yoki tg_user_id majburiy');
+  const rows = await supabase.select('employees', {
+    select: 'id,tg_user_id,full_name,username,phone,role,is_active',
+    tg_user_id: supabase.eq(tgUserId),
+    limit: '1'
+  });
+  return rows[0] || { tg_user_id: tgUserId, full_name: 'Xodim' };
+}
+
+async function resolveEmployeeTarget(employee) {
+  if (!employee || !employee.tg_user_id) {
+    throw new Error('Xodim Telegram ID bilan botga biriktirilmagan');
+  }
+
+  const directChats = await supabase.select('tg_chats', {
+    select: 'chat_id,title,source_type,business_connection_id,is_active',
+    chat_id: supabase.eq(employee.tg_user_id),
+    is_active: 'eq.true',
+    limit: '1'
+  }).catch(() => []);
+  const directChat = directChats[0];
+  if (directChat && directChat.business_connection_id) {
+    return { chat_id: directChat.chat_id, business_connection_id: directChat.business_connection_id, via: 'business' };
+  }
+  if (directChat) return { chat_id: directChat.chat_id, via: 'private' };
+
+  const messages = await supabase.select('messages', {
+    select: 'chat_id,business_connection_id,source_type,created_at',
+    from_tg_user_id: supabase.eq(employee.tg_user_id),
+    source_type: 'in.(private,business)',
+    order: supabase.order('created_at', false),
+    limit: '1'
+  }).catch(() => []);
+  const latestMessage = messages[0];
+  if (latestMessage && latestMessage.business_connection_id) {
+    return { chat_id: latestMessage.chat_id, business_connection_id: latestMessage.business_connection_id, via: 'business' };
+  }
+  if (latestMessage) return { chat_id: latestMessage.chat_id, via: 'private' };
+
+  throw new Error('Xodimga yozish uchun u botga /start yuborgan bo‘lishi yoki Business chat orqali ko‘ringan bo‘lishi kerak');
+}
+
+async function sendToEmployee(body) {
+  if (!body.text) throw new Error('text majburiy');
+  const employee = await getEmployeeByBody(body);
+  if (!employee) throw new Error('Xodim topilmadi');
+  const target = await resolveEmployeeTarget(employee);
+  const telegramResult = target.business_connection_id
+    ? await sendBusinessMessage(target.business_connection_id, target.chat_id, body.text)
+    : await sendMessage(target.chat_id, body.text);
+  return { sent: true, employee_id: employee.id || null, chat_id: target.chat_id, via: target.via, telegram: telegramResult };
+}
+
 async function assignChatCompany(body) {
   if (!body.chat_id || !body.company_id) throw new Error('chat_id va company_id majburiy');
   const rows = await supabase.patch('tg_chats', { chat_id: supabase.eq(body.chat_id) }, { company_id: body.company_id });
@@ -288,6 +449,7 @@ async function handleGet(action, query) {
     case 'privates': return listPrivateChats(query);
     case 'requests': return listRequests(query);
     case 'companies': return listCompanies(query);
+    case 'employees': return listEmployees(query);
     case 'settings': return listSettings();
     case 'telegramWebhookInfo': return getTelegramWebhookStatus();
     default: throw new Error(`Unknown GET action: ${action}`);
@@ -299,6 +461,9 @@ async function handlePost(action, body, currentAdmin) {
     case 'sendMessage': return sendToChat({ ...body, created_by: currentAdmin.username });
     case 'broadcast': return broadcast({ ...body, created_by: currentAdmin.username });
     case 'company': return upsertCompany(body);
+    case 'employee': return upsertEmployee(body);
+    case 'deleteGroup': return deactivateGroup(body);
+    case 'sendEmployeeMessage': return sendToEmployee(body);
     case 'assignChatCompany': return assignChatCompany(body);
     case 'settings': return updateSettings(body);
     case 'adminProfile': return updateAdmin(body, currentAdmin);

@@ -27,15 +27,18 @@
       </div>
 
       <nav class="nav">
-        <button v-for="item in tabs" :key="item.key" :class="{ active: activeTab === item.key }" @click="setTab(item.key)">
+        <button v-for="item in primaryTabs" :key="item.key" :class="{ active: activeTab === item.key }" @click="setTab(item.key)">
           <span>{{ item.icon }}</span>
           <b>{{ item.label }}</b>
         </button>
       </nav>
 
-      <div class="sidebar-footer">
-        <b>#done</b> yozilgan xabar so‘rovni yopadi. Guruh va Business chatlar avtomatik webappga tushadi.
-      </div>
+      <nav class="nav nav-bottom">
+        <button :class="{ active: activeTab === settingsTab.key }" @click="setTab(settingsTab.key)">
+          <span>{{ settingsTab.icon }}</span>
+          <b>{{ settingsTab.label }}</b>
+        </button>
+      </nav>
     </aside>
 
     <section class="main">
@@ -75,9 +78,9 @@
             <div class="metric-mini">Bot qo‘shilgan</div>
           </article>
           <article class="card metric">
-            <div class="metric-label">Kompaniyalar</div>
-            <div class="metric-value">{{ summary.companies_count || 0 }}</div>
-            <div class="metric-mini">Aktiv mijozlar</div>
+            <div class="metric-label">Xodimlar</div>
+            <div class="metric-value">{{ totalEmployees }}</div>
+            <div class="metric-mini">Botga biriktirilgan</div>
           </article>
         </div>
 
@@ -91,7 +94,7 @@
                 <div class="card-note">Kim nechta so‘rovni yopgani va o‘rtacha yopish vaqti</div>
               </div>
             </div>
-            <DataTable :columns="employeeColumns" :rows="filteredEmployees" empty="Hozircha xodim statistikasi yo‘q" />
+            <DataTable :columns="employeeStatColumns" :rows="filteredEmployeeStats" empty="Hozircha xodim statistikasi yo‘q" />
           </section>
 
           <section class="card">
@@ -107,7 +110,7 @@
       </template>
 
       <template v-if="activeTab === 'groups'">
-        <Toolbar v-model="search" placeholder="Guruh nomi, kompaniya yoki chat ID bo‘yicha qidirish" />
+        <Toolbar v-model="search" placeholder="Guruh nomi yoki chat ID bo‘yicha qidirish" />
         <section class="card">
           <div class="card-header">
             <div>
@@ -119,6 +122,7 @@
             <template #actions="{ row }">
               <button class="btn small" @click="openSend(row)">Xabar</button>
               <button class="btn small" @click="loadRequests(row)">So‘rovlar</button>
+              <button class="btn small danger" @click="deleteGroup(row)">O‘chirish</button>
             </template>
           </DataTable>
         </section>
@@ -142,22 +146,22 @@
         </section>
       </template>
 
-      <template v-if="activeTab === 'companies'">
+      <template v-if="activeTab === 'employees'">
         <div class="toolbar">
-          <input v-model="search" class="search" placeholder="Kompaniya nomi bo‘yicha qidirish" />
-          <button class="btn primary" @click="openCompany()">+ Kompaniya</button>
+          <input v-model="search" class="search" placeholder="Xodim ismi, username yoki Telegram ID bo‘yicha qidirish" />
+          <button class="btn primary" @click="openEmployee()">+ Xodim</button>
         </div>
         <section class="card">
           <div class="card-header">
             <div>
-              <div class="card-title">Kompaniyalar</div>
-              <div class="card-note">So‘rov, taklif, user, xodim va guruhlar kesimida</div>
+              <div class="card-title">Xodimlar</div>
+              <div class="card-note">Telegram ID bilan botga biriktirish va profilidan yozish</div>
             </div>
           </div>
-          <DataTable :columns="companyColumns" :rows="filteredCompanies" empty="Kompaniya topilmadi">
+          <DataTable :columns="employeeColumns" :rows="filteredEmployees" empty="Xodim topilmadi">
             <template #actions="{ row }">
-              <button class="btn small" @click="openCompany(row)">Tahrirlash</button>
-              <button class="btn small" @click="openBroadcast(row)">Xabar</button>
+              <button class="btn small" @click="openEmployee(row)">Tahrirlash</button>
+              <button class="btn small" @click="openEmployeeMessage(row)">Yozish</button>
             </template>
           </DataTable>
         </section>
@@ -239,7 +243,6 @@
             <option value="groups">Barcha guruhlar</option>
             <option value="privates">Shaxsiy chatlar</option>
             <option value="all">Hammasi</option>
-            <option v-if="broadcastForm.company_id" value="company">Tanlangan kompaniya</option>
           </select>
         </label>
         <label class="label">Sarlavha
@@ -252,27 +255,46 @@
       </form>
     </Modal>
 
-    <Modal v-if="modal === 'company'" title="Kompaniya" @close="closeModal">
-      <form class="form two" @submit.prevent="saveCompany">
-        <label class="label">Nomi
-          <input v-model.trim="companyForm.name" class="input" placeholder="Kompaniya nomi" />
+    <Modal v-if="modal === 'employee'" title="Xodim" @close="closeModal">
+      <form class="form two" @submit.prevent="saveEmployee">
+        <label class="label">Ism
+          <input v-model.trim="employeeForm.full_name" class="input" placeholder="Xodim ismi" />
         </label>
-        <label class="label">Yuridik nomi
-          <input v-model.trim="companyForm.legal_name" class="input" placeholder="MChJ / AJ" />
+        <label class="label">Telegram ID
+          <input v-model.trim="employeeForm.tg_user_id" class="input" placeholder="123456789" />
+        </label>
+        <label class="label">Username
+          <input v-model.trim="employeeForm.username" class="input" placeholder="username" />
         </label>
         <label class="label">Telefon
-          <input v-model.trim="companyForm.phone" class="input" placeholder="+998..." />
+          <input v-model.trim="employeeForm.phone" class="input" placeholder="+998..." />
+        </label>
+        <label class="label">Rol
+          <select v-model="employeeForm.role" class="select">
+            <option value="support">Support</option>
+            <option value="manager">Manager</option>
+            <option value="owner">Owner</option>
+          </select>
         </label>
         <label class="label">Status
-          <select v-model="companyForm.is_active" class="select">
+          <select v-model="employeeForm.is_active" class="select">
             <option :value="true">Aktiv</option>
             <option :value="false">O‘chiq</option>
           </select>
         </label>
-        <label class="label" style="grid-column: 1 / -1">Izoh
-          <textarea v-model="companyForm.notes" class="textarea" placeholder="Kompaniya haqida qisqa izoh"></textarea>
-        </label>
         <button class="btn primary" style="grid-column: 1 / -1" :disabled="loading">Saqlash</button>
+      </form>
+    </Modal>
+
+    <Modal v-if="modal === 'employeeSend'" title="Xodimga yozish" @close="closeModal">
+      <form class="form" @submit.prevent="sendEmployeeMessage">
+        <label class="label">Xodim
+          <input class="input" :value="selectedTarget?.full_name || selectedTarget?.username || selectedTarget?.tg_user_id || 'Tanlanmagan'" disabled />
+        </label>
+        <label class="label">Xabar matni
+          <textarea v-model="messageForm.text" class="textarea" placeholder="Xodimga yuboriladigan xabar..."></textarea>
+        </label>
+        <button class="btn primary" :disabled="loading">Yuborish</button>
       </form>
     </Modal>
 
@@ -295,10 +317,10 @@ const toast = ref('');
 const search = ref('');
 const modal = ref('');
 const selectedTarget = ref(null);
-const dashboard = reactive({ summary: {}, employeeStats: [], chatStats: [], companyStats: [], openRequests: [] });
+const dashboard = reactive({ summary: {}, employeeStats: [], chatStats: [], openRequests: [] });
 const groups = ref([]);
 const privates = ref([]);
-const companies = ref([]);
+const employees = ref([]);
 const requestRows = ref([]);
 const settingsRaw = ref({ settings: [], admins: [] });
 const webhookStatus = ref(null);
@@ -307,14 +329,16 @@ const tabs = [
   { key: 'stats', label: 'Statistica', icon: '📊', subtitle: 'Xodimlar va so‘rovlar kesimida umumiy nazorat' },
   { key: 'groups', label: 'Guruhlar', icon: '👥', subtitle: 'Bot qo‘shilgan guruhlar va ulardagi murojaatlar' },
   { key: 'privates', label: 'Shaxsiy chatlar', icon: '💬', subtitle: 'Telegram Business orqali kelgan shaxsiy chatlar' },
-  { key: 'companies', label: 'Kompaniyalar', icon: '🏢', subtitle: 'Kompaniya kesimida user, xodim va so‘rov statistikasi' },
+  { key: 'employees', label: 'Xodimlar', icon: '🧑‍💼', subtitle: 'Xodimlarni botga biriktirish va profilidan yozish' },
   { key: 'settings', label: 'Sozlamalar', icon: '⚙️', subtitle: 'Admin profili, bot sozlamalari va AI mode' }
 ];
+const primaryTabs = computed(() => tabs.filter(tab => tab.key !== 'settings'));
+const settingsTab = tabs.find(tab => tab.key === 'settings');
 
 const loginForm = reactive({ username: 'admin', password: '' });
 const messageForm = reactive({ text: '' });
-const broadcastForm = reactive({ target_type: 'groups', title: 'Yangilik', text: '', company_id: '' });
-const companyForm = reactive({ id: '', name: '', legal_name: '', phone: '', notes: '', is_active: true });
+const broadcastForm = reactive({ target_type: 'groups', title: 'Yangilik', text: '' });
+const employeeForm = reactive({ id: '', tg_user_id: '', full_name: '', username: '', phone: '', role: 'support', is_active: true });
 const adminForm = reactive({ username: 'admin', full_name: 'System Admin', new_password: '' });
 const settingsForm = reactive({ ai_mode: 'false', done_tag: '#done', main_group_id: '', request_detection: 'keyword' });
 
@@ -322,6 +346,7 @@ const current = computed(() => tabs.find(t => t.key === activeTab.value) || tabs
 const currentTitle = computed(() => current.value.label);
 const currentSubtitle = computed(() => current.value.subtitle);
 const summary = computed(() => dashboard.summary || {});
+const totalEmployees = computed(() => Number(summary.value.employees_count || 0) || employees.value.length || dashboard.employeeStats?.length || 0);
 
 function showToast(text) {
   toast.value = text;
@@ -345,18 +370,29 @@ function includesSearch(row) {
   return JSON.stringify(row).toLowerCase().includes(q);
 }
 
-const filteredEmployees = computed(() => (dashboard.employeeStats || []).filter(includesSearch));
+const filteredEmployeeStats = computed(() => (dashboard.employeeStats || []).filter(includesSearch));
+const filteredEmployees = computed(() => employees.value.filter(includesSearch));
 const filteredGroups = computed(() => groups.value.filter(includesSearch));
 const filteredPrivates = computed(() => privates.value.filter(includesSearch));
-const filteredCompanies = computed(() => companies.value.filter(includesSearch));
 
-const employeeColumns = [
+const employeeStatColumns = [
   { key: 'full_name', label: 'Xodim' },
   { key: 'username', label: 'Username', format: v => v ? `@${v}` : '—' },
   { key: 'received_requests', label: 'Qabul' },
   { key: 'closed_requests', label: 'Yopilgan' },
   { key: 'avg_close_minutes', label: 'O‘rt. daqiqa', format: v => `${v || 0} min` },
   { key: 'last_closed_at', label: 'Oxirgi #done', format: fmtDate }
+];
+
+const employeeColumns = [
+  { key: 'full_name', label: 'Xodim' },
+  { key: 'tg_user_id', label: 'Telegram ID', format: v => v || '—' },
+  { key: 'username', label: 'Username', format: v => v ? `@${v}` : '—' },
+  { key: 'role', label: 'Rol', badge: true },
+  { key: 'closed_requests', label: 'Yopilgan' },
+  { key: 'can_message', label: 'Yozish', format: v => v ? 'Mumkin' : 'Start kerak' },
+  { key: 'is_active', label: 'Status', format: v => v ? 'Aktiv' : 'O‘chiq', badge: true },
+  { key: 'actions', label: 'Amal', slot: 'actions' }
 ];
 
 const openRequestColumns = [
@@ -369,7 +405,6 @@ const openRequestColumns = [
 const groupColumns = [
   { key: 'title', label: 'Guruh' },
   { key: 'chat_id', label: 'Chat ID' },
-  { key: 'company_name', label: 'Kompaniya', format: v => v || '—' },
   { key: 'total_requests', label: 'So‘rov' },
   { key: 'open_requests', label: 'Ochiq' },
   { key: 'closed_requests', label: 'Yopilgan' },
@@ -388,18 +423,6 @@ const privateColumns = [
   { key: 'actions', label: 'Amal', slot: 'actions' }
 ];
 
-const companyColumns = [
-  { key: 'name', label: 'Kompaniya' },
-  { key: 'chats_count', label: 'Guruh' },
-  { key: 'users_count', label: 'User' },
-  { key: 'employees_count', label: 'Xodim' },
-  { key: 'total_requests', label: 'So‘rov' },
-  { key: 'offers_count', label: 'Taklif' },
-  { key: 'closed_requests', label: 'Yopilgan' },
-  { key: 'last_request_at', label: 'Oxirgi', format: fmtDate },
-  { key: 'actions', label: 'Amal', slot: 'actions' }
-];
-
 const requestColumns = [
   { key: 'customer_name', label: 'Mijoz' },
   { key: 'initial_text', label: 'Matn', truncate: true },
@@ -415,7 +438,7 @@ async function refresh() {
     if (activeTab.value === 'stats') await loadDashboard();
     if (activeTab.value === 'groups') groups.value = await api.groups();
     if (activeTab.value === 'privates') privates.value = await api.privates();
-    if (activeTab.value === 'companies') companies.value = await api.companies();
+    if (activeTab.value === 'employees') employees.value = await api.employees();
     if (activeTab.value === 'settings') await loadSettings();
   } catch (error) {
     showToast(error.message);
@@ -482,23 +505,23 @@ function openSend(row) {
 
 function openBroadcast(row = null) {
   selectedTarget.value = row;
-  broadcastForm.target_type = row?.company_id ? 'company' : 'groups';
-  broadcastForm.company_id = row?.company_id || '';
-  broadcastForm.title = row?.name ? `${row.name} uchun xabar` : 'Yangilik';
+  broadcastForm.target_type = 'groups';
+  broadcastForm.title = 'Yangilik';
   broadcastForm.text = '';
   modal.value = 'broadcast';
 }
 
-function openCompany(row = null) {
-  Object.assign(companyForm, {
-    id: row?.company_id || row?.id || '',
-    name: row?.name || '',
-    legal_name: row?.legal_name || '',
+function openEmployee(row = null) {
+  Object.assign(employeeForm, {
+    id: row?.id || row?.employee_id || '',
+    tg_user_id: row?.tg_user_id || '',
+    full_name: row?.full_name || '',
+    username: row?.username || '',
     phone: row?.phone || '',
-    notes: row?.notes || '',
+    role: row?.role || 'support',
     is_active: row?.is_active ?? true
   });
-  modal.value = 'company';
+  modal.value = 'employee';
 }
 
 function closeModal() {
@@ -533,13 +556,53 @@ async function sendBroadcast() {
   }
 }
 
-async function saveCompany() {
+async function saveEmployee() {
   loading.value = true;
   try {
-    await api.saveCompany({ ...companyForm });
-    showToast('Kompaniya saqlandi');
+    await api.saveEmployee({ ...employeeForm });
+    showToast('Xodim saqlandi');
     closeModal();
-    companies.value = await api.companies();
+    employees.value = await api.employees();
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    loading.value = false;
+  }
+}
+
+async function deleteGroup(row) {
+  if (!row?.chat_id) return showToast('Guruh tanlanmagan');
+  const ok = window.confirm(`${row.title || row.chat_id} guruhini webapp ro‘yxatidan o‘chirasizmi?`);
+  if (!ok) return;
+  loading.value = true;
+  try {
+    await api.deleteGroup({ chat_id: row.chat_id });
+    groups.value = groups.value.filter(group => String(group.chat_id) !== String(row.chat_id));
+    showToast('Guruh ro‘yxatdan olib tashlandi');
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    loading.value = false;
+  }
+}
+
+function openEmployeeMessage(row) {
+  selectedTarget.value = row;
+  messageForm.text = '';
+  modal.value = 'employeeSend';
+}
+
+async function sendEmployeeMessage() {
+  if (!selectedTarget.value?.id && !selectedTarget.value?.tg_user_id) return showToast('Xodim tanlanmagan');
+  loading.value = true;
+  try {
+    const result = await api.sendEmployeeMessage({
+      employee_id: selectedTarget.value.id || selectedTarget.value.employee_id,
+      tg_user_id: selectedTarget.value.tg_user_id,
+      text: messageForm.text
+    });
+    showToast(`Xabar yuborildi: ${result.via}`);
+    closeModal();
   } catch (error) {
     showToast(error.message);
   } finally {

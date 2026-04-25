@@ -94,19 +94,16 @@ async function handleGroupRegistration(message, tracking) {
   try {
     await tracking;
     await sendMessage(chat.id, [
-      '✅ Guruh webapp ro‘yxatiga qo‘shildi.',
-      `Chat ID: <code>${escapeHtml(chat.id)}</code>`,
-      '',
-      'Endi admin paneldagi Guruhlar bo‘limida ko‘rinishi kerak.'
+      '✅ Salom! Men Business Support Botman.',
+      'Murojaatlarni kuzataman va <b>#done</b> yopilishlarini statistikaga qo‘shaman.',
+      `Chat ID: <code>${escapeHtml(chat.id)}</code>`
     ].join('\n'));
   } catch (error) {
     console.error('[bot:register-group:error]', error);
     await sendMessage(chat.id, [
-      '⚠️ Guruhni webapp ro‘yxatiga yozib bo‘lmadi.',
+      '⚠️ Guruhni ro‘yxatga olishda xatolik bo‘ldi.',
       `Chat ID: <code>${escapeHtml(chat.id)}</code>`,
-      `Sabab: ${escapeHtml(shortError(error))}`,
-      '',
-      'Vercel env va Supabase schema sozlamalarini tekshiring.'
+      `Sabab: ${escapeHtml(shortError(error))}`
     ].join('\n')).catch(replyError => logBackgroundError('reply-register-group', replyError));
   }
 }
@@ -130,6 +127,7 @@ function logBackgroundError(label, error) {
 }
 
 async function maybeReplyDone(message, result) {
+  if (isGroupChat(message.chat || {})) return;
   const silent = boolEnv('SILENT_DONE_REPLY', false);
   if (silent) return;
   if (result.closed) {

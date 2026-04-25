@@ -77,7 +77,8 @@ select
   count(sr.id) filter (where sr.status = 'closed' and (sr.closed_at at time zone 'Asia/Tashkent')::date = (now() at time zone 'Asia/Tashkent')::date) as closed_requests,
   (select count(*) from public.tg_chats where source_type = 'group' and is_active = true) as groups_count,
   (select count(*) from public.tg_chats where source_type in ('private','business') and is_active = true) as private_chats_count,
-  (select count(*) from public.companies where is_active = true) as companies_count
+  (select count(*) from public.companies where is_active = true) as companies_count,
+  (select count(*) from public.employees where is_active = true) as employees_count
 from public.support_requests sr;
 
 notify pgrst, 'reload schema';

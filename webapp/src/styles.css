@@ -67,6 +67,7 @@ button { cursor: pointer; }
 .brand-subtitle { font-size: 12px; color: #8ea4bd; margin-top: 2px; }
 
 .nav { display: grid; gap: 8px; }
+.nav-bottom { margin-top: auto; }
 .nav button {
   display: flex;
   align-items: center;
@@ -85,17 +86,6 @@ button { cursor: pointer; }
   color: #061223;
   background: linear-gradient(135deg, #ffffff, #9fd2ff);
   box-shadow: 0 18px 35px rgba(75, 150, 255, .22);
-}
-
-.sidebar-footer {
-  margin-top: auto;
-  padding: 12px;
-  border-radius: 18px;
-  background: rgba(255,255,255,.04);
-  border: 1px solid rgba(255,255,255,.08);
-  color: #a8bad1;
-  font-size: 12px;
-  line-height: 1.55;
 }
 
 .main {

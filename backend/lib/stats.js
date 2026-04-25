@@ -8,6 +8,7 @@ const DEFAULT_SUMMARY = {
   closed_requests: 0,
   groups_count: 0,
   private_chats_count: 0,
+  employees_count: 0,
   companies_count: 0
 };
 
@@ -108,7 +109,9 @@ function buildChatStats({ chats, requests, companies }) {
 
 async function fallbackChatStatistics(query = {}) {
   const data = await listBaseData();
-  const rows = buildChatStats(data).filter(row => matchesFilter(row.source_type, query.source_type));
+  const rows = buildChatStats(data)
+    .filter(row => matchesFilter(row.source_type, query.source_type))
+    .filter(row => matchesFilter(row.is_active, query.is_active));
   return orderAndLimit(rows, query, 'total_requests');
 }
 
@@ -191,6 +194,7 @@ async function fallbackTodaySummary() {
     closed_requests: requests.filter(request => request.status === 'closed' && isTodayTashkent(request.closed_at)).length,
     groups_count: chats.filter(chat => chat.source_type === 'group' && chat.is_active !== false).length,
     private_chats_count: chats.filter(chat => ['private', 'business'].includes(chat.source_type) && chat.is_active !== false).length,
+    employees_count: employees.filter(employee => employee.is_active !== false).length,
     companies_count: companies.filter(company => company.is_active !== false).length
   }];
 }

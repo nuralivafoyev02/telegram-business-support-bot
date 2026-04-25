@@ -164,7 +164,7 @@ async function testGroupStartRegistersGroupAndRepliesWithChatId() {
     assert.strictEqual(chatRow.chat_id, -100777);
     assert.strictEqual(chatRow.source_type, 'group');
     assert.strictEqual(telegramCalls.length, 1);
-    assert.match(telegramCalls[0].text, /Guruh webapp ro‘yxatiga qo‘shildi/);
+    assert.match(telegramCalls[0].text, /Business Support Botman/);
     assert.match(telegramCalls[0].text, /-100777/);
   } finally {
     supabase.insert = originalInsert;
@@ -203,12 +203,56 @@ async function testGroupRegisterReportsDbFailure() {
 
     assert.strictEqual(result.status, 200);
     assert.strictEqual(telegramCalls.length, 1);
-    assert.match(telegramCalls[0].text, /yozib bo‘lmadi/);
+    assert.match(telegramCalls[0].text, /ro‘yxatga olishda xatolik/);
     assert.match(telegramCalls[0].text, /tg_chats write failed/);
   } finally {
     supabase.insert = originalInsert;
     global.fetch = originalFetch;
     console.error = originalConsoleError;
+  }
+}
+
+async function testGroupDoneDoesNotReplyToGroup() {
+  const originalInsert = supabase.insert;
+  const originalSelect = supabase.select;
+  const originalPatch = supabase.patch;
+  const originalFetch = global.fetch;
+  const telegramCalls = [];
+
+  supabase.insert = async (table, rows) => {
+    if (table === 'employees') return rows.map(row => ({ id: 'employee-1', ...row }));
+    return rows;
+  };
+  supabase.select = async () => [];
+  supabase.patch = async () => [];
+  global.fetch = async (_url, options) => {
+    telegramCalls.push(JSON.parse(options.body));
+    return {
+      ok: true,
+      json: async () => ({ ok: true, result: { message_id: 103 } })
+    };
+  };
+
+  try {
+    const result = await callHandler({
+      update_id: 6,
+      message: {
+        message_id: 14,
+        date: 1777100000,
+        text: '#done hal bo‘ldi',
+        chat: { id: -100999, type: 'supergroup', title: 'Support group' },
+        from: { id: 777, first_name: 'Ali', is_bot: false }
+      }
+    });
+
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.handled, 'message');
+    assert.strictEqual(telegramCalls.length, 0);
+  } finally {
+    supabase.insert = originalInsert;
+    supabase.select = originalSelect;
+    supabase.patch = originalPatch;
+    global.fetch = originalFetch;
   }
 }
 
@@ -241,6 +285,7 @@ async function testBotRemovalMarksGroupInactive() {
   await testChatMemberUpdateRegistersGroup();
   await testGroupStartRegistersGroupAndRepliesWithChatId();
   await testGroupRegisterReportsDbFailure();
+  await testGroupDoneDoesNotReplyToGroup();
   await testBotRemovalMarksGroupInactive();
   console.log('Bot tests passed');
 })().catch(error => {
