@@ -11,7 +11,7 @@
         <label class="label">Parol
           <input v-model="loginForm.password" class="input" type="password" autocomplete="current-password" placeholder="••••••••" />
         </label>
-        <button class="btn primary" :disabled="loading">Kirish</button>
+        <button class="btn primary" :disabled="loadingAction === 'login'">{{ loadingAction === 'login' ? 'Kirilmoqda...' : 'Kirish' }}</button>
       </form>
     </section>
   </main>
@@ -48,8 +48,8 @@
           <p>{{ currentSubtitle }}</p>
         </div>
         <div class="actions">
-          <button class="btn" @click="refresh">Yangilash</button>
-          <button v-if="activeTab === 'stats'" class="btn" @click="sendMainStats">Main guruhga statistika</button>
+          <button class="btn" :disabled="loadingAction === 'refresh'" @click="refresh">{{ loadingAction === 'refresh' ? 'Yangilanmoqda...' : 'Yangilash' }}</button>
+          <button v-if="activeTab === 'stats'" class="btn" :disabled="loadingAction === 'mainStats'" @click="sendMainStats">{{ loadingAction === 'mainStats' ? 'Yuborilmoqda...' : 'Main guruhga statistika' }}</button>
           <button class="btn primary" @click="openBroadcast">Xabar yuborish</button>
           <button class="btn danger" @click="logout">Chiqish</button>
         </div>
@@ -122,7 +122,7 @@
             <template #actions="{ row }">
               <button class="btn small" @click="openSend(row)">Xabar</button>
               <button class="btn small" @click="loadRequests(row)">So‘rovlar</button>
-              <button class="btn small danger" @click="deleteGroup(row)">O‘chirish</button>
+              <button class="btn small danger" :disabled="deletingGroupId === String(row.chat_id)" @click="deleteGroup(row)">{{ deletingGroupId === String(row.chat_id) ? 'O‘chirilmoqda...' : 'O‘chirish' }}</button>
             </template>
           </DataTable>
         </section>
@@ -168,12 +168,15 @@
       </template>
 
       <template v-if="activeTab === 'settings'">
-        <div class="grid two">
-          <section class="card pad">
-            <div class="card-title">Admin profili</div>
-            <div class="card-note">Login/parol va ismni o‘zgartirish</div>
-            <div class="spacer"></div>
-            <form class="form" @submit.prevent="saveAdmin">
+        <div class="settings-stack">
+          <section class="card pad settings-card">
+            <div class="settings-head">
+              <div>
+                <div class="card-title">Admin profili</div>
+                <div class="card-note">Login/parol va ismni o‘zgartirish</div>
+              </div>
+            </div>
+            <form class="form settings-form" @submit.prevent="saveAdmin">
               <label class="label">Login
                 <input v-model.trim="adminForm.username" class="input" placeholder="admin" />
               </label>
@@ -183,15 +186,18 @@
               <label class="label">Yangi parol
                 <input v-model="adminForm.new_password" class="input" type="password" placeholder="Bo‘sh qoldirilsa o‘zgarmaydi" />
               </label>
-              <button class="btn primary">Saqlash</button>
+              <button class="btn primary" :disabled="loadingAction === 'saveAdmin'">{{ loadingAction === 'saveAdmin' ? 'Saqlamoqda...' : 'Saqlash' }}</button>
             </form>
           </section>
 
-          <section class="card pad">
-            <div class="card-title">Bot sozlamalari</div>
-            <div class="card-note">AI mode, #done va aniqlash rejimi</div>
-            <div class="spacer"></div>
-            <form class="form" @submit.prevent="saveSettings">
+          <section class="card pad settings-card">
+            <div class="settings-head">
+              <div>
+                <div class="card-title">Bot sozlamalari</div>
+                <div class="card-note">AI mode, #done va aniqlash rejimi</div>
+              </div>
+            </div>
+            <form class="form settings-form" @submit.prevent="saveSettings">
               <label class="label">AI mode
                 <select v-model="settingsForm.ai_mode" class="select">
                   <option value="false">O‘chiq</option>
@@ -210,13 +216,17 @@
                   <option value="all_private_keyword_group">Private hammasi, group keyword</option>
                 </select>
               </label>
-              <button class="btn primary">Sozlamani saqlash</button>
+              <button class="btn primary" :disabled="loadingAction === 'saveSettings'">{{ loadingAction === 'saveSettings' ? 'Saqlamoqda...' : 'Sozlamani saqlash' }}</button>
             </form>
-            <div class="spacer"></div>
-            <div class="card-note">Telegram webhook</div>
-            <div class="actions" style="justify-content:flex-start; margin-top: 12px;">
-              <button class="btn" :disabled="loading" @click="checkTelegramWebhook">Holatni ko‘rish</button>
-              <button class="btn primary" :disabled="loading" @click="reconnectTelegramWebhook">Webhookni ulash</button>
+            <div class="webhook-panel">
+              <div>
+                <div class="card-title">Telegram webhook</div>
+                <div class="card-note">Webhook holatini tekshirish va qayta ulash</div>
+              </div>
+              <div class="actions webhook-actions">
+                <button class="btn" :disabled="loadingAction === 'webhookInfo'" @click="checkTelegramWebhook">{{ loadingAction === 'webhookInfo' ? 'Tekshirilmoqda...' : 'Holatni ko‘rish' }}</button>
+                <button class="btn primary" :disabled="loadingAction === 'webhookConnect'" @click="reconnectTelegramWebhook">{{ loadingAction === 'webhookConnect' ? 'Ulanmoqda...' : 'Webhookni ulash' }}</button>
+              </div>
             </div>
             <pre v-if="webhookStatusText" class="webhook-status">{{ webhookStatusText }}</pre>
           </section>
@@ -232,7 +242,7 @@
         <label class="label">Xabar matni
           <textarea v-model="messageForm.text" class="textarea" placeholder="Xabar matnini kiriting..."></textarea>
         </label>
-        <button class="btn primary" :disabled="loading">Yuborish</button>
+        <button class="btn primary" :disabled="loadingAction === 'sendSingle'">{{ loadingAction === 'sendSingle' ? 'Yuborilmoqda...' : 'Yuborish' }}</button>
       </form>
     </Modal>
 
@@ -251,7 +261,7 @@
         <label class="label">Xabar
           <textarea v-model="broadcastForm.text" class="textarea" placeholder="Yuboriladigan xabar..."></textarea>
         </label>
-        <button class="btn primary" :disabled="loading">Yuborish</button>
+        <button class="btn primary" :disabled="loadingAction === 'broadcast'">{{ loadingAction === 'broadcast' ? 'Yuborilmoqda...' : 'Yuborish' }}</button>
       </form>
     </Modal>
 
@@ -282,7 +292,7 @@
             <option :value="false">O‘chiq</option>
           </select>
         </label>
-        <button class="btn primary" style="grid-column: 1 / -1" :disabled="loading">Saqlash</button>
+        <button class="btn primary" style="grid-column: 1 / -1" :disabled="loadingAction === 'saveEmployee'">{{ loadingAction === 'saveEmployee' ? 'Saqlamoqda...' : 'Saqlash' }}</button>
       </form>
     </Modal>
 
@@ -294,13 +304,18 @@
         <label class="label">Xabar matni
           <textarea v-model="messageForm.text" class="textarea" placeholder="Xodimga yuboriladigan xabar..."></textarea>
         </label>
-        <button class="btn primary" :disabled="loading">Yuborish</button>
+        <button class="btn primary" :disabled="loadingAction === 'employeeSend'">{{ loadingAction === 'employeeSend' ? 'Yuborilmoqda...' : 'Yuborish' }}</button>
       </form>
     </Modal>
 
     <Modal v-if="modal === 'requests'" title="So‘rovlar tarixi" @close="closeModal">
       <DataTable :columns="requestColumns" :rows="requestRows" empty="Bu chatda so‘rovlar yo‘q" />
     </Modal>
+
+    <div v-if="loading" class="app-loader" role="status" aria-live="polite">
+      <span class="spinner" aria-hidden="true"></span>
+      <span>{{ loadingText }}</span>
+    </div>
 
     <div v-if="toast" class="toast">{{ toast }}</div>
   </div>
@@ -313,10 +328,12 @@ import { api, getToken, setToken } from './api';
 const token = ref(getToken());
 const activeTab = ref('stats');
 const loading = ref(false);
+const loadingAction = ref('');
 const toast = ref('');
 const search = ref('');
 const modal = ref('');
 const selectedTarget = ref(null);
+const deletingGroupId = ref('');
 const dashboard = reactive({ summary: {}, employeeStats: [], chatStats: [], openRequests: [] });
 const groups = ref([]);
 const privates = ref([]);
@@ -347,6 +364,33 @@ const currentTitle = computed(() => current.value.label);
 const currentSubtitle = computed(() => current.value.subtitle);
 const summary = computed(() => dashboard.summary || {});
 const totalEmployees = computed(() => Number(summary.value.employees_count || 0) || employees.value.length || dashboard.employeeStats?.length || 0);
+const loadingText = computed(() => ({
+  login: 'Kirilmoqda...',
+  refresh: 'Yangilanmoqda...',
+  tab: 'Yuklanmoqda...',
+  sendSingle: 'Yuborilmoqda...',
+  broadcast: 'Yuborilmoqda...',
+  saveEmployee: 'Saqlamoqda...',
+  deleteGroup: 'O‘chirilmoqda...',
+  employeeSend: 'Yuborilmoqda...',
+  saveAdmin: 'Saqlamoqda...',
+  mainStats: 'Yuborilmoqda...',
+  webhookInfo: 'Tekshirilmoqda...',
+  webhookConnect: 'Ulanmoqda...',
+  saveSettings: 'Saqlamoqda...'
+}[loadingAction.value] || 'Yuklanmoqda...'));
+
+function startLoading(action) {
+  loading.value = true;
+  loadingAction.value = action;
+}
+
+function stopLoading(action) {
+  if (!action || loadingAction.value === action) {
+    loading.value = false;
+    loadingAction.value = '';
+  }
+}
 
 function showToast(text) {
   toast.value = text;
@@ -433,7 +477,7 @@ const requestColumns = [
 ];
 
 async function refresh() {
-  loading.value = true;
+  startLoading('refresh');
   try {
     if (activeTab.value === 'stats') await loadDashboard();
     if (activeTab.value === 'groups') groups.value = await api.groups();
@@ -444,7 +488,7 @@ async function refresh() {
     showToast(error.message);
     if (/token/i.test(error.message)) logout();
   } finally {
-    loading.value = false;
+    stopLoading('refresh');
   }
 }
 
@@ -475,11 +519,23 @@ async function loadSettings() {
 async function setTab(key) {
   activeTab.value = key;
   search.value = '';
-  await refresh();
+  startLoading('tab');
+  try {
+    if (activeTab.value === 'stats') await loadDashboard();
+    if (activeTab.value === 'groups') groups.value = await api.groups();
+    if (activeTab.value === 'privates') privates.value = await api.privates();
+    if (activeTab.value === 'employees') employees.value = await api.employees();
+    if (activeTab.value === 'settings') await loadSettings();
+  } catch (error) {
+    showToast(error.message);
+    if (/token/i.test(error.message)) logout();
+  } finally {
+    stopLoading('tab');
+  }
 }
 
 async function submitLogin() {
-  loading.value = true;
+  startLoading('login');
   try {
     const data = await api.login(loginForm.username, loginForm.password);
     token.value = data.token;
@@ -488,7 +544,7 @@ async function submitLogin() {
   } catch (error) {
     showToast(error.message);
   } finally {
-    loading.value = false;
+    stopLoading('login');
   }
 }
 
@@ -531,7 +587,7 @@ function closeModal() {
 
 async function sendSingleMessage() {
   if (!selectedTarget.value?.chat_id) return showToast('Chat tanlanmagan');
-  loading.value = true;
+  startLoading('sendSingle');
   try {
     await api.sendMessage({ chat_id: selectedTarget.value.chat_id, text: messageForm.text });
     showToast('Xabar yuborildi');
@@ -539,12 +595,12 @@ async function sendSingleMessage() {
   } catch (error) {
     showToast(error.message);
   } finally {
-    loading.value = false;
+    stopLoading('sendSingle');
   }
 }
 
 async function sendBroadcast() {
-  loading.value = true;
+  startLoading('broadcast');
   try {
     const result = await api.broadcast({ ...broadcastForm });
     showToast(`Yuborildi: ${result.sent}/${result.total}`);
@@ -552,12 +608,12 @@ async function sendBroadcast() {
   } catch (error) {
     showToast(error.message);
   } finally {
-    loading.value = false;
+    stopLoading('broadcast');
   }
 }
 
 async function saveEmployee() {
-  loading.value = true;
+  startLoading('saveEmployee');
   try {
     await api.saveEmployee({ ...employeeForm });
     showToast('Xodim saqlandi');
@@ -566,7 +622,7 @@ async function saveEmployee() {
   } catch (error) {
     showToast(error.message);
   } finally {
-    loading.value = false;
+    stopLoading('saveEmployee');
   }
 }
 
@@ -574,7 +630,8 @@ async function deleteGroup(row) {
   if (!row?.chat_id) return showToast('Guruh tanlanmagan');
   const ok = window.confirm(`${row.title || row.chat_id} guruhini webapp ro‘yxatidan o‘chirasizmi?`);
   if (!ok) return;
-  loading.value = true;
+  deletingGroupId.value = String(row.chat_id);
+  startLoading('deleteGroup');
   try {
     await api.deleteGroup({ chat_id: row.chat_id });
     groups.value = groups.value.filter(group => String(group.chat_id) !== String(row.chat_id));
@@ -582,7 +639,8 @@ async function deleteGroup(row) {
   } catch (error) {
     showToast(error.message);
   } finally {
-    loading.value = false;
+    deletingGroupId.value = '';
+    stopLoading('deleteGroup');
   }
 }
 
@@ -594,7 +652,7 @@ function openEmployeeMessage(row) {
 
 async function sendEmployeeMessage() {
   if (!selectedTarget.value?.id && !selectedTarget.value?.tg_user_id) return showToast('Xodim tanlanmagan');
-  loading.value = true;
+  startLoading('employeeSend');
   try {
     const result = await api.sendEmployeeMessage({
       employee_id: selectedTarget.value.id || selectedTarget.value.employee_id,
@@ -606,7 +664,7 @@ async function sendEmployeeMessage() {
   } catch (error) {
     showToast(error.message);
   } finally {
-    loading.value = false;
+    stopLoading('employeeSend');
   }
 }
 
@@ -617,7 +675,7 @@ async function loadRequests(row) {
 }
 
 async function saveAdmin() {
-  loading.value = true;
+  startLoading('saveAdmin');
   try {
     await api.saveAdminProfile({ ...adminForm });
     adminForm.new_password = '';
@@ -625,19 +683,19 @@ async function saveAdmin() {
   } catch (error) {
     showToast(error.message);
   } finally {
-    loading.value = false;
+    stopLoading('saveAdmin');
   }
 }
 
 async function sendMainStats() {
-  loading.value = true;
+  startLoading('mainStats');
   try {
     const result = await api.sendMainStats({});
     showToast(`Statistika yuborildi: ${result.chat_id}`);
   } catch (error) {
     showToast(error.message);
   } finally {
-    loading.value = false;
+    stopLoading('mainStats');
   }
 }
 
@@ -653,28 +711,31 @@ const webhookStatusText = computed(() => {
 });
 
 async function checkTelegramWebhook(show = true) {
+  if (show) startLoading('webhookInfo');
   try {
     webhookStatus.value = await api.telegramWebhookInfo();
     if (show) showToast('Webhook holati yangilandi');
   } catch (error) {
     if (show) showToast(error.message);
+  } finally {
+    if (show) stopLoading('webhookInfo');
   }
 }
 
 async function reconnectTelegramWebhook() {
-  loading.value = true;
+  startLoading('webhookConnect');
   try {
     webhookStatus.value = await api.setTelegramWebhook({ app_url: window.location.origin });
     showToast('Webhook qayta ulandi. Endi Telegramda /register yuboring.');
   } catch (error) {
     showToast(error.message);
   } finally {
-    loading.value = false;
+    stopLoading('webhookConnect');
   }
 }
 
 async function saveSettings() {
-  loading.value = true;
+  startLoading('saveSettings');
   try {
     await api.saveSettings({
       settings: [
@@ -688,7 +749,7 @@ async function saveSettings() {
   } catch (error) {
     showToast(error.message);
   } finally {
-    loading.value = false;
+    stopLoading('saveSettings');
   }
 }
 
