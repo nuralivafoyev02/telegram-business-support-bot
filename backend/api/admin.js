@@ -405,6 +405,45 @@ async function sendToEmployee(body) {
   return { sent: true, employee_id: employee.id || null, chat_id: target.chat_id, via: target.via, telegram: telegramResult };
 }
 
+function getEmployeeMessageTargets(body) {
+  const explicitTargets = Array.isArray(body.employees) ? body.employees : [];
+  const idTargets = Array.isArray(body.employee_ids) ? body.employee_ids.map(employee_id => ({ employee_id })) : [];
+  const tgTargets = Array.isArray(body.tg_user_ids) ? body.tg_user_ids.map(tg_user_id => ({ tg_user_id })) : [];
+  const seen = new Set();
+  return [...explicitTargets, ...idTargets, ...tgTargets].map(target => ({
+    employee_id: target.employee_id || target.id || null,
+    tg_user_id: target.tg_user_id || null,
+    label: target.full_name || target.username || target.tg_user_id || target.employee_id || target.id || 'Xodim'
+  })).filter(target => {
+    const key = target.employee_id ? `id:${target.employee_id}` : `tg:${target.tg_user_id}`;
+    if ((!target.employee_id && !target.tg_user_id) || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+async function sendToEmployees(body) {
+  if (!body.text) throw new Error('text majburiy');
+  const targets = getEmployeeMessageTargets(body);
+  if (!targets.length) throw new Error('Kamida bitta xodim tanlang');
+
+  let sent = 0;
+  let failed = 0;
+  const details = [];
+  for (const target of targets) {
+    try {
+      const result = await sendToEmployee({ employee_id: target.employee_id, tg_user_id: target.tg_user_id, text: body.text });
+      sent += 1;
+      details.push({ label: target.label, ok: true, employee_id: result.employee_id, chat_id: result.chat_id, via: result.via });
+    } catch (error) {
+      failed += 1;
+      details.push({ label: target.label, ok: false, employee_id: target.employee_id, tg_user_id: target.tg_user_id, error: error.message });
+    }
+  }
+
+  return { total: targets.length, sent, failed, details };
+}
+
 async function assignChatCompany(body) {
   if (!body.chat_id || !body.company_id) throw new Error('chat_id va company_id majburiy');
   const rows = await supabase.patch('tg_chats', { chat_id: supabase.eq(body.chat_id) }, { company_id: body.company_id });
@@ -464,6 +503,7 @@ async function handlePost(action, body, currentAdmin) {
     case 'employee': return upsertEmployee(body);
     case 'deleteGroup': return deactivateGroup(body);
     case 'sendEmployeeMessage': return sendToEmployee(body);
+    case 'sendEmployeesMessage': return sendToEmployees(body);
     case 'assignChatCompany': return assignChatCompany(body);
     case 'settings': return updateSettings(body);
     case 'adminProfile': return updateAdmin(body, currentAdmin);

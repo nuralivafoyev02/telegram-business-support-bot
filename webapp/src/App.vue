@@ -110,7 +110,12 @@
       </template>
 
       <template v-if="activeTab === 'groups'">
-        <Toolbar v-model="search" placeholder="Guruh nomi yoki chat ID bo‘yicha qidirish" />
+        <Toolbar v-model="search" placeholder="Guruh nomi yoki chat ID bo‘yicha qidirish">
+          <button class="btn primary" :disabled="!selectedGroups.length" @click="openSelectedMessage('groups')">
+            Belgilanganlarga xabar ({{ selectedGroups.length }})
+          </button>
+          <button v-if="selectedGroups.length" class="btn" @click="clearSelection('groups')">Tanlovni tozalash</button>
+        </Toolbar>
         <section class="card">
           <div class="card-header">
             <div>
@@ -119,6 +124,9 @@
             </div>
           </div>
           <DataTable :columns="groupColumns" :rows="filteredGroups" empty="Guruh topilmadi. Bot qo‘shilgan har bir guruhda /register yuboring.">
+            <template #select="{ row }">
+              <input class="row-check" type="checkbox" :checked="isGroupSelected(row)" @change="toggleGroup(row, $event.target.checked)" />
+            </template>
             <template #actions="{ row }">
               <button class="btn small" @click="openSend(row)">Xabar</button>
               <button class="btn small" @click="loadRequests(row)">So‘rovlar</button>
@@ -149,7 +157,13 @@
       <template v-if="activeTab === 'employees'">
         <div class="toolbar">
           <input v-model="search" class="search" placeholder="Xodim ismi, username yoki Telegram ID bo‘yicha qidirish" />
-          <button class="btn primary" @click="openEmployee()">+ Xodim</button>
+          <div class="toolbar-actions">
+            <button class="btn primary" :disabled="!selectedEmployees.length" @click="openSelectedMessage('employees')">
+              Belgilanganlarga xabar ({{ selectedEmployees.length }})
+            </button>
+            <button v-if="selectedEmployees.length" class="btn" @click="clearSelection('employees')">Tanlovni tozalash</button>
+            <button class="btn primary" @click="openEmployee()">+ Xodim</button>
+          </div>
         </div>
         <section class="card">
           <div class="card-header">
@@ -159,6 +173,9 @@
             </div>
           </div>
           <DataTable :columns="employeeColumns" :rows="filteredEmployees" empty="Xodim topilmadi">
+            <template #select="{ row }">
+              <input class="row-check" type="checkbox" :checked="isEmployeeSelected(row)" @change="toggleEmployee(row, $event.target.checked)" />
+            </template>
             <template #actions="{ row }">
               <button class="btn small" @click="openEmployee(row)">Tahrirlash</button>
               <button class="btn small" @click="openEmployeeMessage(row)">Yozish</button>
@@ -308,7 +325,36 @@
       </form>
     </Modal>
 
-    <Modal v-if="modal === 'requests'" title="So‘rovlar tarixi" @close="closeModal">
+    <Modal v-if="modal === 'selectedSend'" :title="selectedSendTitle" wide @close="closeModal">
+      <form class="form" @submit.prevent="sendSelectedMessage">
+        <section class="recipient-panel">
+          <div class="recipient-head">
+            <div>
+              <div class="card-title">Qabul qiluvchilar</div>
+              <div class="card-note">{{ selectedRecipients.length }} ta tanlangan</div>
+            </div>
+          </div>
+          <div v-if="selectedRecipients.length" class="recipient-list">
+            <div v-for="recipient in selectedRecipients" :key="recipientKey(recipient)" class="recipient-row">
+              <div>
+                <b>{{ recipientLabel(recipient) }}</b>
+                <span>{{ recipientMeta(recipient) }}</span>
+              </div>
+              <button class="btn small danger" type="button" @click="removeSelectedRecipient(recipient)">O‘chirish</button>
+            </div>
+          </div>
+          <div v-else class="empty compact">Qabul qiluvchi tanlanmagan</div>
+        </section>
+        <label class="label">Xabar matni
+          <textarea v-model="messageForm.text" class="textarea" placeholder="Tanlanganlarga yuboriladigan xabar..."></textarea>
+        </label>
+        <button class="btn primary" :disabled="loadingAction === 'selectedSend' || !selectedRecipients.length">
+          {{ loadingAction === 'selectedSend' ? 'Yuborilmoqda...' : 'Tanlanganlarga yuborish' }}
+        </button>
+      </form>
+    </Modal>
+
+    <Modal v-if="modal === 'requests'" title="So‘rovlar tarixi" wide @close="closeModal">
       <DataTable :columns="requestColumns" :rows="requestRows" empty="Bu chatda so‘rovlar yo‘q" />
     </Modal>
 
@@ -334,6 +380,9 @@ const search = ref('');
 const modal = ref('');
 const selectedTarget = ref(null);
 const deletingGroupId = ref('');
+const selectedSendType = ref('groups');
+const selectedGroups = ref([]);
+const selectedEmployees = ref([]);
 const dashboard = reactive({ summary: {}, employeeStats: [], chatStats: [], openRequests: [] });
 const groups = ref([]);
 const privates = ref([]);
@@ -373,6 +422,7 @@ const loadingText = computed(() => ({
   saveEmployee: 'Saqlamoqda...',
   deleteGroup: 'O‘chirilmoqda...',
   employeeSend: 'Yuborilmoqda...',
+  selectedSend: 'Yuborilmoqda...',
   saveAdmin: 'Saqlamoqda...',
   mainStats: 'Yuborilmoqda...',
   webhookInfo: 'Tekshirilmoqda...',
@@ -418,6 +468,8 @@ const filteredEmployeeStats = computed(() => (dashboard.employeeStats || []).fil
 const filteredEmployees = computed(() => employees.value.filter(includesSearch));
 const filteredGroups = computed(() => groups.value.filter(includesSearch));
 const filteredPrivates = computed(() => privates.value.filter(includesSearch));
+const selectedRecipients = computed(() => selectedSendType.value === 'employees' ? selectedEmployees.value : selectedGroups.value);
+const selectedSendTitle = computed(() => selectedSendType.value === 'employees' ? 'Xodimlarga xabar yuborish' : 'Guruhlarga xabar yuborish');
 
 const employeeStatColumns = [
   { key: 'full_name', label: 'Xodim' },
@@ -429,6 +481,7 @@ const employeeStatColumns = [
 ];
 
 const employeeColumns = [
+  { key: 'select', label: '', slot: 'select' },
   { key: 'full_name', label: 'Xodim' },
   { key: 'tg_user_id', label: 'Telegram ID', format: v => v || '—' },
   { key: 'username', label: 'Username', format: v => v ? `@${v}` : '—' },
@@ -447,6 +500,7 @@ const openRequestColumns = [
 ];
 
 const groupColumns = [
+  { key: 'select', label: '', slot: 'select' },
   { key: 'title', label: 'Guruh' },
   { key: 'chat_id', label: 'Chat ID' },
   { key: 'total_requests', label: 'So‘rov' },
@@ -567,6 +621,75 @@ function openBroadcast(row = null) {
   modal.value = 'broadcast';
 }
 
+function groupKey(row) {
+  return String(row?.chat_id || '');
+}
+
+function employeeKey(row) {
+  return String(row?.id || row?.employee_id || row?.tg_user_id || '');
+}
+
+function recipientKey(row) {
+  return selectedSendType.value === 'employees' ? employeeKey(row) : groupKey(row);
+}
+
+function setSelected(listRef, row, keyFn, checked) {
+  const key = keyFn(row);
+  if (!key) return;
+  if (checked) {
+    if (!listRef.value.some(item => keyFn(item) === key)) listRef.value = [...listRef.value, row];
+    return;
+  }
+  listRef.value = listRef.value.filter(item => keyFn(item) !== key);
+}
+
+function isGroupSelected(row) {
+  return selectedGroups.value.some(item => groupKey(item) === groupKey(row));
+}
+
+function isEmployeeSelected(row) {
+  return selectedEmployees.value.some(item => employeeKey(item) === employeeKey(row));
+}
+
+function toggleGroup(row, checked) {
+  setSelected(selectedGroups, row, groupKey, checked);
+}
+
+function toggleEmployee(row, checked) {
+  setSelected(selectedEmployees, row, employeeKey, checked);
+}
+
+function clearSelection(type) {
+  if (type === 'employees') selectedEmployees.value = [];
+  else selectedGroups.value = [];
+}
+
+function openSelectedMessage(type) {
+  selectedSendType.value = type;
+  if (!selectedRecipients.value.length) return showToast('Kamida bitta qabul qiluvchi tanlang');
+  messageForm.text = '';
+  modal.value = 'selectedSend';
+}
+
+function removeSelectedRecipient(row) {
+  if (selectedSendType.value === 'employees') setSelected(selectedEmployees, row, employeeKey, false);
+  else setSelected(selectedGroups, row, groupKey, false);
+}
+
+function recipientLabel(row) {
+  if (selectedSendType.value === 'employees') return row.full_name || row.username || row.tg_user_id || 'Xodim';
+  return row.title || row.chat_id || 'Guruh';
+}
+
+function recipientMeta(row) {
+  if (selectedSendType.value === 'employees') {
+    const username = row.username ? `@${row.username}` : '';
+    const tgId = row.tg_user_id ? `Telegram ID: ${row.tg_user_id}` : 'Telegram ID ulanmagan';
+    return [username, tgId].filter(Boolean).join(' · ');
+  }
+  return `Chat ID: ${row.chat_id}`;
+}
+
 function openEmployee(row = null) {
   Object.assign(employeeForm, {
     id: row?.id || row?.employee_id || '',
@@ -635,6 +758,7 @@ async function deleteGroup(row) {
   try {
     await api.deleteGroup({ chat_id: row.chat_id });
     groups.value = groups.value.filter(group => String(group.chat_id) !== String(row.chat_id));
+    selectedGroups.value = selectedGroups.value.filter(group => String(group.chat_id) !== String(row.chat_id));
     showToast('Guruh ro‘yxatdan olib tashlandi');
   } catch (error) {
     showToast(error.message);
@@ -665,6 +789,39 @@ async function sendEmployeeMessage() {
     showToast(error.message);
   } finally {
     stopLoading('employeeSend');
+  }
+}
+
+async function sendSelectedMessage() {
+  if (!selectedRecipients.value.length) return showToast('Kamida bitta qabul qiluvchi tanlang');
+  if (!messageForm.text.trim()) return showToast('Xabar matnini kiriting');
+  startLoading('selectedSend');
+  try {
+    if (selectedSendType.value === 'employees') {
+      const result = await api.sendEmployeesMessage({
+        employees: selectedEmployees.value.map(employee => ({
+          employee_id: employee.id || employee.employee_id,
+          tg_user_id: employee.tg_user_id,
+          full_name: employee.full_name,
+          username: employee.username
+        })),
+        text: messageForm.text
+      });
+      showToast(`Yuborildi: ${result.sent}/${result.total}`);
+    } else {
+      const result = await api.broadcast({
+        target_type: 'groups',
+        title: 'Tanlangan guruhlarga xabar',
+        text: messageForm.text,
+        chat_ids: selectedGroups.value.map(group => group.chat_id)
+      });
+      showToast(`Yuborildi: ${result.sent}/${result.total}`);
+    }
+    closeModal();
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    stopLoading('selectedSend');
   }
 }
 
@@ -760,29 +917,30 @@ onMounted(async () => {
 const Toolbar = defineComponent({
   props: { modelValue: String, placeholder: String },
   emits: ['update:modelValue'],
-  setup(props, { emit }) {
+  setup(props, { emit, slots }) {
     return () => h('div', { class: 'toolbar' }, [
       h('input', {
         class: 'search',
         value: props.modelValue,
         placeholder: props.placeholder,
         onInput: e => emit('update:modelValue', e.target.value)
-      })
+      }),
+      slots.default ? h('div', { class: 'toolbar-actions' }, slots.default()) : null
     ]);
   }
 });
 
 const Modal = defineComponent({
-  props: { title: String },
+  props: { title: String, wide: Boolean },
   emits: ['close'],
   setup(props, { slots, emit }) {
     return () => h('div', { class: 'modal-backdrop', onClick: () => emit('close') }, [
-      h('section', { class: 'modal', onClick: e => e.stopPropagation() }, [
+      h('section', { class: ['modal', props.wide ? 'modal-wide' : ''], onClick: e => e.stopPropagation() }, [
         h('div', { class: 'card-header' }, [
           h('div', { class: 'card-title' }, props.title),
           h('button', { class: 'btn small', onClick: () => emit('close') }, '✕')
         ]),
-        h('div', { class: 'card pad' }, slots.default?.())
+        h('div', { class: 'modal-body' }, slots.default?.())
       ])
     ]);
   }
@@ -805,8 +963,8 @@ const DataTable = defineComponent({
     return () => h('div', { class: 'table-wrap' }, [
       props.rows && props.rows.length
         ? h('table', [
-            h('thead', h('tr', props.columns.map(col => h('th', col.label)))),
-            h('tbody', props.rows.map(row => h('tr', props.columns.map(col => h('td', renderValue(col, row))))))
+            h('thead', h('tr', props.columns.map(col => h('th', { class: col.key === 'select' ? 'select-cell' : '' }, col.label)))),
+            h('tbody', props.rows.map(row => h('tr', props.columns.map(col => h('td', { class: col.key === 'select' ? 'select-cell' : '' }, renderValue(col, row))))))
           ])
         : h('div', { class: 'empty' }, props.empty || 'Ma’lumot yo‘q')
     ]);

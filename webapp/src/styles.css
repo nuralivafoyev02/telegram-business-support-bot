@@ -202,6 +202,16 @@ td { color: #eef6ff; font-size: 13px; }
 tr { transition: background .14s ease; }
 tr:hover { background: rgba(255,255,255,.04); }
 .table-wrap td .btn + .btn { margin-left: 8px; }
+.select-cell {
+  width: 44px;
+  min-width: 44px;
+  text-align: center;
+}
+.row-check {
+  width: 16px;
+  height: 16px;
+  accent-color: #d7ecff;
+}
 
 .badge {
   display: inline-flex;
@@ -225,6 +235,13 @@ tr:hover { background: rgba(255,255,255,.04); }
   flex-wrap: wrap;
   gap: 12px;
   margin-bottom: 16px;
+}
+.toolbar-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 .search {
   min-width: min(360px, 100%);
@@ -311,16 +328,64 @@ tr:hover { background: rgba(255,255,255,.04); }
   z-index: 30;
 }
 .modal {
-  width: min(720px, 100%);
-  max-height: 92vh;
-  overflow: auto;
+  width: min(720px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   border-radius: var(--radius);
   border: 1px solid var(--line-strong);
   background: #071426;
   box-shadow: 0 16px 50px rgba(0,0,0,.38);
   animation: modalIn .18s ease both;
 }
+.modal-wide {
+  width: min(1180px, calc(100vw - 32px));
+}
+.modal-body {
+  padding: 16px;
+  overflow: auto;
+  max-height: calc(100dvh - 104px);
+}
 @keyframes modalIn { from { transform: translateY(10px) scale(.98); opacity: 0; } to { transform: translateY(0) scale(1); opacity: 1; } }
+
+.recipient-panel {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: rgba(255,255,255,.035);
+  overflow: hidden;
+}
+.recipient-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px;
+  border-bottom: 1px solid var(--line);
+}
+.recipient-list {
+  display: grid;
+  max-height: min(300px, 38vh);
+  overflow: auto;
+}
+.recipient-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(255,255,255,.06);
+}
+.recipient-row:last-child { border-bottom: 0; }
+.recipient-row b {
+  display: block;
+  color: #eef6ff;
+}
+.recipient-row span {
+  display: block;
+  margin-top: 3px;
+  color: #91a8c0;
+  font-size: 12px;
+}
 
 .toast {
   position: fixed;
@@ -365,6 +430,7 @@ tr:hover { background: rgba(255,255,255,.04); }
 .muted { color: #8ea4bd; }
 .truncate { max-width: 360px; overflow: hidden; text-overflow: ellipsis; }
 .empty { padding: 22px; color: #93a8c0; text-align: center; }
+.empty.compact { padding: 14px; }
 .spacer { height: 14px; }
 .webhook-status {
   margin: 12px 0 0;
