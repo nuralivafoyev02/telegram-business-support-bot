@@ -51,6 +51,14 @@ async function answerCallbackQuery(callbackQueryId, text = '') {
   return telegram('answerCallbackQuery', { callback_query_id: callbackQueryId, text });
 }
 
+async function getWebhookInfo() {
+  return telegram('getWebhookInfo');
+}
+
+async function setWebhook(payload) {
+  return telegram('setWebhook', payload);
+}
+
 function tgUserName(user = {}) {
   return [user.first_name, user.last_name].filter(Boolean).join(' ').trim() || user.username || String(user.id || 'Unknown');
 }
@@ -63,4 +71,4 @@ function escapeHtml(str = '') {
     .replaceAll('"', '&quot;');
 }
 
-module.exports = { telegram, sendMessage, sendBusinessMessage, answerCallbackQuery, tgUserName, escapeHtml };
+module.exports = { telegram, sendMessage, sendBusinessMessage, answerCallbackQuery, getWebhookInfo, setWebhook, tgUserName, escapeHtml };

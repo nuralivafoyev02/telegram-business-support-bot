@@ -267,6 +267,18 @@ tr:hover { background: rgba(255,255,255,.04); }
 .truncate { max-width: 360px; overflow: hidden; text-overflow: ellipsis; }
 .empty { padding: 22px; color: #93a8c0; text-align: center; }
 .spacer { height: 14px; }
+.webhook-status {
+  margin: 12px 0 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 14px;
+  background: rgba(5, 15, 29, .58);
+  color: #b9cbe0;
+  padding: 12px;
+  font-size: 12px;
+  line-height: 1.55;
+}
 
 @media (max-width: 1050px) {
   .app-shell { grid-template-columns: 1fr; }

@@ -40,6 +40,35 @@ function getHealth() {
   };
 }
 
+function summarizeUpdate(update = {}) {
+  const picked = pickMessage(update);
+  if (picked && picked.message) {
+    const message = picked.message;
+    const text = getMessageText(message);
+    return {
+      update_id: update.update_id,
+      type: picked.kind,
+      chat_id: message.chat && message.chat.id,
+      chat_type: message.chat && message.chat.type,
+      command: text.startsWith('/') ? text.split(/\s+/)[0] : undefined
+    };
+  }
+  if (update.my_chat_member || update.chat_member) {
+    const memberUpdate = update.my_chat_member || update.chat_member;
+    return {
+      update_id: update.update_id,
+      type: update.my_chat_member ? 'my_chat_member' : 'chat_member',
+      chat_id: memberUpdate.chat && memberUpdate.chat.id,
+      chat_type: memberUpdate.chat && memberUpdate.chat.type,
+      status: memberUpdate.new_chat_member && memberUpdate.new_chat_member.status
+    };
+  }
+  if (update.business_connection) {
+    return { update_id: update.update_id, type: 'business_connection' };
+  }
+  return { update_id: update.update_id, type: 'ignored' };
+}
+
 async function handleStart(message) {
   const webapp = optionalEnv('WEBAPP_URL', '');
   const text = [
@@ -207,6 +236,7 @@ async function handler(req, res) {
 
   try {
     const update = await readBody(req);
+    console.info('[bot:update]', summarizeUpdate(update));
 
     if (update.business_connection) {
       await metrics.saveBusinessConnection(update.business_connection);

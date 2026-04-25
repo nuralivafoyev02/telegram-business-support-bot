@@ -208,6 +208,13 @@
               </label>
               <button class="btn primary">Sozlamani saqlash</button>
             </form>
+            <div class="spacer"></div>
+            <div class="card-note">Telegram webhook</div>
+            <div class="actions" style="justify-content:flex-start; margin-top: 12px;">
+              <button class="btn" :disabled="loading" @click="checkTelegramWebhook">Holatni ko‘rish</button>
+              <button class="btn primary" :disabled="loading" @click="reconnectTelegramWebhook">Webhookni ulash</button>
+            </div>
+            <pre v-if="webhookStatusText" class="webhook-status">{{ webhookStatusText }}</pre>
           </section>
         </div>
       </template>
@@ -294,6 +301,7 @@ const privates = ref([]);
 const companies = ref([]);
 const requestRows = ref([]);
 const settingsRaw = ref({ settings: [], admins: [] });
+const webhookStatus = ref(null);
 
 const tabs = [
   { key: 'stats', label: 'Statistica', icon: '📊', subtitle: 'Xodimlar va so‘rovlar kesimida umumiy nazorat' },
@@ -438,6 +446,7 @@ async function loadSettings() {
   settingsForm.done_tag = done?.tag || '#done';
   settingsForm.main_group_id = mainGroup?.chat_id || '';
   settingsForm.request_detection = detect?.mode || 'keyword';
+  await checkTelegramWebhook(false);
 }
 
 async function setTab(key) {
@@ -562,6 +571,38 @@ async function sendMainStats() {
   try {
     const result = await api.sendMainStats({});
     showToast(`Statistika yuborildi: ${result.chat_id}`);
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    loading.value = false;
+  }
+}
+
+const webhookStatusText = computed(() => {
+  if (!webhookStatus.value) return '';
+  const info = webhookStatus.value.webhook || webhookStatus.value;
+  return [
+    `url: ${info.url || '—'}`,
+    `pending_update_count: ${info.pending_update_count ?? 0}`,
+    `allowed_updates: ${(info.allowed_updates || []).join(', ') || '—'}`,
+    `last_error: ${info.last_error_message || '—'}`
+  ].join('\n');
+});
+
+async function checkTelegramWebhook(show = true) {
+  try {
+    webhookStatus.value = await api.telegramWebhookInfo();
+    if (show) showToast('Webhook holati yangilandi');
+  } catch (error) {
+    if (show) showToast(error.message);
+  }
+}
+
+async function reconnectTelegramWebhook() {
+  loading.value = true;
+  try {
+    webhookStatus.value = await api.setTelegramWebhook({ app_url: window.location.origin });
+    showToast('Webhook qayta ulandi. Endi Telegramda /register yuboring.');
   } catch (error) {
     showToast(error.message);
   } finally {

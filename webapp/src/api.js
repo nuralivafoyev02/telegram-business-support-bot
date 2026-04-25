@@ -43,5 +43,7 @@ export const api = {
   assignChatCompany: payload => request('assignChatCompany', { method: 'POST', body: payload }).then(r => r.data),
   saveSettings: payload => request('settings', { method: 'POST', body: payload }).then(r => r.data),
   saveAdminProfile: payload => request('adminProfile', { method: 'POST', body: payload }).then(r => r.data),
-  sendMainStats: payload => request('sendMainStats', { method: 'POST', body: payload || {} }).then(r => r.data)
+  sendMainStats: payload => request('sendMainStats', { method: 'POST', body: payload || {} }).then(r => r.data),
+  telegramWebhookInfo: () => request('telegramWebhookInfo').then(r => r.data),
+  setTelegramWebhook: payload => request('setTelegramWebhook', { method: 'POST', body: payload || {} }).then(r => r.data)
 };

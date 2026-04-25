@@ -114,7 +114,7 @@ curl -X POST "https://api.telegram.org/bot$BOT_TOKEN/setWebhook" \
   -d "{\
     \"url\": \"$APP_URL/api/bot?secret=$WEBHOOK_SECRET\",\
     \"secret_token\": \"$WEBHOOK_SECRET\",\
-    \"allowed_updates\": [\"message\", \"edited_message\", \"business_message\", \"edited_business_message\", \"business_connection\", \"my_chat_member\"]\
+    \"allowed_updates\": [\"message\", \"edited_message\", \"business_message\", \"edited_business_message\", \"business_connection\", \"my_chat_member\", \"chat_member\"]\
   }"
 ```
 
@@ -130,7 +130,7 @@ Bot endpoint health check:
 curl "$APP_URL/api/bot"
 ```
 
-Javobdagi `env.botToken`, `env.supabaseUrl`, `env.supabaseServiceRoleKey` qiymatlari `true` bo‘lishi kerak. Guruhlar webappda ko‘rinishi uchun webhook `allowed_updates` ichida `my_chat_member` bo‘lishi shart. Guruhdagi oddiy murojaat xabarlarini o‘qish uchun BotFather’da bot privacy mode’ni disable qiling: `/setprivacy` → botni tanlang → `Disable`.
+Javobdagi `env.botToken`, `env.supabaseUrl`, `env.supabaseServiceRoleKey` qiymatlari `true` bo‘lishi kerak. Guruhlar webappda ko‘rinishi uchun webhook `allowed_updates` ichida `my_chat_member` bo‘lishi shart. Admin paneldagi `Sozlamalar → Telegram webhook → Webhookni ulash` tugmasi webhookni joriy domen va secret bilan qayta sozlaydi. Guruhdagi oddiy murojaat xabarlarini o‘qish uchun BotFather’da bot privacy mode’ni disable qiling: `/setprivacy` → botni tanlang → `Disable`.
 
 Agar bot webhook sozlanishidan oldin guruhlarga qo‘shilgan bo‘lsa, Telegram eski guruhlar ro‘yxatini botga qayta bermaydi. Bunday guruhlarni webapp ro‘yxatiga tushirish uchun har bir guruh ichida `/register` yoki `/start` yuboring. Bot `Chat ID` bilan tasdiq qaytaradi va guruh `Guruhlar` bo‘limida ko‘rinadi.
 

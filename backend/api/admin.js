@@ -3,10 +3,20 @@
 const supabase = require('../lib/supabase');
 const { allowCors, sendJson, readBody, getQuery } = require('../lib/http');
 const { login, requireAdmin, hashPassword } = require('../lib/auth');
-const { sendMessage, sendBusinessMessage } = require('../lib/telegram');
+const { sendMessage, sendBusinessMessage, getWebhookInfo, setWebhook } = require('../lib/telegram');
 const { optionalEnv } = require('../lib/env');
 const { sendMainStatsReport } = require('../lib/report');
 const stats = require('../lib/stats');
+
+const TELEGRAM_ALLOWED_UPDATES = [
+  'message',
+  'edited_message',
+  'business_message',
+  'edited_business_message',
+  'business_connection',
+  'my_chat_member',
+  'chat_member'
+];
 
 function parseIntSafe(value, fallback = 0) {
   const num = Number.parseInt(value, 10);
@@ -79,6 +89,58 @@ async function listSettings() {
     supabase.select('admins', { select: 'id,username,full_name,role,is_active,last_login_at,created_at', order: 'created_at.asc', limit: '20' }).catch(() => [])
   ]);
   return { settings, admins };
+}
+
+function maskWebhookUrl(url) {
+  if (!url) return '';
+  try {
+    const parsed = new URL(url);
+    if (parsed.searchParams.has('secret')) parsed.searchParams.set('secret', '***');
+    return parsed.toString();
+  } catch (_error) {
+    return String(url).replace(/secret=[^&]+/g, 'secret=***');
+  }
+}
+
+function sanitizeWebhookInfo(info = {}) {
+  return {
+    ...info,
+    url: maskWebhookUrl(info.url || ''),
+    has_custom_certificate: !!info.has_custom_certificate,
+    allowed_updates: info.allowed_updates || []
+  };
+}
+
+function getAppUrl(body = {}) {
+  const url = body.app_url || optionalEnv('WEBAPP_URL', '');
+  return String(url || '').trim().replace(/\/$/, '');
+}
+
+async function getTelegramWebhookStatus() {
+  return sanitizeWebhookInfo(await getWebhookInfo());
+}
+
+async function connectTelegramWebhook(body = {}) {
+  const appUrl = getAppUrl(body);
+  if (!appUrl) throw new Error('WEBAPP_URL env yoki app_url kerak');
+
+  const secret = optionalEnv('TELEGRAM_WEBHOOK_SECRET', '');
+  const webhookUrl = `${appUrl}/api/bot${secret ? `?secret=${encodeURIComponent(secret)}` : ''}`;
+  const payload = {
+    url: webhookUrl,
+    allowed_updates: TELEGRAM_ALLOWED_UPDATES,
+    drop_pending_updates: body.drop_pending_updates === true
+  };
+  if (secret) payload.secret_token = secret;
+
+  await setWebhook(payload);
+  const info = await getTelegramWebhookStatus();
+  return {
+    connected: true,
+    url: maskWebhookUrl(webhookUrl),
+    allowed_updates: TELEGRAM_ALLOWED_UPDATES,
+    webhook: info
+  };
 }
 
 async function sendToChat(body) {
@@ -227,6 +289,7 @@ async function handleGet(action, query) {
     case 'requests': return listRequests(query);
     case 'companies': return listCompanies(query);
     case 'settings': return listSettings();
+    case 'telegramWebhookInfo': return getTelegramWebhookStatus();
     default: throw new Error(`Unknown GET action: ${action}`);
   }
 }
@@ -240,6 +303,7 @@ async function handlePost(action, body, currentAdmin) {
     case 'settings': return updateSettings(body);
     case 'adminProfile': return updateAdmin(body, currentAdmin);
     case 'sendMainStats': return sendMainStatsReport(body.chat_id || body.main_group_id);
+    case 'setTelegramWebhook': return connectTelegramWebhook(body);
     default: throw new Error(`Unknown POST action: ${action}`);
   }
 }

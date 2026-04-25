@@ -41,7 +41,13 @@ function createRes() {
 
 async function callHandler(body) {
   const res = createRes();
-  await handler(createReq(body), res);
+  const originalInfo = console.info;
+  console.info = () => {};
+  try {
+    await handler(createReq(body), res);
+  } finally {
+    console.info = originalInfo;
+  }
   return { status: res.statusCode, payload: JSON.parse(res.body) };
 }
 
