@@ -1,0 +1,20 @@
+{
+  "name": "telegram-business-support-bot",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Telegram Business support bot + Vite/Vue admin webapp + Supabase schema",
+  "type": "commonjs",
+  "workspaces": [
+    "webapp"
+  ],
+  "scripts": {
+    "dev:webapp": "npm --workspace webapp run dev",
+    "build": "npm --workspace webapp run build",
+    "preview": "npm --workspace webapp run preview",
+    "check:backend": "node --check backend/api/bot.js && node --check backend/api/admin.js && node --check backend/lib/*.js && node --check api/bot.js && node --check api/admin.js",
+    "test:parser": "node tests/parser.test.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
