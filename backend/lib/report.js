@@ -1,6 +1,6 @@
 'use strict';
 
-const supabase = require('./supabase');
+const stats = require('./stats');
 const { sendMessage, escapeHtml } = require('./telegram');
 const { optionalEnv, requiredEnv } = require('./env');
 
@@ -14,9 +14,9 @@ function todayUz() {
 
 async function buildMainStatsReport() {
   const [summaryRows, employees, chats] = await Promise.all([
-    supabase.select('v_today_summary', { select: '*', limit: '1' }),
-    supabase.select('v_employee_statistics', { select: '*', order: 'closed_requests.desc', limit: '20' }),
-    supabase.select('v_chat_statistics', { select: '*', order: 'open_requests.desc', limit: '10' })
+    stats.selectTodaySummary({ select: '*', limit: '1' }),
+    stats.selectEmployeeStatistics({ select: '*', order: 'closed_requests.desc', limit: '20' }),
+    stats.selectChatStatistics({ select: '*', order: 'open_requests.desc', limit: '10' })
   ]);
 
   const summary = summaryRows[0] || {};

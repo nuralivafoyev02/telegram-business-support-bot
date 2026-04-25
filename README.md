@@ -44,6 +44,8 @@ supabase/003_views.sql
 supabase/004_rls.sql
 ```
 
+Agar Vercel logida `PGRST205` va `Could not find the table 'public.v_chat_statistics' in the schema cache` xatosi chiqsa, `supabase/003_views.sql` SQL Editor’da qayta ishga tushirilmagan yoki PostgREST schema cache yangilanmagan bo‘ladi. `003_views.sql` oxiridagi `notify pgrst, 'reload schema';` cache’ni yangilaydi.
+
 Default admin:
 
 ```txt

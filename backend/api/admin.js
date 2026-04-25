@@ -6,6 +6,7 @@ const { login, requireAdmin, hashPassword } = require('../lib/auth');
 const { sendMessage, sendBusinessMessage } = require('../lib/telegram');
 const { optionalEnv } = require('../lib/env');
 const { sendMainStatsReport } = require('../lib/report');
+const stats = require('../lib/stats');
 
 function parseIntSafe(value, fallback = 0) {
   const num = Number.parseInt(value, 10);
@@ -19,14 +20,14 @@ function limitQuery(query, fallback = 100) {
 
 async function getDashboard() {
   const [employeeStats, chatStats, companyStats, openRequests, today] = await Promise.all([
-    supabase.select('v_employee_statistics', { select: '*', order: 'closed_requests.desc', limit: '100' }),
-    supabase.select('v_chat_statistics', { select: '*', order: 'total_requests.desc', limit: '100' }),
-    supabase.select('v_company_statistics', { select: '*', order: 'total_requests.desc', limit: '100' }),
+    stats.selectEmployeeStatistics({ select: '*', order: 'closed_requests.desc', limit: '100' }),
+    stats.selectChatStatistics({ select: '*', order: 'total_requests.desc', limit: '100' }),
+    stats.selectCompanyStatistics({ select: '*', order: 'total_requests.desc', limit: '100' }),
     supabase.select('support_requests', { select: 'id,source_type,chat_id,customer_name,initial_text,status,created_at,company_id', status: 'eq.open', order: supabase.order('created_at', false), limit: '50' }),
-    supabase.select('v_today_summary', { select: '*' })
+    stats.selectTodaySummary({ select: '*' })
   ]);
   return {
-    summary: today[0] || { total_requests: 0, open_requests: 0, closed_requests: 0, groups_count: 0, private_chats_count: 0 },
+    summary: today[0] || stats.DEFAULT_SUMMARY,
     employeeStats,
     chatStats,
     companyStats,
@@ -35,7 +36,7 @@ async function getDashboard() {
 }
 
 async function listGroups(query) {
-  return supabase.select('v_chat_statistics', {
+  return stats.selectChatStatistics({
     select: '*',
     source_type: 'eq.group',
     order: supabase.order(query.orderBy || 'last_message_at', false),
@@ -44,7 +45,7 @@ async function listGroups(query) {
 }
 
 async function listPrivateChats(query) {
-  return supabase.select('v_chat_statistics', {
+  return stats.selectChatStatistics({
     select: '*',
     source_type: 'in.(private,business)',
     order: supabase.order(query.orderBy || 'last_message_at', false),
@@ -65,7 +66,7 @@ async function listRequests(query) {
 }
 
 async function listCompanies(query) {
-  return supabase.select('v_company_statistics', {
+  return stats.selectCompanyStatistics({
     select: '*',
     order: supabase.order(query.orderBy || 'total_requests', false),
     limit: limitQuery(query)

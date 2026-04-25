@@ -78,3 +78,5 @@ select
   (select count(*) from public.tg_chats where source_type = 'group' and is_active = true) as groups_count,
   (select count(*) from public.tg_chats where source_type in ('private','business') and is_active = true) as private_chats_count,
   (select count(*) from public.companies where is_active = true) as companies_count;
+
+notify pgrst, 'reload schema';
