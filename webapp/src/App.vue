@@ -3,7 +3,7 @@
     <section class="card login-card">
       <div class="logo">BS</div>
       <h1>Business Support Bot</h1>
-      <p>Admin panelga kirish uchun login va parolni kiriting.</p>
+      <p>Admin panel</p>
       <form class="form" @submit.prevent="submitLogin">
         <label class="label">Login
           <input v-model.trim="loginForm.username" class="input" autocomplete="username" placeholder="admin" />
@@ -22,7 +22,7 @@
         <div class="logo">BS</div>
         <div>
           <div class="brand-title">Support Center</div>
-          <div class="brand-subtitle">Telegram Business bot</div>
+          <div class="brand-subtitle">Admin panel</div>
         </div>
       </div>
 
@@ -45,16 +45,17 @@
       <header class="topbar">
         <div class="page-title">
           <h1>{{ currentTitle }}</h1>
-          <p>{{ currentSubtitle }}</p>
         </div>
-        <div class="actions">
-          <button class="btn" :disabled="loadingAction === 'refresh'" @click="refresh">{{ loadingAction === 'refresh' ? 'Yangilanmoqda...' : 'Yangilash' }}</button>
-          <button v-if="activeTab === 'stats'" class="btn" :disabled="loadingAction === 'mainStats'" @click="sendMainStats">{{ loadingAction === 'mainStats' ? 'Yuborilmoqda...' : 'Main guruhga statistika' }}</button>
-          <button class="btn primary" @click="openBroadcast">Xabar yuborish</button>
-          <button class="btn danger" @click="logout">Chiqish</button>
-        </div>
+        <TransitionGroup name="action-pop" tag="div" class="actions">
+          <button key="refresh" class="btn" :disabled="loadingAction === 'refresh'" @click="refresh">{{ loadingAction === 'refresh' ? 'Yangilanmoqda...' : 'Yangilash' }}</button>
+          <button v-if="activeTab === 'stats'" key="mainStats" class="btn" :disabled="loadingAction === 'mainStats'" @click="sendMainStats">{{ loadingAction === 'mainStats' ? 'Yuborilmoqda...' : 'Statistika yuborish' }}</button>
+          <button key="broadcast" class="btn primary" @click="openBroadcast">Umumiy xabar</button>
+          <button key="logout" class="btn danger" @click="logout">Chiqish</button>
+        </TransitionGroup>
       </header>
 
+      <Transition name="page-shift" mode="out-in">
+        <div class="page-body" :key="activeTab">
       <template v-if="activeTab === 'stats'">
         <div class="grid cards">
           <article class="card metric">
@@ -91,7 +92,6 @@
             <div class="card-header">
               <div>
                 <div class="card-title">Xodimlar statistikasi</div>
-                <div class="card-note">Kim nechta so‘rovni yopgani va o‘rtacha yopish vaqti</div>
               </div>
             </div>
             <DataTable :columns="employeeStatColumns" :rows="filteredEmployeeStats" empty="Hozircha xodim statistikasi yo‘q" />
@@ -101,7 +101,6 @@
             <div class="card-header">
               <div>
                 <div class="card-title">Ochiq so‘rovlar</div>
-                <div class="card-note">Eng oxirgi 50 ta aktiv murojaat</div>
               </div>
             </div>
             <DataTable :columns="openRequestColumns" :rows="dashboard.openRequests || []" empty="Ochiq so‘rov yo‘q" />
@@ -111,19 +110,20 @@
 
       <template v-if="activeTab === 'groups'">
         <Toolbar v-model="search" placeholder="Guruh nomi yoki chat ID bo‘yicha qidirish">
-          <button class="btn primary" :disabled="!selectedGroups.length" @click="openSelectedMessage('groups')">
+          <TransitionGroup name="action-pop" tag="div" class="toolbar-actions">
+          <button key="send" class="btn primary" :disabled="!selectedGroups.length" @click="openSelectedMessage('groups')">
             Belgilanganlarga xabar ({{ selectedGroups.length }})
           </button>
-          <button v-if="selectedGroups.length" class="btn" @click="clearSelection('groups')">Tanlovni tozalash</button>
+          <button v-if="selectedGroups.length" key="clear" class="btn" @click="clearSelection('groups')">Tanlovni tozalash</button>
+          </TransitionGroup>
         </Toolbar>
         <section class="card">
           <div class="card-header">
             <div>
               <div class="card-title">Guruhlar ro‘yxati</div>
-              <div class="card-note">Bot qaysi guruhga qo‘shilsa avtomatik shu yerda ko‘rinadi</div>
             </div>
           </div>
-          <DataTable :columns="groupColumns" :rows="filteredGroups" empty="Guruh topilmadi. Bot qo‘shilgan har bir guruhda /register yuboring.">
+          <DataTable :columns="groupColumns" :rows="filteredGroups" empty="Guruh topilmadi">
             <template #select="{ row }">
               <input class="row-check" type="checkbox" :checked="isGroupSelected(row)" @change="toggleGroup(row, $event.target.checked)" />
             </template>
@@ -141,8 +141,7 @@
         <section class="card">
           <div class="card-header">
             <div>
-              <div class="card-title">Shaxsiy va Business chatlar</div>
-              <div class="card-note">Telegram Business orqali kelgan mijoz yozishmalari</div>
+              <div class="card-title">Chatlar</div>
             </div>
           </div>
           <DataTable :columns="privateColumns" :rows="filteredPrivates" empty="Shaxsiy chat topilmadi">
@@ -157,19 +156,18 @@
       <template v-if="activeTab === 'employees'">
         <div class="toolbar">
           <input v-model="search" class="search" placeholder="Xodim ismi, username yoki Telegram ID bo‘yicha qidirish" />
-          <div class="toolbar-actions">
-            <button class="btn primary" :disabled="!selectedEmployees.length" @click="openSelectedMessage('employees')">
+          <TransitionGroup name="action-pop" tag="div" class="toolbar-actions">
+            <button key="send" class="btn primary" :disabled="!selectedEmployees.length" @click="openSelectedMessage('employees')">
               Belgilanganlarga xabar ({{ selectedEmployees.length }})
             </button>
-            <button v-if="selectedEmployees.length" class="btn" @click="clearSelection('employees')">Tanlovni tozalash</button>
-            <button class="btn primary" @click="openEmployee()">+ Xodim</button>
-          </div>
+            <button v-if="selectedEmployees.length" key="clear" class="btn" @click="clearSelection('employees')">Tanlovni tozalash</button>
+            <button key="new" class="btn primary" @click="openEmployee()">+ Xodim</button>
+          </TransitionGroup>
         </div>
         <section class="card">
           <div class="card-header">
             <div>
               <div class="card-title">Xodimlar</div>
-              <div class="card-note">Telegram ID bilan botga biriktirish va profilidan yozish</div>
             </div>
           </div>
           <DataTable :columns="employeeColumns" :rows="filteredEmployees" empty="Xodim topilmadi">
@@ -190,7 +188,6 @@
             <div class="settings-head">
               <div>
                 <div class="card-title">Admin profili</div>
-                <div class="card-note">Login/parol va ismni o‘zgartirish</div>
               </div>
             </div>
             <form class="form settings-form" @submit.prevent="saveAdmin">
@@ -211,7 +208,6 @@
             <div class="settings-head">
               <div>
                 <div class="card-title">Bot sozlamalari</div>
-                <div class="card-note">AI mode, #done va aniqlash rejimi</div>
               </div>
             </div>
             <form class="form settings-form" @submit.prevent="saveSettings">
@@ -238,19 +234,23 @@
             <div class="webhook-panel">
               <div>
                 <div class="card-title">Telegram webhook</div>
-                <div class="card-note">Webhook holatini tekshirish va qayta ulash</div>
               </div>
               <div class="actions webhook-actions">
                 <button class="btn" :disabled="loadingAction === 'webhookInfo'" @click="checkTelegramWebhook">{{ loadingAction === 'webhookInfo' ? 'Tekshirilmoqda...' : 'Holatni ko‘rish' }}</button>
                 <button class="btn primary" :disabled="loadingAction === 'webhookConnect'" @click="reconnectTelegramWebhook">{{ loadingAction === 'webhookConnect' ? 'Ulanmoqda...' : 'Webhookni ulash' }}</button>
               </div>
             </div>
-            <pre v-if="webhookStatusText" class="webhook-status">{{ webhookStatusText }}</pre>
+            <Transition name="fade">
+              <pre v-if="webhookStatusText" class="webhook-status">{{ webhookStatusText }}</pre>
+            </Transition>
           </section>
         </div>
       </template>
+        </div>
+      </Transition>
     </section>
 
+    <Transition name="modal-fade">
     <Modal v-if="modal === 'send'" title="Xabar yuborish" @close="closeModal">
       <form class="form" @submit.prevent="sendSingleMessage">
         <label class="label">Chat
@@ -262,10 +262,12 @@
         <button class="btn primary" :disabled="loadingAction === 'sendSingle'">{{ loadingAction === 'sendSingle' ? 'Yuborilmoqda...' : 'Yuborish' }}</button>
       </form>
     </Modal>
+    </Transition>
 
-    <Modal v-if="modal === 'broadcast'" title="Guruhlarga xabar yuborish" @close="closeModal">
+    <Transition name="modal-fade">
+    <Modal v-if="modal === 'broadcast'" title="Ommaviy xabar" @close="closeModal">
       <form class="form" @submit.prevent="sendBroadcast">
-        <label class="label">Target
+        <label class="label">Qabul qiluvchi
           <select v-model="broadcastForm.target_type" class="select">
             <option value="groups">Barcha guruhlar</option>
             <option value="privates">Shaxsiy chatlar</option>
@@ -281,7 +283,9 @@
         <button class="btn primary" :disabled="loadingAction === 'broadcast'">{{ loadingAction === 'broadcast' ? 'Yuborilmoqda...' : 'Yuborish' }}</button>
       </form>
     </Modal>
+    </Transition>
 
+    <Transition name="modal-fade">
     <Modal v-if="modal === 'employee'" title="Xodim" @close="closeModal">
       <form class="form two" @submit.prevent="saveEmployee">
         <label class="label">Ism
@@ -312,7 +316,9 @@
         <button class="btn primary" style="grid-column: 1 / -1" :disabled="loadingAction === 'saveEmployee'">{{ loadingAction === 'saveEmployee' ? 'Saqlamoqda...' : 'Saqlash' }}</button>
       </form>
     </Modal>
+    </Transition>
 
+    <Transition name="modal-fade">
     <Modal v-if="modal === 'employeeSend'" title="Xodimga yozish" @close="closeModal">
       <form class="form" @submit.prevent="sendEmployeeMessage">
         <label class="label">Xodim
@@ -324,7 +330,9 @@
         <button class="btn primary" :disabled="loadingAction === 'employeeSend'">{{ loadingAction === 'employeeSend' ? 'Yuborilmoqda...' : 'Yuborish' }}</button>
       </form>
     </Modal>
+    </Transition>
 
+    <Transition name="modal-fade">
     <Modal v-if="modal === 'selectedSend'" :title="selectedSendTitle" wide @close="closeModal">
       <form class="form" @submit.prevent="sendSelectedMessage">
         <section class="recipient-panel">
@@ -334,7 +342,7 @@
               <div class="card-note">{{ selectedRecipients.length }} ta tanlangan</div>
             </div>
           </div>
-          <div v-if="selectedRecipients.length" class="recipient-list">
+          <TransitionGroup v-if="selectedRecipients.length" name="list-pop" tag="div" class="recipient-list">
             <div v-for="recipient in selectedRecipients" :key="recipientKey(recipient)" class="recipient-row">
               <div>
                 <b>{{ recipientLabel(recipient) }}</b>
@@ -342,7 +350,7 @@
               </div>
               <button class="btn small danger" type="button" @click="removeSelectedRecipient(recipient)">O‘chirish</button>
             </div>
-          </div>
+          </TransitionGroup>
           <div v-else class="empty compact">Qabul qiluvchi tanlanmagan</div>
         </section>
         <label class="label">Xabar matni
@@ -353,17 +361,24 @@
         </button>
       </form>
     </Modal>
+    </Transition>
 
+    <Transition name="modal-fade">
     <Modal v-if="modal === 'requests'" title="So‘rovlar tarixi" wide @close="closeModal">
       <DataTable :columns="requestColumns" :rows="requestRows" empty="Bu chatda so‘rovlar yo‘q" />
     </Modal>
+    </Transition>
 
+    <Transition name="fade">
     <div v-if="loading" class="app-loader" role="status" aria-live="polite">
       <span class="spinner" aria-hidden="true"></span>
       <span>{{ loadingText }}</span>
     </div>
+    </Transition>
 
+    <Transition name="toast-pop">
     <div v-if="toast" class="toast">{{ toast }}</div>
+    </Transition>
   </div>
 </template>
 
@@ -392,11 +407,11 @@ const settingsRaw = ref({ settings: [], admins: [] });
 const webhookStatus = ref(null);
 
 const tabs = [
-  { key: 'stats', label: 'Statistica', icon: '📊', subtitle: 'Xodimlar va so‘rovlar kesimida umumiy nazorat' },
-  { key: 'groups', label: 'Guruhlar', icon: '👥', subtitle: 'Bot qo‘shilgan guruhlar va ulardagi murojaatlar' },
-  { key: 'privates', label: 'Shaxsiy chatlar', icon: '💬', subtitle: 'Telegram Business orqali kelgan shaxsiy chatlar' },
-  { key: 'employees', label: 'Xodimlar', icon: '🧑‍💼', subtitle: 'Xodimlarni botga biriktirish va profilidan yozish' },
-  { key: 'settings', label: 'Sozlamalar', icon: '⚙️', subtitle: 'Admin profili, bot sozlamalari va AI mode' }
+  { key: 'stats', label: 'Statistika', icon: '📊' },
+  { key: 'groups', label: 'Guruhlar', icon: '👥' },
+  { key: 'privates', label: 'Chatlar', icon: '💬' },
+  { key: 'employees', label: 'Xodimlar', icon: '🧑‍💼' },
+  { key: 'settings', label: 'Sozlamalar', icon: '⚙️' }
 ];
 const primaryTabs = computed(() => tabs.filter(tab => tab.key !== 'settings'));
 const settingsTab = tabs.find(tab => tab.key === 'settings');
@@ -410,7 +425,6 @@ const settingsForm = reactive({ ai_mode: 'false', done_tag: '#done', main_group_
 
 const current = computed(() => tabs.find(t => t.key === activeTab.value) || tabs[0]);
 const currentTitle = computed(() => current.value.label);
-const currentSubtitle = computed(() => current.value.subtitle);
 const summary = computed(() => dashboard.summary || {});
 const totalEmployees = computed(() => Number(summary.value.employees_count || 0) || employees.value.length || dashboard.employeeStats?.length || 0);
 const loadingText = computed(() => ({
@@ -925,7 +939,7 @@ const Toolbar = defineComponent({
         placeholder: props.placeholder,
         onInput: e => emit('update:modelValue', e.target.value)
       }),
-      slots.default ? h('div', { class: 'toolbar-actions' }, slots.default()) : null
+      slots.default ? slots.default() : null
     ]);
   }
 });
