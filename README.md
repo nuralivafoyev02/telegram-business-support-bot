@@ -122,6 +122,14 @@ Webhook tekshirish:
 curl "https://api.telegram.org/bot$BOT_TOKEN/getWebhookInfo"
 ```
 
+Bot endpoint health check:
+
+```bash
+curl "$APP_URL/api/bot"
+```
+
+Javobdagi `env.botToken`, `env.supabaseUrl`, `env.supabaseServiceRoleKey` qiymatlari `true` bo‘lishi kerak. Guruhlar webappda ko‘rinishi uchun webhook `allowed_updates` ichida `my_chat_member` bo‘lishi shart. Guruhdagi oddiy murojaat xabarlarini o‘qish uchun BotFather’da bot privacy mode’ni disable qiling: `/setprivacy` → botni tanlang → `Disable`.
+
 ## Fayl strukturasi
 
 ```txt

@@ -6,6 +6,9 @@ const { sendMessage, escapeHtml } = require('../lib/telegram');
 const { getMessageText, classifyMessage } = require('../lib/parser');
 const metrics = require('../lib/metrics');
 
+const START_RE = /^\/start(?:@\w+)?(?:\s|$)/i;
+const HELP_RE = /^\/help(?:@\w+)?(?:\s|$)/i;
+
 function verifyWebhook(req) {
   const secret = optionalEnv('TELEGRAM_WEBHOOK_SECRET', '');
   if (!secret) return true;
@@ -22,6 +25,20 @@ function pickMessage(update) {
   return null;
 }
 
+function getHealth() {
+  return {
+    ok: true,
+    service: 'telegram-business-support-bot',
+    endpoint: 'bot',
+    env: {
+      botToken: !!optionalEnv('BOT_TOKEN', ''),
+      webhookSecret: !!optionalEnv('TELEGRAM_WEBHOOK_SECRET', ''),
+      supabaseUrl: !!optionalEnv('SUPABASE_URL', ''),
+      supabaseServiceRoleKey: !!optionalEnv('SUPABASE_SERVICE_ROLE_KEY', '')
+    }
+  };
+}
+
 async function handleStart(message) {
   const webapp = optionalEnv('WEBAPP_URL', '');
   const text = [
@@ -31,7 +48,7 @@ async function handleStart(message) {
     'So‘rov yopilganda xodim <b>#done</b> tegini yuboradi.',
     webapp ? `Admin panel: ${escapeHtml(webapp)}` : ''
   ].filter(Boolean).join('\n');
-  await sendMessage(message.chat.id, text).catch(() => null);
+  await sendMessage(message.chat.id, text);
 }
 
 async function handleHelp(message) {
@@ -44,7 +61,11 @@ async function handleHelp(message) {
     '4) Statistika webappda yangilanadi.',
     '',
     'Masalan: <code>#done hal qilindi</code>'
-  ].join('\n')).catch(() => null);
+  ].join('\n'));
+}
+
+function logBackgroundError(label, error) {
+  console.error(`[bot:${label}:error]`, error);
 }
 
 async function maybeReplyDone(message, result) {
@@ -53,12 +74,35 @@ async function maybeReplyDone(message, result) {
   if (result.closed) {
     await sendMessage(message.chat.id, `✅ So‘rov yopildi. Yopgan xodim: <b>${escapeHtml(result.request.closed_by_name || 'Xodim')}</b>`, {
       reply_to_message_id: message.message_id
-    }).catch(() => null);
+    }).catch(error => logBackgroundError('reply-done', error));
   } else {
     await sendMessage(message.chat.id, '⚠️ #done qabul qilindi, lekin bu chatda ochiq so‘rov topilmadi.', {
       reply_to_message_id: message.message_id
-    }).catch(() => null);
+    }).catch(error => logBackgroundError('reply-done', error));
   }
+}
+
+async function recordIncomingMessage(updateKind, message, sourceType, classification, employee = null) {
+  const chat = message.chat || {};
+  const from = message.from || {};
+
+  await metrics.upsertTelegramUser(from);
+  const chatRow = await metrics.upsertChat(chat, sourceType, {
+    business_connection_id: message.business_connection_id || null
+  });
+  await metrics.saveMessage({ message, updateKind, sourceType, classification, employee });
+  return chatRow;
+}
+
+async function handleCommand(updateKind, message, sourceType, text, classification) {
+  const tracking = recordIncomingMessage(updateKind, message, sourceType, classification)
+    .catch(error => logBackgroundError('record-command', error));
+
+  let reply = Promise.resolve();
+  if (START_RE.test(text)) reply = handleStart(message);
+  if (HELP_RE.test(text)) reply = handleHelp(message);
+
+  await Promise.all([tracking, reply]);
 }
 
 async function processMessage(updateKind, message) {
@@ -66,6 +110,17 @@ async function processMessage(updateKind, message) {
   const from = message.from || {};
   const text = getMessageText(message);
   const sourceType = metrics.sourceTypeFrom(updateKind, chat.type);
+
+  const commandClassification = classifyMessage({
+    text,
+    chatType: chat.type,
+    isBusiness: updateKind.includes('business')
+  });
+
+  if (commandClassification === 'command') {
+    await handleCommand(updateKind, message, sourceType, text, commandClassification);
+    return;
+  }
 
   await metrics.upsertTelegramUser(from);
   const chatRow = await metrics.upsertChat(chat, sourceType, {
@@ -81,12 +136,6 @@ async function processMessage(updateKind, message) {
   });
 
   await metrics.saveMessage({ message, updateKind, sourceType, classification, employee });
-
-  if (classification === 'command') {
-    if (text.startsWith('/start')) return handleStart(message);
-    if (text.startsWith('/help')) return handleHelp(message);
-    return;
-  }
 
   if (classification === 'done') {
     const closer = employee || await metrics.ensureEmployee(from);
@@ -106,10 +155,11 @@ async function processMessage(updateKind, message) {
 
 async function handler(req, res) {
   if (req.method !== 'POST') {
-    return sendJson(res, 200, { ok: true, service: 'telegram-business-support-bot', endpoint: 'bot' });
+    return sendJson(res, 200, getHealth());
   }
 
   if (!verifyWebhook(req)) {
+    console.warn('[bot:webhook] invalid webhook secret');
     return sendJson(res, 401, { ok: false, error: 'Invalid webhook secret' });
   }
 

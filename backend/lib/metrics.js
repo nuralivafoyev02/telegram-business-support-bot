@@ -17,6 +17,11 @@ function sourceTypeFrom(updateKind, chatType) {
   return 'private';
 }
 
+function isActiveMemberStatus(status) {
+  if (!status) return true;
+  return !['left', 'kicked'].includes(status);
+}
+
 async function upsertTelegramUser(user = {}, extra = {}) {
   if (!user || !user.id) return null;
   const rows = await supabase.insert('tg_users', [{
@@ -200,8 +205,10 @@ async function registerChatMemberUpdate(update = {}) {
   const memberUpdate = update.my_chat_member || update.chat_member;
   if (!memberUpdate || !memberUpdate.chat) return null;
   const sourceType = ['group', 'supergroup'].includes(memberUpdate.chat.type) ? 'group' : 'private';
+  const memberStatus = memberUpdate.new_chat_member && memberUpdate.new_chat_member.status;
   return upsertChat(memberUpdate.chat, sourceType, {
-    member_status: memberUpdate.new_chat_member && memberUpdate.new_chat_member.status,
+    member_status: memberStatus || null,
+    is_active: isActiveMemberStatus(memberStatus),
     last_member_update_at: nowIso()
   });
 }
