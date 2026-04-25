@@ -197,6 +197,9 @@
               <label class="label">Yopish tegi
                 <input v-model.trim="settingsForm.done_tag" class="input" placeholder="#done" />
               </label>
+              <label class="label">Main guruh chat ID
+                <input v-model.trim="settingsForm.main_group_id" class="input" placeholder="-1001234567890" />
+              </label>
               <label class="label">So‘rov aniqlash rejimi
                 <select v-model="settingsForm.request_detection" class="select">
                   <option value="keyword">Keyword</option>
@@ -305,7 +308,7 @@ const messageForm = reactive({ text: '' });
 const broadcastForm = reactive({ target_type: 'groups', title: 'Yangilik', text: '', company_id: '' });
 const companyForm = reactive({ id: '', name: '', legal_name: '', phone: '', notes: '', is_active: true });
 const adminForm = reactive({ username: 'admin', full_name: 'System Admin', new_password: '' });
-const settingsForm = reactive({ ai_mode: 'false', done_tag: '#done', request_detection: 'keyword' });
+const settingsForm = reactive({ ai_mode: 'false', done_tag: '#done', main_group_id: '', request_detection: 'keyword' });
 
 const current = computed(() => tabs.find(t => t.key === activeTab.value) || tabs[0]);
 const currentTitle = computed(() => current.value.label);
@@ -314,7 +317,7 @@ const summary = computed(() => dashboard.summary || {});
 
 function showToast(text) {
   toast.value = text;
-  setTimeout(() => { toast.value = ''; }, 2600);
+  setTimeout(() => { toast.value = ''; }, 5200);
 }
 
 function fmtDate(value) {
@@ -357,6 +360,7 @@ const openRequestColumns = [
 
 const groupColumns = [
   { key: 'title', label: 'Guruh' },
+  { key: 'chat_id', label: 'Chat ID' },
   { key: 'company_name', label: 'Kompaniya', format: v => v || '—' },
   { key: 'total_requests', label: 'So‘rov' },
   { key: 'open_requests', label: 'Ochiq' },
@@ -428,9 +432,11 @@ async function loadSettings() {
   }
   const ai = data.settings?.find(s => s.key === 'ai_mode')?.value;
   const done = data.settings?.find(s => s.key === 'done_tag')?.value;
+  const mainGroup = data.settings?.find(s => s.key === 'main_group')?.value;
   const detect = data.settings?.find(s => s.key === 'request_detection')?.value;
   settingsForm.ai_mode = String(!!ai?.enabled);
   settingsForm.done_tag = done?.tag || '#done';
+  settingsForm.main_group_id = mainGroup?.chat_id || '';
   settingsForm.request_detection = detect?.mode || 'keyword';
 }
 
@@ -570,6 +576,7 @@ async function saveSettings() {
       settings: [
         { key: 'ai_mode', value: { enabled: settingsForm.ai_mode === 'true', provider: null } },
         { key: 'done_tag', value: { tag: settingsForm.done_tag, auto_reply: true } },
+        { key: 'main_group', value: { chat_id: settingsForm.main_group_id } },
         { key: 'request_detection', value: { mode: settingsForm.request_detection, min_text_length: 10 } }
       ]
     });

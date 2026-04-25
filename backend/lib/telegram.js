@@ -14,7 +14,14 @@ async function telegram(method, payload = {}) {
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok || data.ok === false) {
-    throw new Error(`Telegram ${method}: ${data.description || response.statusText}`);
+    const error = new Error(`Telegram ${method}: ${data.description || response.statusText}`);
+    error.telegram = {
+      method,
+      status: response.status,
+      code: data.error_code || response.status,
+      description: data.description || response.statusText
+    };
+    throw error;
   }
   return data.result;
 }

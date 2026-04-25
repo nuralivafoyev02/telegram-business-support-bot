@@ -239,7 +239,7 @@ async function handlePost(action, body, currentAdmin) {
     case 'assignChatCompany': return assignChatCompany(body);
     case 'settings': return updateSettings(body);
     case 'adminProfile': return updateAdmin(body, currentAdmin);
-    case 'sendMainStats': return sendMainStatsReport(body.chat_id);
+    case 'sendMainStats': return sendMainStatsReport(body.chat_id || body.main_group_id);
     default: throw new Error(`Unknown POST action: ${action}`);
   }
 }

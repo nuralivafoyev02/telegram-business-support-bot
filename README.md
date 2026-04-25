@@ -78,6 +78,8 @@ CRON_SECRET=change-me-cron-secret
 
 `SUPABASE_SERVICE_ROLE_KEY` faqat backend environmentda turishi kerak. Webappga chiqarilmagan.
 
+`MAIN_GROUP_ID` noto‘g‘ri bo‘lsa `Telegram sendMessage: Bad Request: chat not found` chiqadi. Buni webappdagi `Sozlamalar → Bot sozlamalari → Main guruh chat ID` orqali ham sozlash mumkin. Chat ID `-100...` formatida bo‘ladi; bot shu guruhda bo‘lishi va xabar yuborish huquqiga ega bo‘lishi kerak.
+
 ## Local ishga tushirish
 
 ```bash

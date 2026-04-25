@@ -192,5 +192,6 @@ insert into public.bot_settings (key, value)
 values
   ('ai_mode', '{"enabled": false, "provider": null}'::jsonb),
   ('done_tag', '{"tag": "#done", "auto_reply": true}'::jsonb),
-  ('request_detection', '{"mode": "keyword", "min_text_length": 10}'::jsonb)
+  ('request_detection', '{"mode": "keyword", "min_text_length": 10}'::jsonb),
+  ('main_group', '{"chat_id": ""}'::jsonb)
 on conflict (key) do nothing;
