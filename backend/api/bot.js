@@ -2,7 +2,7 @@
 
 const { sendJson, readBody, getQuery } = require('../lib/http');
 const { optionalEnv, boolEnv } = require('../lib/env');
-const { sendMessage, escapeHtml } = require('../lib/telegram');
+const { sendMessage, deleteMessage, escapeHtml } = require('../lib/telegram');
 const { getMessageText, classifyMessage } = require('../lib/parser');
 const metrics = require('../lib/metrics');
 
@@ -85,27 +85,11 @@ function isGroupChat(chat = {}) {
   return ['group', 'supergroup'].includes(chat.type);
 }
 
-function shortError(error) {
-  return String(error && error.message || error || 'Noma’lum xato').slice(0, 220);
-}
-
-async function handleGroupRegistration(message, tracking) {
+async function handleGroupRegistrationCommand(message, tracking) {
   const chat = message.chat || {};
-  try {
-    await tracking;
-    await sendMessage(chat.id, [
-      '✅ Salom! Men Business Support Botman.',
-      'Murojaatlarni kuzataman va <b>#done</b> yopilishlarini statistikaga qo‘shaman.',
-      `Chat ID: <code>${escapeHtml(chat.id)}</code>`
-    ].join('\n'));
-  } catch (error) {
-    console.error('[bot:register-group:error]', error);
-    await sendMessage(chat.id, [
-      '⚠️ Guruhni ro‘yxatga olishda xatolik bo‘ldi.',
-      `Chat ID: <code>${escapeHtml(chat.id)}</code>`,
-      `Sabab: ${escapeHtml(shortError(error))}`
-    ].join('\n')).catch(replyError => logBackgroundError('reply-register-group', replyError));
-  }
+  await tracking.catch(error => logBackgroundError('register-group', error));
+  await deleteMessage(chat.id, message.message_id)
+    .catch(error => logBackgroundError('delete-group-command', error));
 }
 
 async function handleHelp(message) {
@@ -158,7 +142,7 @@ async function handleCommand(updateKind, message, sourceType, text, classificati
   const chat = message.chat || {};
 
   if (isGroupChat(chat) && (START_RE.test(text) || REGISTER_RE.test(text))) {
-    await handleGroupRegistration(message, tracking);
+    await handleGroupRegistrationCommand(message, tracking);
     return;
   }
 

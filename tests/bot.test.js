@@ -127,7 +127,7 @@ async function testChatMemberUpdateRegistersGroup() {
   }
 }
 
-async function testGroupStartRegistersGroupAndRepliesWithChatId() {
+async function testGroupStartRegistersGroupAndDeletesCommand() {
   const originalInsert = supabase.insert;
   const originalSelect = supabase.select;
   const originalFetch = global.fetch;
@@ -140,7 +140,7 @@ async function testGroupStartRegistersGroupAndRepliesWithChatId() {
   };
   supabase.select = async () => [];
   global.fetch = async (_url, options) => {
-    telegramCalls.push(JSON.parse(options.body));
+    telegramCalls.push({ url: _url, body: JSON.parse(options.body) });
     return {
       ok: true,
       json: async () => ({ ok: true, result: { message_id: 101 } })
@@ -164,8 +164,10 @@ async function testGroupStartRegistersGroupAndRepliesWithChatId() {
     assert.strictEqual(chatRow.chat_id, -100777);
     assert.strictEqual(chatRow.source_type, 'group');
     assert.strictEqual(telegramCalls.length, 1);
-    assert.match(telegramCalls[0].text, /Business Support Botman/);
-    assert.match(telegramCalls[0].text, /-100777/);
+    assert.match(telegramCalls[0].url, /deleteMessage$/);
+    assert.strictEqual(telegramCalls[0].body.chat_id, -100777);
+    assert.strictEqual(telegramCalls[0].body.message_id, 12);
+    assert.strictEqual(telegramCalls[0].body.text, undefined);
   } finally {
     supabase.insert = originalInsert;
     supabase.select = originalSelect;
@@ -173,7 +175,7 @@ async function testGroupStartRegistersGroupAndRepliesWithChatId() {
   }
 }
 
-async function testGroupRegisterReportsDbFailure() {
+async function testGroupRegisterDbFailureStillDeletesCommand() {
   const originalInsert = supabase.insert;
   const originalFetch = global.fetch;
   const originalConsoleError = console.error;
@@ -182,7 +184,7 @@ async function testGroupRegisterReportsDbFailure() {
   supabase.insert = async () => { throw new Error('tg_chats write failed'); };
   console.error = () => {};
   global.fetch = async (_url, options) => {
-    telegramCalls.push(JSON.parse(options.body));
+    telegramCalls.push({ url: _url, body: JSON.parse(options.body) });
     return {
       ok: true,
       json: async () => ({ ok: true, result: { message_id: 102 } })
@@ -203,8 +205,10 @@ async function testGroupRegisterReportsDbFailure() {
 
     assert.strictEqual(result.status, 200);
     assert.strictEqual(telegramCalls.length, 1);
-    assert.match(telegramCalls[0].text, /ro‘yxatga olishda xatolik/);
-    assert.match(telegramCalls[0].text, /tg_chats write failed/);
+    assert.match(telegramCalls[0].url, /deleteMessage$/);
+    assert.strictEqual(telegramCalls[0].body.chat_id, -100888);
+    assert.strictEqual(telegramCalls[0].body.message_id, 13);
+    assert.strictEqual(telegramCalls[0].body.text, undefined);
   } finally {
     supabase.insert = originalInsert;
     global.fetch = originalFetch;
@@ -283,8 +287,8 @@ async function testBotRemovalMarksGroupInactive() {
 (async () => {
   await testStartRepliesWhenDbTrackingFails();
   await testChatMemberUpdateRegistersGroup();
-  await testGroupStartRegistersGroupAndRepliesWithChatId();
-  await testGroupRegisterReportsDbFailure();
+  await testGroupStartRegistersGroupAndDeletesCommand();
+  await testGroupRegisterDbFailureStillDeletesCommand();
   await testGroupDoneDoesNotReplyToGroup();
   await testBotRemovalMarksGroupInactive();
   console.log('Bot tests passed');
