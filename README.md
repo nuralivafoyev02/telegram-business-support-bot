@@ -14,12 +14,14 @@ Node.js + Vercel serverless backend, Supabase SQL schema va Vite/Vue dark admin 
 
 1. Mijoz guruhga yoki Telegram Business shaxsiy chatga yozadi.
 2. Bot xabarni tekshiradi:
-   - Guruhda request keywordlar bo‘lsa `support_requests` jadvaliga `open` so‘rov sifatida yozadi.
-   - Business/private chatda mijoz xabari request sifatida yoziladi.
+   - Guruhda request niyati kuchli bo‘lsa `support_requests` jadvaliga `open` so‘rov sifatida yozadi.
+   - Business/private chatda keyword yoki `AI mode`/broad detection yoqilgan bo‘lsa mijozning mazmunli xabari request sifatida yoziladi.
+   - Bir mijoz bir open request ustidan ketma-ket yozsa yangi ticket ochilmaydi, xabar `request_events` ichiga `note` bo‘lib qo‘shiladi.
 3. Xodim `#done` yozsa:
    - Shu chatdagi eng oxirgi `open` so‘rov `closed` bo‘ladi.
    - Xodim avtomatik `employees` jadvaliga qo‘shiladi.
    - Xodim statistikasi `v_employee_statistics` view orqali ko‘rinadi.
+   - `Sozlamalar`dagi yopish tegi o‘zgartirilsa bot shu tegni ham taniydi.
 4. Webapp orqali:
    - Statistika ko‘rish
    - Guruhlarga xabar yuborish
@@ -132,7 +134,7 @@ curl "$APP_URL/api/bot"
 
 Javobdagi `env.botToken`, `env.supabaseUrl`, `env.supabaseServiceRoleKey` qiymatlari `true` bo‘lishi kerak. Guruhlar webappda ko‘rinishi uchun webhook `allowed_updates` ichida `my_chat_member` bo‘lishi shart. Admin paneldagi `Sozlamalar → Telegram webhook → Webhookni ulash` tugmasi webhookni joriy domen va secret bilan qayta sozlaydi. Guruhdagi oddiy murojaat xabarlarini o‘qish uchun BotFather’da bot privacy mode’ni disable qiling: `/setprivacy` → botni tanlang → `Disable`.
 
-Agar bot webhook sozlanishidan oldin guruhlarga qo‘shilgan bo‘lsa, Telegram eski guruhlar ro‘yxatini botga qayta bermaydi. Bunday guruhlarni webapp ro‘yxatiga tushirish uchun har bir guruh ichida `/register` yoki `/start` yuboring. Bot `Chat ID` bilan tasdiq qaytaradi va guruh `Guruhlar` bo‘limida ko‘rinadi.
+Agar bot webhook sozlanishidan oldin guruhlarga qo‘shilgan bo‘lsa, Telegram eski guruhlar ro‘yxatini botga qayta bermaydi. Bunday guruhlarni webapp ro‘yxatiga tushirish uchun har bir guruh ichida `/register` yoki `/start` yuboring. Bot guruhni ro‘yxatga olishga urinadi va guruhdagi command xabarini o‘chiradi. Xabar o‘chishi uchun bot guruhda delete permissionga ega admin bo‘lishi kerak.
 
 ## Fayl strukturasi
 
@@ -181,6 +183,6 @@ telegram-business-support-bot/
 
 - Xodimlarni webapp orqali qo‘lda qo‘shish/tahrirlash.
 - Kompaniya userlarini Telegram `getChatMember` yoki CRM import orqali boyitish.
-- AI mode uchun OpenAI / local classifier ulash.
+- AI mode uchun tashqi OpenAI/local provider integratsiyasini ulash.
 - So‘rovni biror xodimga assign qilish va SLA timer.
 - Vercel Cron orqali `/api/cron?secret=CRON_SECRET` endpointini kunlik/haftalik avtomatlashtirish.

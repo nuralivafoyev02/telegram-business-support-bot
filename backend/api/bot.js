@@ -4,6 +4,7 @@ const { sendJson, readBody, getQuery } = require('../lib/http');
 const { optionalEnv, boolEnv } = require('../lib/env');
 const { sendMessage, deleteMessage, escapeHtml } = require('../lib/telegram');
 const { getMessageText, classifyMessage } = require('../lib/parser');
+const { getBotSettings } = require('../lib/bot-settings');
 const metrics = require('../lib/metrics');
 
 const START_RE = /^\/start(?:@\w+)?(?:\s|$)/i;
@@ -175,6 +176,8 @@ async function processMessage(updateKind, message) {
     return;
   }
 
+  const settings = await getBotSettings();
+
   await metrics.upsertTelegramUser(from);
   const chatRow = await metrics.upsertChat(chat, sourceType, {
     business_connection_id: message.business_connection_id || null
@@ -185,7 +188,8 @@ async function processMessage(updateKind, message) {
     text,
     chatType: chat.type,
     isKnownEmployee: !!employee,
-    isBusiness: updateKind.includes('business')
+    isBusiness: updateKind.includes('business'),
+    ...settings
   });
 
   await metrics.saveMessage({ message, updateKind, sourceType, classification, employee });

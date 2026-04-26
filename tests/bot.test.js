@@ -10,6 +10,7 @@ process.env.SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY ||
 
 const supabase = require('../backend/lib/supabase');
 const handler = require('../backend/api/bot');
+const { clearBotSettingsCache } = require('../backend/lib/bot-settings');
 
 function createReq(body, headers = {}) {
   const req = Readable.from([JSON.stringify(body)]);
@@ -260,6 +261,96 @@ async function testGroupDoneDoesNotReplyToGroup() {
   }
 }
 
+async function testRequestMessageAppendsToExistingOpenRequest() {
+  const originalInsert = supabase.insert;
+  const originalSelect = supabase.select;
+  const insertedTables = [];
+  clearBotSettingsCache();
+
+  supabase.select = async (table) => {
+    if (table === 'support_requests') {
+      return [{
+        id: 'request-1',
+        chat_id: 777,
+        source_type: 'private',
+        customer_tg_id: 777,
+        status: 'open',
+        created_at: new Date().toISOString()
+      }];
+    }
+    return [];
+  };
+  supabase.insert = async (table, rows) => {
+    insertedTables.push(table);
+    return rows.map(row => ({ id: `${table}-row`, ...row }));
+  };
+
+  try {
+    const result = await callHandler({
+      update_id: 7,
+      message: {
+        message_id: 15,
+        date: 1777100000,
+        text: 'Login qilolmayapman, tekshirib bering',
+        chat: { id: 777, type: 'private', first_name: 'Ali' },
+        from: { id: 777, first_name: 'Ali', is_bot: false }
+      }
+    });
+
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.handled, 'message');
+    assert.strictEqual(insertedTables.includes('support_requests'), false);
+    assert.strictEqual(insertedTables.includes('request_events'), true);
+  } finally {
+    supabase.insert = originalInsert;
+    supabase.select = originalSelect;
+    clearBotSettingsCache();
+  }
+}
+
+async function testAiModeSettingOpensPrivateBroadRequest() {
+  const originalInsert = supabase.insert;
+  const originalSelect = supabase.select;
+  const insertedTables = [];
+  clearBotSettingsCache();
+
+  supabase.select = async (table) => {
+    if (table === 'bot_settings') {
+      return [
+        { key: 'ai_mode', value: { enabled: true, provider: null } },
+        { key: 'request_detection', value: { mode: 'keyword', min_text_length: 10 } }
+      ];
+    }
+    return [];
+  };
+  supabase.insert = async (table, rows) => {
+    insertedTables.push(table);
+    return rows.map(row => ({ id: `${table}-row`, ...row }));
+  };
+
+  try {
+    const result = await callHandler({
+      update_id: 8,
+      message: {
+        message_id: 16,
+        date: 1777100000,
+        text: 'Menga katalog yuboring',
+        chat: { id: 778, type: 'private', first_name: 'Vali' },
+        from: { id: 778, first_name: 'Vali', is_bot: false }
+      }
+    });
+
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.handled, 'message');
+    assert.strictEqual(insertedTables.includes('support_requests'), true);
+    assert.strictEqual(insertedTables.includes('request_events'), true);
+  } finally {
+    supabase.insert = originalInsert;
+    supabase.select = originalSelect;
+    clearBotSettingsCache();
+  }
+}
+
 async function testBotRemovalMarksGroupInactive() {
   const originalInsert = supabase.insert;
   let row = null;
@@ -290,6 +381,8 @@ async function testBotRemovalMarksGroupInactive() {
   await testGroupStartRegistersGroupAndDeletesCommand();
   await testGroupRegisterDbFailureStillDeletesCommand();
   await testGroupDoneDoesNotReplyToGroup();
+  await testRequestMessageAppendsToExistingOpenRequest();
+  await testAiModeSettingOpensPrivateBroadRequest();
   await testBotRemovalMarksGroupInactive();
   console.log('Bot tests passed');
 })().catch(error => {

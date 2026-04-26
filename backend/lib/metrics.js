@@ -119,10 +119,49 @@ async function saveMessage({ message, updateKind, sourceType, classification, em
   return rows[0];
 }
 
+async function findMergeableOpenRequest({ message, sourceType }) {
+  const from = message.from || {};
+  const chat = message.chat || {};
+  if (!chat.id) return null;
+
+  const rows = await supabase.select('support_requests', {
+    select: 'id,source_type,chat_id,company_id,customer_tg_id,customer_name,initial_message_id,initial_text,status,created_at',
+    chat_id: supabase.eq(chat.id),
+    status: 'eq.open',
+    order: supabase.order('created_at', false),
+    limit: sourceType === 'group' ? '10' : '1'
+  }).catch(() => []);
+
+  if (sourceType !== 'group') return rows[0] || null;
+  if (!from.id) return null;
+  return rows.find(row => String(row.customer_tg_id || '') === String(from.id)) || null;
+}
+
+async function addRequestNote({ request, message }) {
+  const from = message.from || {};
+  const chat = message.chat || {};
+  const text = message.text || message.caption || '';
+  await supabase.insert('request_events', [{
+    request_id: request.id,
+    chat_id: chat.id,
+    tg_message_id: message.message_id,
+    event_type: 'note',
+    actor_tg_id: from.id || null,
+    actor_name: tgUserName(from),
+    text,
+    raw: message
+  }], { prefer: 'return=minimal' }).catch(() => null);
+  return { ...request, appended: true };
+}
+
 async function createSupportRequest({ message, sourceType, companyId = null }) {
   const from = message.from || {};
   const chat = message.chat || {};
   const text = message.text || message.caption || '';
+
+  const existing = await findMergeableOpenRequest({ message, sourceType });
+  if (existing) return addRequestNote({ request: existing, message });
+
   const rows = await supabase.insert('support_requests', [{
     source_type: sourceType,
     chat_id: chat.id,
