@@ -670,16 +670,25 @@ async function assignChatCompany(body) {
   return rows[0];
 }
 
-async function notifyAiModeEnabled(settings = {}) {
+async function notifyAiModeChange(settings = {}, enabled) {
   const chatId = settings.mainGroupId || await resolveMainStatsChatId().catch(() => '');
   if (!chatId) return;
 
-  await sendMessage(chatId, [
-    '⚡️ <b>AI mode faollashtirildi</b>',
-    '',
-    'Bot endi Uyqur texnik yordam so‘rovlarini yanada aqlliroq tahlil qiladi.',
-    'Savol, muammo va o‘rgatish niyatlari aniqroq ajratiladi.'
-  ].join('\n'));
+  const lines = enabled
+    ? [
+      '⚡️ <b>AI mode faollashtirildi</b>',
+      '',
+      'Bot endi Uyqur texnik yordam so‘rovlarini yanada aqlliroq tahlil qiladi.',
+      'Savol, muammo va o‘rgatish niyatlari aniqroq ajratiladi.'
+    ]
+    : [
+      '⚡️ <b>AI mode o‘chirildi</b>',
+      '',
+      'Bot endi standart aqlli aniqlash rejimida ishlaydi.',
+      'Uyqur texnik yordam so‘rovlari keyword va kontekst orqali ajratiladi.'
+    ];
+
+  await sendMessage(chatId, lines.join('\n'));
 }
 
 async function updateSettings(body) {
@@ -698,7 +707,10 @@ async function updateSettings(body) {
   rows.forEach(row => mergedRows.set(row.key, row));
   const nextSettings = normalizeSettings([...mergedRows.values()]);
   if (!previousSettings.aiMode && nextSettings.aiMode) {
-    await notifyAiModeEnabled(nextSettings).catch(error => console.error('[admin:ai-mode-notice:error]', error));
+    await notifyAiModeChange(nextSettings, true).catch(error => console.error('[admin:ai-mode-notice:error]', error));
+  }
+  if (previousSettings.aiMode && !nextSettings.aiMode) {
+    await notifyAiModeChange(nextSettings, false).catch(error => console.error('[admin:ai-mode-notice:error]', error));
   }
 
   return savedRows;

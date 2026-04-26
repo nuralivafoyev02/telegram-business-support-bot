@@ -99,8 +99,62 @@ async function testAiModeEnableSendsMainGroupNotice() {
   }
 }
 
+async function testAiModeDisableSendsMainGroupNotice() {
+  const originalSelect = supabase.select;
+  const originalInsert = supabase.insert;
+  const originalFetch = global.fetch;
+  const telegramCalls = [];
+  let insertedRows = null;
+
+  supabase.select = async (table) => {
+    assert.strictEqual(table, 'bot_settings');
+    return [
+      { key: 'ai_mode', value: { enabled: true, provider: null } },
+      { key: 'main_group', value: { chat_id: '-100777' } },
+      { key: 'done_tag', value: { tag: '#done' } },
+      { key: 'request_detection', value: { mode: 'keyword', min_text_length: 10 } }
+    ];
+  };
+  supabase.insert = async (table, rows) => {
+    assert.strictEqual(table, 'bot_settings');
+    insertedRows = rows;
+    return rows;
+  };
+  global.fetch = async (url, options) => {
+    telegramCalls.push({ url, body: JSON.parse(options.body) });
+    return {
+      ok: true,
+      json: async () => ({ ok: true, result: { message_id: 502 } })
+    };
+  };
+
+  try {
+    const result = await callSettings({
+      settings: [
+        { key: 'ai_mode', value: { enabled: false, provider: null } },
+        { key: 'main_group', value: { chat_id: '-100777' } },
+        { key: 'done_tag', value: { tag: '#done', auto_reply: true } },
+        { key: 'request_detection', value: { mode: 'keyword', min_text_length: 10 } }
+      ]
+    });
+
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.ok, true);
+    assert.strictEqual(insertedRows.some(row => row.key === 'ai_mode' && row.value.enabled === false), true);
+    assert.strictEqual(telegramCalls.length, 1);
+    assert.match(telegramCalls[0].url, /sendMessage$/);
+    assert.strictEqual(telegramCalls[0].body.chat_id, '-100777');
+    assert.match(telegramCalls[0].body.text, /⚡️ <b>AI mode o‘chirildi<\/b>/);
+  } finally {
+    supabase.select = originalSelect;
+    supabase.insert = originalInsert;
+    global.fetch = originalFetch;
+  }
+}
+
 async function run() {
   await testAiModeEnableSendsMainGroupNotice();
+  await testAiModeDisableSendsMainGroupNotice();
   console.log('Admin tests passed');
 }
 
