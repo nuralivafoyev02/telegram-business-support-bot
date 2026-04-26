@@ -88,7 +88,7 @@ async function testStartRepliesWhenDbTrackingFails() {
     assert.strictEqual(result.payload.handled, 'message');
     assert.strictEqual(telegramCalls.length, 1);
     assert.strictEqual(telegramCalls[0].chat_id, 777);
-    assert.match(telegramCalls[0].text, /Business Support Bot/);
+    assert.match(telegramCalls[0].text, /Uyqur texnik yordam boti/);
   } finally {
     supabase.insert = originalInsert;
     supabase.select = originalSelect;
@@ -334,9 +334,44 @@ async function testAiModeSettingOpensPrivateBroadRequest() {
       message: {
         message_id: 16,
         date: 1777100000,
-        text: 'Menga katalog yuboring',
+        text: 'Uyqur obyekt sozlamalari haqida gaplashamiz',
         chat: { id: 778, type: 'private', first_name: 'Vali' },
         from: { id: 778, first_name: 'Vali', is_bot: false }
+      }
+    });
+
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.handled, 'message');
+    assert.strictEqual(insertedTables.includes('support_requests'), true);
+    assert.strictEqual(insertedTables.includes('request_events'), true);
+  } finally {
+    supabase.insert = originalInsert;
+    supabase.select = originalSelect;
+    clearBotSettingsCache();
+  }
+}
+
+async function testLocalSmartIntentOpensPrivateRequestWithoutAiMode() {
+  const originalInsert = supabase.insert;
+  const originalSelect = supabase.select;
+  const insertedTables = [];
+  clearBotSettingsCache();
+
+  supabase.select = async () => [];
+  supabase.insert = async (table, rows) => {
+    insertedTables.push(table);
+    return rows.map(row => ({ id: `${table}-row`, ...row }));
+  };
+
+  try {
+    const result = await callHandler({
+      update_id: 10,
+      message: {
+        message_id: 18,
+        date: 1777100000,
+        text: 'Smeta hisobotini chiqara olmayapman, ko‘rsatib bering',
+        chat: { id: 779, type: 'private', first_name: 'Nodir' },
+        from: { id: 779, first_name: 'Nodir', is_bot: false }
       }
     });
 
@@ -453,6 +488,7 @@ async function testBotRemovalMarksGroupInactive() {
   await testGroupDoneDoesNotReplyToGroup();
   await testRequestMessageAppendsToExistingOpenRequest();
   await testAiModeSettingOpensPrivateBroadRequest();
+  await testLocalSmartIntentOpensPrivateRequestWithoutAiMode();
   await testMainGroupStatsTriggerSendsReport();
   await testBotRemovalMarksGroupInactive();
   console.log('Bot tests passed');

@@ -75,10 +75,10 @@ function summarizeUpdate(update = {}) {
 async function handleStart(message) {
   const webapp = optionalEnv('WEBAPP_URL', '');
   const text = [
-    '✅ <b>Business Support Bot ishga tushdi</b>',
+    '✅ <b>Uyqur texnik yordam boti ishga tushdi</b>',
     '',
-    'Bu bot guruh va Telegram Business chatlardagi mijoz so‘rovlarini statistikaga qo‘shadi.',
-    'So‘rov yopilganda xodim <b>#done</b> tegini yuboradi.',
+    'Bu bot Uyqur dasturi bo‘yicha mijozlardan tushgan savol, muammo va o‘rgatish so‘rovlarini statistikaga qo‘shadi.',
+    'Xodim masalani yakunlaganda <b>#done</b> tegini yuboradi.',
     webapp ? `Admin panel: ${escapeHtml(webapp)}` : ''
   ].filter(Boolean).join('\n');
   await sendMessage(message.chat.id, text);
@@ -130,9 +130,9 @@ async function handleHelp(message) {
   await sendMessage(message.chat.id, [
     '📌 <b>Qisqa qo‘llanma</b>',
     '',
-    '1) Mijoz guruh yoki business chatga murojaat yozadi.',
-    '2) Bot murojaatni <b>open request</b> sifatida saqlaydi.',
-    '3) Xodim ishni tugatgach <b>#done</b> yozadi.',
+    '1) Mijoz Uyqur dasturidagi savol yoki muammoni guruh/business chatga yozadi.',
+    '2) Bot uni <b>open request</b> sifatida saqlaydi.',
+    '3) Xodim tushuntirib yoki muammoni hal qilib bo‘lgach <b>#done</b> yozadi.',
     '4) Statistika webappda yangilanadi.',
     '5) Guruh webappda ko‘rinmasa guruh ichida <b>/register</b> yuboring.',
     '',

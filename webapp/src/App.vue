@@ -1,9 +1,9 @@
 <template>
   <main v-if="!token" class="login-screen">
     <section class="card login-card">
-      <div class="logo">BS</div>
-      <h1>Business Support Bot</h1>
-      <p>Admin panel</p>
+      <div class="logo">UQ</div>
+      <h1>Uyqur Support</h1>
+      <p>Texnik yordam paneli</p>
       <form class="form" @submit.prevent="submitLogin">
         <label class="label">Login
           <input v-model.trim="loginForm.username" class="input" autocomplete="username" placeholder="admin"
@@ -34,10 +34,10 @@
   <div v-else class="app-shell">
     <aside class="sidebar">
       <div class="brand">
-        <div class="logo">BS</div>
+        <div class="logo">UQ</div>
         <div>
-          <div class="brand-title">Support Center</div>
-          <div class="brand-subtitle">Admin panel</div>
+          <div class="brand-title">Uyqur Support</div>
+          <div class="brand-subtitle">Texnik yordam paneli</div>
         </div>
       </div>
 
@@ -401,9 +401,9 @@
           </label>
           <label class="label">Rol
             <select v-model="employeeForm.role" class="select">
-              <option value="support">Support</option>
-              <option value="manager">Manager</option>
-              <option value="owner">Owner</option>
+              <option value="support">Texnik yordam</option>
+              <option value="manager">Menejer</option>
+              <option value="owner">Ega</option>
             </select>
           </label>
           <label class="label">Status
