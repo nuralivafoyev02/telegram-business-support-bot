@@ -14,6 +14,7 @@
     "check:backend": "node --check backend/api/bot.js && node --check backend/api/admin.js && node --check backend/lib/*.js && node --check api/bot.js && node --check api/admin.js && node --check webapp/api/*.js",
     "test:parser": "node tests/parser.test.js",
     "test:bot": "node tests/bot.test.js",
+    "test:admin": "node tests/admin.test.js",
     "test:report": "node tests/report.test.js"
   },
   "engines": {

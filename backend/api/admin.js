@@ -5,7 +5,8 @@ const { allowCors, sendJson, readBody, getQuery } = require('../lib/http');
 const { login, requireAdmin, hashPassword } = require('../lib/auth');
 const { sendMessage, sendBusinessMessage, getWebhookInfo, setWebhook } = require('../lib/telegram');
 const { optionalEnv } = require('../lib/env');
-const { sendMainStatsReport } = require('../lib/report');
+const { normalizeSettings, clearBotSettingsCache } = require('../lib/bot-settings');
+const { resolveMainStatsChatId, sendMainStatsReport } = require('../lib/report');
 const stats = require('../lib/stats');
 
 const TELEGRAM_ALLOWED_UPDATES = [
@@ -669,11 +670,38 @@ async function assignChatCompany(body) {
   return rows[0];
 }
 
+async function notifyAiModeEnabled(settings = {}) {
+  const chatId = settings.mainGroupId || await resolveMainStatsChatId().catch(() => '');
+  if (!chatId) return;
+
+  await sendMessage(chatId, [
+    '⚡️ <b>AI mode faollashtirildi</b>',
+    '',
+    'Bot endi Uyqur texnik yordam so‘rovlarini yanada aqlliroq tahlil qiladi.',
+    'Savol, muammo va o‘rgatish niyatlari aniqroq ajratiladi.'
+  ].join('\n'));
+}
+
 async function updateSettings(body) {
   const items = Array.isArray(body.settings) ? body.settings : [];
   if (!items.length) return [];
+  const previousRows = await supabase.select('bot_settings', {
+    select: 'key,value',
+    key: 'in.(ai_mode,done_tag,request_detection,main_group)'
+  }).catch(() => []);
+  const previousSettings = normalizeSettings(previousRows || []);
   const rows = items.map(item => ({ key: item.key, value: item.value, updated_at: new Date().toISOString() }));
-  return supabase.insert('bot_settings', rows, { upsert: true, onConflict: 'key' });
+  const savedRows = await supabase.insert('bot_settings', rows, { upsert: true, onConflict: 'key' });
+  clearBotSettingsCache();
+
+  const mergedRows = new Map((previousRows || []).map(row => [row.key, row]));
+  rows.forEach(row => mergedRows.set(row.key, row));
+  const nextSettings = normalizeSettings([...mergedRows.values()]);
+  if (!previousSettings.aiMode && nextSettings.aiMode) {
+    await notifyAiModeEnabled(nextSettings).catch(error => console.error('[admin:ai-mode-notice:error]', error));
+  }
+
+  return savedRows;
 }
 
 async function updateAdmin(body, currentAdmin) {

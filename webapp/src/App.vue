@@ -492,8 +492,32 @@
 import { computed, defineComponent, h, onMounted, reactive, ref } from 'vue';
 import { api, getToken, setToken } from './api';
 
+const ACTIVE_TAB_STORAGE_KEY = 'uyqur_support_active_tab';
+const tabs = [
+  { key: 'stats', label: 'Statistika', icon: '📊' },
+  { key: 'groups', label: 'Guruhlar', icon: '👥' },
+  { key: 'privates', label: 'Chatlar', icon: '💬' },
+  { key: 'employees', label: 'Xodimlar', icon: '🧑‍💼' },
+  { key: 'settings', label: 'Sozlamalar', icon: '⚙️' }
+];
+
+function isValidTab(key) {
+  return tabs.some(tab => tab.key === key);
+}
+
+function getStoredActiveTab() {
+  if (typeof window === 'undefined') return 'stats';
+  const stored = window.localStorage.getItem(ACTIVE_TAB_STORAGE_KEY);
+  return isValidTab(stored) ? stored : 'stats';
+}
+
+function storeActiveTab(key) {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(ACTIVE_TAB_STORAGE_KEY, key);
+}
+
 const token = ref(getToken());
-const activeTab = ref('stats');
+const activeTab = ref(getStoredActiveTab());
 const loading = ref(false);
 const loadingAction = ref('');
 const toast = ref('');
@@ -517,13 +541,6 @@ const loginStatus = ref('');
 const loginStatusType = ref('');
 const loginError = ref('');
 
-const tabs = [
-  { key: 'stats', label: 'Statistika', icon: '📊' },
-  { key: 'groups', label: 'Guruhlar', icon: '👥' },
-  { key: 'privates', label: 'Chatlar', icon: '💬' },
-  { key: 'employees', label: 'Xodimlar', icon: '🧑‍💼' },
-  { key: 'settings', label: 'Sozlamalar', icon: '⚙️' }
-];
 const primaryTabs = computed(() => tabs.filter(tab => tab.key !== 'settings'));
 const settingsTab = tabs.find(tab => tab.key === 'settings');
 
@@ -771,7 +788,8 @@ async function loadSettings() {
 }
 
 async function setTab(key) {
-  activeTab.value = key;
+  activeTab.value = isValidTab(key) ? key : 'stats';
+  storeActiveTab(activeTab.value);
   search.value = '';
   startLoading('tab');
   try {
