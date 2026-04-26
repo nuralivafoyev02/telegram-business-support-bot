@@ -386,6 +386,84 @@ async function testLocalSmartIntentOpensPrivateRequestWithoutAiMode() {
   }
 }
 
+async function testSelectedAiModelClassifiesRequest() {
+  const originalInsert = supabase.insert;
+  const originalSelect = supabase.select;
+  const originalFetch = global.fetch;
+  const insertedTables = [];
+  let aiCalled = false;
+  clearBotSettingsCache();
+
+  supabase.select = async (table) => {
+    if (table === 'bot_settings') {
+      return [
+        { key: 'ai_mode', value: { enabled: true, provider: 'openai_compatible', model: 'test-model', model_label: 'Test AI' } },
+        {
+          key: 'ai_integration',
+          value: {
+            enabled: true,
+            provider: 'openai_compatible',
+            label: 'Test AI',
+            base_url: 'https://ai.example/v1',
+            model: 'test-model',
+            api_key: 'secret-token',
+            system_prompt: 'Return JSON classification',
+            knowledge_text: 'Uyqur technical support'
+          }
+        },
+        { key: 'request_detection', value: { mode: 'keyword', min_text_length: 10 } }
+      ];
+    }
+    if (table === 'support_requests') return [];
+    return [];
+  };
+  supabase.insert = async (table, rows) => {
+    insertedTables.push(table);
+    return rows.map(row => ({ id: `${table}-row`, ...row }));
+  };
+  global.fetch = async (url, options) => {
+    aiCalled = true;
+    assert.strictEqual(url, 'https://ai.example/v1/chat/completions');
+    const body = JSON.parse(options.body);
+    assert.strictEqual(body.model, 'test-model');
+    assert.strictEqual(options.headers.Authorization, 'Bearer secret-token');
+    return {
+      ok: true,
+      json: async () => ({
+        choices: [{
+          message: {
+            content: JSON.stringify({ classification: 'request', confidence: 0.93, reason: 'Uyqur support intent' })
+          }
+        }]
+      })
+    };
+  };
+
+  try {
+    const result = await callHandler({
+      update_id: 11,
+      message: {
+        message_id: 19,
+        date: 1777100000,
+        text: 'Buni texnik yordam ko‘rib chiqsin',
+        chat: { id: 780, type: 'private', first_name: 'Sardor' },
+        from: { id: 780, first_name: 'Sardor', is_bot: false }
+      }
+    });
+
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.handled, 'message');
+    assert.strictEqual(aiCalled, true);
+    assert.strictEqual(insertedTables.includes('support_requests'), true);
+    assert.strictEqual(insertedTables.includes('request_events'), true);
+  } finally {
+    supabase.insert = originalInsert;
+    supabase.select = originalSelect;
+    global.fetch = originalFetch;
+    clearBotSettingsCache();
+  }
+}
+
 async function testMainGroupStatsTriggerSendsReport() {
   const originalInsert = supabase.insert;
   const originalSelect = supabase.select;
@@ -489,6 +567,7 @@ async function testBotRemovalMarksGroupInactive() {
   await testRequestMessageAppendsToExistingOpenRequest();
   await testAiModeSettingOpensPrivateBroadRequest();
   await testLocalSmartIntentOpensPrivateRequestWithoutAiMode();
+  await testSelectedAiModelClassifiesRequest();
   await testMainGroupStatsTriggerSendsReport();
   await testBotRemovalMarksGroupInactive();
   console.log('Bot tests passed');

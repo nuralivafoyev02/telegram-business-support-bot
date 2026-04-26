@@ -6,6 +6,7 @@ const { sendMessage, deleteMessage, escapeHtml } = require('../lib/telegram');
 const { getMessageText, classifyMessage } = require('../lib/parser');
 const { getBotSettings } = require('../lib/bot-settings');
 const { resolveMainStatsChatId, sendMainStatsReport } = require('../lib/report');
+const { shouldUseExternalAi, classifyWithAi } = require('../lib/ai');
 const metrics = require('../lib/metrics');
 
 const START_RE = /^\/start(?:@\w+)?(?:\s|$)/i;
@@ -171,6 +172,29 @@ async function recordIncomingMessage(updateKind, message, sourceType, classifica
   return chatRow;
 }
 
+async function classifyIncomingMessage({ text, chat, sourceType, updateKind, employee, settings }) {
+  const useExternalAi = shouldUseExternalAi(settings);
+  const localSettings = useExternalAi ? { ...settings, aiMode: false } : settings;
+  let classification = classifyMessage({
+    text,
+    chatType: chat.type,
+    isKnownEmployee: !!employee,
+    isBusiness: updateKind.includes('business'),
+    ...localSettings
+  });
+
+  if (!employee && useExternalAi && !['done', 'command'].includes(classification)) {
+    try {
+      const ai = await classifyWithAi({ text, chatType: chat.type, sourceType, settings });
+      if (ai && ai.classification) classification = ai.classification;
+    } catch (error) {
+      logBackgroundError('ai-classify', error);
+    }
+  }
+
+  return classification;
+}
+
 async function handleCommand(updateKind, message, sourceType, text, classification) {
   const tracking = recordIncomingMessage(updateKind, message, sourceType, classification);
   const chat = message.chat || {};
@@ -217,12 +241,13 @@ async function processMessage(updateKind, message) {
   });
 
   const employee = await metrics.getKnownEmployeeByTelegramId(from.id);
-  const classification = classifyMessage({
+  const classification = await classifyIncomingMessage({
     text,
-    chatType: chat.type,
-    isKnownEmployee: !!employee,
-    isBusiness: updateKind.includes('business'),
-    ...settings
+    chat,
+    sourceType,
+    updateKind,
+    employee,
+    settings
   });
 
   await metrics.saveMessage({ message, updateKind, sourceType, classification, employee });

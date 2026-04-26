@@ -305,7 +305,8 @@
                   <label class="label">AI mode
                     <select v-model="settingsForm.ai_mode" class="select">
                       <option value="false">O‘chiq</option>
-                      <option value="true">Yoqilgan</option>
+                      <option value="true">Local smart</option>
+                      <option value="model" :disabled="!aiIntegrationReady">{{ aiModelOptionLabel }}</option>
                     </select>
                   </label>
                   <label class="label">Yopish tegi
@@ -338,6 +339,59 @@
                 <Transition name="fade">
                   <pre v-if="webhookStatusText" class="webhook-status">{{ webhookStatusText }}</pre>
                 </Transition>
+              </section>
+            </div>
+          </template>
+
+          <template v-if="activeTab === 'integrations'">
+            <div class="settings-stack integration-stack">
+              <section class="card pad settings-card">
+                <div class="settings-head">
+                  <div>
+                    <div class="card-title">AI integratsiya</div>
+                  </div>
+                  <span class="status-pill" :class="{ ready: aiIntegrationReady }">{{ aiIntegrationStatus }}</span>
+                </div>
+                <form class="form settings-form integration-form" @submit.prevent="saveIntegration">
+                  <label class="label">Provider
+                    <select v-model="integrationForm.provider" class="select">
+                      <option value="openai_compatible">OpenAI-compatible</option>
+                    </select>
+                  </label>
+                  <label class="label">Model label
+                    <input v-model.trim="integrationForm.label" class="input" placeholder="Uyqur AI" />
+                  </label>
+                  <label class="label">Base URL
+                    <input v-model.trim="integrationForm.base_url" class="input" placeholder="https://api.openai.com/v1" />
+                  </label>
+                  <label class="label">Model
+                    <input v-model.trim="integrationForm.model" class="input" placeholder="gpt-4o-mini" />
+                  </label>
+                  <label class="label">API token
+                    <input v-model="integrationForm.api_key" class="input" type="password"
+                      :placeholder="integrationForm.has_api_key ? 'Saqlangan tokenni almashtirish' : 'sk-...'" />
+                  </label>
+                  <label class="label">Holat
+                    <select v-model="integrationForm.enabled" class="select">
+                      <option :value="true">Aktiv</option>
+                      <option :value="false">O‘chiq</option>
+                    </select>
+                  </label>
+                  <label class="label wide">System prompt
+                    <textarea v-model="integrationForm.system_prompt" class="textarea tall"></textarea>
+                  </label>
+                  <label class="label wide">Bilim bazasi
+                    <textarea v-model="integrationForm.knowledge_text" class="textarea tall"
+                      placeholder="Uyqur dasturi bo‘yicha ichki qo‘llanma va tushuntirishlar..."></textarea>
+                  </label>
+                  <label class="label wide">PDF, Word, Excel yoki matn fayl
+                    <input class="input" type="file" multiple accept=".pdf,.docx,.xlsx,.txt,.md,.csv"
+                      :disabled="loadingAction === 'extractKnowledge'" @change="importKnowledgeFiles" />
+                  </label>
+                  <button class="btn primary" :disabled="loadingAction === 'saveIntegration' || loadingAction === 'extractKnowledge'">
+                    {{ loadingAction === 'saveIntegration' ? 'Saqlamoqda...' : 'Integratsiyani saqlash' }}
+                  </button>
+                </form>
               </section>
             </div>
           </template>
@@ -498,6 +552,7 @@ const tabs = [
   { key: 'groups', label: 'Guruhlar', icon: '👥' },
   { key: 'privates', label: 'Chatlar', icon: '💬' },
   { key: 'employees', label: 'Xodimlar', icon: '🧑‍💼' },
+  { key: 'integrations', label: 'Integratsiya', icon: '⚡️' },
   { key: 'settings', label: 'Sozlamalar', icon: '⚙️' }
 ];
 
@@ -550,11 +605,27 @@ const broadcastForm = reactive({ target_type: 'groups', title: 'Yangilik', text:
 const employeeForm = reactive({ id: '', tg_user_id: '', full_name: '', username: '', phone: '', role: 'support', is_active: true });
 const adminForm = reactive({ username: 'admin', full_name: 'System Admin', new_password: '' });
 const settingsForm = reactive({ ai_mode: 'false', done_tag: '#done', main_group_id: '', request_detection: 'keyword' });
+const integrationForm = reactive({
+  enabled: true,
+  provider: 'openai_compatible',
+  label: 'Uyqur AI',
+  base_url: 'https://api.openai.com/v1',
+  model: '',
+  api_key: '',
+  has_api_key: false,
+  system_prompt: '',
+  knowledge_text: ''
+});
 
 const current = computed(() => tabs.find(t => t.key === activeTab.value) || tabs[0]);
 const currentTitle = computed(() => current.value.label);
 const loginFeedback = computed(() => loginError.value || loginStatus.value);
 const loginButtonText = computed(() => loadingAction.value === 'login' ? 'Tekshirilmoqda...' : 'Kirish');
+const aiIntegrationReady = computed(() => !!(integrationForm.enabled && integrationForm.model && (integrationForm.api_key || integrationForm.has_api_key)));
+const aiModelOptionLabel = computed(() => aiIntegrationReady.value
+  ? `${integrationForm.label || integrationForm.model} modeli`
+  : 'AI model ulanmagan');
+const aiIntegrationStatus = computed(() => aiIntegrationReady.value ? 'Ulangan' : 'Token yoki model kerak');
 const periodOptions = [
   { key: 'today', label: 'Bugun' },
   { key: 'week', label: 'Hafta' },
@@ -595,7 +666,9 @@ const loadingText = computed(() => ({
   mainStats: 'Yuborilmoqda...',
   webhookInfo: 'Tekshirilmoqda...',
   webhookConnect: 'Ulanmoqda...',
-  saveSettings: 'Saqlamoqda...'
+  saveSettings: 'Saqlamoqda...',
+  saveIntegration: 'Saqlamoqda...',
+  extractKnowledge: 'Fayl o‘qilmoqda...'
 }[loadingAction.value] || 'Yuklanmoqda...'));
 
 function startLoading(action) {
@@ -754,6 +827,7 @@ async function refresh() {
     if (activeTab.value === 'groups') groups.value = await api.groups();
     if (activeTab.value === 'privates') privates.value = await api.privates();
     if (activeTab.value === 'employees') employees.value = await api.employees();
+    if (activeTab.value === 'integrations') await loadSettings();
     if (activeTab.value === 'settings') await loadSettings();
   } catch (error) {
     showToast(error.message);
@@ -777,10 +851,22 @@ async function loadSettings() {
     adminForm.full_name = admin.full_name || 'System Admin';
   }
   const ai = data.settings?.find(s => s.key === 'ai_mode')?.value;
+  const integration = data.settings?.find(s => s.key === 'ai_integration')?.value;
   const done = data.settings?.find(s => s.key === 'done_tag')?.value;
   const mainGroup = data.settings?.find(s => s.key === 'main_group')?.value;
   const detect = data.settings?.find(s => s.key === 'request_detection')?.value;
-  settingsForm.ai_mode = String(!!ai?.enabled);
+  Object.assign(integrationForm, {
+    enabled: integration?.enabled !== false,
+    provider: integration?.provider || 'openai_compatible',
+    label: integration?.label || integration?.model || 'Uyqur AI',
+    base_url: integration?.base_url || 'https://api.openai.com/v1',
+    model: integration?.model || '',
+    api_key: '',
+    has_api_key: !!integration?.has_api_key,
+    system_prompt: integration?.system_prompt || '',
+    knowledge_text: integration?.knowledge_text || ''
+  });
+  settingsForm.ai_mode = ai?.enabled && ai?.provider ? 'model' : String(!!ai?.enabled);
   settingsForm.done_tag = done?.tag || '#done';
   settingsForm.main_group_id = mainGroup?.chat_id || '';
   settingsForm.request_detection = detect?.mode || 'keyword';
@@ -797,6 +883,7 @@ async function setTab(key) {
     if (activeTab.value === 'groups') groups.value = await api.groups();
     if (activeTab.value === 'privates') privates.value = await api.privates();
     if (activeTab.value === 'employees') employees.value = await api.employees();
+    if (activeTab.value === 'integrations') await loadSettings();
     if (activeTab.value === 'settings') await loadSettings();
   } catch (error) {
     showToast(error.message);
@@ -1122,12 +1209,51 @@ async function reconnectTelegramWebhook() {
   }
 }
 
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || '').split(',').pop() || '');
+    reader.onerror = () => reject(reader.error || new Error('Fayl o‘qilmadi'));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function importKnowledgeFiles(event) {
+  const files = Array.from(event.target.files || []);
+  if (!files.length) return;
+  startLoading('extractKnowledge');
+  try {
+    const extracted = [];
+    for (const file of files) {
+      const data = await fileToBase64(file);
+      const result = await api.extractAiKnowledge({ file: { name: file.name, type: file.type, data } });
+      extracted.push(`### ${result.name}\n${result.text}`);
+    }
+    integrationForm.knowledge_text = [integrationForm.knowledge_text, ...extracted].filter(Boolean).join('\n\n').trim();
+    showToast(`${files.length} ta fayldan ma’lumot qo‘shildi`);
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    event.target.value = '';
+    stopLoading('extractKnowledge');
+  }
+}
+
 async function saveSettings() {
   startLoading('saveSettings');
   try {
+    const useModel = settingsForm.ai_mode === 'model' && aiIntegrationReady.value;
     await api.saveSettings({
       settings: [
-        { key: 'ai_mode', value: { enabled: settingsForm.ai_mode === 'true', provider: null } },
+        {
+          key: 'ai_mode',
+          value: {
+            enabled: settingsForm.ai_mode !== 'false',
+            provider: useModel ? integrationForm.provider : null,
+            model: useModel ? integrationForm.model : null,
+            model_label: useModel ? (integrationForm.label || integrationForm.model) : null
+          }
+        },
         { key: 'done_tag', value: { tag: settingsForm.done_tag, auto_reply: true } },
         { key: 'main_group', value: { chat_id: settingsForm.main_group_id } },
         { key: 'request_detection', value: { mode: settingsForm.request_detection, min_text_length: 10 } }
@@ -1138,6 +1264,37 @@ async function saveSettings() {
     showToast(error.message);
   } finally {
     stopLoading('saveSettings');
+  }
+}
+
+async function saveIntegration() {
+  startLoading('saveIntegration');
+  try {
+    await api.saveSettings({
+      settings: [
+        {
+          key: 'ai_integration',
+          value: {
+            enabled: integrationForm.enabled,
+            provider: integrationForm.provider,
+            label: integrationForm.label,
+            base_url: integrationForm.base_url,
+            model: integrationForm.model,
+            api_key: integrationForm.api_key,
+            has_api_key: integrationForm.has_api_key,
+            system_prompt: integrationForm.system_prompt,
+            knowledge_text: integrationForm.knowledge_text
+          }
+        }
+      ]
+    });
+    integrationForm.has_api_key = Boolean(integrationForm.api_key || integrationForm.has_api_key);
+    integrationForm.api_key = '';
+    showToast('AI integratsiya saqlandi');
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    stopLoading('saveIntegration');
   }
 }
 

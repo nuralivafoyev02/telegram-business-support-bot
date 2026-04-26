@@ -6,6 +6,8 @@ const { login, requireAdmin, hashPassword } = require('../lib/auth');
 const { sendMessage, sendBusinessMessage, getWebhookInfo, setWebhook } = require('../lib/telegram');
 const { optionalEnv } = require('../lib/env');
 const { normalizeSettings, clearBotSettingsCache } = require('../lib/bot-settings');
+const { normalizeAiIntegration, mergeAiIntegration, sanitizeAiIntegration, isAiIntegrationReady, aiIntegrationSignature } = require('../lib/ai-config');
+const { extractTextFromUpload } = require('../lib/document-text');
 const { resolveMainStatsChatId, sendMainStatsReport } = require('../lib/report');
 const stats = require('../lib/stats');
 
@@ -362,7 +364,12 @@ async function listSettings() {
     supabase.select('bot_settings', { select: 'key,value,updated_at', order: 'key.asc' }),
     supabase.select('admins', { select: 'id,username,full_name,role,is_active,last_login_at,created_at', order: 'created_at.asc', limit: '20' }).catch(() => [])
   ]);
-  return { settings, admins };
+  return {
+    settings: settings.map(row => row.key === 'ai_integration'
+      ? { ...row, value: sanitizeAiIntegration(row.value) }
+      : row),
+    admins
+  };
 }
 
 function maskWebhookUrl(url) {
@@ -691,15 +698,41 @@ async function notifyAiModeChange(settings = {}, enabled) {
   await sendMessage(chatId, lines.join('\n'));
 }
 
+async function notifyAiIntegrationConnected(settings = {}) {
+  const chatId = settings.mainGroupId || await resolveMainStatsChatId().catch(() => '');
+  if (!chatId) return;
+  const label = settings.aiIntegration && (settings.aiIntegration.label || settings.aiIntegration.model) || 'AI model';
+
+  await sendMessage(chatId, [
+    '⚡️ <b>AI model ulandi</b>',
+    '',
+    `<b>${String(label).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')}</b> integratsiyasi tayyor.`,
+    'AI mode selectida shu model tanlansa, bot xabarlarni AI orqali tahlil qiladi.'
+  ].join('\n'));
+}
+
+function settingValue(rows = [], key) {
+  const row = rows.find(item => item && item.key === key);
+  return row && row.value && typeof row.value === 'object' ? row.value : {};
+}
+
 async function updateSettings(body) {
   const items = Array.isArray(body.settings) ? body.settings : [];
   if (!items.length) return [];
   const previousRows = await supabase.select('bot_settings', {
     select: 'key,value',
-    key: 'in.(ai_mode,done_tag,request_detection,main_group)'
+    key: 'in.(ai_mode,ai_integration,done_tag,request_detection,main_group)'
   }).catch(() => []);
   const previousSettings = normalizeSettings(previousRows || []);
-  const rows = items.map(item => ({ key: item.key, value: item.value, updated_at: new Date().toISOString() }));
+  const previousIntegration = normalizeAiIntegration(settingValue(previousRows, 'ai_integration'));
+  const previousIntegrationReady = isAiIntegrationReady(previousIntegration);
+  const previousIntegrationSignature = aiIntegrationSignature(previousIntegration);
+  const rows = items.map(item => {
+    const value = item.key === 'ai_integration'
+      ? mergeAiIntegration(previousIntegration, item.value)
+      : item.value;
+    return { key: item.key, value, updated_at: new Date().toISOString() };
+  });
   const savedRows = await supabase.insert('bot_settings', rows, { upsert: true, onConflict: 'key' });
   clearBotSettingsCache();
 
@@ -712,8 +745,19 @@ async function updateSettings(body) {
   if (previousSettings.aiMode && !nextSettings.aiMode) {
     await notifyAiModeChange(nextSettings, false).catch(error => console.error('[admin:ai-mode-notice:error]', error));
   }
+  const nextIntegrationReady = isAiIntegrationReady(nextSettings.aiIntegration);
+  const integrationChanged = previousIntegrationSignature !== aiIntegrationSignature(nextSettings.aiIntegration);
+  if (nextIntegrationReady && (!previousIntegrationReady || integrationChanged)) {
+    await notifyAiIntegrationConnected(nextSettings).catch(error => console.error('[admin:ai-integration-notice:error]', error));
+  }
 
-  return savedRows;
+  return savedRows.map(row => row.key === 'ai_integration'
+    ? { ...row, value: sanitizeAiIntegration(row.value) }
+    : row);
+}
+
+async function extractAiKnowledge(body = {}) {
+  return extractTextFromUpload(body.file || body);
 }
 
 async function updateAdmin(body, currentAdmin) {
@@ -765,6 +809,7 @@ async function handlePost(action, body, currentAdmin) {
     case 'sendEmployeesMessage': return sendToEmployees(body);
     case 'assignChatCompany': return assignChatCompany(body);
     case 'settings': return updateSettings(body);
+    case 'aiKnowledgeExtract': return extractAiKnowledge(body);
     case 'adminProfile': return updateAdmin(body, currentAdmin);
     case 'sendMainStats': return sendMainStatsReport(body.chat_id || body.main_group_id);
     case 'setTelegramWebhook': return connectTelegramWebhook(body);

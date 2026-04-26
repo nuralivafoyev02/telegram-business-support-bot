@@ -152,9 +152,70 @@ async function testAiModeDisableSendsMainGroupNotice() {
   }
 }
 
+async function testAiIntegrationSaveMasksTokenAndNotifiesMainGroup() {
+  const originalSelect = supabase.select;
+  const originalInsert = supabase.insert;
+  const originalFetch = global.fetch;
+  const telegramCalls = [];
+
+  supabase.select = async (table) => {
+    assert.strictEqual(table, 'bot_settings');
+    return [
+      { key: 'ai_mode', value: { enabled: false, provider: null } },
+      { key: 'main_group', value: { chat_id: '-100777' } },
+      { key: 'done_tag', value: { tag: '#done' } },
+      { key: 'request_detection', value: { mode: 'keyword', min_text_length: 10 } }
+    ];
+  };
+  supabase.insert = async (table, rows) => {
+    assert.strictEqual(table, 'bot_settings');
+    return rows;
+  };
+  global.fetch = async (url, options) => {
+    telegramCalls.push({ url, body: JSON.parse(options.body) });
+    return {
+      ok: true,
+      json: async () => ({ ok: true, result: { message_id: 503 } })
+    };
+  };
+
+  try {
+    const result = await callSettings({
+      settings: [{
+        key: 'ai_integration',
+        value: {
+          enabled: true,
+          provider: 'openai_compatible',
+          label: 'Uyqur AI',
+          base_url: 'https://ai.example/v1',
+          model: 'uyqur-model',
+          api_key: 'secret-token',
+          system_prompt: 'Classify support requests',
+          knowledge_text: 'Uyqurda obyekt va smeta bor.'
+        }
+      }]
+    });
+
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.ok, true);
+    const integration = result.payload.data.find(row => row.key === 'ai_integration').value;
+    assert.strictEqual(integration.api_key, '');
+    assert.strictEqual(integration.has_api_key, true);
+    assert.strictEqual(telegramCalls.length, 1);
+    assert.match(telegramCalls[0].body.text, /⚡️ <b>AI model ulandi<\/b>/);
+    assert.match(telegramCalls[0].body.text, /Uyqur AI/);
+    assert.doesNotMatch(JSON.stringify(result.payload), /secret-token/);
+  } finally {
+    supabase.select = originalSelect;
+    supabase.insert = originalInsert;
+    global.fetch = originalFetch;
+  }
+}
+
 async function run() {
   await testAiModeEnableSendsMainGroupNotice();
   await testAiModeDisableSendsMainGroupNotice();
+  await testAiIntegrationSaveMasksTokenAndNotifiesMainGroup();
   console.log('Admin tests passed');
 }
 

@@ -44,6 +44,7 @@ export const api = {
   sendEmployeeMessage: payload => request('sendEmployeeMessage', { method: 'POST', body: payload }).then(r => r.data),
   sendEmployeesMessage: payload => request('sendEmployeesMessage', { method: 'POST', body: payload }).then(r => r.data),
   saveSettings: payload => request('settings', { method: 'POST', body: payload }).then(r => r.data),
+  extractAiKnowledge: payload => request('aiKnowledgeExtract', { method: 'POST', body: payload }).then(r => r.data),
   saveAdminProfile: payload => request('adminProfile', { method: 'POST', body: payload }).then(r => r.data),
   sendMainStats: payload => request('sendMainStats', { method: 'POST', body: payload || {} }).then(r => r.data),
   telegramWebhookInfo: () => request('telegramWebhookInfo').then(r => r.data),
