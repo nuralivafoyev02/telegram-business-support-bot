@@ -254,13 +254,29 @@ button:disabled { cursor: wait; opacity: .72; }
   border: 1px solid var(--line);
   border-left: 0;
   border-right: 0;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(142, 199, 255, .45) transparent;
+}
+.table-wrap::-webkit-scrollbar {
+  width: 4px;
+  height: 2px;
+}
+.table-wrap::-webkit-scrollbar-track {
+  background: transparent;
+}
+.table-wrap::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(142, 199, 255, .42);
+}
+.table-wrap::-webkit-scrollbar-thumb:hover {
+  background: rgba(142, 199, 255, .62);
 }
 table { width: 100%; border-collapse: collapse; min-width: 760px; }
 th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid rgba(255,255,255,.065); white-space: nowrap; }
 th { color: #9ab0ca; font-size: 12px; font-weight: 700; background: rgba(255,255,255,.04); position: sticky; top: 0; z-index: 1; }
 td { color: #eef6ff; font-size: 13px; }
-tr { transition: background .14s ease; }
-tr:hover { background: rgba(255,255,255,.04); }
+tr { transition: background-color .12s ease; }
+tbody tr:hover { background: rgba(142, 199, 255, .035); }
 .table-wrap td .btn + .btn { margin-left: 8px; }
 .select-cell {
   width: 44px;

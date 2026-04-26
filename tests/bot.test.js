@@ -166,7 +166,7 @@ async function testGroupStartRegistersGroupAndDeletesCommand() {
     assert.strictEqual(chatRow.source_type, 'group');
     assert.strictEqual(telegramCalls.length, 1);
     assert.match(telegramCalls[0].url, /deleteMessage$/);
-    assert.strictEqual(telegramCalls[0].body.chat_id, -100777);
+    assert.strictEqual(String(telegramCalls[0].body.chat_id), '-100777');
     assert.strictEqual(telegramCalls[0].body.message_id, 12);
     assert.strictEqual(telegramCalls[0].body.text, undefined);
   } finally {
@@ -351,6 +351,76 @@ async function testAiModeSettingOpensPrivateBroadRequest() {
   }
 }
 
+async function testMainGroupStatsTriggerSendsReport() {
+  const originalInsert = supabase.insert;
+  const originalSelect = supabase.select;
+  const originalFetch = global.fetch;
+  const originalConsoleError = console.error;
+  const telegramCalls = [];
+  const insertedTables = [];
+  clearBotSettingsCache();
+
+  supabase.select = async (table) => {
+    if (table === 'bot_settings') return [{ key: 'main_group', value: { chat_id: '-100777' } }];
+    if (table === 'v_today_summary') return [{ total_requests: 1, open_requests: 0, closed_requests: 1, groups_count: 1 }];
+    if (table === 'employees') return [{ id: 'employee-1', full_name: 'Ali Valiyev', username: 'ali' }];
+    if (table === 'v_chat_statistics') return [{ chat_id: -100777, title: 'Main group', open_requests: 0 }];
+    if (table === 'support_requests') {
+      return [{
+        id: 'request-1',
+        source_type: 'group',
+        chat_id: -100777,
+        status: 'closed',
+        closed_by_employee_id: 'employee-1',
+        closed_by_name: 'Ali Valiyev',
+        created_at: new Date().toISOString(),
+        closed_at: new Date().toISOString()
+      }];
+    }
+    return [];
+  };
+  supabase.insert = async (table, rows) => {
+    insertedTables.push(table);
+    return rows.map(row => ({ id: `${table}-row`, ...row }));
+  };
+  console.error = () => {};
+  global.fetch = async (_url, options) => {
+    telegramCalls.push({ url: _url, body: JSON.parse(options.body) });
+    return {
+      ok: true,
+      json: async () => ({ ok: true, result: { message_id: 104 } })
+    };
+  };
+
+  try {
+    const result = await callHandler({
+      update_id: 9,
+      message: {
+        message_id: 17,
+        date: 1777100000,
+        text: 'xodimlar statisticasi',
+        chat: { id: -100777, type: 'supergroup', title: 'Main group' },
+        from: { id: 777, first_name: 'Ali', is_bot: false }
+      }
+    });
+
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.handled, 'message');
+    assert.strictEqual(telegramCalls.length, 1);
+    assert.match(telegramCalls[0].url, /sendMessage$/);
+    assert.strictEqual(String(telegramCalls[0].body.chat_id), '-100777');
+    assert.match(telegramCalls[0].body.text, /Bugungi xodimlar statistikasi/);
+    assert.match(telegramCalls[0].body.text, /Ali Valiyev/);
+    assert.strictEqual(insertedTables.includes('support_requests'), false);
+  } finally {
+    supabase.insert = originalInsert;
+    supabase.select = originalSelect;
+    global.fetch = originalFetch;
+    console.error = originalConsoleError;
+    clearBotSettingsCache();
+  }
+}
+
 async function testBotRemovalMarksGroupInactive() {
   const originalInsert = supabase.insert;
   let row = null;
@@ -383,6 +453,7 @@ async function testBotRemovalMarksGroupInactive() {
   await testGroupDoneDoesNotReplyToGroup();
   await testRequestMessageAppendsToExistingOpenRequest();
   await testAiModeSettingOpensPrivateBroadRequest();
+  await testMainGroupStatsTriggerSendsReport();
   await testBotRemovalMarksGroupInactive();
   console.log('Bot tests passed');
 })().catch(error => {

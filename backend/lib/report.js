@@ -13,40 +13,164 @@ function todayUz() {
   }).format(new Date());
 }
 
+function todayKey(value = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Tashkent',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(new Date(value));
+  const map = Object.fromEntries(parts.filter(part => part.type !== 'literal').map(part => [part.type, part.value]));
+  return `${map.year}-${map.month}-${map.day}`;
+}
+
+function isToday(value) {
+  return value ? todayKey(value) === todayKey() : false;
+}
+
+function round(value, precision = 1) {
+  const factor = 10 ** precision;
+  return Math.round((Number(value) || 0) * factor) / factor;
+}
+
+function percent(part, total) {
+  return total ? round((Number(part || 0) / Number(total || 0)) * 100, 1) : 0;
+}
+
+function minutesBetween(start, end) {
+  if (!start || !end) return null;
+  const diff = new Date(end).getTime() - new Date(start).getTime();
+  return Number.isFinite(diff) && diff >= 0 ? diff / 60000 : null;
+}
+
+function average(values) {
+  const clean = values.filter(value => Number.isFinite(value));
+  if (!clean.length) return 0;
+  return round(clean.reduce((sum, value) => sum + value, 0) / clean.length, 1);
+}
+
+function formatNumber(value) {
+  return new Intl.NumberFormat('uz-UZ', { maximumFractionDigits: 1 }).format(Number(value || 0));
+}
+
+function employeeLabel(employee = {}) {
+  const username = employee.username ? ` @${employee.username}` : '';
+  return `${employee.full_name || employee.closed_by_name || 'Xodim'}${username}`;
+}
+
+function buildTodayEmployeeRows(requests, employees) {
+  const employeeMap = new Map(employees.map(employee => [employee.id || employee.employee_id, employee]));
+  const todayClosed = requests.filter(request => request.status === 'closed' && isToday(request.closed_at) && request.closed_by_employee_id);
+  const grouped = new Map();
+
+  todayClosed.forEach(request => {
+    const key = request.closed_by_employee_id;
+    const employee = employeeMap.get(key) || {};
+    const row = grouped.get(key) || {
+      employee_id: key,
+      full_name: employee.full_name || request.closed_by_name || 'Xodim',
+      username: employee.username || '',
+      closed_requests: 0,
+      chats: new Set(),
+      close_minutes: []
+    };
+    row.closed_requests += 1;
+    if (request.chat_id) row.chats.add(String(request.chat_id));
+    const closeMinutes = minutesBetween(request.created_at, request.closed_at);
+    if (closeMinutes !== null) row.close_minutes.push(closeMinutes);
+    grouped.set(key, row);
+  });
+
+  return [...grouped.values()]
+    .map(row => ({
+      ...row,
+      handled_chats: row.chats.size,
+      avg_close_minutes: average(row.close_minutes),
+      close_share_pct: percent(row.closed_requests, todayClosed.length)
+    }))
+    .sort((a, b) => b.closed_requests - a.closed_requests || a.full_name.localeCompare(b.full_name));
+}
+
+function buildOpenGroupRows(requests, chats) {
+  const chatMap = new Map(chats.map(chat => [String(chat.chat_id), chat]));
+  const grouped = new Map();
+
+  requests
+    .filter(request => request.source_type === 'group' && request.status === 'open')
+    .forEach(request => {
+      const key = String(request.chat_id);
+      const chat = chatMap.get(key) || {};
+      const row = grouped.get(key) || {
+        chat_id: request.chat_id,
+        title: chat.title || key,
+        open_requests: 0
+      };
+      row.open_requests += 1;
+      grouped.set(key, row);
+    });
+
+  return [...grouped.values()]
+    .sort((a, b) => b.open_requests - a.open_requests)
+    .slice(0, 5);
+}
+
 async function buildMainStatsReport() {
-  const [summaryRows, employees, chats] = await Promise.all([
+  const [summaryRows, employees, chats, requests] = await Promise.all([
     stats.selectTodaySummary({ select: '*', limit: '1' }),
-    stats.selectEmployeeStatistics({ select: '*', order: 'closed_requests.desc', limit: '20' }),
-    stats.selectChatStatistics({ select: '*', order: 'open_requests.desc', limit: '10' })
+    supabase.select('employees', { select: 'id,full_name,username,is_active', is_active: 'eq.true', limit: '1000' }).catch(() => []),
+    stats.selectChatStatistics({ select: '*', order: 'open_requests.desc', limit: '50' }).catch(() => []),
+    supabase.select('support_requests', {
+      select: 'id,source_type,chat_id,status,closed_by_employee_id,closed_by_name,created_at,closed_at',
+      order: 'created_at.desc',
+      limit: '10000'
+    }).catch(() => [])
   ]);
 
   const summary = summaryRows[0] || {};
+  const todayCreated = requests.filter(request => isToday(request.created_at));
+  const todayClosed = requests.filter(request => request.status === 'closed' && isToday(request.closed_at));
+  const todayCreatedClosed = todayCreated.filter(request => request.status === 'closed');
+  const openRequests = requests.filter(request => request.status === 'open');
+  const groupToday = todayCreated.filter(request => request.source_type === 'group');
+  const privateToday = todayCreated.filter(request => ['private', 'business'].includes(request.source_type));
+  const employeeRows = buildTodayEmployeeRows(requests, employees);
+  const openGroupRows = buildOpenGroupRows(requests, chats);
   const lines = [];
-  lines.push('📊 <b>Xodimlar statistikasi</b>');
-  lines.push(`🕒 ${escapeHtml(todayUz())}`);
+  lines.push('📊 <b>Bugungi xodimlar statistikasi</b>');
+  lines.push(`🗓 ${escapeHtml(todayUz())}`);
+  lines.push('━━━━━━━━━━━━━━━━');
   lines.push('');
-  lines.push(`• Bugungi so‘rovlar: <b>${summary.total_requests || 0}</b>`);
-  lines.push(`• Ochiq so‘rovlar: <b>${summary.open_requests || 0}</b>`);
-  lines.push(`• Bugun yopilgan: <b>${summary.closed_requests || 0}</b>`);
-  lines.push(`• Aktiv guruhlar: <b>${summary.groups_count || 0}</b>`);
+  lines.push('📌 <b>Umumiy holat</b>');
+  lines.push(`• Bugun tushgan so‘rovlar: <b>${formatNumber(todayCreated.length || summary.total_requests || 0)}</b>`);
+  lines.push(`• Bugun yopilgan ticketlar: <b>${formatNumber(todayClosed.length || summary.closed_requests || 0)}</b>`);
+  lines.push(`• Hozir ochiq ticketlar: <b>${formatNumber(openRequests.length || summary.open_requests || 0)}</b>`);
+  lines.push(`• Bugungi yopilish foizi: <b>${formatNumber(percent(todayCreatedClosed.length, todayCreated.length))}%</b>`);
+  lines.push(`• Guruhlardan tushgan: <b>${formatNumber(groupToday.length)}</b>`);
+  lines.push(`• Shaxsiy/Business chatlardan: <b>${formatNumber(privateToday.length)}</b>`);
   lines.push('');
-  lines.push('👤 <b>Top xodimlar</b>');
+  lines.push('👥 <b>Xodimlar kesimi</b>');
 
-  const activeEmployees = employees.filter(e => Number(e.closed_requests || 0) > 0).slice(0, 10);
-  if (!activeEmployees.length) {
-    lines.push('Hozircha #done statistikasi yo‘q.');
+  if (!employeeRows.length) {
+    lines.push('Bugun hali hech kim ticket yopmagan.');
   } else {
-    activeEmployees.forEach((e, index) => {
-      lines.push(`${index + 1}. ${escapeHtml(e.full_name || 'Xodim')} — yopgan: <b>${e.closed_requests || 0}</b>, o‘rtacha: ${e.avg_close_minutes || 0} min`);
+    employeeRows.slice(0, 10).forEach((employee, index) => {
+      lines.push(`${index + 1}. <b>${escapeHtml(employeeLabel(employee))}</b>`);
+      lines.push(`   ✅ ${formatNumber(employee.closed_requests)} ta yopildi · ulush ${formatNumber(employee.close_share_pct)}% · o‘rtacha ${formatNumber(employee.avg_close_minutes)} min`);
     });
   }
 
-  const openChats = chats.filter(c => Number(c.open_requests || 0) > 0).slice(0, 5);
-  if (openChats.length) {
-    lines.push('');
-    lines.push('⚠️ <b>Ochiq so‘rov ko‘p chatlar</b>');
-    openChats.forEach(c => lines.push(`• ${escapeHtml(c.title || String(c.chat_id))}: <b>${c.open_requests}</b> ochiq`));
+  lines.push('');
+  lines.push('🧾 <b>Ochiq qolgan guruhlar</b>');
+  if (!openGroupRows.length) {
+    lines.push('Guruhlarda ochiq ticket yo‘q.');
+  } else {
+    openGroupRows.forEach(row => {
+      lines.push(`• ${escapeHtml(row.title || String(row.chat_id))}: <b>${formatNumber(row.open_requests)}</b> ochiq`);
+    });
   }
+  lines.push('');
+  lines.push('━━━━━━━━━━━━━━━━');
+  lines.push('Webappda to‘liq haftalik/oylik statistika bor.');
 
   return lines.join('\n');
 }

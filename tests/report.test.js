@@ -5,7 +5,7 @@ const assert = require('assert');
 process.env.BOT_TOKEN = process.env.BOT_TOKEN || '123456:test-token';
 
 const supabase = require('../backend/lib/supabase');
-const { resolveMainStatsChatId, sendMainStatsReport } = require('../backend/lib/report');
+const { buildMainStatsReport, resolveMainStatsChatId, sendMainStatsReport } = require('../backend/lib/report');
 
 async function testResolveFromSettings() {
   const originalSelect = supabase.select;
@@ -75,10 +75,74 @@ async function testChatNotFoundMessage() {
   }
 }
 
+async function testBuildMainStatsReportUsesTodayEmployeeClosures() {
+  const originalSelect = supabase.select;
+  const now = new Date();
+  const yesterday = new Date(now.getTime() - 36 * 60 * 60 * 1000).toISOString();
+  const today = now.toISOString();
+
+  supabase.select = async table => {
+    if (table === 'v_today_summary') {
+      return [{ total_requests: 2, open_requests: 1, closed_requests: 1, groups_count: 1 }];
+    }
+    if (table === 'employees') {
+      return [{ id: 'employee-1', full_name: 'Ali Valiyev', username: 'ali' }];
+    }
+    if (table === 'v_chat_statistics') {
+      return [{ chat_id: -1001, title: 'Main support', open_requests: 1 }];
+    }
+    if (table === 'support_requests') {
+      return [
+        {
+          id: 'request-1',
+          source_type: 'group',
+          chat_id: -1001,
+          status: 'closed',
+          closed_by_employee_id: 'employee-1',
+          closed_by_name: 'Ali Valiyev',
+          created_at: today,
+          closed_at: today
+        },
+        {
+          id: 'request-2',
+          source_type: 'group',
+          chat_id: -1001,
+          status: 'open',
+          created_at: today,
+          closed_at: null
+        },
+        {
+          id: 'request-old',
+          source_type: 'group',
+          chat_id: -1001,
+          status: 'closed',
+          closed_by_employee_id: 'employee-1',
+          closed_by_name: 'Ali Valiyev',
+          created_at: yesterday,
+          closed_at: yesterday
+        }
+      ];
+    }
+    return [];
+  };
+
+  try {
+    const text = await buildMainStatsReport();
+    assert.match(text, /Bugungi xodimlar statistikasi/);
+    assert.match(text, /Bugun tushgan so‘rovlar: <b>2<\/b>/);
+    assert.match(text, /Ali Valiyev @ali/);
+    assert.match(text, /1 ta yopildi/);
+    assert.match(text, /Main support/);
+  } finally {
+    supabase.select = originalSelect;
+  }
+}
+
 (async () => {
   await testResolveFromSettings();
   await testResolveFromSingleActiveGroup();
   await testChatNotFoundMessage();
+  await testBuildMainStatsReportUsesTodayEmployeeClosures();
   console.log('Report tests passed');
 })().catch(error => {
   console.error(error);

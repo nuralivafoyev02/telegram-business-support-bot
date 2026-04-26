@@ -5,11 +5,13 @@ const { optionalEnv, boolEnv } = require('../lib/env');
 const { sendMessage, deleteMessage, escapeHtml } = require('../lib/telegram');
 const { getMessageText, classifyMessage } = require('../lib/parser');
 const { getBotSettings } = require('../lib/bot-settings');
+const { resolveMainStatsChatId, sendMainStatsReport } = require('../lib/report');
 const metrics = require('../lib/metrics');
 
 const START_RE = /^\/start(?:@\w+)?(?:\s|$)/i;
 const HELP_RE = /^\/help(?:@\w+)?(?:\s|$)/i;
 const REGISTER_RE = /^\/(?:register|id|chatid)(?:@\w+)?(?:\s|$)/i;
+const MAIN_STATS_TRIGGER_RE = /\b(?:xodimlar|hodimlar)\s+statisti[ck]asi\b/i;
 
 function verifyWebhook(req) {
   const secret = optionalEnv('TELEGRAM_WEBHOOK_SECRET', '');
@@ -84,6 +86,37 @@ async function handleStart(message) {
 
 function isGroupChat(chat = {}) {
   return ['group', 'supergroup'].includes(chat.type);
+}
+
+function sameChatId(left, right) {
+  return String(left || '').trim() === String(right || '').trim();
+}
+
+function isMainStatsTrigger(text = '') {
+  return MAIN_STATS_TRIGGER_RE.test(text);
+}
+
+async function isMainStatsGroup(chat = {}) {
+  const target = await resolveMainStatsChatId().catch(error => {
+    logBackgroundError('resolve-main-stats-group', error);
+    return '';
+  });
+  return target && sameChatId(target, chat.id);
+}
+
+async function maybeSendMainStatsFromGroup(message, text) {
+  const chat = message.chat || {};
+  if (!isGroupChat(chat) || !isMainStatsTrigger(text)) return false;
+  if (!await isMainStatsGroup(chat)) return false;
+
+  try {
+    await sendMainStatsReport(chat.id);
+  } catch (error) {
+    logBackgroundError('send-main-stats-trigger', error);
+    await sendMessage(chat.id, `⚠️ Statistika yuborilmadi: ${escapeHtml(error.message)}`)
+      .catch(replyError => logBackgroundError('reply-main-stats-error', replyError));
+  }
+  return true;
 }
 
 async function handleGroupRegistrationCommand(message, tracking) {
@@ -193,6 +226,8 @@ async function processMessage(updateKind, message) {
   });
 
   await metrics.saveMessage({ message, updateKind, sourceType, classification, employee });
+
+  if (await maybeSendMainStatsFromGroup(message, text)) return;
 
   if (classification === 'done') {
     const closer = employee || await metrics.ensureEmployee(from);
