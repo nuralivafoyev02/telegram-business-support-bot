@@ -612,6 +612,13 @@ async function testMainGroupBroadcastPreview() {
   const originalFetch = global.fetch;
   const telegramCalls = [];
   let broadcastRow = null;
+  const announcementText = [
+    'Yangi modul ishga tushdi',
+    '',
+    '1. Smeta eksporti',
+    '2. Ombor qoldig‘i',
+    '3. Xodimlar hisoboti'
+  ].join('\n');
   clearBotSettingsCache();
 
   supabase.select = async (table) => {
@@ -652,7 +659,7 @@ async function testMainGroupBroadcastPreview() {
         reply_to_message: {
           message_id: 49,
           date: 1777099900,
-          text: 'Yangi modul ishga tushdi',
+          text: announcementText,
           chat: { id: -100777, type: 'supergroup', title: 'Main group' },
           from: { id: 777, first_name: 'Ali', username: 'ali_pm', is_bot: false }
         }
@@ -663,11 +670,12 @@ async function testMainGroupBroadcastPreview() {
     assert.strictEqual(result.payload.handled, 'message');
     assert.strictEqual(broadcastRow.status, 'created');
     assert.strictEqual(broadcastRow.total_targets, 1);
-    assert.strictEqual(broadcastRow.text, 'Yangi modul ishga tushdi');
+    assert.strictEqual(broadcastRow.text, announcementText);
     const preview = telegramCalls.find(call => /sendMessage$/.test(call.url));
     assert.ok(preview);
     assert.match(preview.body.text, /Ommaviy xabar preview/);
     assert.match(preview.body.text, /Yuboriladigan guruhlar:<\/b> 1 ta/);
+    assert.match(preview.body.text, /1\. Smeta eksporti\n2\. Ombor qoldig‘i\n3\. Xodimlar hisoboti/);
     assert.strictEqual(preview.body.reply_markup.inline_keyboard[0][0].callback_data, 'broadcast_confirm:broadcast-1');
   } finally {
     supabase.insert = originalInsert;
@@ -685,6 +693,13 @@ async function testMainGroupBroadcastConfirmSendsAndReports() {
   const telegramCalls = [];
   const patches = [];
   const targetRows = [];
+  const announcementText = [
+    'Yangi modul ishga tushdi',
+    '',
+    '1. Smeta eksporti',
+    '2. Ombor qoldig‘i',
+    '3. Xodimlar hisoboti'
+  ].join('\n');
   clearBotSettingsCache();
 
   supabase.select = async (table) => {
@@ -701,7 +716,7 @@ async function testMainGroupBroadcastConfirmSendsAndReports() {
   supabase.patch = async (table, query, values) => {
     patches.push({ table, query, values });
     if (table === 'broadcasts' && values.status === 'processing') {
-      return [{ id: 'broadcast-1', text: 'Yangi modul ishga tushdi', status: 'processing' }];
+      return [{ id: 'broadcast-1', text: announcementText, status: 'processing' }];
     }
     return [{ id: 'broadcast-1', ...values }];
   };
@@ -745,6 +760,7 @@ async function testMainGroupBroadcastConfirmSendsAndReports() {
     const targetSends = telegramCalls.filter(call => /sendMessage$/.test(call.url) && [-1001, -1002].includes(Number(call.body.chat_id)));
     assert.strictEqual(targetSends.length, 2);
     assert.strictEqual(targetSends[0].body.parse_mode, undefined);
+    assert.strictEqual(targetSends[0].body.text, announcementText);
     const resultMessage = telegramCalls.find(call => /sendMessage$/.test(call.url) && Number(call.body.chat_id) === -100777 && /Ommaviy xabar yakunlandi/.test(call.body.text));
     assert.ok(resultMessage);
     assert.match(resultMessage.body.text, /New Era ✅/);

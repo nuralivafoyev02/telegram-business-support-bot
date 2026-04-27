@@ -148,6 +148,10 @@ function clipText(text = '', limit = 1600) {
   return `${value.slice(0, limit - 20).trimEnd()}\n...`;
 }
 
+function getRawMessageText(message = {}) {
+  return String(message.text || message.caption || '');
+}
+
 function broadcastTitle(text = '') {
   const firstLine = String(text || '').split('\n').map(line => line.trim()).find(Boolean) || 'Main group broadcast';
   return firstLine.length > 80 ? `${firstLine.slice(0, 77)}...` : firstLine;
@@ -210,7 +214,7 @@ async function maybeStartGroupBroadcastPreview(message, text) {
   if (!await isMainStatsGroup(chat)) return false;
 
   const source = message.reply_to_message || {};
-  const sourceText = getMessageText(source);
+  const sourceText = getRawMessageText(source);
   if (!sourceText) {
     await sendMessage(chat.id, '⚠️ Qaysi yangilik yuborilishini bilishim uchun yangilik xabariga reply qilib yozing.', {
       reply_to_message_id: message.message_id
