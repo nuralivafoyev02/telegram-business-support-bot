@@ -27,13 +27,15 @@ async function telegram(method, payload = {}) {
 }
 
 async function sendMessage(chatId, text, options = {}) {
-  return telegram('sendMessage', {
+  const payload = {
     chat_id: chatId,
     text,
     parse_mode: options.parse_mode || 'HTML',
     disable_web_page_preview: true,
     ...options
-  });
+  };
+  if (options.parse_mode === null) delete payload.parse_mode;
+  return telegram('sendMessage', payload);
 }
 
 async function deleteMessage(chatId, messageId) {
@@ -58,6 +60,14 @@ async function answerCallbackQuery(callbackQueryId, text = '') {
   return telegram('answerCallbackQuery', { callback_query_id: callbackQueryId, text });
 }
 
+async function editMessageReplyMarkup(chatId, messageId, replyMarkup = null) {
+  return telegram('editMessageReplyMarkup', {
+    chat_id: chatId,
+    message_id: messageId,
+    reply_markup: replyMarkup
+  });
+}
+
 async function getWebhookInfo() {
   return telegram('getWebhookInfo');
 }
@@ -78,4 +88,4 @@ function escapeHtml(str = '') {
     .replaceAll('"', '&quot;');
 }
 
-module.exports = { telegram, sendMessage, deleteMessage, sendBusinessMessage, answerCallbackQuery, getWebhookInfo, setWebhook, tgUserName, escapeHtml };
+module.exports = { telegram, sendMessage, deleteMessage, sendBusinessMessage, answerCallbackQuery, editMessageReplyMarkup, getWebhookInfo, setWebhook, tgUserName, escapeHtml };

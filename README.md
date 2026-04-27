@@ -17,8 +17,8 @@ Node.js + Vercel serverless backend, Supabase SQL schema va Vite/Vue dark admin 
    - Guruhda request niyati kuchli bo‘lsa `support_requests` jadvaliga `open` so‘rov sifatida yozadi.
    - Business/private chatda keyword yoki `AI mode`/broad detection yoqilgan bo‘lsa mijozning mazmunli xabari request sifatida yoziladi.
    - Bir mijoz bir open request ustidan ketma-ket yozsa yangi ticket ochilmaydi, xabar `request_events` ichiga `note` bo‘lib qo‘shiladi.
-3. Xodim `#done` yozsa:
-   - Shu chatdagi eng oxirgi `open` so‘rov `closed` bo‘ladi.
+3. Xodim `#done` yozsa yoki guruhda mijozning ochiq ticket xabariga reply qilsa:
+   - Shu chatdagi eng oxirgi `open` so‘rov yoki reply qilingan aniq so‘rov `closed` bo‘ladi.
    - Xodim avtomatik `employees` jadvaliga qo‘shiladi.
    - Xodim statistikasi `v_employee_statistics` view orqali ko‘rinadi.
    - `Sozlamalar`dagi yopish tegi o‘zgartirilsa bot shu tegni ham taniydi.
@@ -30,6 +30,7 @@ Node.js + Vercel serverless backend, Supabase SQL schema va Vite/Vue dark admin 
    - Kompaniya guruhlariga broadcast yuborish
    - Main guruhga xodimlar statistikasini yuborish
    - Admin login/parol va bot sozlamalarini boshqarish mumkin.
+5. Main guruhda yangilik xabariga reply qilib botga “barcha guruhlarga yubor” mazmunida yozilsa, bot preview chiqaradi. Inline tasdiq bosilgandan keyin xabar barcha faol mijoz guruhlariga yuboriladi va natija ro‘yxati main guruhga qaytadi.
 
 ## Muhim cheklov
 
@@ -116,7 +117,7 @@ curl -X POST "https://api.telegram.org/bot$BOT_TOKEN/setWebhook" \
   -d "{\
     \"url\": \"$APP_URL/api/bot?secret=$WEBHOOK_SECRET\",\
     \"secret_token\": \"$WEBHOOK_SECRET\",\
-    \"allowed_updates\": [\"message\", \"edited_message\", \"business_message\", \"edited_business_message\", \"business_connection\", \"my_chat_member\", \"chat_member\"]\
+    \"allowed_updates\": [\"message\", \"edited_message\", \"business_message\", \"edited_business_message\", \"business_connection\", \"my_chat_member\", \"chat_member\", \"callback_query\"]\
   }"
 ```
 
@@ -132,7 +133,7 @@ Bot endpoint health check:
 curl "$APP_URL/api/bot"
 ```
 
-Javobdagi `env.botToken`, `env.supabaseUrl`, `env.supabaseServiceRoleKey` qiymatlari `true` bo‘lishi kerak. Guruhlar webappda ko‘rinishi uchun webhook `allowed_updates` ichida `my_chat_member` bo‘lishi shart. Admin paneldagi `Sozlamalar → Telegram webhook → Webhookni ulash` tugmasi webhookni joriy domen va secret bilan qayta sozlaydi. Guruhdagi oddiy murojaat xabarlarini o‘qish uchun BotFather’da bot privacy mode’ni disable qiling: `/setprivacy` → botni tanlang → `Disable`.
+Javobdagi `env.botToken`, `env.supabaseUrl`, `env.supabaseServiceRoleKey` qiymatlari `true` bo‘lishi kerak. Guruhlar webappda ko‘rinishi uchun webhook `allowed_updates` ichida `my_chat_member`, inline tasdiq tugmalari ishlashi uchun `callback_query` bo‘lishi shart. Admin paneldagi `Sozlamalar → Telegram webhook → Webhookni ulash` tugmasi webhookni joriy domen va secret bilan qayta sozlaydi. Guruhdagi oddiy murojaat xabarlarini o‘qish uchun BotFather’da bot privacy mode’ni disable qiling: `/setprivacy` → botni tanlang → `Disable`.
 
 Agar bot webhook sozlanishidan oldin guruhlarga qo‘shilgan bo‘lsa, Telegram eski guruhlar ro‘yxatini botga qayta bermaydi. Bunday guruhlarni webapp ro‘yxatiga tushirish uchun har bir guruh ichida `/register` yoki `/start` yuboring. Bot guruhni ro‘yxatga olishga urinadi va guruhdagi command xabarini o‘chiradi. Xabar o‘chishi uchun bot guruhda delete permissionga ega admin bo‘lishi kerak.
 

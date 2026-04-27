@@ -190,31 +190,55 @@ async function createSupportRequest({ message, sourceType, companyId = null }) {
   return request;
 }
 
-async function closeLatestRequest({ message, employee }) {
+async function findOpenRequestById(requestId) {
+  if (!requestId) return null;
+  const rows = await supabase.select('support_requests', {
+    select: 'id,chat_id,status,created_at,initial_text,customer_tg_id,customer_name,initial_message_id',
+    id: supabase.eq(requestId),
+    status: 'eq.open',
+    limit: '1'
+  }).catch(() => []);
+  return rows[0] || null;
+}
+
+async function findOpenRequestFromReply({ message }) {
   const chat = message.chat || {};
   const from = message.from || {};
-  const open = await supabase.select('support_requests', {
-    select: 'id,chat_id,status,created_at,initial_text,customer_name',
+  const reply = message.reply_to_message || null;
+  const repliedFrom = reply && reply.from || {};
+  if (!chat.id || !reply || !reply.message_id || !from.id) return null;
+  if (repliedFrom.id && String(repliedFrom.id) === String(from.id)) return null;
+
+  const directRows = await supabase.select('support_requests', {
+    select: 'id,chat_id,status,created_at,initial_text,customer_tg_id,customer_name,initial_message_id',
     chat_id: supabase.eq(chat.id),
+    initial_message_id: supabase.eq(reply.message_id),
     status: 'eq.open',
     order: supabase.order('created_at', false),
     limit: '1'
-  });
-  const request = open[0];
-  if (!request) {
-    await supabase.insert('request_events', [{
-      request_id: null,
-      chat_id: chat.id,
-      tg_message_id: message.message_id,
-      event_type: 'done_without_request',
-      actor_tg_id: from.id || null,
-      actor_name: tgUserName(from),
-      employee_id: employee ? employee.id : null,
-      text: message.text || message.caption || '',
-      raw: message
-    }], { prefer: 'return=minimal' }).catch(() => null);
-    return { closed: false, request: null };
-  }
+  }).catch(() => []);
+  if (directRows[0]) return directRows[0];
+
+  const eventRows = await supabase.select('request_events', {
+    select: 'request_id,event_type,actor_tg_id,created_at',
+    chat_id: supabase.eq(chat.id),
+    tg_message_id: supabase.eq(reply.message_id),
+    order: supabase.order('created_at', false),
+    limit: '1'
+  }).catch(() => []);
+  const event = eventRows.find(row => row && row.request_id && ['opened', 'note'].includes(row.event_type));
+  if (!event) return null;
+
+  const request = await findOpenRequestById(event.request_id);
+  if (!request) return null;
+  if (request.customer_tg_id && repliedFrom.id && String(request.customer_tg_id) !== String(repliedFrom.id)) return null;
+  if (request.customer_tg_id && event.actor_tg_id && String(request.customer_tg_id) !== String(event.actor_tg_id)) return null;
+  return request;
+}
+
+async function closeRequestRecord({ request, message, employee }) {
+  const chat = message.chat || {};
+  const from = message.from || {};
 
   const closedRows = await supabase.patch('support_requests', { id: supabase.eq(request.id) }, {
     status: 'closed',
@@ -238,6 +262,42 @@ async function closeLatestRequest({ message, employee }) {
   }], { prefer: 'return=minimal' }).catch(() => null);
 
   return { closed: true, request: closedRows[0] || request };
+}
+
+async function closeLatestRequest({ message, employee }) {
+  const chat = message.chat || {};
+  const from = message.from || {};
+  const open = await supabase.select('support_requests', {
+    select: 'id,chat_id,status,created_at,initial_text,customer_name,customer_tg_id,initial_message_id',
+    chat_id: supabase.eq(chat.id),
+    status: 'eq.open',
+    order: supabase.order('created_at', false),
+    limit: '1'
+  });
+  const request = open[0];
+  if (!request) {
+    await supabase.insert('request_events', [{
+      request_id: null,
+      chat_id: chat.id,
+      tg_message_id: message.message_id,
+      event_type: 'done_without_request',
+      actor_tg_id: from.id || null,
+      actor_name: tgUserName(from),
+      employee_id: employee ? employee.id : null,
+      text: message.text || message.caption || '',
+      raw: message
+    }], { prefer: 'return=minimal' }).catch(() => null);
+    return { closed: false, request: null };
+  }
+
+  return closeRequestRecord({ request, message, employee });
+}
+
+async function closeRequestByReply({ message, employee }) {
+  const request = await findOpenRequestFromReply({ message });
+  if (!request) return { closed: false, request: null };
+  const closer = employee || await ensureEmployee(message.from || {});
+  return closeRequestRecord({ request, message, employee: closer });
 }
 
 async function registerChatMemberUpdate(update = {}) {
@@ -264,5 +324,6 @@ module.exports = {
   saveMessage,
   createSupportRequest,
   closeLatestRequest,
+  closeRequestByReply,
   registerChatMemberUpdate
 };

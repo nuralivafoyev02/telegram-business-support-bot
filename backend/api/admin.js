@@ -18,7 +18,8 @@ const TELEGRAM_ALLOWED_UPDATES = [
   'edited_business_message',
   'business_connection',
   'my_chat_member',
-  'chat_member'
+  'chat_member',
+  'callback_query'
 ];
 
 function parseIntSafe(value, fallback = 0) {

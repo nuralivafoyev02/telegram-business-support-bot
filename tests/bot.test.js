@@ -534,6 +534,234 @@ async function testMainGroupStatsTriggerSendsReport() {
   }
 }
 
+async function testReplyToCustomerTicketClosesRequest() {
+  const originalInsert = supabase.insert;
+  const originalSelect = supabase.select;
+  const originalPatch = supabase.patch;
+  const inserted = [];
+  const patched = [];
+  clearBotSettingsCache();
+
+  supabase.select = async (table, query = {}) => {
+    if (table === 'bot_settings') return [];
+    if (table === 'employees') return [];
+    if (table === 'support_requests' && query.initial_message_id) {
+      return [{
+        id: 'request-1',
+        chat_id: -100200,
+        status: 'open',
+        customer_tg_id: 1001,
+        customer_name: 'Customer',
+        initial_message_id: 40,
+        initial_text: 'Login qilolmayapman',
+        created_at: new Date().toISOString()
+      }];
+    }
+    return [];
+  };
+  supabase.insert = async (table, rows) => {
+    inserted.push({ table, rows });
+    if (table === 'employees') return rows.map(row => ({ id: 'employee-1', ...row }));
+    return rows.map(row => ({ id: `${table}-row`, ...row }));
+  };
+  supabase.patch = async (table, query, values) => {
+    patched.push({ table, query, values });
+    return [{ id: 'request-1', ...values }];
+  };
+
+  try {
+    const result = await callHandler({
+      update_id: 12,
+      message: {
+        message_id: 41,
+        date: 1777100000,
+        text: 'Hal qildim, tekshirib ko‘ring',
+        chat: { id: -100200, type: 'supergroup', title: 'Support group' },
+        from: { id: 777, first_name: 'Ali', is_bot: false },
+        reply_to_message: {
+          message_id: 40,
+          date: 1777099900,
+          text: 'Login qilolmayapman',
+          chat: { id: -100200, type: 'supergroup', title: 'Support group' },
+          from: { id: 1001, first_name: 'Customer', is_bot: false }
+        }
+      }
+    });
+
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.handled, 'message');
+    const closePatch = patched.find(item => item.table === 'support_requests');
+    assert.ok(closePatch);
+    assert.strictEqual(closePatch.values.status, 'closed');
+    assert.strictEqual(closePatch.values.closed_by_tg_id, 777);
+    assert.strictEqual(closePatch.values.done_message_id, 41);
+    assert.strictEqual(inserted.some(item => item.table === 'employees'), true);
+    assert.strictEqual(inserted.some(item => item.table === 'support_requests'), false);
+    assert.strictEqual(inserted.some(item => item.table === 'request_events' && item.rows[0].event_type === 'closed'), true);
+  } finally {
+    supabase.insert = originalInsert;
+    supabase.select = originalSelect;
+    supabase.patch = originalPatch;
+    clearBotSettingsCache();
+  }
+}
+
+async function testMainGroupBroadcastPreview() {
+  const originalInsert = supabase.insert;
+  const originalSelect = supabase.select;
+  const originalFetch = global.fetch;
+  const telegramCalls = [];
+  let broadcastRow = null;
+  clearBotSettingsCache();
+
+  supabase.select = async (table) => {
+    if (table === 'bot_settings') return [{ key: 'main_group', value: { chat_id: '-100777' } }];
+    if (table === 'employees') return [];
+    if (table === 'tg_chats') {
+      return [
+        { chat_id: -1001, title: 'New Era', source_type: 'group' },
+        { chat_id: -100777, title: 'Main group', source_type: 'group' }
+      ];
+    }
+    return [];
+  };
+  supabase.insert = async (table, rows) => {
+    if (table === 'broadcasts') {
+      broadcastRow = { id: 'broadcast-1', ...rows[0] };
+      return [broadcastRow];
+    }
+    return rows.map(row => ({ id: `${table}-row`, ...row }));
+  };
+  global.fetch = async (_url, options) => {
+    telegramCalls.push({ url: _url, body: JSON.parse(options.body) });
+    return {
+      ok: true,
+      json: async () => ({ ok: true, result: { message_id: 105 } })
+    };
+  };
+
+  try {
+    const result = await callHandler({
+      update_id: 13,
+      message: {
+        message_id: 50,
+        date: 1777100000,
+        text: '@uyqurbot shu yangilikni barcha guruhlarga yubor',
+        chat: { id: -100777, type: 'supergroup', title: 'Main group' },
+        from: { id: 777, first_name: 'Ali', username: 'ali_pm', is_bot: false },
+        reply_to_message: {
+          message_id: 49,
+          date: 1777099900,
+          text: 'Yangi modul ishga tushdi',
+          chat: { id: -100777, type: 'supergroup', title: 'Main group' },
+          from: { id: 777, first_name: 'Ali', username: 'ali_pm', is_bot: false }
+        }
+      }
+    });
+
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.handled, 'message');
+    assert.strictEqual(broadcastRow.status, 'created');
+    assert.strictEqual(broadcastRow.total_targets, 1);
+    assert.strictEqual(broadcastRow.text, 'Yangi modul ishga tushdi');
+    const preview = telegramCalls.find(call => /sendMessage$/.test(call.url));
+    assert.ok(preview);
+    assert.match(preview.body.text, /Ommaviy xabar preview/);
+    assert.match(preview.body.text, /Yuboriladigan guruhlar:<\/b> 1 ta/);
+    assert.strictEqual(preview.body.reply_markup.inline_keyboard[0][0].callback_data, 'broadcast_confirm:broadcast-1');
+  } finally {
+    supabase.insert = originalInsert;
+    supabase.select = originalSelect;
+    global.fetch = originalFetch;
+    clearBotSettingsCache();
+  }
+}
+
+async function testMainGroupBroadcastConfirmSendsAndReports() {
+  const originalInsert = supabase.insert;
+  const originalSelect = supabase.select;
+  const originalPatch = supabase.patch;
+  const originalFetch = global.fetch;
+  const telegramCalls = [];
+  const patches = [];
+  const targetRows = [];
+  clearBotSettingsCache();
+
+  supabase.select = async (table) => {
+    if (table === 'bot_settings') return [{ key: 'main_group', value: { chat_id: '-100777' } }];
+    if (table === 'tg_chats') {
+      return [
+        { chat_id: -1001, title: 'New Era', source_type: 'group' },
+        { chat_id: -1002, title: 'Fayus', source_type: 'group' },
+        { chat_id: -100777, title: 'Main group', source_type: 'group' }
+      ];
+    }
+    return [];
+  };
+  supabase.patch = async (table, query, values) => {
+    patches.push({ table, query, values });
+    if (table === 'broadcasts' && values.status === 'processing') {
+      return [{ id: 'broadcast-1', text: 'Yangi modul ishga tushdi', status: 'processing' }];
+    }
+    return [{ id: 'broadcast-1', ...values }];
+  };
+  supabase.insert = async (table, rows) => {
+    if (table === 'broadcast_targets') targetRows.push(...rows);
+    return rows.map(row => ({ id: `${table}-row`, ...row }));
+  };
+  global.fetch = async (_url, options) => {
+    const body = JSON.parse(options.body);
+    telegramCalls.push({ url: _url, body });
+    if (/sendMessage$/.test(_url) && Number(body.chat_id) === -1002) {
+      return {
+        ok: true,
+        json: async () => ({ ok: false, error_code: 403, description: 'Forbidden: bot was kicked' })
+      };
+    }
+    return {
+      ok: true,
+      json: async () => ({ ok: true, result: { message_id: 106 } })
+    };
+  };
+
+  try {
+    const result = await callHandler({
+      update_id: 14,
+      callback_query: {
+        id: 'callback-1',
+        data: 'broadcast_confirm:broadcast-1',
+        from: { id: 777, first_name: 'Ali', username: 'ali_pm', is_bot: false },
+        message: {
+          message_id: 55,
+          date: 1777100000,
+          text: 'preview',
+          chat: { id: -100777, type: 'supergroup', title: 'Main group' }
+        }
+      }
+    });
+
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.handled, 'callback_query');
+    const targetSends = telegramCalls.filter(call => /sendMessage$/.test(call.url) && [-1001, -1002].includes(Number(call.body.chat_id)));
+    assert.strictEqual(targetSends.length, 2);
+    assert.strictEqual(targetSends[0].body.parse_mode, undefined);
+    const resultMessage = telegramCalls.find(call => /sendMessage$/.test(call.url) && Number(call.body.chat_id) === -100777 && /Ommaviy xabar yakunlandi/.test(call.body.text));
+    assert.ok(resultMessage);
+    assert.match(resultMessage.body.text, /New Era ✅/);
+    assert.match(resultMessage.body.text, /Fayus 🔴/);
+    assert.doesNotMatch(resultMessage.body.text, /Main group/);
+    assert.strictEqual(targetRows.some(row => row.chat_id === -1001 && row.status === 'sent'), true);
+    assert.strictEqual(targetRows.some(row => row.chat_id === -1002 && row.status === 'failed'), true);
+    assert.strictEqual(patches.some(item => item.table === 'broadcasts' && item.values.status === 'completed_with_errors'), true);
+  } finally {
+    supabase.insert = originalInsert;
+    supabase.select = originalSelect;
+    supabase.patch = originalPatch;
+    global.fetch = originalFetch;
+    clearBotSettingsCache();
+  }
+}
+
 async function testBotRemovalMarksGroupInactive() {
   const originalInsert = supabase.insert;
   let row = null;
@@ -569,6 +797,9 @@ async function testBotRemovalMarksGroupInactive() {
   await testLocalSmartIntentOpensPrivateRequestWithoutAiMode();
   await testSelectedAiModelClassifiesRequest();
   await testMainGroupStatsTriggerSendsReport();
+  await testReplyToCustomerTicketClosesRequest();
+  await testMainGroupBroadcastPreview();
+  await testMainGroupBroadcastConfirmSendsAndReports();
   await testBotRemovalMarksGroupInactive();
   console.log('Bot tests passed');
 })().catch(error => {
