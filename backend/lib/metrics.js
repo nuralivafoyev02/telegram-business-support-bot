@@ -22,7 +22,7 @@ function isActiveMemberStatus(status) {
   return !['left', 'kicked'].includes(status);
 }
 
-async function upsertTelegramUser(user = {}, extra = {}) {
+async function upsertTelegramUser(user = {}, extra = {}, options = {}) {
   if (!user || !user.id) return null;
   const rows = await supabase.insert('tg_users', [{
     tg_user_id: user.id,
@@ -34,8 +34,8 @@ async function upsertTelegramUser(user = {}, extra = {}) {
     last_seen_at: nowIso(),
     raw: user,
     ...extra
-  }], { upsert: true, onConflict: 'tg_user_id' });
-  return rows[0];
+  }], { upsert: true, onConflict: 'tg_user_id', prefer: options.prefer || 'return=representation' });
+  return Array.isArray(rows) ? rows[0] : null;
 }
 
 async function getKnownEmployeeByTelegramId(tgUserId) {
@@ -63,7 +63,7 @@ async function ensureEmployee(user = {}) {
   return rows[0];
 }
 
-async function upsertChat(chat = {}, sourceType = 'group', extra = {}) {
+async function upsertChat(chat = {}, sourceType = 'group', extra = {}, options = {}) {
   if (!chat || chat.id === undefined || chat.id === null) return null;
   const title = chatTitle(chat);
   const rows = await supabase.insert('tg_chats', [{
@@ -76,14 +76,14 @@ async function upsertChat(chat = {}, sourceType = 'group', extra = {}) {
     last_message_at: nowIso(),
     raw: chat,
     ...extra
-  }], { upsert: true, onConflict: 'chat_id' });
-  return rows[0];
+  }], { upsert: true, onConflict: 'chat_id', prefer: options.prefer || 'return=representation' });
+  return Array.isArray(rows) ? rows[0] : null;
 }
 
 async function saveBusinessConnection(connection = {}) {
   if (!connection || !connection.id) return null;
   const user = connection.user || {};
-  await upsertTelegramUser(user);
+  await upsertTelegramUser(user, {}, { prefer: 'return=minimal' });
   const rows = await supabase.insert('business_connections', [{
     connection_id: connection.id,
     user_chat_id: connection.user_chat_id || null,
@@ -97,7 +97,7 @@ async function saveBusinessConnection(connection = {}) {
   return rows[0];
 }
 
-async function saveMessage({ message, updateKind, sourceType, classification, employee }) {
+async function saveMessage({ message, updateKind, sourceType, classification, employee }, options = {}) {
   const from = message.from || {};
   const chat = message.chat || {};
   const text = message.text || message.caption || '';
@@ -115,8 +115,8 @@ async function saveMessage({ message, updateKind, sourceType, classification, em
     business_connection_id: message.business_connection_id || null,
     raw: message,
     created_at: message.date ? new Date(message.date * 1000).toISOString() : nowIso()
-  }], { upsert: true, onConflict: 'chat_id,tg_message_id' });
-  return rows[0];
+  }], { upsert: true, onConflict: 'chat_id,tg_message_id', prefer: options.prefer || 'return=representation' });
+  return Array.isArray(rows) ? rows[0] : null;
 }
 
 async function findMergeableOpenRequest({ message, sourceType }) {
@@ -209,7 +209,7 @@ async function findOpenRequestFromReply({ message }) {
   if (!chat.id || !reply || !reply.message_id || !from.id) return null;
   if (repliedFrom.id && String(repliedFrom.id) === String(from.id)) return null;
 
-  const directRows = await supabase.select('support_requests', {
+  const directPromise = supabase.select('support_requests', {
     select: 'id,chat_id,status,created_at,initial_text,customer_tg_id,customer_name,initial_message_id',
     chat_id: supabase.eq(chat.id),
     initial_message_id: supabase.eq(reply.message_id),
@@ -217,15 +217,16 @@ async function findOpenRequestFromReply({ message }) {
     order: supabase.order('created_at', false),
     limit: '1'
   }).catch(() => []);
-  if (directRows[0]) return directRows[0];
-
-  const eventRows = await supabase.select('request_events', {
+  const eventPromise = supabase.select('request_events', {
     select: 'request_id,event_type,actor_tg_id,created_at',
     chat_id: supabase.eq(chat.id),
     tg_message_id: supabase.eq(reply.message_id),
     order: supabase.order('created_at', false),
     limit: '1'
   }).catch(() => []);
+  const [directRows, eventRows] = await Promise.all([directPromise, eventPromise]);
+  if (directRows[0]) return directRows[0];
+
   const event = eventRows.find(row => row && row.request_id && ['opened', 'note'].includes(row.event_type));
   if (!event) return null;
 
@@ -240,7 +241,7 @@ async function closeRequestRecord({ request, message, employee }) {
   const chat = message.chat || {};
   const from = message.from || {};
 
-  const closedRows = await supabase.patch('support_requests', { id: supabase.eq(request.id) }, {
+  const patchPromise = supabase.patch('support_requests', { id: supabase.eq(request.id) }, {
     status: 'closed',
     closed_at: nowIso(),
     closed_by_employee_id: employee ? employee.id : null,
@@ -249,7 +250,7 @@ async function closeRequestRecord({ request, message, employee }) {
     done_message_id: message.message_id
   });
 
-  await supabase.insert('request_events', [{
+  const eventPromise = supabase.insert('request_events', [{
     request_id: request.id,
     chat_id: chat.id,
     tg_message_id: message.message_id,
@@ -261,6 +262,7 @@ async function closeRequestRecord({ request, message, employee }) {
     raw: message
   }], { prefer: 'return=minimal' }).catch(() => null);
 
+  const [closedRows] = await Promise.all([patchPromise, eventPromise]);
   return { closed: true, request: closedRows[0] || request };
 }
 

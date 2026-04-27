@@ -232,7 +232,7 @@
               <DataTable :columns="privateColumns" :rows="filteredPrivates" empty="Shaxsiy chat topilmadi">
                 <template #actions="{ row }">
                   <button class="btn small" @click="openSend(row)">Yozish</button>
-                  <button class="btn small" @click="loadRequests(row)">Tarix</button>
+                  <button class="btn small" @click="loadChatDetail(row)">Tafsilot</button>
                 </template>
               </DataTable>
             </section>
@@ -529,6 +529,60 @@
       </Modal>
     </Transition>
 
+    <Transition name="modal-fade">
+      <Modal v-if="modal === 'chatDetail'" :title="chatDetailTitle" wide @close="closeModal">
+        <div class="detail-stack">
+          <section class="detail-summary">
+            <div>
+              <span>Ticketlar</span>
+              <b>{{ fmtNumber(chatDetail.chat?.total_requests) }}</b>
+            </div>
+            <div>
+              <span>Ochiq</span>
+              <b>{{ fmtNumber(chatDetail.chat?.open_requests) }}</b>
+            </div>
+            <div>
+              <span>Yopilgan</span>
+              <b>{{ fmtNumber(chatDetail.chat?.closed_requests) }}</b>
+            </div>
+            <div>
+              <span>Oxirgi aktivlik</span>
+              <b>{{ fmtDate(chatDetail.chat?.last_message_at || chatDetail.chat?.last_request_at) }}</b>
+            </div>
+          </section>
+
+          <section class="detail-section">
+            <div class="detail-section-head">
+              <div class="card-title">Ticketlar va yechimlar</div>
+              <div class="card-note">{{ fmtNumber(chatDetail.requests?.length) }} ta yozuv</div>
+            </div>
+            <DataTable :columns="chatRequestColumns" :rows="chatDetail.requests || []"
+              empty="Bu chatda ticket yo‘q" />
+          </section>
+
+          <section class="detail-section">
+            <div class="detail-section-head">
+              <div class="card-title">Javoblar tarixi</div>
+              <div class="card-note">{{ fmtNumber(chatDetail.timeline?.length) }} ta hodisa</div>
+            </div>
+            <div v-if="chatDetail.timeline?.length" class="timeline-list">
+              <article v-for="(item, index) in chatDetail.timeline" :key="timelineKey(item, index)"
+                class="timeline-row">
+                <div class="timeline-meta">
+                  <span class="badge" :class="timelineBadgeClass(item)">{{ timelineTypeLabel(item.type) }}</span>
+                  <b>{{ item.actor_name || '—' }}</b>
+                  <span>{{ fmtDate(item.created_at) }}</span>
+                </div>
+                <p>{{ item.text || 'Matn yo‘q' }}</p>
+                <small v-if="item.request_text && item.type !== 'ticket'">Ticket: {{ item.request_text }}</small>
+              </article>
+            </div>
+            <div v-else class="empty compact">Javoblar tarixi yo‘q</div>
+          </section>
+        </div>
+      </Modal>
+    </Transition>
+
     <Transition name="fade">
       <div v-if="loading" class="app-loader" role="status" aria-live="polite">
         <span class="spinner" aria-hidden="true"></span>
@@ -589,6 +643,7 @@ const groups = ref([]);
 const privates = ref([]);
 const employees = ref([]);
 const requestRows = ref([]);
+const chatDetail = ref({ chat: null, requests: [], timeline: [] });
 const settingsRaw = ref({ settings: [], admins: [] });
 const webhookStatus = ref(null);
 const showLoginPassword = ref(false);
@@ -662,6 +717,7 @@ const loadingText = computed(() => ({
   deleteGroup: 'O‘chirilmoqda...',
   employeeSend: 'Yuborilmoqda...',
   selectedSend: 'Yuborilmoqda...',
+  chatDetail: 'Chat tafsiloti yuklanmoqda...',
   saveAdmin: 'Saqlamoqda...',
   mainStats: 'Yuborilmoqda...',
   webhookInfo: 'Tekshirilmoqda...',
@@ -729,6 +785,10 @@ const filteredGroups = computed(() => groups.value.filter(includesSearch));
 const filteredPrivates = computed(() => privates.value.filter(includesSearch));
 const selectedRecipients = computed(() => selectedSendType.value === 'employees' ? selectedEmployees.value : selectedGroups.value);
 const selectedSendTitle = computed(() => selectedSendType.value === 'employees' ? 'Xodimlarga xabar yuborish' : 'Guruhlarga xabar yuborish');
+const chatDetailTitle = computed(() => {
+  const chat = chatDetail.value.chat;
+  return chat ? `Chat: ${chat.title || chat.chat_id}` : 'Chat tafsiloti';
+});
 
 const employeeStatColumns = [
   { key: 'full_name', label: 'Xodim' },
@@ -819,6 +879,38 @@ const requestColumns = [
   { key: 'created_at', label: 'Kelgan', format: fmtDate },
   { key: 'closed_at', label: 'Yopilgan', format: fmtDate }
 ];
+
+const chatRequestColumns = [
+  { key: 'customer_name', label: 'Mijoz', format: v => v || '—' },
+  { key: 'initial_text', label: 'Kelgan ticket', truncate: true },
+  { key: 'status', label: 'Status', badge: true },
+  { key: 'closed_by_name', label: 'Yopgan', format: v => v || '—' },
+  { key: 'solution_text', label: 'Yechim/Javob', truncate: true, format: v => v || '—' },
+  { key: 'created_at', label: 'Kelgan', format: fmtDate },
+  { key: 'solution_at', label: 'Javob vaqti', format: fmtDate }
+];
+
+function timelineTypeLabel(type) {
+  return ({
+    ticket: 'Ticket',
+    note: 'Izoh',
+    solution: 'Yechim',
+    closed: 'Yopildi',
+    employee_reply: 'Javob',
+    admin_reply: 'Admin javobi',
+    done_without_request: 'Ticketsiz #done'
+  }[type] || 'Hodisa');
+}
+
+function timelineBadgeClass(item) {
+  if (['solution', 'closed'].includes(item.type)) return 'green';
+  if (item.type === 'ticket') return 'orange';
+  return 'blue';
+}
+
+function timelineKey(item, index) {
+  return `${item.type || 'event'}:${item.request_id || item.message_id || index}:${item.created_at || index}`;
+}
 
 async function refresh() {
   startLoading('refresh');
@@ -1147,6 +1239,20 @@ async function loadRequests(row) {
   selectedTarget.value = row;
   requestRows.value = await api.requests({ chat_id: row.chat_id });
   modal.value = 'requests';
+}
+
+async function loadChatDetail(row) {
+  if (!row?.chat_id) return showToast('Chat tanlanmagan');
+  selectedTarget.value = row;
+  startLoading('chatDetail');
+  try {
+    chatDetail.value = await api.chatDetail({ chat_id: row.chat_id });
+    modal.value = 'chatDetail';
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    stopLoading('chatDetail');
+  }
 }
 
 async function saveAdmin() {

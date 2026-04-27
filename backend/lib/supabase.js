@@ -2,11 +2,15 @@
 
 const { requiredEnv } = require('./env');
 
+let cachedConfig = null;
+
 function getConfig() {
-  return {
+  if (cachedConfig) return cachedConfig;
+  cachedConfig = {
     url: requiredEnv('SUPABASE_URL').replace(/\/$/, ''),
     key: requiredEnv('SUPABASE_SERVICE_ROLE_KEY')
   };
+  return cachedConfig;
 }
 
 function headers(extra = {}) {

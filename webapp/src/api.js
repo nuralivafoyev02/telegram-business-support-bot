@@ -36,6 +36,7 @@ export const api = {
   privates: () => request('privates').then(r => r.data),
   employees: () => request('employees').then(r => r.data),
   requests: query => request('requests', { query }).then(r => r.data),
+  chatDetail: query => request('chatDetail', { query }).then(r => r.data),
   settings: () => request('settings').then(r => r.data),
   sendMessage: payload => request('sendMessage', { method: 'POST', body: payload }).then(r => r.data),
   broadcast: payload => request('broadcast', { method: 'POST', body: payload }).then(r => r.data),

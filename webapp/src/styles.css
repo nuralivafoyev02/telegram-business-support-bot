@@ -609,6 +609,86 @@ tbody tr:hover { background: rgba(142, 199, 255, .035); }
   font-size: 12px;
 }
 
+.detail-stack {
+  display: grid;
+  gap: 16px;
+}
+.detail-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+.detail-summary div {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: rgba(255,255,255,.035);
+  padding: 12px;
+}
+.detail-summary span {
+  display: block;
+  color: #91a8c0;
+  font-size: 12px;
+}
+.detail-summary b {
+  display: block;
+  margin-top: 5px;
+  color: #eef6ff;
+  font-size: 18px;
+  letter-spacing: 0;
+  overflow-wrap: anywhere;
+}
+.detail-section {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: rgba(255,255,255,.02);
+}
+.detail-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+}
+.timeline-list {
+  display: grid;
+  max-height: min(420px, 48vh);
+  overflow: auto;
+}
+.timeline-row {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(255,255,255,.06);
+}
+.timeline-row:last-child { border-bottom: 0; }
+.timeline-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: #91a8c0;
+  font-size: 12px;
+}
+.timeline-meta b {
+  color: #eef6ff;
+  font-size: 13px;
+}
+.timeline-row p {
+  margin: 0;
+  color: #eaf5ff;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.timeline-row small {
+  color: #91a8c0;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
 .toast {
   position: fixed;
   right: 18px;
@@ -685,6 +765,7 @@ tbody tr:hover { background: rgba(142, 199, 255, .035); }
   .nav-bottom { margin-top: 0; }
   .grid.cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .grid.two, .grid.three, .stats-main-grid { grid-template-columns: 1fr; }
+  .detail-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .settings-stack { max-width: none; }
   .integration-form { grid-template-columns: 1fr; }
 }
@@ -699,4 +780,5 @@ tbody tr:hover { background: rgba(142, 199, 255, .035); }
   .stats-controls { justify-content: stretch; }
   .segmented { width: 100%; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .form.two { grid-template-columns: 1fr; }
+  .detail-summary { grid-template-columns: 1fr; }
 }

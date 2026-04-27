@@ -24,6 +24,29 @@ const BROADCAST_DELETE_CONFIRM_PREFIX = 'broadcast_delete_confirm:';
 const BROADCAST_DELETE_CANCEL_PREFIX = 'broadcast_delete_cancel:';
 const TELEGRAM_TEXT_LIMIT = 4096;
 const RESULT_CHUNK_LIMIT = 3600;
+const BROADCAST_CONCURRENCY = clampInt(optionalEnv('BROADCAST_CONCURRENCY', '8'), 8, 1, 20);
+
+function clampInt(value, fallback, min, max) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(Math.max(parsed, min), max);
+}
+
+async function mapWithConcurrency(items, limit, worker) {
+  const results = new Array(items.length);
+  let nextIndex = 0;
+  const workerCount = Math.min(limit, items.length);
+
+  await Promise.all(Array.from({ length: workerCount }, async () => {
+    while (nextIndex < items.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      results[index] = await worker(items[index], index);
+    }
+  }));
+
+  return results;
+}
 
 function verifyWebhook(req) {
   const secret = optionalEnv('TELEGRAM_WEBHOOK_SECRET', '');
@@ -117,7 +140,10 @@ function isMainStatsTrigger(text = '') {
   return MAIN_STATS_TRIGGER_RE.test(text);
 }
 
-async function isMainStatsGroup(chat = {}) {
+async function isMainStatsGroup(chat = {}, settings = null) {
+  const configured = String(settings && settings.mainGroupId || optionalEnv('MAIN_GROUP_ID', '')).trim();
+  if (configured) return sameChatId(configured, chat.id);
+
   const target = await resolveMainStatsChatId().catch(error => {
     logBackgroundError('resolve-main-stats-group', error);
     return '';
@@ -125,10 +151,10 @@ async function isMainStatsGroup(chat = {}) {
   return target && sameChatId(target, chat.id);
 }
 
-async function maybeSendMainStatsFromGroup(message, text) {
+async function maybeSendMainStatsFromGroup(message, text, settings = null) {
   const chat = message.chat || {};
   if (!isGroupChat(chat) || !isMainStatsTrigger(text)) return false;
-  if (!await isMainStatsGroup(chat)) return false;
+  if (!await isMainStatsGroup(chat, settings)) return false;
 
   try {
     await sendMainStatsReport(chat.id);
@@ -296,10 +322,10 @@ function broadcastDeleteResultMessages({ total, deleted, failed, details }) {
   return chunks;
 }
 
-async function maybeStartGroupBroadcastPreview(message, text) {
+async function maybeStartGroupBroadcastPreview(message, text, settings = null) {
   const chat = message.chat || {};
   if (!isGroupChat(chat) || !isGroupBroadcastTrigger(text)) return false;
-  if (!await isMainStatsGroup(chat)) return false;
+  if (!await isMainStatsGroup(chat, settings)) return false;
 
   const source = message.reply_to_message || {};
   const sourceText = getRawMessageText(source);
@@ -349,10 +375,10 @@ async function maybeStartGroupBroadcastPreview(message, text) {
   return true;
 }
 
-async function maybeStartGroupBroadcastDeletePreview(message, text) {
+async function maybeStartGroupBroadcastDeletePreview(message, text, settings = null) {
   const chat = message.chat || {};
   if (!isGroupChat(chat) || !isGroupBroadcastDeleteTrigger(text)) return false;
-  if (!await isMainStatsGroup(chat)) return false;
+  if (!await isMainStatsGroup(chat, settings)) return false;
 
   const { broadcast, targets } = await loadGroupBroadcastWithTargets();
   if (!broadcast || !targets.length) {
@@ -448,32 +474,36 @@ async function cancelBroadcastPreview(id) {
 
 async function sendPendingGroupBroadcast({ broadcast }) {
   const targets = await listActiveGroupBroadcastTargets();
-  let sent = 0;
-  let failed = 0;
-  const details = [];
 
-  for (const target of targets) {
+  const results = await mapWithConcurrency(targets, BROADCAST_CONCURRENCY, async target => {
     try {
       const telegramResult = await sendMessage(target.chat_id, broadcast.text, { parse_mode: null });
-      sent += 1;
-      details.push({ chat_id: target.chat_id, title: target.title, ok: true, message_id: telegramResult.message_id });
-      await supabase.insert('broadcast_targets', [{
-        broadcast_id: broadcast.id,
-        chat_id: target.chat_id,
-        status: 'sent',
-        sent_at: new Date().toISOString(),
-        telegram_message_id: telegramResult.message_id
-      }], { prefer: 'return=minimal' }).catch(() => null);
+      return { target, ok: true, message_id: telegramResult.message_id };
     } catch (error) {
-      failed += 1;
-      details.push({ chat_id: target.chat_id, title: target.title, ok: false, error: error.message });
-      await supabase.insert('broadcast_targets', [{
-        broadcast_id: broadcast.id,
-        chat_id: target.chat_id,
-        status: 'failed',
-        error: error.message
-      }], { prefer: 'return=minimal' }).catch(() => null);
+      return { target, ok: false, error: error.message };
     }
+  });
+
+  const sent = results.filter(result => result.ok).length;
+  const failed = results.length - sent;
+  const details = results.map(result => ({
+    chat_id: result.target.chat_id,
+    title: result.target.title,
+    ok: result.ok,
+    message_id: result.message_id,
+    error: result.error
+  }));
+  const targetRows = results.map(result => ({
+    broadcast_id: broadcast.id,
+    chat_id: result.target.chat_id,
+    status: result.ok ? 'sent' : 'failed',
+    sent_at: result.ok ? new Date().toISOString() : undefined,
+    telegram_message_id: result.ok ? result.message_id : undefined,
+    error: result.ok ? undefined : result.error
+  }));
+
+  if (targetRows.length) {
+    await supabase.insert('broadcast_targets', targetRows, { prefer: 'return=minimal' }).catch(() => null);
   }
 
   await supabase.patch('broadcasts', { id: supabase.eq(broadcast.id) }, {
@@ -489,20 +519,23 @@ async function sendPendingGroupBroadcast({ broadcast }) {
 
 async function deleteSentGroupBroadcast({ broadcast }) {
   const { targets } = await loadGroupBroadcastWithTargets(broadcast.id);
-  let deleted = 0;
-  let failed = 0;
-  const details = [];
-
-  for (const target of targets) {
+  const results = await mapWithConcurrency(targets, BROADCAST_CONCURRENCY, async target => {
     try {
       await deleteMessage(target.chat_id, target.telegram_message_id);
-      deleted += 1;
-      details.push({ chat_id: target.chat_id, title: target.title, ok: true });
+      return { target, ok: true };
     } catch (error) {
-      failed += 1;
-      details.push({ chat_id: target.chat_id, title: target.title, ok: false, error: error.message });
+      return { target, ok: false, error: error.message };
     }
-  }
+  });
+
+  const deleted = results.filter(result => result.ok).length;
+  const failed = results.length - deleted;
+  const details = results.map(result => ({
+    chat_id: result.target.chat_id,
+    title: result.target.title,
+    ok: result.ok,
+    error: result.error
+  }));
 
   return { total: targets.length, deleted, failed, details };
 }
@@ -603,11 +636,13 @@ async function recordIncomingMessage(updateKind, message, sourceType, classifica
   const chat = message.chat || {};
   const from = message.from || {};
 
-  await metrics.upsertTelegramUser(from);
-  const chatRow = await metrics.upsertChat(chat, sourceType, {
-    business_connection_id: message.business_connection_id || null
-  });
-  await metrics.saveMessage({ message, updateKind, sourceType, classification, employee });
+  const [, chatRow] = await Promise.all([
+    metrics.upsertTelegramUser(from, {}, { prefer: 'return=minimal' }),
+    metrics.upsertChat(chat, sourceType, {
+      business_connection_id: message.business_connection_id || null
+    })
+  ]);
+  await metrics.saveMessage({ message, updateKind, sourceType, classification, employee }, { prefer: 'return=minimal' });
   return chatRow;
 }
 
@@ -682,14 +717,26 @@ async function processMessage(updateKind, message) {
     return;
   }
 
-  const settings = await getBotSettings();
+  const [settings, , chatRow, employee] = await Promise.all([
+    getBotSettings(),
+    metrics.upsertTelegramUser(from, {}, { prefer: 'return=minimal' }),
+    metrics.upsertChat(chat, sourceType, {
+      business_connection_id: message.business_connection_id || null
+    }),
+    metrics.getKnownEmployeeByTelegramId(from.id)
+  ]);
 
-  await metrics.upsertTelegramUser(from);
-  const chatRow = await metrics.upsertChat(chat, sourceType, {
-    business_connection_id: message.business_connection_id || null
-  });
+  const possibleMainGroupAutomation = isGroupChat(chat)
+    && (isMainStatsTrigger(text) || isGroupBroadcastDeleteTrigger(text) || isGroupBroadcastTrigger(text))
+    && await isMainStatsGroup(chat, settings);
 
-  const employee = await metrics.getKnownEmployeeByTelegramId(from.id);
+  if (possibleMainGroupAutomation) {
+    await metrics.saveMessage({ message, updateKind, sourceType, classification: 'message', employee }, { prefer: 'return=minimal' });
+    if (await maybeSendMainStatsFromGroup(message, text, settings)) return;
+    if (await maybeStartGroupBroadcastDeletePreview(message, text, settings)) return;
+    if (await maybeStartGroupBroadcastPreview(message, text, settings)) return;
+  }
+
   const classification = await classifyIncomingMessage({
     text,
     chat,
@@ -699,11 +746,11 @@ async function processMessage(updateKind, message) {
     settings
   });
 
-  await metrics.saveMessage({ message, updateKind, sourceType, classification, employee });
+  await metrics.saveMessage({ message, updateKind, sourceType, classification, employee }, { prefer: 'return=minimal' });
 
-  if (await maybeSendMainStatsFromGroup(message, text)) return;
-  if (await maybeStartGroupBroadcastDeletePreview(message, text)) return;
-  if (await maybeStartGroupBroadcastPreview(message, text)) return;
+  if (await maybeSendMainStatsFromGroup(message, text, settings)) return;
+  if (await maybeStartGroupBroadcastDeletePreview(message, text, settings)) return;
+  if (await maybeStartGroupBroadcastPreview(message, text, settings)) return;
 
   if (classification === 'done') {
     const closer = employee || await metrics.ensureEmployee(from);
