@@ -120,14 +120,13 @@ function summarizeUpdate(update = {}) {
 }
 
 async function handleStart(message) {
-  const webapp = optionalEnv('WEBAPP_URL', '');
   const text = [
-    '✅ <b>Uyqur texnik yordam boti ishga tushdi</b>',
+    '<b>Assalomu alaykum!</b>',
     '',
-    'Bu bot Uyqur dasturi bo‘yicha mijozlardan tushgan savol, muammo va o‘rgatish so‘rovlarini statistikaga qo‘shadi.',
-    'Xodim masalani yakunlaganda javob yozadi, <b>#done</b> tegini yuboradi yoki mijoz xabariga reply qiladi.',
-    webapp ? `Admin panel: ${escapeHtml(webapp)}` : ''
-  ].filter(Boolean).join('\n');
+    'Men Uyqur yordam botiman. Uyqur dasturi bo‘yicha savol, muammo yoki taklifingiz bo‘lsa, shu yerga yozishingiz mumkin.',
+    '',
+    'Qanday yordam bera olaman?'
+  ].join('\n');
   await sendMessage(message.chat.id, text);
 }
 

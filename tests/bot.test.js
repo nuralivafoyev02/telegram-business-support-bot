@@ -88,7 +88,9 @@ async function testStartRepliesWhenDbTrackingFails() {
     assert.strictEqual(result.payload.handled, 'message');
     assert.strictEqual(telegramCalls.length, 1);
     assert.strictEqual(telegramCalls[0].chat_id, 777);
-    assert.match(telegramCalls[0].text, /Uyqur texnik yordam boti/);
+    assert.match(telegramCalls[0].text, /Assalomu alaykum/);
+    assert.match(telegramCalls[0].text, /Qanday yordam bera olaman/);
+    assert.doesNotMatch(telegramCalls[0].text, /Admin panel/i);
   } finally {
     supabase.insert = originalInsert;
     supabase.select = originalSelect;
