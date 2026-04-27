@@ -263,6 +263,99 @@ async function testAutoReplyNotificationSendsMainGroupMessage() {
   }
 }
 
+async function testAutoReplyDisableNotificationSendsMainGroupMessage() {
+  const originalSelect = supabase.select;
+  const originalInsert = supabase.insert;
+  const originalFetch = global.fetch;
+  const telegramCalls = [];
+  let insertedRows = null;
+
+  supabase.select = async (table) => {
+    assert.strictEqual(table, 'bot_settings');
+    return [
+      { key: 'auto_reply', value: { enabled: true } },
+      { key: 'main_group', value: { chat_id: '-100777' } }
+    ];
+  };
+  supabase.insert = async (table, rows) => {
+    assert.strictEqual(table, 'bot_settings');
+    insertedRows = rows;
+    return rows;
+  };
+  global.fetch = async (url, options) => {
+    telegramCalls.push({ url, body: JSON.parse(options.body) });
+    return {
+      ok: true,
+      json: async () => ({ ok: true, result: { message_id: 602 } })
+    };
+  };
+
+  try {
+    const result = await callSettings({
+      settings: [
+        { key: 'auto_reply', value: { enabled: false } },
+        { key: 'main_group', value: { chat_id: '-100777' } }
+      ]
+    });
+
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.ok, true);
+    assert.strictEqual(insertedRows.some(row => row.key === 'auto_reply' && row.value.enabled === false), true);
+    assert.strictEqual(telegramCalls.length, 1);
+    assert.match(telegramCalls[0].url, /sendMessage$/);
+    assert.strictEqual(telegramCalls[0].body.chat_id, '-100777');
+    assert.match(telegramCalls[0].body.text, /Avto javob rejimi o‘chirildi/);
+  } finally {
+    supabase.select = originalSelect;
+    supabase.insert = originalInsert;
+    global.fetch = originalFetch;
+  }
+}
+
+async function testFirstAutoReplyEnableStillNotifiesMainGroup() {
+  const originalSelect = supabase.select;
+  const originalInsert = supabase.insert;
+  const originalFetch = global.fetch;
+  const telegramCalls = [];
+
+  supabase.select = async (table) => {
+    assert.strictEqual(table, 'bot_settings');
+    return [
+      { key: 'main_group', value: { chat_id: '-100777' } }
+    ];
+  };
+  supabase.insert = async (table, rows) => {
+    assert.strictEqual(table, 'bot_settings');
+    return rows;
+  };
+  global.fetch = async (url, options) => {
+    telegramCalls.push({ url, body: JSON.parse(options.body) });
+    return {
+      ok: true,
+      json: async () => ({ ok: true, result: { message_id: 603 } })
+    };
+  };
+
+  try {
+    const result = await callSettings({
+      settings: [
+        { key: 'auto_reply', value: { enabled: true } },
+        { key: 'main_group', value: { chat_id: '-100777' } }
+      ]
+    });
+
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.ok, true);
+    assert.strictEqual(telegramCalls.length, 1);
+    assert.strictEqual(telegramCalls[0].body.chat_id, '-100777');
+    assert.match(telegramCalls[0].body.text, /Avto javob rejimi yoqildi/);
+  } finally {
+    supabase.select = originalSelect;
+    supabase.insert = originalInsert;
+    global.fetch = originalFetch;
+  }
+}
+
 async function testAiIntegrationSaveMasksTokenAndNotifiesMainGroup() {
   const originalSelect = supabase.select;
   const originalInsert = supabase.insert;
@@ -504,6 +597,8 @@ async function run() {
   await testAiModeEnableSendsMainGroupNotice();
   await testAiModeDisableSendsMainGroupNotice();
   await testAutoReplyNotificationSendsMainGroupMessage();
+  await testAutoReplyDisableNotificationSendsMainGroupMessage();
+  await testFirstAutoReplyEnableStillNotifiesMainGroup();
   await testAiIntegrationSaveMasksTokenAndNotifiesMainGroup();
   await testPrivateChatsExcludeEmployees();
   await testChatDetailIncludesTicketSolutionAndTimeline();

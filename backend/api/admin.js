@@ -1127,6 +1127,10 @@ function settingValue(rows = [], key) {
   return row && row.value && typeof row.value === 'object' ? row.value : {};
 }
 
+function hasSetting(rows = [], key) {
+  return rows.some(item => item && item.key === key);
+}
+
 async function updateSettings(body) {
   const items = Array.isArray(body.settings) ? body.settings : [];
   if (!items.length) return [];
@@ -1135,6 +1139,8 @@ async function updateSettings(body) {
     key: 'in.(ai_mode,ai_integration,auto_reply,done_tag,request_detection,main_group)'
   }).catch(() => []);
   const previousSettings = normalizeSettings(previousRows || []);
+  const previousAutoReplyExists = hasSetting(previousRows, 'auto_reply');
+  const autoReplySubmitted = items.some(item => item && item.key === 'auto_reply');
   const previousIntegration = normalizeAiIntegration(settingValue(previousRows, 'ai_integration'));
   const previousIntegrationReady = isAiIntegrationReady(previousIntegration);
   const previousIntegrationSignature = aiIntegrationSignature(previousIntegration);
@@ -1156,11 +1162,8 @@ async function updateSettings(body) {
   if (previousSettings.aiMode && !nextSettings.aiMode) {
     await notifyAiModeChange(nextSettings, false).catch(error => console.error('[admin:ai-mode-notice:error]', error));
   }
-  if (!previousSettings.autoReply && nextSettings.autoReply) {
-    await notifyAutoReplyChange(nextSettings, true).catch(error => console.error('[admin:auto-reply-notice:error]', error));
-  }
-  if (previousSettings.autoReply && !nextSettings.autoReply) {
-    await notifyAutoReplyChange(nextSettings, false).catch(error => console.error('[admin:auto-reply-notice:error]', error));
+  if (autoReplySubmitted && (!previousAutoReplyExists || previousSettings.autoReply !== nextSettings.autoReply)) {
+    await notifyAutoReplyChange(nextSettings, nextSettings.autoReply).catch(error => console.error('[admin:auto-reply-notice:error]', error));
   }
   const nextIntegrationReady = isAiIntegrationReady(nextSettings.aiIntegration);
   const integrationChanged = previousIntegrationSignature !== aiIntegrationSignature(nextSettings.aiIntegration);
