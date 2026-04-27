@@ -140,19 +140,6 @@
                 <DataTable :columns="openRequestColumns" :rows="dashboard.openRequests || []"
                   empty="Ochiq so‘rov yo‘q" />
               </section>
-              <!-- <section class="card">
-                <div class="card-header">
-                  <div>
-                    <div class="card-title">Davrlar kesimi</div>
-                    <div class="card-note">Bugun, hafta, oy va jami holat</div>
-                  </div>
-                </div>
-                <DataTable :columns="periodColumns" :rows="periodRows" empty="Statistika yo‘q">
-                  <template #periodClose="{ row }">
-                    <MetricBar :value="row.close_rate" />
-                  </template>
-                </DataTable>
-              </section> -->
             </div>
 
             <div class="spacer"></div>
