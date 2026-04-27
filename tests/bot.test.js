@@ -620,6 +620,106 @@ async function testSelectedAiModelClassifiesRequest() {
   }
 }
 
+async function testClassifierJsonIsNotSentAsAutoReply() {
+  const originalInsert = supabase.insert;
+  const originalSelect = supabase.select;
+  const originalFetch = global.fetch;
+  const inserted = [];
+  const telegramCalls = [];
+  const aiCalls = [];
+  clearBotSettingsCache();
+
+  supabase.select = async (table) => {
+    if (table === 'bot_settings') {
+      return [
+        { key: 'ai_mode', value: { enabled: true, provider: 'openai_compatible', model: 'test-model', model_label: 'Test AI' } },
+        {
+          key: 'ai_integration',
+          value: {
+            enabled: true,
+            provider: 'openai_compatible',
+            label: 'Test AI',
+            base_url: 'https://ai.example/v1',
+            model: 'test-model',
+            api_key: 'secret-token',
+            system_prompt: 'Return JSON classification',
+            knowledge_text: ''
+          }
+        },
+        { key: 'request_detection', value: { mode: 'keyword', min_text_length: 10 } }
+      ];
+    }
+    if (table === 'employees') return [];
+    if (table === 'support_requests') return [];
+    return [];
+  };
+  supabase.insert = async (table, rows) => {
+    inserted.push({ table, rows });
+    return rows.map(row => ({ id: `${table}-row`, ...row }));
+  };
+  global.fetch = async (url, options) => {
+    if (/api\.telegram\.org/.test(url)) {
+      telegramCalls.push({ url, body: JSON.parse(options.body) });
+      return {
+        ok: true,
+        json: async () => ({ ok: true, result: { message_id: 704 } })
+      };
+    }
+
+    const body = JSON.parse(options.body);
+    aiCalls.push(body);
+    if (body.response_format) {
+      return {
+        ok: true,
+        json: async () => ({
+          choices: [{
+            message: {
+              content: JSON.stringify({ classification: 'request', confidence: 0.94, reason: 'support intent' })
+            }
+          }]
+        })
+      };
+    }
+    return {
+      ok: true,
+      json: async () => ({
+        choices: [{
+          message: {
+            content: JSON.stringify({ classification: 'request', confidence: 0.9, reason: 'wrong response shape' })
+          }
+        }]
+      })
+    };
+  };
+
+  try {
+    const result = await callHandler({
+      update_id: 73,
+      message: {
+        message_id: 153,
+        date: 1777100000,
+        text: 'Login qilolmayapman, yordam bering',
+        chat: { id: 781, type: 'private', first_name: 'Sardor' },
+        from: { id: 781, first_name: 'Sardor', is_bot: false }
+      }
+    });
+
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.handled, 'message');
+    assert.strictEqual(aiCalls.length, 2);
+    assert.strictEqual(inserted.some(item => item.table === 'support_requests'), true);
+    assert.strictEqual(inserted.some(item => item.table === 'messages' && item.rows[0].classification === 'ai_reply'), false);
+    assert.strictEqual(telegramCalls.length, 1);
+    assert.match(telegramCalls[0].body.text, /So'rovingiz qabul qilindi/);
+    assert.doesNotMatch(telegramCalls[0].body.text, /classification/);
+  } finally {
+    supabase.insert = originalInsert;
+    supabase.select = originalSelect;
+    global.fetch = originalFetch;
+    clearBotSettingsCache();
+  }
+}
+
 async function testAiModeAutoRepliesToGroupRequest() {
   const originalInsert = supabase.insert;
   const originalSelect = supabase.select;
@@ -716,6 +816,75 @@ async function testAiModeAutoRepliesToGroupRequest() {
     assert.strictEqual(telegramCalls[0].body.chat_id, -100300);
     assert.strictEqual(telegramCalls[0].body.reply_to_message_id, 152);
     assert.match(telegramCalls[0].body.text, /parolni tiklash/);
+  } finally {
+    supabase.insert = originalInsert;
+    supabase.select = originalSelect;
+    global.fetch = originalFetch;
+    clearBotSettingsCache();
+  }
+}
+
+async function testAutoReplyFallbackUsesLocalKnowledge() {
+  const originalSelect = supabase.select;
+  const originalInsert = supabase.insert;
+  const originalFetch = global.fetch;
+  const telegramCalls = [];
+  const inserted = [];
+  clearBotSettingsCache();
+
+  supabase.select = async (table) => {
+    if (table === 'bot_settings') {
+      return [
+        { key: 'ai_mode', value: { enabled: false, provider: null } },
+        { key: 'auto_reply', value: { enabled: true } },
+        { key: "ai_integration", value: { enabled: true, provider: "openai_compatible", knowledge_text: "Savol: Printer ishlamaydi? Javob: Printerni ochib qayta yoqib koring." } },
+        { key: 'request_detection', value: { mode: 'keyword', min_text_length: 10 } }
+      ];
+    }
+    if (table === 'employees') return [];
+    if (table === 'support_requests') return [];
+    return [];
+  };
+  supabase.insert = async (table, rows) => {
+    inserted.push({ table, rows });
+    return rows.map(row => ({ id: `${table}-row`, ...row }));
+  };
+  global.fetch = async (url, options) => {
+    if (/api\.telegram\.org/.test(url)) {
+      telegramCalls.push({ url, body: JSON.parse(options.body) });
+      return {
+        ok: true,
+        json: async () => ({ ok: true, result: { message_id: 802 } })
+      };
+    }
+    return {
+      ok: true,
+      json: async () => ({ ok: true, result: {} })
+    };
+  };
+
+  try {
+    const result = await callHandler({
+      update_id: 82,
+      message: {
+        message_id: 182,
+        date: 1777100000,
+        text: 'Printerim ishlamayapti',
+        chat: { id: 900, type: 'private', first_name: 'Mijoz' },
+        from: { id: 900, first_name: 'Mijoz', is_bot: false }
+      }
+    });
+
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.handled, 'message');
+    assert.strictEqual(telegramCalls.length, 1);
+    assert.strictEqual(telegramCalls[0].body.chat_id, 900);
+    assert.strictEqual(telegramCalls[0].body.reply_to_message_id, 182);
+    assert.match(telegramCalls[0].body.text, /ochib qayta yoqib/);
+    assert.doesNotMatch(telegramCalls[0].body.text, /Savol:/);
+    assert.doesNotMatch(telegramCalls[0].body.text, /Javob:/);
+    assert.strictEqual(inserted.some(item => item.table === 'support_requests'), true);
+    assert.strictEqual(inserted.some(item => item.table === 'messages' && item.rows[0].classification === 'ai_reply'), true);
   } finally {
     supabase.insert = originalInsert;
     supabase.select = originalSelect;
@@ -1311,7 +1480,9 @@ async function testBotRemovalMarksGroupInactive() {
   await testAiModeSettingOpensPrivateBroadRequest();
   await testLocalSmartIntentOpensPrivateRequestWithoutAiMode();
   await testSelectedAiModelClassifiesRequest();
+  await testClassifierJsonIsNotSentAsAutoReply();
   await testAiModeAutoRepliesToGroupRequest();
+  await testAutoReplyFallbackUsesLocalKnowledge();
   await testMainGroupStatsTriggerSendsReport();
   await testReplyToCustomerTicketClosesRequest();
   await testEmployeePlainAnswerClosesLatestOpenRequest();

@@ -1088,6 +1088,27 @@ async function notifyAiModeChange(settings = {}, enabled) {
   await sendMessage(chatId, lines.join('\n'));
 }
 
+async function notifyAutoReplyChange(settings = {}, enabled) {
+  const chatId = settings.mainGroupId || await resolveMainStatsChatId().catch(() => '');
+  if (!chatId) return;
+
+  const lines = enabled
+    ? [
+      '⚡️ <b>Avto javob rejimi yoqildi</b>',
+      '',
+      'Bot endi avtomatik ravishda AI yoki ichki bilim bazasi asosida javob qaytaradi.',
+      'Guruh va chat so‘rovlari main guruhga xabar yuborildi.'
+    ]
+    : [
+      '⚡️ <b>Avto javob rejimi o‘chirildi</b>',
+      '',
+      'Bot endi avtomatik javob bermaydi.',
+      'So‘rovlar standart yordam oqimiga qaytadi.'
+    ];
+
+  await sendMessage(chatId, lines.join('\n'));
+}
+
 async function notifyAiIntegrationConnected(settings = {}) {
   const chatId = settings.mainGroupId || await resolveMainStatsChatId().catch(() => '');
   if (!chatId) return;
@@ -1134,6 +1155,12 @@ async function updateSettings(body) {
   }
   if (previousSettings.aiMode && !nextSettings.aiMode) {
     await notifyAiModeChange(nextSettings, false).catch(error => console.error('[admin:ai-mode-notice:error]', error));
+  }
+  if (!previousSettings.autoReply && nextSettings.autoReply) {
+    await notifyAutoReplyChange(nextSettings, true).catch(error => console.error('[admin:auto-reply-notice:error]', error));
+  }
+  if (previousSettings.autoReply && !nextSettings.autoReply) {
+    await notifyAutoReplyChange(nextSettings, false).catch(error => console.error('[admin:auto-reply-notice:error]', error));
   }
   const nextIntegrationReady = isAiIntegrationReady(nextSettings.aiIntegration);
   const integrationChanged = previousIntegrationSignature !== aiIntegrationSignature(nextSettings.aiIntegration);
