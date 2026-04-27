@@ -377,6 +377,32 @@ button:disabled { cursor: wait; opacity: .72; }
 .table-wrap::-webkit-scrollbar-thumb:hover {
   background: rgba(142, 199, 255, .62);
 }
+.data-table {
+  display: grid;
+  gap: 10px;
+}
+.table-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 16px 14px;
+}
+.pagination-info,
+.page-number {
+  color: #9fb5cf;
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.pagination-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.page-btn:disabled {
+  cursor: default;
+}
 table { width: 100%; border-collapse: collapse; min-width: 760px; }
 th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid rgba(255,255,255,.065); white-space: nowrap; }
 th { color: #9ab0ca; font-size: 12px; font-weight: 700; background: rgba(255,255,255,.04); position: sticky; top: 0; z-index: 1; }
@@ -1008,6 +1034,8 @@ tbody tr:hover { background: rgba(142, 199, 255, .035); }
   .segmented { width: 100%; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .source-chart { grid-template-columns: 1fr; }
   .donut { justify-self: center; }
+  .table-pagination { align-items: stretch; flex-direction: column; }
+  .pagination-actions { justify-content: space-between; }
   .chart-row,
   .chart-row.compact {
     grid-template-columns: minmax(76px, .9fr) minmax(84px, 1.4fr) minmax(34px, auto);

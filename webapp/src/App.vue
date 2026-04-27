@@ -710,7 +710,7 @@
 </template>
 
 <script setup>
-import { computed, defineComponent, h, onMounted, reactive, ref } from 'vue';
+import { computed, defineComponent, h, onMounted, reactive, ref, watch } from 'vue';
 import { api, getToken, setToken } from './api';
 
 const ACTIVE_TAB_STORAGE_KEY = 'uyqur_support_active_tab';
@@ -1769,8 +1769,30 @@ const MetricBar = defineComponent({
 });
 
 const DataTable = defineComponent({
-  props: { columns: Array, rows: Array, empty: String, onCellAction: Function },
+  props: {
+    columns: Array,
+    rows: Array,
+    empty: String,
+    onCellAction: Function,
+    pageSize: { type: Number, default: 20 }
+  },
   setup(props, { slots }) {
+    const page = ref(1);
+    const safeRows = computed(() => Array.isArray(props.rows) ? props.rows : []);
+    const safePageSize = computed(() => Math.max(1, Number(props.pageSize || 20)));
+    const totalRows = computed(() => safeRows.value.length);
+    const totalPages = computed(() => Math.max(1, Math.ceil(totalRows.value / safePageSize.value)));
+    const currentPage = computed(() => Math.min(page.value, totalPages.value));
+    const pagedRows = computed(() => {
+      const start = (currentPage.value - 1) * safePageSize.value;
+      return safeRows.value.slice(start, start + safePageSize.value);
+    });
+    const goToPage = nextPage => {
+      page.value = Math.max(1, Math.min(totalPages.value, nextPage));
+    };
+    watch([totalRows, safePageSize], () => {
+      page.value = 1;
+    });
     const resolveAction = (column, row) => typeof column.action === 'function' ? column.action(row, column) : column.action;
     const triggerAction = (event, column, row) => {
       const action = resolveAction(column, row);
@@ -1788,32 +1810,58 @@ const DataTable = defineComponent({
       }
       return h('span', { class: column.truncate ? 'truncate' : '' }, text);
     };
-
-    return () => h('div', { class: 'table-wrap' }, [
-      props.rows && props.rows.length
-        ? h('table', [
-          h('thead', h('tr', props.columns.map(col => h('th', { class: col.key === 'select' ? 'select-cell' : '' }, col.label)))),
-          h('tbody', props.rows.map(row => h('tr', props.columns.map(col => {
-            const action = resolveAction(col, row);
-            const cellProps = {
-              class: [
-                col.key === 'select' ? 'select-cell' : '',
-                action ? 'cell-action' : ''
-              ].filter(Boolean).join(' ')
-            };
-            if (action) {
-              cellProps.role = 'button';
-              cellProps.tabindex = 0;
-              cellProps.title = 'Ochish';
-              cellProps.onClick = event => triggerAction(event, col, row);
-              cellProps.onKeydown = event => {
-                if (event.key === 'Enter' || event.key === ' ') triggerAction(event, col, row);
-              };
-            }
-            return h('td', cellProps, renderValue(col, row));
-          }))))
+    const renderPagination = () => {
+      if (totalRows.value <= safePageSize.value) return null;
+      const start = ((currentPage.value - 1) * safePageSize.value) + 1;
+      const end = Math.min(totalRows.value, currentPage.value * safePageSize.value);
+      return h('div', { class: 'table-pagination' }, [
+        h('span', { class: 'pagination-info' }, `${fmtNumber(start)}-${fmtNumber(end)} / ${fmtNumber(totalRows.value)}`),
+        h('div', { class: 'pagination-actions' }, [
+          h('button', {
+            class: 'btn small page-btn',
+            type: 'button',
+            disabled: currentPage.value <= 1,
+            onClick: () => goToPage(currentPage.value - 1)
+          }, 'Oldingi'),
+          h('span', { class: 'page-number' }, `${fmtNumber(currentPage.value)} / ${fmtNumber(totalPages.value)}`),
+          h('button', {
+            class: 'btn small page-btn',
+            type: 'button',
+            disabled: currentPage.value >= totalPages.value,
+            onClick: () => goToPage(currentPage.value + 1)
+          }, 'Keyingi')
         ])
-        : h('div', { class: 'empty' }, props.empty || 'Ma’lumot yo‘q')
+      ]);
+    };
+
+    return () => h('div', { class: 'data-table' }, [
+      h('div', { class: 'table-wrap' }, [
+        safeRows.value.length
+          ? h('table', [
+            h('thead', h('tr', props.columns.map(col => h('th', { class: col.key === 'select' ? 'select-cell' : '' }, col.label)))),
+            h('tbody', pagedRows.value.map(row => h('tr', props.columns.map(col => {
+              const action = resolveAction(col, row);
+              const cellProps = {
+                class: [
+                  col.key === 'select' ? 'select-cell' : '',
+                  action ? 'cell-action' : ''
+                ].filter(Boolean).join(' ')
+              };
+              if (action) {
+                cellProps.role = 'button';
+                cellProps.tabindex = 0;
+                cellProps.title = 'Ochish';
+                cellProps.onClick = event => triggerAction(event, col, row);
+                cellProps.onKeydown = event => {
+                  if (event.key === 'Enter' || event.key === ' ') triggerAction(event, col, row);
+                };
+              }
+              return h('td', cellProps, renderValue(col, row));
+            }))))
+          ])
+          : h('div', { class: 'empty' }, props.empty || 'Ma’lumot yo‘q')
+      ]),
+      renderPagination()
     ]);
   }
 });

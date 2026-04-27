@@ -173,7 +173,7 @@ function buildMainStatsQuestionText({ text, summaryRows, employees, requests }) 
   const todayCreatedOpen = todayCreated.filter(request => request.status === 'open');
   const openRequests = requests.filter(request => request.status === 'open');
   const employeeRows = buildTodayEmployeeRows(requests, employees);
-  const lines = ['📌 <b>Bugungi holat</b>'];
+  const lines = ['📌 <b>Bugungi holat</b>\n'];
 
   if (intents.wantsActiveEmployee || intents.wantsTopCloser) {
     const top = employeeRows[0];

@@ -46,8 +46,8 @@ export const api = {
     return data;
   },
   dashboard: () => request('dashboard').then(r => r.data),
-  groups: () => request('groups').then(r => r.data),
-  privates: () => request('privates').then(r => r.data),
+  groups: () => request('groups', { query: { limit: 500 } }).then(r => r.data),
+  privates: () => request('privates', { query: { limit: 500 } }).then(r => r.data),
   employees: () => request('employees').then(r => r.data),
   requests: query => request('requests', { query }).then(r => r.data),
   chatDetail: query => request('chatDetail', { query }).then(r => r.data),
