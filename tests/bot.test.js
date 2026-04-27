@@ -925,6 +925,42 @@ async function testLocalKnowledgeUsesClosestMeaningAndShortPath() {
   assert.doesNotMatch(reply, /Loyiha qanday yaratilishi/);
 }
 
+async function testLocalKnowledgeDoesNotCrossWrongSection() {
+  const reply = await generateLocalSupportReply({
+    text: 'Sozlamalar bo‘limi qayerda?',
+    chatType: 'supergroup',
+    sourceType: 'group',
+    settings: {
+      aiIntegration: {
+        knowledge_text: [
+          'Savol: Kontragent qanday qo‘shiladi? Javob: Kontragentlar bo‘limida yangi kontragent qo‘shish tugmasi bosiladi.',
+          'Savol: Loyiha qanday yaratiladi? Javob: Loyiha bo‘limida Loyiha qo‘shish kartasi bosiladi.'
+        ].join('\n\n')
+      }
+    }
+  });
+
+  assert.strictEqual(reply, null);
+
+  const settingsReply = await generateLocalSupportReply({
+    text: 'Sozlamalar bo‘limi qayerda?',
+    chatType: 'supergroup',
+    sourceType: 'group',
+    settings: {
+      aiIntegration: {
+        knowledge_text: [
+          'Savol: Kontragent qanday qo‘shiladi? Javob: Kontragentlar bo‘limida yangi kontragent qo‘shish tugmasi bosiladi.',
+          'Savol: Sozlamalar qayerda? Javob: Sozlamalar bo‘limida kompaniya, main guruh va avto javob parametrlari saqlanadi.'
+        ].join('\n\n')
+      }
+    }
+  });
+
+  assert.ok(settingsReply);
+  assert.match(settingsReply, /Sozlamalar/);
+  assert.doesNotMatch(settingsReply, /Kontragentlar bo‘limida yangi kontragent/);
+}
+
 async function testMainGroupEmployeeQuestionGetsAutoReply() {
   const originalSelect = supabase.select;
   const originalInsert = supabase.insert;
@@ -1130,6 +1166,99 @@ async function testMainGroupStatsTriggerSendsReport() {
     supabase.select = originalSelect;
     global.fetch = originalFetch;
     console.error = originalConsoleError;
+    clearBotSettingsCache();
+  }
+}
+
+async function testMainGroupAnswersStatsQuestions() {
+  const originalInsert = supabase.insert;
+  const originalSelect = supabase.select;
+  const originalFetch = global.fetch;
+  const telegramCalls = [];
+  const inserted = [];
+  clearBotSettingsCache();
+
+  const now = new Date().toISOString();
+  const employees = [
+    { id: 'employee-1', tg_user_id: 777, full_name: 'Ali Valiyev', username: 'ali', is_active: true },
+    { id: 'employee-2', tg_user_id: 778, full_name: 'Vali Karimov', username: 'vali', is_active: true }
+  ];
+  const requests = [
+    { id: 'request-1', source_type: 'group', chat_id: -1001, status: 'closed', closed_by_employee_id: 'employee-1', closed_by_name: 'Ali Valiyev', created_at: now, closed_at: now },
+    { id: 'request-2', source_type: 'group', chat_id: -1002, status: 'closed', closed_by_employee_id: 'employee-1', closed_by_name: 'Ali Valiyev', created_at: now, closed_at: now },
+    { id: 'request-3', source_type: 'group', chat_id: -1003, status: 'closed', closed_by_employee_id: 'employee-2', closed_by_name: 'Vali Karimov', created_at: now, closed_at: now },
+    { id: 'request-4', source_type: 'group', chat_id: -1004, status: 'open', closed_by_employee_id: null, closed_by_name: null, created_at: now, closed_at: null }
+  ];
+
+  supabase.select = async (table) => {
+    if (table === 'bot_settings') {
+      return [
+        { key: 'main_group', value: { chat_id: '-100777' } },
+        { key: 'ai_mode', value: { enabled: false, provider: null } },
+        { key: 'auto_reply', value: { enabled: true } },
+        { key: 'request_detection', value: { mode: 'keyword', min_text_length: 10 } }
+      ];
+    }
+    if (table === 'employees') return employees;
+    if (table === 'v_today_summary') return [{ total_requests: 4, open_requests: 1, closed_requests: 3 }];
+    if (table === 'v_chat_statistics') return [{ chat_id: -1004, title: 'Client group', open_requests: 1 }];
+    if (table === 'support_requests') return requests;
+    return [];
+  };
+  supabase.insert = async (table, rows) => {
+    inserted.push({ table, rows });
+    return rows.map(row => ({ id: `${table}-row`, ...row }));
+  };
+  global.fetch = async (_url, options) => {
+    telegramCalls.push({ url: _url, body: JSON.parse(options.body) });
+    return {
+      ok: true,
+      json: async () => ({ ok: true, result: { message_id: 903 + telegramCalls.length } })
+    };
+  };
+
+  try {
+    const activeResult = await callHandler({
+      update_id: 85,
+      message: {
+        message_id: 185,
+        date: 1777100000,
+        text: 'eng faol xodim',
+        chat: { id: -100777, type: 'supergroup', title: 'Main group' },
+        from: { id: 777, first_name: 'Admin', username: 'admin', is_bot: false }
+      }
+    });
+
+    assert.strictEqual(activeResult.status, 200);
+    assert.strictEqual(activeResult.payload.handled, 'message');
+    assert.strictEqual(telegramCalls.length, 1);
+    assert.match(telegramCalls[0].body.text, /Eng faol xodim/);
+    assert.match(telegramCalls[0].body.text, /Ali Valiyev/);
+    assert.match(telegramCalls[0].body.text, /2<\/b> ta/);
+    assert.strictEqual(telegramCalls[0].body.reply_to_message_id, 185);
+
+    const allClosedResult = await callHandler({
+      update_id: 86,
+      message: {
+        message_id: 186,
+        date: 1777100000,
+        text: "bugun barcha so'rovlar yopildimi?",
+        chat: { id: -100777, type: 'supergroup', title: 'Main group' },
+        from: { id: 777, first_name: 'Admin', username: 'admin', is_bot: false }
+      }
+    });
+
+    assert.strictEqual(allClosedResult.status, 200);
+    assert.strictEqual(allClosedResult.payload.handled, 'message');
+    assert.strictEqual(telegramCalls.length, 2);
+    assert.match(telegramCalls[1].body.text, /Yo‘q/);
+    assert.match(telegramCalls[1].body.text, /1<\/b> tasi ochiq/);
+    assert.strictEqual(inserted.some(item => item.table === 'support_requests'), false);
+    assert.strictEqual(inserted.some(item => item.table === 'messages' && item.rows[0].classification === 'ai_reply'), true);
+  } finally {
+    supabase.insert = originalInsert;
+    supabase.select = originalSelect;
+    global.fetch = originalFetch;
     clearBotSettingsCache();
   }
 }
@@ -1655,9 +1784,11 @@ async function testBotRemovalMarksGroupInactive() {
   await testAiModeAutoRepliesToGroupRequest();
   await testAutoReplyFallbackUsesLocalKnowledge();
   await testLocalKnowledgeUsesClosestMeaningAndShortPath();
+  await testLocalKnowledgeDoesNotCrossWrongSection();
   await testMainGroupEmployeeQuestionGetsAutoReply();
   await testMainGroupCustomerRequestDoesNotCreateTicket();
   await testMainGroupStatsTriggerSendsReport();
+  await testMainGroupAnswersStatsQuestions();
   await testReplyToCustomerTicketClosesRequest();
   await testEmployeePlainAnswerClosesLatestOpenRequest();
   await testMainGroupBroadcastPreview();

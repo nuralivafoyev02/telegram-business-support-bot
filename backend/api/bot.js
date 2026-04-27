@@ -6,7 +6,7 @@ const supabase = require('../lib/supabase');
 const { sendMessage, deleteMessage, answerCallbackQuery, editMessageReplyMarkup, escapeHtml, tgUserName } = require('../lib/telegram');
 const { getMessageText, classifyMessage, isGreetingOnly } = require('../lib/parser');
 const { getBotSettings } = require('../lib/bot-settings');
-const { resolveMainStatsChatId, sendMainStatsReport } = require('../lib/report');
+const { resolveMainStatsChatId, sendMainStatsReport, buildMainStatsQuestionReply } = require('../lib/report');
 const { shouldUseExternalAi, classifyWithAi, generateSupportReply, generateLocalSupportReply } = require('../lib/ai');
 const metrics = require('../lib/metrics');
 
@@ -824,12 +824,36 @@ async function maybeSendAiAutoReply({ updateKind, message, sourceType, text, set
   }
 }
 
+async function maybeSendMainStatsQuestionReply({ message, sourceType, text, settings }) {
+  if (!shouldAutoReply(settings)) return false;
+  if (message.from && message.from.is_bot) return false;
+
+  let reply = '';
+  try {
+    reply = await buildMainStatsQuestionReply(text);
+  } catch (error) {
+    logBackgroundError('main-stats-question', error);
+    return false;
+  }
+  if (!reply) return false;
+
+  try {
+    const telegramResult = await sendMessage(message.chat.id, reply, { reply_to_message_id: message.message_id });
+    await saveAiReplyMessage({ telegramResult, sourceMessage: message, sourceType, text: reply, settings });
+    return true;
+  } catch (error) {
+    logBackgroundError('main-stats-question-reply', error);
+    return false;
+  }
+}
+
 async function maybeAnswerMainGroupQuestion({ updateKind, message, sourceType, text, settings }) {
   const chat = message.chat || {};
   if (!isGroupChat(chat)) return false;
   if (message.reply_to_message) return false;
-  if (!isQuestionLike(text)) return false;
   if (!await isMainStatsGroup(chat, settings)) return false;
+  if (await maybeSendMainStatsQuestionReply({ message, sourceType, text, settings })) return true;
+  if (!isQuestionLike(text)) return false;
   if (!classifyAsCustomerRequest({ updateKind, message, text, settings })) return false;
 
   return maybeSendAiAutoReply({

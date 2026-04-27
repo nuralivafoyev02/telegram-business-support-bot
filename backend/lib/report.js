@@ -53,6 +53,15 @@ function formatNumber(value) {
   return new Intl.NumberFormat('uz-UZ', { maximumFractionDigits: 1 }).format(Number(value || 0));
 }
 
+function normalizeStatsText(value = '') {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/[‘’ʼʻ`']/g, '')
+    .replace(/ё/g, 'е')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function employeeLabel(employee = {}) {
   const username = employee.username ? ` @${employee.username}` : '';
   return `${employee.full_name || employee.closed_by_name || 'Xodim'}${username}`;
@@ -114,7 +123,7 @@ function buildOpenGroupRows(requests, chats) {
     .slice(0, 5);
 }
 
-async function buildMainStatsReport() {
+async function loadMainStatsData() {
   const [summaryRows, employees, chats, requests] = await Promise.all([
     stats.selectTodaySummary({ select: '*', limit: '1' }),
     supabase.select('employees', { select: 'id,full_name,username,is_active', is_active: 'eq.true', limit: '1000' }).catch(() => []),
@@ -125,6 +134,86 @@ async function buildMainStatsReport() {
       limit: '10000'
     }).catch(() => [])
   ]);
+
+  return { summaryRows, employees, chats, requests };
+}
+
+function mainStatsQuestionIntents(text = '') {
+  const value = normalizeStatsText(text);
+  const hasEmployee = /\b(?:xodim|hodim|employee|сотрудник)\w*\b/i.test(value);
+  const hasTicket = /\b(?:ticket|tiket|so'?rov|sorov|murojaat|request|zayavka|заявк)\w*\b/i.test(value);
+  const hasToday = /\b(?:bugun|bugungi|today|сегодня)\b/i.test(value);
+  const wantsTopCloser = hasEmployee && (
+    /\beng\s+(?:kop|ko'p|ko‘p)\b.*\b(?:yop|closed|закр)\w*/i.test(value)
+    || hasTicket && /\b(?:kim|qaysi|qaysi\s+biri)\b.*\b(?:yop|closed|закр)\w*/i.test(value)
+    || hasTicket && /\b(?:yopgan|yopdi|yopilgan)\b.*\b(?:xodim|hodim|employee)\w*/i.test(value)
+  );
+  const wantsActiveEmployee = hasEmployee && /\beng\s+faol\b|\bfaol\s+(?:xodim|hodim|employee)\w*/i.test(value);
+  const wantsOpenToday = hasTicket && (
+    /\b(?:nechta|qancha|necha|сколько|how many)\b.*\b(?:ochiq|qoldi|qolgan|open)\w*/i.test(value)
+    || /\b(?:ochiq|open)\w*\b.*\b(?:qoldi|qolgan|turibdi|bor)\b/i.test(value)
+  );
+  const wantsAllClosed = hasTicket && (
+    /\b(?:barcha|hamma|jami|hammasi|all|все)\b.*\b(?:yopildimi|yopilganmi|yopildi|closed|закрыт)\w*/i.test(value)
+    || /\b(?:yopildimi|yopilganmi)\b.*\b(?:barcha|hamma|jami|hammasi)\b/i.test(value)
+  );
+
+  if (!(hasEmployee || hasTicket || hasToday)) return null;
+  if (!(wantsTopCloser || wantsActiveEmployee || wantsOpenToday || wantsAllClosed)) return null;
+  return { wantsTopCloser, wantsActiveEmployee, wantsOpenToday, wantsAllClosed };
+}
+
+function buildMainStatsQuestionText({ text, summaryRows, employees, requests }) {
+  const intents = mainStatsQuestionIntents(text);
+  if (!intents) return '';
+
+  const summary = summaryRows[0] || {};
+  const todayCreated = requests.filter(request => isToday(request.created_at));
+  const todayClosed = requests.filter(request => request.status === 'closed' && isToday(request.closed_at));
+  const todayCreatedOpen = todayCreated.filter(request => request.status === 'open');
+  const openRequests = requests.filter(request => request.status === 'open');
+  const employeeRows = buildTodayEmployeeRows(requests, employees);
+  const lines = ['📌 <b>Bugungi holat</b>'];
+
+  if (intents.wantsActiveEmployee || intents.wantsTopCloser) {
+    const top = employeeRows[0];
+    if (!top) {
+      lines.push('Bugun hali hech kim ticket yopmagan.');
+    } else if (intents.wantsActiveEmployee && !intents.wantsTopCloser) {
+      lines.push(`Eng faol xodim: <b>${escapeHtml(employeeLabel(top))}</b>`);
+      lines.push(`Yopgan ticket: <b>${formatNumber(top.closed_requests)}</b> ta, ishlagan chat: <b>${formatNumber(top.handled_chats)}</b> ta.`);
+    } else {
+      lines.push(`Eng ko‘p ticket yopgan xodim: <b>${escapeHtml(employeeLabel(top))}</b>`);
+      lines.push(`Bugun yopgan ticket: <b>${formatNumber(top.closed_requests)}</b> ta.`);
+    }
+  }
+
+  if (intents.wantsOpenToday) {
+    lines.push(`Bugun ochiq qolgan ticket: <b>${formatNumber(todayCreatedOpen.length)}</b> ta.`);
+    lines.push(`Hozir jami ochiq ticket: <b>${formatNumber(openRequests.length || summary.open_requests || 0)}</b> ta.`);
+  }
+
+  if (intents.wantsAllClosed) {
+    if (!todayCreated.length) {
+      lines.push('Bugun hali so‘rov tushmagan.');
+    } else if (!todayCreatedOpen.length) {
+      lines.push(`Ha, bugun tushgan <b>${formatNumber(todayCreated.length)}</b> ta so‘rovning barchasi yopilgan.`);
+    } else {
+      lines.push(`Yo‘q, bugun tushgan <b>${formatNumber(todayCreated.length)}</b> ta so‘rovdan <b>${formatNumber(todayCreatedOpen.length)}</b> tasi ochiq qolgan.`);
+    }
+  }
+
+  if (lines.length === 1) return '';
+  return lines.join('\n');
+}
+
+async function buildMainStatsQuestionReply(text = '') {
+  const data = await loadMainStatsData();
+  return buildMainStatsQuestionText({ text, ...data });
+}
+
+async function buildMainStatsReport() {
+  const { summaryRows, employees, chats, requests } = await loadMainStatsData();
 
   const summary = summaryRows[0] || {};
   const todayCreated = requests.filter(request => isToday(request.created_at));
@@ -241,4 +330,4 @@ async function sendMainStatsReport(chatId) {
   return { chat_id: target, message_id: result.message_id, text };
 }
 
-module.exports = { buildMainStatsReport, resolveMainStatsChatId, sendMainStatsReport };
+module.exports = { buildMainStatsReport, buildMainStatsQuestionReply, resolveMainStatsChatId, sendMainStatsReport };

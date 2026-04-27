@@ -116,7 +116,93 @@
 
             <div class="spacer"></div>
 
-            <div class="grid column stats-main-grid">
+            <div class="stats-charts">
+              <section class="card chart-card">
+                <div class="card-header">
+                  <div>
+                    <div class="card-title">Davrlar bo‘yicha ticketlar</div>
+                    <div class="card-note">Bugun, hafta, oy va jami kesimi</div>
+                  </div>
+                </div>
+                <div class="chart-bars">
+                  <div v-for="row in periodChartRows" :key="row.period_label" class="chart-row">
+                    <div class="chart-label">{{ row.period_label }}</div>
+                    <div class="chart-track">
+                      <span class="chart-fill blue" :style="{ width: barWidth(row.total_requests, periodChartMax) }"></span>
+                    </div>
+                    <div class="chart-value">{{ fmtNumber(row.total_requests) }}</div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="card chart-card">
+                <div class="card-header">
+                  <div>
+                    <div class="card-title">Manbalar</div>
+                    <div class="card-note">{{ selectedPeriodLabel }} bo‘yicha taqsimot</div>
+                  </div>
+                </div>
+                <div class="source-chart">
+                  <div class="donut" :style="sourceDonutStyle">
+                    <span>{{ fmtNumber(sourceTotal) }}</span>
+                  </div>
+                  <div class="source-bars">
+                    <div v-for="row in sourceChartRows" :key="row.key" class="chart-row compact">
+                      <div class="chart-label">
+                        <span class="legend-dot" :style="{ background: row.color }"></span>
+                        {{ row.label }}
+                      </div>
+                      <div class="chart-track">
+                        <span class="chart-fill" :style="{ width: barWidth(row.value, sourceChartMax), background: row.color }"></span>
+                      </div>
+                      <div class="chart-value">{{ fmtNumber(row.value) }}</div>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="card chart-card">
+                <div class="card-header">
+                  <div>
+                    <div class="card-title">Top xodimlar</div>
+                    <div class="card-note">Yopilgan ticketlar bo‘yicha</div>
+                  </div>
+                </div>
+                <div class="chart-bars">
+                  <div v-for="row in topEmployeeChartRows" :key="row.employee_id || row.full_name" class="chart-row">
+                    <div class="chart-label">{{ row.full_name || 'Xodim' }}</div>
+                    <div class="chart-track">
+                      <span class="chart-fill green" :style="{ width: barWidth(row.closed_requests, topEmployeeChartMax) }"></span>
+                    </div>
+                    <div class="chart-value">{{ fmtNumber(row.closed_requests) }}</div>
+                  </div>
+                  <div v-if="!topEmployeeChartRows.length" class="empty compact">Ma’lumot yo‘q</div>
+                </div>
+              </section>
+
+              <section class="card chart-card">
+                <div class="card-header">
+                  <div>
+                    <div class="card-title">Faol guruhlar</div>
+                    <div class="card-note">Jami so‘rovlar bo‘yicha</div>
+                  </div>
+                </div>
+                <div class="chart-bars">
+                  <div v-for="row in groupChartRows" :key="row.chat_id || row.title" class="chart-row">
+                    <div class="chart-label">{{ row.title || row.chat_id }}</div>
+                    <div class="chart-track">
+                      <span class="chart-fill orange" :style="{ width: barWidth(row.total_requests, groupChartMax) }"></span>
+                    </div>
+                    <div class="chart-value">{{ fmtNumber(row.total_requests) }}</div>
+                  </div>
+                  <div v-if="!groupChartRows.length" class="empty compact">Ma’lumot yo‘q</div>
+                </div>
+              </section>
+            </div>
+
+            <div class="spacer"></div>
+
+            <div class="stats-table-stack">
               <section class="card">
                 <div class="card-header">
                   <div>
@@ -141,28 +227,22 @@
                 <DataTable :columns="openRequestColumns" :rows="dashboard.openRequests || []"
                   empty="Ochiq so‘rov yo‘q" :on-cell-action="handleTableCellAction" />
               </section>
-            </div>
 
-            <div class="spacer"></div>
-
-            <section class="card">
-              <div class="card-header">
-                <div>
-                  <div class="card-title">Guruhlar bo‘yicha mijoz so‘rovlari</div>
-                  <div class="card-note">Jami so‘rov, ochiq ticket va yopilish foizi</div>
+              <section class="card">
+                <div class="card-header">
+                  <div>
+                    <div class="card-title">Guruhlar bo‘yicha mijoz so‘rovlari</div>
+                    <div class="card-note">Jami so‘rov, ochiq ticket va yopilish foizi</div>
+                  </div>
                 </div>
-              </div>
-              <DataTable :columns="groupPerformanceColumns" :rows="groupPerformanceRows"
-                empty="Bu davrda guruhlardan so‘rov tushmagan" :on-cell-action="handleTableCellAction">
-                <template #groupClose="{ row }">
-                  <MetricBar :value="row.close_rate" />
-                </template>
-              </DataTable>
-            </section>
+                <DataTable :columns="groupPerformanceColumns" :rows="groupPerformanceRows"
+                  empty="Bu davrda guruhlardan so‘rov tushmagan" :on-cell-action="handleTableCellAction">
+                  <template #groupClose="{ row }">
+                    <MetricBar :value="row.close_rate" />
+                  </template>
+                </DataTable>
+              </section>
 
-            <div class="spacer"></div>
-
-            <div class="grid two">
               <section class="card">
                 <div class="card-header">
                   <div>
@@ -199,6 +279,7 @@
                     @change="toggleGroup(row, $event.target.checked)" />
                 </template>
                 <template #actions="{ row }">
+                  <button class="btn small" @click="openTelegramChat(row)">Telegram</button>
                   <button class="btn small" @click="openSend(row)">Xabar</button>
                   <button class="btn small" @click="loadRequests(row)">So‘rovlar</button>
                   <button class="btn small danger" :disabled="deletingGroupId === String(row.chat_id)"
@@ -220,6 +301,7 @@
               <DataTable :columns="privateColumns" :rows="filteredPrivates" empty="Shaxsiy chat topilmadi"
                 :on-cell-action="handleTableCellAction">
                 <template #actions="{ row }">
+                  <button class="btn small" @click="openTelegramChat(row)">Telegram</button>
                   <button class="btn small" @click="openSend(row)">Yozish</button>
                   <button class="btn small" @click="loadChatDetail(row)">Tafsilot</button>
                 </template>
@@ -742,6 +824,30 @@ const periodRows = computed(() => periodOptions.map(period => ({
   ...(analytics.value.periods?.[period.key] || emptyPeriodStats),
   period_label: period.label
 })));
+const periodChartRows = computed(() => periodRows.value);
+const periodChartMax = computed(() => Math.max(1, ...periodChartRows.value.map(row => Number(row.total_requests || 0))));
+const sourceChartRows = computed(() => [
+  { key: 'group', label: 'Guruh', value: Number(selectedPeriodStats.value.group_requests || 0), color: '#8ec7ff' },
+  { key: 'private', label: 'Shaxsiy', value: Number(selectedPeriodStats.value.private_requests || 0), color: '#95ffc8' },
+  { key: 'business', label: 'Business', value: Number(selectedPeriodStats.value.business_requests || 0), color: '#ffd166' }
+]);
+const sourceTotal = computed(() => sourceChartRows.value.reduce((sum, row) => sum + row.value, 0));
+const sourceChartMax = computed(() => Math.max(1, ...sourceChartRows.value.map(row => row.value)));
+const sourceDonutStyle = computed(() => {
+  if (!sourceTotal.value) return { background: 'conic-gradient(rgba(255,255,255,.12) 0deg 360deg)' };
+  let start = 0;
+  const slices = sourceChartRows.value.map(row => {
+    const end = start + (row.value / sourceTotal.value) * 360;
+    const slice = `${row.color} ${start}deg ${end}deg`;
+    start = end;
+    return slice;
+  });
+  return { background: `conic-gradient(${slices.join(', ')}, rgba(255,255,255,.08) ${start}deg 360deg)` };
+});
+const topEmployeeChartRows = computed(() => topEmployeeRows.value.slice(0, 6));
+const topEmployeeChartMax = computed(() => Math.max(1, ...topEmployeeChartRows.value.map(row => Number(row.closed_requests || 0))));
+const groupChartRows = computed(() => groupPerformanceRows.value.slice(0, 6));
+const groupChartMax = computed(() => Math.max(1, ...groupChartRows.value.map(row => Number(row.total_requests || 0))));
 const loadingText = computed(() => ({
   login: 'Kirilmoqda...',
   refresh: 'Yangilanmoqda...',
@@ -796,6 +902,13 @@ function fmtNumber(value) {
 
 function fmtPercent(value) {
   return `${fmtNumber(value)}%`;
+}
+
+function barWidth(value, max) {
+  const numeric = Number(value || 0);
+  const maximum = Number(max || 0);
+  if (!numeric || !maximum) return '0%';
+  return `${Math.min(100, Math.max(5, (numeric / maximum) * 100))}%`;
 }
 
 function fmtMinutes(value) {
@@ -857,7 +970,7 @@ const periodColumns = [
 ];
 
 const groupPerformanceColumns = [
-  { key: 'title', label: 'Guruh', action: 'chatDetail' },
+  { key: 'title', label: 'Guruh', action: 'telegram' },
   { key: 'total_requests', label: 'Jami so‘rov', format: fmtNumber, action: 'requests' },
   { key: 'open_requests', label: 'Ochiq', format: fmtNumber, action: 'requests' },
   { key: 'closed_requests', label: 'Yopilgan', format: fmtNumber, action: 'requests' },
@@ -887,8 +1000,8 @@ const openRequestColumns = [
 
 const groupColumns = [
   { key: 'select', label: '', slot: 'select' },
-  { key: 'title', label: 'Guruh', action: 'chatDetail' },
-  { key: 'chat_id', label: 'Chat ID', action: 'chatDetail' },
+  { key: 'title', label: 'Guruh', action: 'telegram' },
+  { key: 'chat_id', label: 'Chat ID', action: 'telegram' },
   { key: 'total_requests', label: 'So‘rov', action: 'requests' },
   { key: 'open_requests', label: 'Ochiq', action: 'requests' },
   { key: 'closed_requests', label: 'Yopilgan', action: 'requests' },
@@ -898,7 +1011,7 @@ const groupColumns = [
 ];
 
 const privateColumns = [
-  { key: 'title', label: 'Chat', action: 'chatDetail' },
+  { key: 'title', label: 'Chat', action: 'telegram' },
   { key: 'source_type', label: 'Tur', badge: true, action: 'chatDetail' },
   { key: 'total_requests', label: 'So‘rov', action: 'chatDetail' },
   { key: 'open_requests', label: 'Ochiq', action: 'chatDetail' },
@@ -1208,6 +1321,26 @@ function tableActionChatRow(row = {}) {
   };
 }
 
+function telegramUrlFor(row = {}) {
+  const username = String(row.username || row.customer_username || '').replace(/^@/, '').trim();
+  if (username) return `https://t.me/${encodeURIComponent(username)}`;
+
+  const chatId = row.chat_id || row.contact_chat_id || row.customer_tg_id || row.tg_user_id;
+  if (!chatId) return '';
+
+  const normalized = String(chatId).trim();
+  const isGroup = normalized.startsWith('-') || row.source_type === 'group' || String(row.type || '').includes('group');
+  const key = isGroup ? 'chat_id' : 'user_id';
+  return `tg://openmessage?${key}=${encodeURIComponent(normalized)}`;
+}
+
+function openTelegramChat(row = {}) {
+  const target = tableActionChatRow(row) || row;
+  const url = telegramUrlFor(target);
+  if (!url) return showToast('Telegramda ochish uchun chat ID yoki username topilmadi');
+  window.open(url, '_blank', 'noopener,noreferrer');
+}
+
 function tableActionEmployeeRow(row = {}) {
   const employee = {
     ...row,
@@ -1223,6 +1356,10 @@ function tableActionEmployeeRow(row = {}) {
 
 function handleTableCellAction({ action, row }) {
   if (!action) return;
+  if (action === 'telegram') {
+    openTelegramChat(row);
+    return;
+  }
   if (action === 'chatDetail') {
     const chatRow = tableActionChatRow(row);
     if (!chatRow) return showToast('Chat tafsiloti uchun chat ID topilmadi');
