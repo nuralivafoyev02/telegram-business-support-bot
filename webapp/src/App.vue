@@ -116,13 +116,22 @@
 
             <div class="spacer"></div>
 
-            <div class="grid two stats-main-grid">
+            <div class="grid column stats-main-grid">
               <section class="card">
                 <div class="card-header">
                   <div>
                     <div class="card-title">Eng ko‘p ticket yopgan xodimlar</div>
                     <div class="card-note">{{ selectedPeriodLabel }} kesimi</div>
                   </div>
+                  <section class="card">
+                    <div class="card-header">
+                      <div>
+                        <div class="card-title">Ochiq so‘rovlar</div>
+                      </div>
+                    </div>
+                    <DataTable :columns="openRequestColumns" :rows="dashboard.openRequests || []"
+                      empty="Ochiq so‘rov yo‘q" />
+                  </section>
                 </div>
                 <DataTable :columns="topEmployeeColumns" :rows="topEmployeeRows" empty="Bu davrda yopilgan ticket yo‘q">
                   <template #employeeShare="{ row }">
@@ -130,8 +139,7 @@
                   </template>
                 </DataTable>
               </section>
-
-              <section class="card">
+              <!-- <section class="card">
                 <div class="card-header">
                   <div>
                     <div class="card-title">Davrlar kesimi</div>
@@ -143,7 +151,7 @@
                     <MetricBar :value="row.close_rate" />
                   </template>
                 </DataTable>
-              </section>
+              </section> -->
             </div>
 
             <div class="spacer"></div>
@@ -175,16 +183,6 @@
                 <DataTable :columns="employeeStatColumns" :rows="filteredEmployeeStats"
                   empty="Hozircha xodim statistikasi yo‘q" />
               </section>
-
-              <section class="card">
-                <div class="card-header">
-                  <div>
-                    <div class="card-title">Ochiq so‘rovlar</div>
-                  </div>
-                </div>
-                <DataTable :columns="openRequestColumns" :rows="dashboard.openRequests || []"
-                  empty="Ochiq so‘rov yo‘q" />
-              </section>
             </div>
           </template>
 
@@ -215,7 +213,7 @@
                   <button class="btn small" @click="loadRequests(row)">So‘rovlar</button>
                   <button class="btn small danger" :disabled="deletingGroupId === String(row.chat_id)"
                     @click="deleteGroup(row)">{{ deletingGroupId === String(row.chat_id) ? 'O‘chirilmoqda...' :
-                    'O‘chirish' }}</button>
+                      'O‘chirish' }}</button>
                 </template>
               </DataTable>
             </section>
@@ -333,7 +331,7 @@
                       loadingAction === 'webhookInfo' ? 'Tekshirilmoqda...' : 'Holatni ko‘rish' }}</button>
                     <button class="btn primary" :disabled="loadingAction === 'webhookConnect'"
                       @click="reconnectTelegramWebhook">{{ loadingAction === 'webhookConnect' ? 'Ulanmoqda...' :
-                      'Webhookni ulash' }}</button>
+                        'Webhookni ulash' }}</button>
                   </div>
                 </div>
                 <Transition name="fade">
@@ -362,7 +360,8 @@
                     <input v-model.trim="integrationForm.label" class="input" placeholder="Uyqur AI" />
                   </label>
                   <label class="label">Base URL
-                    <input v-model.trim="integrationForm.base_url" class="input" placeholder="https://api.openai.com/v1" />
+                    <input v-model.trim="integrationForm.base_url" class="input"
+                      placeholder="https://api.openai.com/v1" />
                   </label>
                   <label class="label">Model
                     <input v-model.trim="integrationForm.model" class="input" placeholder="gpt-4o-mini" />
@@ -388,7 +387,8 @@
                     <input class="input" type="file" multiple accept=".pdf,.docx,.xlsx,.txt,.md,.csv"
                       :disabled="loadingAction === 'extractKnowledge'" @change="importKnowledgeFiles" />
                   </label>
-                  <button class="btn primary" :disabled="loadingAction === 'saveIntegration' || loadingAction === 'extractKnowledge'">
+                  <button class="btn primary"
+                    :disabled="loadingAction === 'saveIntegration' || loadingAction === 'extractKnowledge'">
                     {{ loadingAction === 'saveIntegration' ? 'Saqlamoqda...' : 'Integratsiyani saqlash' }}
                   </button>
                 </form>
@@ -556,8 +556,7 @@
               <div class="card-title">Ticketlar va yechimlar</div>
               <div class="card-note">{{ fmtNumber(chatDetail.requests?.length) }} ta yozuv</div>
             </div>
-            <DataTable :columns="chatRequestColumns" :rows="chatDetail.requests || []"
-              empty="Bu chatda ticket yo‘q" />
+            <DataTable :columns="chatRequestColumns" :rows="chatDetail.requests || []" empty="Bu chatda ticket yo‘q" />
           </section>
 
           <section class="detail-section">
@@ -566,10 +565,11 @@
               <div class="card-note">{{ fmtNumber(chatConversation.length) }} ta xabar</div>
             </div>
             <div v-if="chatConversation.length" class="telegram-thread">
-              <article v-for="message in chatConversation" :key="chatBubbleKey(message)"
-                class="chat-bubble-row" :class="{ outbound: message.direction === 'outbound' }">
+              <article v-for="message in chatConversation" :key="chatBubbleKey(message)" class="chat-bubble-row"
+                :class="{ outbound: message.direction === 'outbound' }">
                 <div class="chat-bubble">
-                  <div class="chat-bubble-author">{{ message.actor_name || (message.direction === 'outbound' ? 'Xodim' : 'Mijoz') }}</div>
+                  <div class="chat-bubble-author">{{ message.actor_name || (message.direction === 'outbound' ? 'Xodim' :
+                    'Mijoz') }}</div>
                   <div v-if="message.media" class="chat-media">
                     <img v-if="message.media.kind === 'photo' && mediaUrl(message.media)" class="chat-media-image"
                       :src="mediaUrl(message.media)" alt="" />
@@ -592,7 +592,7 @@
             <div v-else class="empty compact">Dialog tarixi yo‘q</div>
           </section>
 
-          <section v-if="chatDetail.timeline?.length" class="detail-section compact-section">
+          <!-- <section v-if="chatDetail.timeline?.length" class="detail-section compact-section">
             <div class="detail-section-head">
               <div class="card-title">Yopilish hodisalari</div>
               <div class="card-note">{{ fmtNumber(chatDetail.timeline?.length) }} ta hodisa</div>
@@ -609,7 +609,7 @@
                 <small v-if="item.request_text && item.type !== 'ticket'">Ticket: {{ item.request_text }}</small>
               </article>
             </div>
-          </section>
+          </section> -->
         </div>
       </Modal>
     </Transition>
@@ -988,7 +988,7 @@ function clearMediaUrls() {
   mediaLoadToken += 1;
   if (typeof URL !== 'undefined') {
     Object.values(mediaUrls.value).forEach(url => {
-      try { URL.revokeObjectURL(url); } catch (_error) {}
+      try { URL.revokeObjectURL(url); } catch (_error) { }
     });
   }
   mediaUrls.value = {};
