@@ -25,6 +25,20 @@ async function request(action, { method = 'GET', body, query = {} } = {}) {
   return data;
 }
 
+async function requestBlob(action, { query = {} } = {}) {
+  const params = new URLSearchParams({ action, ...query });
+  const headers = {};
+  const token = getToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const response = await fetch(`/api/admin?${params.toString()}`, { headers });
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data.error || 'Fayl yuklanmadi');
+  }
+  return response.blob();
+}
+
 export const api = {
   async login(username, password) {
     const data = await request('login', { method: 'POST', body: { username, password } });
@@ -37,6 +51,7 @@ export const api = {
   employees: () => request('employees').then(r => r.data),
   requests: query => request('requests', { query }).then(r => r.data),
   chatDetail: query => request('chatDetail', { query }).then(r => r.data),
+  telegramFile: fileId => requestBlob('telegramFile', { query: { file_id: fileId } }),
   settings: () => request('settings').then(r => r.data),
   sendMessage: payload => request('sendMessage', { method: 'POST', body: payload }).then(r => r.data),
   broadcast: payload => request('broadcast', { method: 'POST', body: payload }).then(r => r.data),

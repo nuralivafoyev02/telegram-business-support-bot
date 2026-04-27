@@ -288,19 +288,41 @@ async function testChatDetailIncludesTicketSolutionAndTimeline() {
       }];
     }
     if (table === 'messages') {
-      return [{
-        tg_message_id: 55,
-        chat_id: chatId,
-        from_tg_user_id: 909,
-        from_name: 'Ali',
-        from_username: 'ali',
-        source_type: 'private',
-        text: 'Lift qayta ishga tushirildi',
-        classification: 'message',
-        employee_id: 'emp-1',
-        raw: {},
-        created_at: '2026-04-27T08:04:00.000Z'
-      }];
+      return [
+        {
+          tg_message_id: 11,
+          chat_id: chatId,
+          from_tg_user_id: 808,
+          from_name: 'Mijoz',
+          from_username: 'client',
+          source_type: 'private',
+          text: 'Lift ishlamayapti',
+          classification: 'request',
+          employee_id: null,
+          raw: {
+            message_id: 11,
+            photo: [
+              { file_id: 'small-photo', width: 90, height: 90, file_size: 300 },
+              { file_id: 'large-photo', width: 1280, height: 720, file_size: 8000 }
+            ],
+            caption: 'Lift ishlamayapti'
+          },
+          created_at: '2026-04-27T08:00:00.000Z'
+        },
+        {
+          tg_message_id: 55,
+          chat_id: chatId,
+          from_tg_user_id: 909,
+          from_name: 'Ali',
+          from_username: 'ali',
+          source_type: 'private',
+          text: 'Lift qayta ishga tushirildi',
+          classification: 'message',
+          employee_id: 'emp-1',
+          raw: {},
+          created_at: '2026-04-27T08:04:00.000Z'
+        }
+      ];
     }
     if (table === 'employees') {
       return [{ id: 'emp-1', tg_user_id: 909, full_name: 'Ali', username: 'ali', role: 'support', is_active: true }];
@@ -331,6 +353,10 @@ async function testChatDetailIncludesTicketSolutionAndTimeline() {
     assert.strictEqual(result.payload.data.requests[0].solution_by, 'Ali');
     assert.strictEqual(result.payload.data.timeline.some(item => item.type === 'solution' && item.request_text === 'Lift ishlamayapti'), true);
     assert.strictEqual(result.payload.data.timeline.some(item => item.type === 'employee_reply' && item.message_id === 55), false);
+    assert.strictEqual(result.payload.data.conversation[0].direction, 'inbound');
+    assert.strictEqual(result.payload.data.conversation[0].media.kind, 'photo');
+    assert.strictEqual(result.payload.data.conversation[0].media.file_id, 'large-photo');
+    assert.strictEqual(result.payload.data.conversation[1].direction, 'outbound');
   } finally {
     supabase.select = originalSelect;
   }

@@ -6,6 +6,10 @@ function apiUrl(method) {
   return `https://api.telegram.org/bot${requiredEnv('BOT_TOKEN')}/${method}`;
 }
 
+function fileApiUrl(filePath) {
+  return `https://api.telegram.org/file/bot${requiredEnv('BOT_TOKEN')}/${filePath}`;
+}
+
 async function telegram(method, payload = {}) {
   const response = await fetch(apiUrl(method), {
     method: 'POST',
@@ -76,6 +80,18 @@ async function setWebhook(payload) {
   return telegram('setWebhook', payload);
 }
 
+async function getFile(fileId) {
+  return telegram('getFile', { file_id: fileId });
+}
+
+async function downloadFile(filePath) {
+  const response = await fetch(fileApiUrl(filePath));
+  if (!response.ok) {
+    throw new Error(`Telegram file download: ${response.statusText || response.status}`);
+  }
+  return response;
+}
+
 function tgUserName(user = {}) {
   return [user.first_name, user.last_name].filter(Boolean).join(' ').trim() || user.username || String(user.id || 'Unknown');
 }
@@ -88,4 +104,4 @@ function escapeHtml(str = '') {
     .replaceAll('"', '&quot;');
 }
 
-module.exports = { telegram, sendMessage, deleteMessage, sendBusinessMessage, answerCallbackQuery, editMessageReplyMarkup, getWebhookInfo, setWebhook, tgUserName, escapeHtml };
+module.exports = { telegram, sendMessage, deleteMessage, sendBusinessMessage, answerCallbackQuery, editMessageReplyMarkup, getWebhookInfo, setWebhook, getFile, downloadFile, tgUserName, escapeHtml };

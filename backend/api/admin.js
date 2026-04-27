@@ -1,9 +1,10 @@
 'use strict';
 
+const { Readable } = require('stream');
 const supabase = require('../lib/supabase');
 const { allowCors, sendJson, readBody, getQuery } = require('../lib/http');
 const { login, requireAdmin, hashPassword } = require('../lib/auth');
-const { sendMessage, sendBusinessMessage, getWebhookInfo, setWebhook } = require('../lib/telegram');
+const { sendMessage, sendBusinessMessage, getWebhookInfo, setWebhook, getFile, downloadFile } = require('../lib/telegram');
 const { optionalEnv } = require('../lib/env');
 const { normalizeSettings, clearBotSettingsCache } = require('../lib/bot-settings');
 const { normalizeAiIntegration, mergeAiIntegration, sanitizeAiIntegration, isAiIntegrationReady, aiIntegrationSignature } = require('../lib/ai-config');
@@ -305,6 +306,67 @@ function eventRank(type) {
   return 4;
 }
 
+function bestPhotoSize(photos = []) {
+  return [...photos].filter(photo => photo && photo.file_id).sort((a, b) => {
+    const areaA = Number(a.width || 0) * Number(a.height || 0);
+    const areaB = Number(b.width || 0) * Number(b.height || 0);
+    return (Number(a.file_size || areaA) || 0) - (Number(b.file_size || areaB) || 0);
+  }).at(-1) || null;
+}
+
+function buildMediaPayload(kind, source = {}, extra = {}) {
+  if (!source || !source.file_id) return null;
+  return {
+    kind,
+    file_id: source.file_id,
+    file_unique_id: source.file_unique_id || null,
+    file_name: source.file_name || null,
+    mime_type: source.mime_type || null,
+    file_size: source.file_size || null,
+    width: source.width || null,
+    height: source.height || null,
+    duration: source.duration || null,
+    ...extra
+  };
+}
+
+function extractMessageMedia(raw = {}) {
+  if (!raw || typeof raw !== 'object' || raw.source === 'admin_send') return null;
+  const photo = bestPhotoSize(raw.photo || []);
+  if (photo) return buildMediaPayload('photo', photo);
+  if (raw.video) {
+    return buildMediaPayload('video', raw.video, {
+      thumbnail_file_id: raw.video.thumbnail && raw.video.thumbnail.file_id || null
+    });
+  }
+  if (raw.voice) return buildMediaPayload('voice', raw.voice);
+  if (raw.audio) return buildMediaPayload('audio', raw.audio);
+  if (raw.video_note) {
+    return buildMediaPayload('video_note', raw.video_note, {
+      thumbnail_file_id: raw.video_note.thumbnail && raw.video_note.thumbnail.file_id || null
+    });
+  }
+  if (raw.animation) {
+    return buildMediaPayload('animation', raw.animation, {
+      thumbnail_file_id: raw.animation.thumbnail && raw.animation.thumbnail.file_id || null
+    });
+  }
+  if (raw.document) {
+    return buildMediaPayload('document', raw.document, {
+      thumbnail_file_id: raw.document.thumbnail && raw.document.thumbnail.file_id || null
+    });
+  }
+  return null;
+}
+
+function messageDirection({ message, employee }) {
+  const rawSource = message.raw && message.raw.source;
+  if (rawSource === 'admin_send') return 'outbound';
+  if (employee) return 'outbound';
+  if (['admin_reply', 'employee_message'].includes(message.classification)) return 'outbound';
+  return 'inbound';
+}
+
 function buildChatDetail({ chat, requests, events, messages, employeesById, employeesByTgId }) {
   const requestEvents = new Map();
   events.forEach(event => {
@@ -335,6 +397,12 @@ function buildChatDetail({ chat, requests, events, messages, employeesById, empl
 
   const closeMessageIds = new Set(enrichedRequests.map(request => telegramIdKey(request.done_message_id)).filter(Boolean));
   const eventMessageIds = new Set(events.map(event => telegramIdKey(event.tg_message_id)).filter(Boolean));
+  const requestByInitialMessageId = new Map(enrichedRequests.map(request => [telegramIdKey(request.initial_message_id), request]).filter(([id]) => id));
+  const requestByDoneMessageId = new Map(enrichedRequests.map(request => [telegramIdKey(request.done_message_id), request]).filter(([id]) => id));
+  const eventRequestByMessageId = new Map(events.map(event => {
+    const request = event.request_id ? requestById.get(event.request_id) : null;
+    return [telegramIdKey(event.tg_message_id), request];
+  }).filter(([id, request]) => id && request));
   const requestTimeline = enrichedRequests.map(request => ({
     type: 'ticket',
     request_id: request.id,
@@ -395,6 +463,34 @@ function buildChatDetail({ chat, requests, events, messages, employeesById, empl
   const timeline = [...requestTimeline, ...eventTimeline, ...replyTimeline]
     .filter(item => item.created_at || item.text)
     .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
+  const conversation = messages
+    .map(message => {
+      const employee = message.employee_id ? employeesById.get(message.employee_id) : employeesByTgId.get(telegramIdKey(message.from_tg_user_id));
+      const rawSource = message.raw && message.raw.source;
+      const relatedRequest = requestByInitialMessageId.get(telegramIdKey(message.tg_message_id))
+        || requestByDoneMessageId.get(telegramIdKey(message.tg_message_id))
+        || eventRequestByMessageId.get(telegramIdKey(message.tg_message_id))
+        || null;
+      const direction = messageDirection({ message, employee });
+      return {
+        id: message.id || null,
+        message_id: message.tg_message_id || null,
+        direction,
+        actor_type: direction === 'outbound' ? 'employee' : 'customer',
+        actor_name: (employee && employee.full_name) || message.from_name || (rawSource === 'admin_send' ? 'Admin' : 'Mijoz'),
+        actor_username: (employee && employee.username) || message.from_username || '',
+        employee_id: (employee && employee.id) || message.employee_id || null,
+        text: message.text || '',
+        media: extractMessageMedia(message.raw),
+        request_id: relatedRequest ? relatedRequest.id : null,
+        request_text: relatedRequest ? relatedRequest.initial_text || '' : '',
+        status: relatedRequest ? relatedRequest.status : null,
+        classification: message.classification || '',
+        created_at: message.created_at
+      };
+    })
+    .filter(message => message.text || message.media || message.created_at)
+    .sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')));
 
   return {
     chat: {
@@ -409,6 +505,7 @@ function buildChatDetail({ chat, requests, events, messages, employeesById, empl
     requests: enrichedRequests,
     events,
     messages,
+    conversation,
     timeline
   };
 }
@@ -605,6 +702,51 @@ function sanitizeWebhookInfo(info = {}) {
 function getAppUrl(body = {}) {
   const url = body.app_url || optionalEnv('WEBAPP_URL', '');
   return String(url || '').trim().replace(/\/$/, '');
+}
+
+function contentTypeFromPath(filePath = '') {
+  const lower = String(filePath).toLowerCase();
+  if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+  if (lower.endsWith('.png')) return 'image/png';
+  if (lower.endsWith('.webp')) return 'image/webp';
+  if (lower.endsWith('.gif')) return 'image/gif';
+  if (lower.endsWith('.mp4')) return 'video/mp4';
+  if (lower.endsWith('.mov')) return 'video/quicktime';
+  if (lower.endsWith('.ogg') || lower.endsWith('.oga')) return 'audio/ogg';
+  if (lower.endsWith('.mp3')) return 'audio/mpeg';
+  if (lower.endsWith('.m4a')) return 'audio/mp4';
+  if (lower.endsWith('.wav')) return 'audio/wav';
+  if (lower.endsWith('.pdf')) return 'application/pdf';
+  return 'application/octet-stream';
+}
+
+async function sendTelegramFile(query, res) {
+  const fileId = String(query.file_id || '').trim();
+  if (!fileId) throw new Error('file_id majburiy');
+  const file = await getFile(fileId);
+  if (!file || !file.file_path) throw new Error('Telegram fayl topilmadi');
+
+  const response = await downloadFile(file.file_path);
+  res.statusCode = 200;
+  res.setHeader('Content-Type', response.headers.get('content-type') || contentTypeFromPath(file.file_path));
+  res.setHeader('Cache-Control', 'private, max-age=86400');
+  const contentLength = response.headers.get('content-length');
+  if (contentLength) res.setHeader('Content-Length', contentLength);
+
+  if (response.body && Readable.fromWeb) {
+    await new Promise((resolve, reject) => {
+      Readable.fromWeb(response.body)
+        .on('error', reject)
+        .pipe(res)
+        .on('error', reject)
+        .on('finish', resolve);
+    });
+    return;
+  }
+
+  const buffer = Buffer.from(await response.arrayBuffer());
+  res.setHeader('Content-Length', String(buffer.length));
+  res.end(buffer);
 }
 
 async function getTelegramWebhookStatus() {
@@ -1082,6 +1224,10 @@ async function handler(req, res) {
     const currentAdmin = requireAdmin(req);
 
     if (req.method === 'GET') {
+      if (action === 'telegramFile') {
+        await sendTelegramFile(query, res);
+        return;
+      }
       const data = await handleGet(action, query);
       return sendJson(res, 200, { ok: true, data });
     }

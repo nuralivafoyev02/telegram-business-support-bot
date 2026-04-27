@@ -562,12 +562,44 @@
 
           <section class="detail-section">
             <div class="detail-section-head">
-              <div class="card-title">Javoblar tarixi</div>
+              <div class="card-title">Dialog</div>
+              <div class="card-note">{{ fmtNumber(chatConversation.length) }} ta xabar</div>
+            </div>
+            <div v-if="chatConversation.length" class="telegram-thread">
+              <article v-for="message in chatConversation" :key="chatBubbleKey(message)"
+                class="chat-bubble-row" :class="{ outbound: message.direction === 'outbound' }">
+                <div class="chat-bubble">
+                  <div class="chat-bubble-author">{{ message.actor_name || (message.direction === 'outbound' ? 'Xodim' : 'Mijoz') }}</div>
+                  <div v-if="message.media" class="chat-media">
+                    <img v-if="message.media.kind === 'photo' && mediaUrl(message.media)" class="chat-media-image"
+                      :src="mediaUrl(message.media)" alt="" />
+                    <video v-else-if="isVideoMedia(message.media) && mediaUrl(message.media)" class="chat-media-video"
+                      :src="mediaUrl(message.media)" controls playsinline></video>
+                    <audio v-else-if="isAudioMedia(message.media) && mediaUrl(message.media)" class="chat-media-audio"
+                      :src="mediaUrl(message.media)" controls></audio>
+                    <div v-else class="chat-media-placeholder">
+                      {{ mediaPlaceholder(message.media) }}
+                    </div>
+                  </div>
+                  <p v-if="message.text">{{ message.text }}</p>
+                  <div class="chat-bubble-footer">
+                    <span v-if="message.request_text" class="chat-ticket">Ticket</span>
+                    <time>{{ fmtChatTime(message.created_at) }}</time>
+                  </div>
+                </div>
+              </article>
+            </div>
+            <div v-else class="empty compact">Dialog tarixi yo‘q</div>
+          </section>
+
+          <section v-if="chatDetail.timeline?.length" class="detail-section compact-section">
+            <div class="detail-section-head">
+              <div class="card-title">Yopilish hodisalari</div>
               <div class="card-note">{{ fmtNumber(chatDetail.timeline?.length) }} ta hodisa</div>
             </div>
-            <div v-if="chatDetail.timeline?.length" class="timeline-list">
+            <div class="timeline-list compact">
               <article v-for="(item, index) in chatDetail.timeline" :key="timelineKey(item, index)"
-                class="timeline-row">
+                class="timeline-row compact">
                 <div class="timeline-meta">
                   <span class="badge" :class="timelineBadgeClass(item)">{{ timelineTypeLabel(item.type) }}</span>
                   <b>{{ item.actor_name || '—' }}</b>
@@ -577,7 +609,6 @@
                 <small v-if="item.request_text && item.type !== 'ticket'">Ticket: {{ item.request_text }}</small>
               </article>
             </div>
-            <div v-else class="empty compact">Javoblar tarixi yo‘q</div>
           </section>
         </div>
       </Modal>
@@ -644,6 +675,10 @@ const privates = ref([]);
 const employees = ref([]);
 const requestRows = ref([]);
 const chatDetail = ref({ chat: null, requests: [], timeline: [] });
+const mediaUrls = ref({});
+const mediaLoading = ref({});
+const mediaErrors = ref({});
+let mediaLoadToken = 0;
 const settingsRaw = ref({ settings: [], admins: [] });
 const webhookStatus = ref(null);
 const showLoginPassword = ref(false);
@@ -789,6 +824,7 @@ const chatDetailTitle = computed(() => {
   const chat = chatDetail.value.chat;
   return chat ? `Chat: ${chat.title || chat.chat_id}` : 'Chat tafsiloti';
 });
+const chatConversation = computed(() => chatDetail.value.conversation || []);
 
 const employeeStatColumns = [
   { key: 'full_name', label: 'Xodim' },
@@ -910,6 +946,82 @@ function timelineBadgeClass(item) {
 
 function timelineKey(item, index) {
   return `${item.type || 'event'}:${item.request_id || item.message_id || index}:${item.created_at || index}`;
+}
+
+function fmtChatTime(value) {
+  if (!value) return '';
+  return new Intl.DateTimeFormat('uz-UZ', { hour: '2-digit', minute: '2-digit' }).format(new Date(value));
+}
+
+function chatBubbleKey(message) {
+  return `${message.message_id || message.id || 'msg'}:${message.created_at || ''}`;
+}
+
+function mediaUrl(media) {
+  return media && media.file_id ? mediaUrls.value[media.file_id] || '' : '';
+}
+
+function isVideoMedia(media) {
+  return ['video', 'video_note', 'animation'].includes(media?.kind);
+}
+
+function isAudioMedia(media) {
+  return ['voice', 'audio'].includes(media?.kind);
+}
+
+function mediaPlaceholder(media) {
+  if (!media) return 'Media';
+  if (mediaErrors.value[media.file_id]) return 'Media yuklanmadi';
+  if (mediaLoading.value[media.file_id]) return 'Media yuklanmoqda...';
+  return ({
+    photo: 'Rasm',
+    video: 'Video',
+    video_note: 'Video xabar',
+    animation: 'Animatsiya',
+    voice: 'Voice message',
+    audio: 'Audio',
+    document: media.file_name || 'Fayl'
+  }[media.kind] || 'Media');
+}
+
+function clearMediaUrls() {
+  mediaLoadToken += 1;
+  if (typeof URL !== 'undefined') {
+    Object.values(mediaUrls.value).forEach(url => {
+      try { URL.revokeObjectURL(url); } catch (_error) {}
+    });
+  }
+  mediaUrls.value = {};
+  mediaLoading.value = {};
+  mediaErrors.value = {};
+}
+
+async function loadConversationMedia(messages = []) {
+  const loadToken = mediaLoadToken;
+  const mediaItems = messages
+    .map(message => message.media)
+    .filter(media => media && media.file_id && !mediaUrls.value[media.file_id]);
+  const uniqueMedia = [...new Map(mediaItems.map(media => [media.file_id, media])).values()];
+  if (!uniqueMedia.length) return;
+
+  await Promise.all(uniqueMedia.map(async media => {
+    mediaLoading.value = { ...mediaLoading.value, [media.file_id]: true };
+    try {
+      const blob = await api.telegramFile(media.file_id);
+      const url = URL.createObjectURL(blob);
+      if (loadToken !== mediaLoadToken) {
+        URL.revokeObjectURL(url);
+        return;
+      }
+      mediaUrls.value = { ...mediaUrls.value, [media.file_id]: url };
+    } catch (error) {
+      if (loadToken !== mediaLoadToken) return;
+      mediaErrors.value = { ...mediaErrors.value, [media.file_id]: error.message };
+    } finally {
+      if (loadToken !== mediaLoadToken) return;
+      mediaLoading.value = { ...mediaLoading.value, [media.file_id]: false };
+    }
+  }));
 }
 
 async function refresh() {
@@ -1114,6 +1226,7 @@ function openEmployee(row = null) {
 }
 
 function closeModal() {
+  if (modal.value === 'chatDetail') clearMediaUrls();
   modal.value = '';
   selectedTarget.value = null;
 }
@@ -1244,10 +1357,12 @@ async function loadRequests(row) {
 async function loadChatDetail(row) {
   if (!row?.chat_id) return showToast('Chat tanlanmagan');
   selectedTarget.value = row;
+  clearMediaUrls();
   startLoading('chatDetail');
   try {
     chatDetail.value = await api.chatDetail({ chat_id: row.chat_id });
     modal.value = 'chatDetail';
+    loadConversationMedia(chatDetail.value.conversation || []).catch(error => showToast(error.message));
   } catch (error) {
     showToast(error.message);
   } finally {
