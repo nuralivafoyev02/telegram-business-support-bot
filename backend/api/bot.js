@@ -4,7 +4,7 @@ const { sendJson, readBody, getQuery } = require('../lib/http');
 const { optionalEnv, boolEnv } = require('../lib/env');
 const supabase = require('../lib/supabase');
 const { sendMessage, deleteMessage, answerCallbackQuery, editMessageReplyMarkup, escapeHtml, tgUserName } = require('../lib/telegram');
-const { getMessageText, classifyMessage } = require('../lib/parser');
+const { getMessageText, classifyMessage, isGreetingOnly } = require('../lib/parser');
 const { getBotSettings } = require('../lib/bot-settings');
 const { resolveMainStatsChatId, sendMainStatsReport } = require('../lib/report');
 const { shouldUseExternalAi, classifyWithAi } = require('../lib/ai');
@@ -25,6 +25,9 @@ const BROADCAST_DELETE_CANCEL_PREFIX = 'broadcast_delete_cancel:';
 const TELEGRAM_TEXT_LIMIT = 4096;
 const RESULT_CHUNK_LIMIT = 3600;
 const BROADCAST_CONCURRENCY = clampInt(optionalEnv('BROADCAST_CONCURRENCY', '8'), 8, 1, 20);
+const PRIVATE_GREETING_REPLY = "Va alaykum assalom! So'rovingiz bo'lsa guruhga yoki @uyqur_nurali ga yozishingiz mumkin.";
+const PRIVATE_UNKNOWN_REPLY = "So'rovingizni guruhga yoki @uyqur_nurali ga berishingiz mumkin";
+const PRIVATE_REQUEST_REPLY = "So'rovingiz qabul qilindi. Guruhga yoki @uyqur_nurali ga yozishingiz mumkin.";
 
 function clampInt(value, fallback, min, max) {
   const parsed = Number.parseInt(value, 10);
@@ -704,6 +707,31 @@ async function maybeCloseRequestFromEmployeeAnswer(message, classification, empl
   return !!result.closed;
 }
 
+function isDirectBotPrivateChat(updateKind = '', chat = {}) {
+  return chat.type === 'private' && !String(updateKind).includes('business');
+}
+
+async function maybeReplyPrivateGreeting(updateKind, message, text) {
+  const chat = message.chat || {};
+  if (!isDirectBotPrivateChat(updateKind, chat)) return false;
+  if (message.from && message.from.is_bot) return false;
+  if (!isGreetingOnly(text)) return false;
+  await sendMessage(chat.id, PRIVATE_GREETING_REPLY, { reply_to_message_id: message.message_id })
+    .catch(error => logBackgroundError('private-greeting-reply', error));
+  return true;
+}
+
+async function maybeReplyPrivateFallback(updateKind, message, classification) {
+  const chat = message.chat || {};
+  if (!isDirectBotPrivateChat(updateKind, chat)) return false;
+  if (message.from && message.from.is_bot) return false;
+  if (['done', 'command'].includes(classification)) return false;
+  await sendMessage(chat.id, classification === 'request' ? PRIVATE_REQUEST_REPLY : PRIVATE_UNKNOWN_REPLY, {
+    reply_to_message_id: message.message_id
+  }).catch(error => logBackgroundError('private-fallback-reply', error));
+  return true;
+}
+
 async function handleCommand(updateKind, message, sourceType, text, classification) {
   const tracking = recordIncomingMessage(updateKind, message, sourceType, classification);
   const chat = message.chat || {};
@@ -784,6 +812,8 @@ async function processMessage(updateKind, message) {
     return;
   }
 
+  if (await maybeReplyPrivateGreeting(updateKind, message, text)) return;
+
   if (await maybeCloseRequestFromReply(message, classification, employee)) return;
 
   if (await maybeCloseRequestFromEmployeeAnswer(message, classification, employee, text)) return;
@@ -794,7 +824,11 @@ async function processMessage(updateKind, message) {
       sourceType,
       companyId: chatRow ? chatRow.company_id : null
     });
+    await maybeReplyPrivateFallback(updateKind, message, classification);
+    return;
   }
+
+  if (await maybeReplyPrivateFallback(updateKind, message, classification)) return;
 }
 
 async function handler(req, res) {
