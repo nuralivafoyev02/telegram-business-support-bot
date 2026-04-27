@@ -30,7 +30,7 @@ Node.js + Vercel serverless backend, Supabase SQL schema va Vite/Vue dark admin 
    - Kompaniya guruhlariga broadcast yuborish
    - Main guruhga xodimlar statistikasini yuborish
    - Admin login/parol va bot sozlamalarini boshqarish mumkin.
-5. Main guruhda yangilik xabariga reply qilib botga “barcha guruhlarga yubor” mazmunida yozilsa, bot preview chiqaradi. Inline tasdiq bosilgandan keyin xabar barcha faol mijoz guruhlariga yuboriladi va natija ro‘yxati main guruhga qaytadi.
+5. Main guruhda yangilik xabariga reply qilib botga “barcha guruhlarga yubor” mazmunida yozilsa, bot preview chiqaradi. Inline tasdiq bosilgandan keyin xabar barcha faol mijoz guruhlariga yuboriladi va natija ro‘yxati main guruhga qaytadi. “Oxirgi yangilanishdagi yuborgan xabarlaringni o‘chir” mazmunidagi so‘rov bilan oxirgi broadcast xabarlari ham tasdiqdan keyin guruhlardan o‘chiriladi.
 
 ## Muhim cheklov
 

@@ -778,6 +778,167 @@ async function testMainGroupBroadcastConfirmSendsAndReports() {
   }
 }
 
+async function testMainGroupBroadcastDeletePreview() {
+  const originalInsert = supabase.insert;
+  const originalSelect = supabase.select;
+  const originalFetch = global.fetch;
+  const telegramCalls = [];
+  clearBotSettingsCache();
+
+  supabase.select = async (table) => {
+    if (table === 'bot_settings') return [{ key: 'main_group', value: { chat_id: '-100777' } }];
+    if (table === 'employees') return [];
+    if (table === 'broadcasts') {
+      return [{
+        id: 'broadcast-1',
+        title: 'Yangi modul',
+        text: 'Yangi modul ishga tushdi',
+        target_type: 'groups',
+        sent_count: 2,
+        failed_count: 0,
+        status: 'sent',
+        completed_at: new Date().toISOString()
+      }];
+    }
+    if (table === 'broadcast_targets') {
+      return [
+        { id: 'target-1', broadcast_id: 'broadcast-1', chat_id: -1001, status: 'sent', telegram_message_id: 101 },
+        { id: 'target-2', broadcast_id: 'broadcast-1', chat_id: -1002, status: 'sent', telegram_message_id: 102 }
+      ];
+    }
+    if (table === 'tg_chats') {
+      return [
+        { chat_id: -1001, title: 'New Era' },
+        { chat_id: -1002, title: 'Fayus' }
+      ];
+    }
+    return [];
+  };
+  supabase.insert = async (table, rows) => rows.map(row => ({ id: `${table}-row`, ...row }));
+  global.fetch = async (_url, options) => {
+    telegramCalls.push({ url: _url, body: JSON.parse(options.body) });
+    return {
+      ok: true,
+      json: async () => ({ ok: true, result: { message_id: 107 } })
+    };
+  };
+
+  try {
+    const result = await callHandler({
+      update_id: 15,
+      message: {
+        message_id: 60,
+        date: 1777100000,
+        text: 'oxirgi yangilanishdagi barcha guruhlarga yuborgan xabarlaringni o‘chir',
+        chat: { id: -100777, type: 'supergroup', title: 'Main group' },
+        from: { id: 777, first_name: 'Ali', username: 'ali_pm', is_bot: false }
+      }
+    });
+
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.handled, 'message');
+    const preview = telegramCalls.find(call => /sendMessage$/.test(call.url));
+    assert.ok(preview);
+    assert.match(preview.body.text, /Oxirgi ommaviy xabarni o‘chirish/);
+    assert.match(preview.body.text, /Guruhlar:<\/b> 2 ta/);
+    assert.match(preview.body.text, /Shu xabarni barcha guruhlardan o‘chirishimni tasdiqlaysizmi/);
+    assert.strictEqual(preview.body.reply_markup.inline_keyboard[0][0].callback_data, 'broadcast_delete_confirm:broadcast-1');
+    assert.strictEqual(preview.body.reply_markup.inline_keyboard[0][1].callback_data, 'broadcast_delete_cancel:broadcast-1');
+  } finally {
+    supabase.insert = originalInsert;
+    supabase.select = originalSelect;
+    global.fetch = originalFetch;
+    clearBotSettingsCache();
+  }
+}
+
+async function testMainGroupBroadcastDeleteConfirmDeletesAndReports() {
+  const originalInsert = supabase.insert;
+  const originalSelect = supabase.select;
+  const originalFetch = global.fetch;
+  const telegramCalls = [];
+  clearBotSettingsCache();
+
+  supabase.select = async (table) => {
+    if (table === 'bot_settings') return [{ key: 'main_group', value: { chat_id: '-100777' } }];
+    if (table === 'broadcasts') {
+      return [{
+        id: 'broadcast-1',
+        title: 'Yangi modul',
+        text: 'Yangi modul ishga tushdi',
+        target_type: 'groups',
+        sent_count: 2,
+        failed_count: 0,
+        status: 'sent',
+        completed_at: new Date().toISOString()
+      }];
+    }
+    if (table === 'broadcast_targets') {
+      return [
+        { id: 'target-1', broadcast_id: 'broadcast-1', chat_id: -1001, status: 'sent', telegram_message_id: 101 },
+        { id: 'target-2', broadcast_id: 'broadcast-1', chat_id: -1002, status: 'sent', telegram_message_id: 102 }
+      ];
+    }
+    if (table === 'tg_chats') {
+      return [
+        { chat_id: -1001, title: 'New Era' },
+        { chat_id: -1002, title: 'Fayus' }
+      ];
+    }
+    return [];
+  };
+  supabase.insert = async (table, rows) => rows.map(row => ({ id: `${table}-row`, ...row }));
+  global.fetch = async (_url, options) => {
+    const body = JSON.parse(options.body);
+    telegramCalls.push({ url: _url, body });
+    if (/deleteMessage$/.test(_url) && Number(body.chat_id) === -1002) {
+      return {
+        ok: true,
+        json: async () => ({ ok: false, error_code: 400, description: 'Bad Request: message to delete not found' })
+      };
+    }
+    return {
+      ok: true,
+      json: async () => ({ ok: true, result: { message_id: 108 } })
+    };
+  };
+
+  try {
+    const result = await callHandler({
+      update_id: 16,
+      callback_query: {
+        id: 'callback-2',
+        data: 'broadcast_delete_confirm:broadcast-1',
+        from: { id: 777, first_name: 'Ali', username: 'ali_pm', is_bot: false },
+        message: {
+          message_id: 61,
+          date: 1777100000,
+          text: 'delete preview',
+          chat: { id: -100777, type: 'supergroup', title: 'Main group' }
+        }
+      }
+    });
+
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.handled, 'callback_query');
+    const deleteCalls = telegramCalls.filter(call => /deleteMessage$/.test(call.url));
+    assert.strictEqual(deleteCalls.length, 2);
+    assert.strictEqual(deleteCalls[0].body.chat_id, -1001);
+    assert.strictEqual(deleteCalls[0].body.message_id, 101);
+    assert.strictEqual(deleteCalls[1].body.chat_id, -1002);
+    assert.strictEqual(deleteCalls[1].body.message_id, 102);
+    const resultMessage = telegramCalls.find(call => /sendMessage$/.test(call.url) && Number(call.body.chat_id) === -100777 && /Ommaviy xabar o‘chirish yakunlandi/.test(call.body.text));
+    assert.ok(resultMessage);
+    assert.match(resultMessage.body.text, /New Era ✅/);
+    assert.match(resultMessage.body.text, /Fayus 🔴/);
+  } finally {
+    supabase.insert = originalInsert;
+    supabase.select = originalSelect;
+    global.fetch = originalFetch;
+    clearBotSettingsCache();
+  }
+}
+
 async function testBotRemovalMarksGroupInactive() {
   const originalInsert = supabase.insert;
   let row = null;
@@ -816,6 +977,8 @@ async function testBotRemovalMarksGroupInactive() {
   await testReplyToCustomerTicketClosesRequest();
   await testMainGroupBroadcastPreview();
   await testMainGroupBroadcastConfirmSendsAndReports();
+  await testMainGroupBroadcastDeletePreview();
+  await testMainGroupBroadcastDeleteConfirmDeletesAndReports();
   await testBotRemovalMarksGroupInactive();
   console.log('Bot tests passed');
 })().catch(error => {

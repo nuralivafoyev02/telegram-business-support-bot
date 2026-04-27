@@ -20,6 +20,8 @@ const GROUP_BROADCAST_TRIGGER_RES = [
 ];
 const BROADCAST_CONFIRM_PREFIX = 'broadcast_confirm:';
 const BROADCAST_CANCEL_PREFIX = 'broadcast_cancel:';
+const BROADCAST_DELETE_CONFIRM_PREFIX = 'broadcast_delete_confirm:';
+const BROADCAST_DELETE_CANCEL_PREFIX = 'broadcast_delete_cancel:';
 const TELEGRAM_TEXT_LIMIT = 4096;
 const RESULT_CHUNK_LIMIT = 3600;
 
@@ -142,6 +144,15 @@ function isGroupBroadcastTrigger(text = '') {
   return GROUP_BROADCAST_TRIGGER_RES.some(pattern => pattern.test(text));
 }
 
+function isGroupBroadcastDeleteTrigger(text = '') {
+  const value = String(text || '').toLowerCase();
+  const hasDelete = /\b(?:o'?chir|ochir|delete|udal|удал)\w*\b/i.test(value);
+  const hasLatest = /\b(?:oxirgi|so'?nggi|songgi|last|последн)\b/i.test(value);
+  const hasBroadcastContext = /\b(?:yangilanish|broadcast|e'?lon|elon|xabar|update)\w*\b/i.test(value);
+  const hasSentGroupContext = /\b(?:barcha|hamma|jami)\b.*\b(?:guruh|gruppa|group|chat)\w*\b.*\b(?:yuborgan|jo'?natgan|tarqatgan|send)\w*\b/i.test(value);
+  return hasDelete && ((hasLatest && hasBroadcastContext) || hasSentGroupContext);
+}
+
 function clipText(text = '', limit = 1600) {
   const value = String(text || '');
   if (value.length <= limit) return value;
@@ -173,6 +184,46 @@ async function listActiveGroupBroadcastTargets(excludeChatId) {
   return rows.filter(row => !sameChatId(row.chat_id, excludeChatId));
 }
 
+async function loadGroupBroadcastWithTargets(id = null) {
+  const query = {
+    select: 'id,title,text,target_type,total_targets,sent_count,failed_count,status,created_at,completed_at',
+    target_type: 'eq.groups',
+    status: 'in.(sent,completed_with_errors)',
+    order: supabase.order('completed_at', false),
+    limit: '1'
+  };
+  if (id) query.id = supabase.eq(id);
+  if (!id) query.sent_count = 'gt.0';
+
+  const broadcasts = await supabase.select('broadcasts', query).catch(() => []);
+  const broadcast = broadcasts[0] || null;
+  if (!broadcast) return { broadcast: null, targets: [] };
+
+  const targetRows = await supabase.select('broadcast_targets', {
+    select: 'id,broadcast_id,chat_id,status,telegram_message_id,error',
+    broadcast_id: supabase.eq(broadcast.id),
+    status: 'eq.sent',
+    telegram_message_id: 'not.is.null',
+    limit: '1000'
+  }).catch(() => []);
+
+  const chatIds = [...new Set(targetRows.map(row => row.chat_id).filter(idValue => idValue !== undefined && idValue !== null))];
+  const chats = chatIds.length
+    ? await supabase.select('tg_chats', {
+      select: 'chat_id,title',
+      chat_id: supabase.inList(chatIds),
+      limit: '1000'
+    }).catch(() => [])
+    : [];
+  const chatMap = new Map(chats.map(chat => [String(chat.chat_id), chat]));
+  const targets = targetRows.map(row => {
+    const chat = chatMap.get(String(row.chat_id)) || {};
+    return { ...row, title: chat.title || String(row.chat_id) };
+  });
+
+  return { broadcast, targets };
+}
+
 function broadcastPreviewText({ text, targets, createdBy }) {
   return [
     '📣 <b>Ommaviy xabar preview</b>',
@@ -201,6 +252,43 @@ function broadcastResultMessages({ total, sent, failed, details }) {
     if (current.length + line.length + 1 > RESULT_CHUNK_LIMIT) {
       chunks.push(current.trimEnd());
       current = '📣 <b>Ommaviy xabar yakunlandi (davomi)</b>\n\n';
+    }
+    current += `${line}\n`;
+  }
+  if (current.trim()) chunks.push(current.trimEnd());
+  return chunks;
+}
+
+function broadcastDeletePreviewText({ broadcast, targets }) {
+  return [
+    '🧹 <b>Oxirgi ommaviy xabarni o‘chirish</b>',
+    '',
+    `<b>Guruhlar:</b> ${targets.length} ta`,
+    `<b>Sarlavha:</b> ${escapeHtml(broadcast.title || 'Yangilik')}`,
+    '',
+    '<b>Xabar:</b>',
+    escapeHtml(clipText(broadcast.text || '', 900)),
+    '',
+    'Shu xabarni barcha guruhlardan o‘chirishimni tasdiqlaysizmi?'
+  ].join('\n');
+}
+
+function broadcastDeleteResultMessages({ total, deleted, failed, details }) {
+  const header = [
+    '🧹 <b>Ommaviy xabar o‘chirish yakunlandi</b>',
+    '',
+    `<b>Jami:</b> ${total} ta | <b>O‘chirildi:</b> ${deleted} ta | <b>Xato:</b> ${failed} ta`
+  ];
+  const lines = details.length
+    ? details.map((item, index) => `${index + 1}. ${escapeHtml(item.title || String(item.chat_id))} ${item.ok ? '✅' : '🔴'}`)
+    : ['O‘chirish uchun xabar topilmadi.'];
+
+  const chunks = [];
+  let current = `${header.join('\n')}\n\n`;
+  for (const line of lines) {
+    if (current.length + line.length + 1 > RESULT_CHUNK_LIMIT) {
+      chunks.push(current.trimEnd());
+      current = '🧹 <b>Ommaviy xabar o‘chirish yakunlandi (davomi)</b>\n\n';
     }
     current += `${line}\n`;
   }
@@ -261,6 +349,31 @@ async function maybeStartGroupBroadcastPreview(message, text) {
   return true;
 }
 
+async function maybeStartGroupBroadcastDeletePreview(message, text) {
+  const chat = message.chat || {};
+  if (!isGroupChat(chat) || !isGroupBroadcastDeleteTrigger(text)) return false;
+  if (!await isMainStatsGroup(chat)) return false;
+
+  const { broadcast, targets } = await loadGroupBroadcastWithTargets();
+  if (!broadcast || !targets.length) {
+    await sendMessage(chat.id, '⚠️ O‘chirish uchun oxirgi yuborilgan ommaviy xabar topilmadi.', {
+      reply_to_message_id: message.message_id
+    }).catch(error => logBackgroundError('broadcast-delete-no-targets', error));
+    return true;
+  }
+
+  await sendMessage(chat.id, broadcastDeletePreviewText({ broadcast, targets }), {
+    reply_to_message_id: message.message_id,
+    reply_markup: {
+      inline_keyboard: [[
+        { text: '✅ Ha, tasdiqlayman', callback_data: `${BROADCAST_DELETE_CONFIRM_PREFIX}${broadcast.id}` },
+        { text: '❌ Yo‘q, bekor qilinsin', callback_data: `${BROADCAST_DELETE_CANCEL_PREFIX}${broadcast.id}` }
+      ]]
+    }
+  });
+  return true;
+}
+
 async function handleGroupRegistrationCommand(message, tracking) {
   const chat = message.chat || {};
   await tracking.catch(error => logBackgroundError('register-group', error));
@@ -303,6 +416,12 @@ async function maybeReplyDone(message, result) {
 
 function parseBroadcastCallbackData(data = '') {
   const value = String(data || '');
+  if (value.startsWith(BROADCAST_DELETE_CONFIRM_PREFIX)) {
+    return { action: 'delete_confirm', id: value.slice(BROADCAST_DELETE_CONFIRM_PREFIX.length) };
+  }
+  if (value.startsWith(BROADCAST_DELETE_CANCEL_PREFIX)) {
+    return { action: 'delete_cancel', id: value.slice(BROADCAST_DELETE_CANCEL_PREFIX.length) };
+  }
   if (value.startsWith(BROADCAST_CONFIRM_PREFIX)) {
     return { action: 'confirm', id: value.slice(BROADCAST_CONFIRM_PREFIX.length) };
   }
@@ -368,6 +487,67 @@ async function sendPendingGroupBroadcast({ broadcast, sourceChatId }) {
   return { total: targets.length, sent, failed, details };
 }
 
+async function deleteSentGroupBroadcast({ broadcast }) {
+  const { targets } = await loadGroupBroadcastWithTargets(broadcast.id);
+  let deleted = 0;
+  let failed = 0;
+  const details = [];
+
+  for (const target of targets) {
+    try {
+      await deleteMessage(target.chat_id, target.telegram_message_id);
+      deleted += 1;
+      details.push({ chat_id: target.chat_id, title: target.title, ok: true });
+    } catch (error) {
+      failed += 1;
+      details.push({ chat_id: target.chat_id, title: target.title, ok: false, error: error.message });
+    }
+  }
+
+  return { total: targets.length, deleted, failed, details };
+}
+
+async function handleBroadcastDeleteCallback(query, parsed) {
+  const callbackMessage = query.message || {};
+  const chat = callbackMessage.chat || {};
+  if (!isGroupChat(chat) || !await isMainStatsGroup(chat)) {
+    await answerCallbackQuery(query.id, 'Bu tugma faqat main guruhda ishlaydi.').catch(error => logBackgroundError('broadcast-delete-callback-answer', error));
+    return true;
+  }
+
+  if (parsed.action === 'delete_cancel') {
+    await answerCallbackQuery(query.id, 'Bekor qilindi.').catch(error => logBackgroundError('broadcast-delete-cancel-answer', error));
+    if (callbackMessage.message_id) {
+      await editMessageReplyMarkup(chat.id, callbackMessage.message_id, { inline_keyboard: [] })
+        .catch(error => logBackgroundError('broadcast-delete-cancel-markup', error));
+    }
+    await sendMessage(chat.id, '❌ Ommaviy xabarni o‘chirish bekor qilindi.', {
+      reply_to_message_id: callbackMessage.message_id
+    }).catch(error => logBackgroundError('broadcast-delete-cancel-message', error));
+    return true;
+  }
+
+  const { broadcast, targets } = await loadGroupBroadcastWithTargets(parsed.id);
+  if (!broadcast || !targets.length) {
+    await answerCallbackQuery(query.id, 'O‘chirish uchun xabar topilmadi.').catch(error => logBackgroundError('broadcast-delete-stale-answer', error));
+    return true;
+  }
+
+  await answerCallbackQuery(query.id, 'O‘chirish boshlandi.').catch(error => logBackgroundError('broadcast-delete-confirm-answer', error));
+  if (callbackMessage.message_id) {
+    await editMessageReplyMarkup(chat.id, callbackMessage.message_id, { inline_keyboard: [] })
+      .catch(error => logBackgroundError('broadcast-delete-confirm-markup', error));
+  }
+
+  const result = await deleteSentGroupBroadcast({ broadcast });
+  const messages = broadcastDeleteResultMessages(result);
+  for (let index = 0; index < messages.length; index += 1) {
+    await sendMessage(chat.id, messages[index], index === 0 ? { reply_to_message_id: callbackMessage.message_id } : {})
+      .catch(error => logBackgroundError('broadcast-delete-result-message', error));
+  }
+  return true;
+}
+
 async function handleBroadcastCallback(query, parsed) {
   const callbackMessage = query.message || {};
   const chat = callbackMessage.chat || {};
@@ -414,6 +594,7 @@ async function handleBroadcastCallback(query, parsed) {
 
 async function handleCallbackQuery(query = {}) {
   const parsed = parseBroadcastCallbackData(query.data);
+  if (parsed && parsed.action.startsWith('delete_')) return handleBroadcastDeleteCallback(query, parsed);
   if (parsed) return handleBroadcastCallback(query, parsed);
   await answerCallbackQuery(query.id).catch(error => logBackgroundError('callback-answer', error));
 }
@@ -521,6 +702,7 @@ async function processMessage(updateKind, message) {
   await metrics.saveMessage({ message, updateKind, sourceType, classification, employee });
 
   if (await maybeSendMainStatsFromGroup(message, text)) return;
+  if (await maybeStartGroupBroadcastDeletePreview(message, text)) return;
   if (await maybeStartGroupBroadcastPreview(message, text)) return;
 
   if (classification === 'done') {
