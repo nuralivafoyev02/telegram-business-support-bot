@@ -146,7 +146,7 @@ async function buildMainStatsReport() {
   lines.push(`• Hozir ochiq ticketlar: <b>${formatNumber(openRequests.length || summary.open_requests || 0)}</b>`);
   lines.push(`• Bugungi yopilish foizi: <b>${formatNumber(percent(todayCreatedClosed.length, todayCreated.length))}%</b>`);
   lines.push(`• Guruhlardan tushgan: <b>${formatNumber(groupToday.length)}</b>`);
-  lines.push(`• Shaxsiy/Business chatlardan: <b>${formatNumber(privateToday.length)}</b>`);
+  lines.push(`• Shaxsiy chatlardan: <b>${formatNumber(privateToday.length)}</b>`);
   lines.push('');
   lines.push('👥 <b>Xodimlar kesimi</b>');
 
@@ -170,8 +170,6 @@ async function buildMainStatsReport() {
   }
   lines.push('');
   lines.push('━━━━━━━━━━━━━━━━');
-  lines.push('Webappda to‘liq haftalik/oylik statistika bor.');
-
   return lines.join('\n');
 }
 
