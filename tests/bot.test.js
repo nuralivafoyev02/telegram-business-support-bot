@@ -11,6 +11,18 @@ process.env.SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY ||
 const supabase = require('../backend/lib/supabase');
 const handler = require('../backend/api/bot');
 const { clearBotSettingsCache } = require('../backend/lib/bot-settings');
+const { generateLocalSupportReply } = require('../backend/lib/ai');
+
+const LONG_PROJECT_KNOWLEDGE = [
+  'UYQUR — “Loyiha” bo‘limi bo‘yicha qisqa yo‘riqnoma',
+  '1. Ekranda ko‘rinadigan umumiy tuzilma',
+  '“Loyiha” bo‘limi ikki asosiy ko‘rinishda tasvirlangan: 1) umumiy loyiha ro‘yxati sahifasi; 2) tanlangan loyiha ichidagi batafsil smeta sahifasi.',
+  'Ko‘rinish Qayerda ko‘rinadi Mazmuni Papkalar Loyiha ro‘yxati sahifasi Papka qo‘shish bloki orqali loyihalarni guruhlash imkoniyati ko‘rinadi. Loyihalar Loyiha ro‘yxati sahifasi Mavjud loyiha kartalari va yangi loyiha qo‘shish kartasi mavjud. Smeta Loyiha ichki sahifasi Loyiha qiymati, resurslar va bo‘limlar kesimidagi smeta ko‘rsatiladi. Ish grafigi Loyiha ichki sahifasi Loyiha bo‘yicha rejalashtirilgan ishlar jadvali uchun alohida tab mavjud.',
+  '2. Savollar va javoblar',
+  '1. Loyiha qanday yaratilishi mumkin? Javob: Loyiha “Loyihalar” blokidagi “Loyiha qo‘shish” kartasi orqali yaratiladi.',
+  '2. Papka qanday yaratiladi? Javob: “Papkalar” qismida alohida “Papka qo‘shish” maydoni ko‘rinib turibdi.',
+  '5. Plan, fakt va bashorat qismi qanday ko‘rsatiladi? Javob: Loyiha ichidagi Ish grafigi bo‘limida ishlar plan, fakt va bashorat ko‘rsatkichlari orqali taqqoslab ko‘rsatiladi.'
+].join('\n');
 
 function createReq(body, headers = {}) {
   const req = Readable.from([JSON.stringify(body)]);
@@ -893,6 +905,26 @@ async function testAutoReplyFallbackUsesLocalKnowledge() {
   }
 }
 
+async function testLocalKnowledgeUsesClosestMeaningAndShortPath() {
+  const reply = await generateLocalSupportReply({
+    text: 'Prognoz va reja bilan bajarilgan ish qayerda ko‘rinadi?',
+    chatType: 'supergroup',
+    sourceType: 'group',
+    settings: {
+      aiIntegration: {
+        knowledge_text: LONG_PROJECT_KNOWLEDGE
+      }
+    }
+  });
+
+  assert.ok(reply);
+  assert.match(reply, /Loyiha > Ish grafigi/);
+  assert.match(reply, /plan, fakt va bashorat|reja|prognoz/i);
+  assert.ok(reply.length < 260);
+  assert.doesNotMatch(reply, /Papka qanday yaratiladi/);
+  assert.doesNotMatch(reply, /Loyiha qanday yaratilishi/);
+}
+
 async function testMainGroupEmployeeQuestionGetsAutoReply() {
   const originalSelect = supabase.select;
   const originalInsert = supabase.insert;
@@ -912,7 +944,7 @@ async function testMainGroupEmployeeQuestionGetsAutoReply() {
           value: {
             enabled: true,
             provider: 'openai_compatible',
-            knowledge_text: 'Plan, fakt va bashorat loyihalar kesimida alohida ustunlarda ko‘rsatiladi. Plan rejalashtirilgan summa, fakt bajarilgan ish, bashorat esa kutilayotgan natijani bildiradi.'
+            knowledge_text: LONG_PROJECT_KNOWLEDGE
           }
         },
         { key: 'request_detection', value: { mode: 'keyword', min_text_length: 10 } }
@@ -950,7 +982,11 @@ async function testMainGroupEmployeeQuestionGetsAutoReply() {
     assert.strictEqual(telegramCalls.length, 1);
     assert.strictEqual(telegramCalls[0].body.chat_id, -100777);
     assert.strictEqual(telegramCalls[0].body.reply_to_message_id, 183);
-    assert.match(telegramCalls[0].body.text, /Plan, fakt va bashorat/);
+    assert.match(telegramCalls[0].body.text, /Loyiha > Ish grafigi/);
+    assert.match(telegramCalls[0].body.text, /plan, fakt va bashorat/i);
+    assert.ok(telegramCalls[0].body.text.length < 260);
+    assert.doesNotMatch(telegramCalls[0].body.text, /Papka qanday yaratiladi/);
+    assert.doesNotMatch(telegramCalls[0].body.text, /Loyiha qanday yaratilishi/);
     assert.strictEqual(inserted.some(item => item.table === 'support_requests'), false);
     assert.strictEqual(inserted.some(item => item.table === 'messages' && item.rows[0].classification === 'ai_reply'), true);
   } finally {
@@ -1618,6 +1654,7 @@ async function testBotRemovalMarksGroupInactive() {
   await testClassifierJsonIsNotSentAsAutoReply();
   await testAiModeAutoRepliesToGroupRequest();
   await testAutoReplyFallbackUsesLocalKnowledge();
+  await testLocalKnowledgeUsesClosestMeaningAndShortPath();
   await testMainGroupEmployeeQuestionGetsAutoReply();
   await testMainGroupCustomerRequestDoesNotCreateTicket();
   await testMainGroupStatsTriggerSendsReport();
