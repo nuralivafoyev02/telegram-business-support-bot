@@ -125,6 +125,91 @@ function normalizeAiReplyText(value = '') {
   return text.slice(0, MAX_AUTO_REPLY_CHARS).trim();
 }
 
+function tokenizeForMatch(value = '') {
+  const normalized = String(value || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ');
+  return [...new Set(normalized.split(/\s+/).filter(token => token.length > 2))];
+}
+
+function scoreTextMatch(source = '', query = '') {
+  const sourceTokens = tokenizeForMatch(source);
+  const queryTokens = tokenizeForMatch(query);
+  if (!sourceTokens.length || !queryTokens.length) return 0;
+  const common = sourceTokens.filter(token => queryTokens.includes(token)).length;
+  return common / Math.max(sourceTokens.length, queryTokens.length);
+}
+
+function parseKnowledgeEntry(chunk = '') {
+  const lines = String(chunk || '').split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+  if (!lines.length) return null;
+
+  let question = '';
+  let answer = '';
+  let inAnswer = false;
+
+  for (const line of lines) {
+    if (/^(savol|question|q)\s*[:\-]/i.test(line)) {
+      question = line.replace(/^(savol|question|q)\s*[:\-]\s*/i, '').trim();
+      inAnswer = false;
+      continue;
+    }
+    if (/^(javob|answer|a)\s*[:\-]/i.test(line)) {
+      answer = line.replace(/^(javob|answer|a)\s*[:\-]\s*/i, '').trim();
+      inAnswer = true;
+      continue;
+    }
+    if (!question && /[?؟]$/.test(line)) {
+      question = line;
+      continue;
+    }
+    if (question && !answer) {
+      answer = line;
+      inAnswer = true;
+      continue;
+    }
+    if (inAnswer) {
+      answer = `${answer} ${line}`.trim();
+    } else if (!question) {
+      question = `${question} ${line}`.trim();
+    }
+  }
+
+  if (!question) question = lines[0];
+  if (!answer) answer = lines.slice(1).join(' ') || lines[0];
+
+  return { question, answer, raw: lines.join(' ') };
+}
+
+function buildKnowledgeEntries(knowledgeText = '') {
+  return String(knowledgeText || '')
+    .split(/\n{2,}/)
+    .map(parseKnowledgeEntry)
+    .filter(Boolean)
+    .slice(0, 80);
+}
+
+async function generateLocalSupportReply({ text, chatType, sourceType, settings }) {
+  const knowledge = String(settings.aiIntegration && settings.aiIntegration.knowledge_text || '').trim();
+  if (!knowledge) return null;
+
+  const entries = buildKnowledgeEntries(knowledge);
+  if (!entries.length) return null;
+
+  let best = { score: 0, answer: null };
+  for (const entry of entries) {
+    const score = Math.max(
+      scoreTextMatch(entry.question, text),
+      scoreTextMatch(entry.answer, text),
+      scoreTextMatch(entry.raw, text)
+    );
+    if (score > best.score) {
+      best = { score, answer: entry.answer || entry.raw };
+    }
+  }
+
+  if (best.score < 0.15 || !best.answer) return null;
+  return normalizeAiReplyText(best.answer);
+}
+
 async function generateSupportReply({ text, chatType, sourceType, settings }) {
   if (!shouldUseExternalAi(settings)) return null;
   const config = normalizeAiIntegration(settings.aiIntegration);
@@ -176,5 +261,6 @@ async function generateSupportReply({ text, chatType, sourceType, settings }) {
 module.exports = {
   shouldUseExternalAi,
   classifyWithAi,
-  generateSupportReply
+  generateSupportReply,
+  generateLocalSupportReply
 };

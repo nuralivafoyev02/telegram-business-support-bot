@@ -295,6 +295,12 @@
                       <option value="model" :disabled="!aiIntegrationReady">{{ aiModelOptionLabel }}</option>
                     </select>
                   </label>
+                  <label class="label">Avto javob
+                    <select v-model="settingsForm.auto_reply" class="select">
+                      <option value="false">O‘chiq</option>
+                      <option value="true">AI yoki bot</option>
+                    </select>
+                  </label>
                   <label class="label">Yopish tegi
                     <input v-model.trim="settingsForm.done_tag" class="input" placeholder="#done" />
                   </label>
@@ -682,7 +688,7 @@ const messageForm = reactive({ text: '' });
 const broadcastForm = reactive({ target_type: 'groups', title: 'Yangilik', text: '' });
 const employeeForm = reactive({ id: '', tg_user_id: '', full_name: '', username: '', phone: '', role: 'support', is_active: true });
 const adminForm = reactive({ username: 'admin', full_name: 'System Admin', new_password: '' });
-const settingsForm = reactive({ ai_mode: 'false', done_tag: '#done', main_group_id: '', request_detection: 'keyword' });
+const settingsForm = reactive({ ai_mode: 'false', auto_reply: 'true', done_tag: '#done', main_group_id: '', request_detection: 'keyword' });
 const integrationForm = reactive({
   enabled: true,
   provider: 'openai_compatible',
@@ -1059,6 +1065,10 @@ async function loadSettings() {
     knowledge_text: integration?.knowledge_text || ''
   });
   settingsForm.ai_mode = ai?.enabled && ai?.provider ? 'model' : String(!!ai?.enabled);
+  const autoReplySetting = data.settings?.find(s => s.key === 'auto_reply')?.value;
+  settingsForm.auto_reply = autoReplySetting !== undefined
+    ? String(!!autoReplySetting.enabled)
+    : 'true';
   settingsForm.done_tag = done?.tag || '#done';
   settingsForm.main_group_id = mainGroup?.chat_id || '';
   settingsForm.request_detection = detect?.mode || 'keyword';
@@ -1463,6 +1473,7 @@ async function saveSettings() {
             model_label: useModel ? (integrationForm.label || integrationForm.model) : null
           }
         },
+        { key: 'auto_reply', value: { enabled: settingsForm.auto_reply === 'true' } },
         { key: 'done_tag', value: { tag: settingsForm.done_tag, auto_reply: true } },
         { key: 'main_group', value: { chat_id: settingsForm.main_group_id } },
         { key: 'request_detection', value: { mode: settingsForm.request_detection, min_text_length: 10 } }

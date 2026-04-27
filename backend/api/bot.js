@@ -7,7 +7,7 @@ const { sendMessage, deleteMessage, answerCallbackQuery, editMessageReplyMarkup,
 const { getMessageText, classifyMessage, isGreetingOnly } = require('../lib/parser');
 const { getBotSettings } = require('../lib/bot-settings');
 const { resolveMainStatsChatId, sendMainStatsReport } = require('../lib/report');
-const { shouldUseExternalAi, classifyWithAi, generateSupportReply } = require('../lib/ai');
+const { shouldUseExternalAi, classifyWithAi, generateSupportReply, generateLocalSupportReply } = require('../lib/ai');
 const metrics = require('../lib/metrics');
 
 const START_RE = /^\/start(?:@\w+)?(?:\s|$)/i;
@@ -755,18 +755,33 @@ async function saveAiReplyMessage({ telegramResult, sourceMessage, sourceType, t
   }], { upsert: true, onConflict: 'chat_id,tg_message_id', prefer: 'return=minimal' }).catch(error => logBackgroundError('save-ai-reply', error));
 }
 
+function shouldAutoReply(settings = {}) {
+  return Boolean(settings.autoReply);
+}
+
 async function maybeSendAiAutoReply({ updateKind, message, sourceType, text, settings }) {
-  if (!shouldUseExternalAi(settings)) return false;
+  if (!shouldAutoReply(settings)) return false;
   if (message.from && message.from.is_bot) return false;
   if (!hasCustomerFacingPayload(message, text)) return false;
 
   try {
-    const reply = await generateSupportReply({
-      text,
-      chatType: (message.chat || {}).type,
-      sourceType,
-      settings
-    });
+    let reply = null;
+    if (shouldUseExternalAi(settings)) {
+      reply = await generateSupportReply({
+        text,
+        chatType: (message.chat || {}).type,
+        sourceType,
+        settings
+      });
+    }
+    if (!reply) {
+      reply = await generateLocalSupportReply({
+        text,
+        chatType: (message.chat || {}).type,
+        sourceType,
+        settings
+      });
+    }
     if (!reply) return false;
 
     const options = { reply_to_message_id: message.message_id, parse_mode: null };

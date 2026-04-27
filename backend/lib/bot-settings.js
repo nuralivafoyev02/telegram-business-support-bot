@@ -11,6 +11,7 @@ const DEFAULT_SETTINGS = Object.freeze({
   aiModel: '',
   aiModelLabel: '',
   aiIntegration: normalizeAiIntegration({}),
+  autoReply: true,
   doneTag: DEFAULT_DONE_TAG,
   requestDetectionMode: 'keyword',
   minTextLength: 10,
@@ -40,6 +41,7 @@ function normalizeNumber(value, fallback) {
 function normalizeSettings(rows = []) {
   const ai = settingValue(rows, 'ai_mode');
   const integration = normalizeAiIntegration(settingValue(rows, 'ai_integration'));
+  const autoReply = settingValue(rows, 'auto_reply');
   const done = settingValue(rows, 'done_tag');
   const detection = settingValue(rows, 'request_detection');
   const mainGroup = settingValue(rows, 'main_group');
@@ -52,6 +54,7 @@ function normalizeSettings(rows = []) {
     aiModel: aiProvider ? String(ai.model || integration.model || '').trim() : '',
     aiModelLabel: aiProvider ? String(ai.model_label || ai.modelLabel || integration.label || integration.model || '').trim() : '',
     aiIntegration: integration,
+    autoReply: normalizeBoolean(autoReply.enabled, DEFAULT_SETTINGS.autoReply),
     doneTag: String(done.tag || DEFAULT_SETTINGS.doneTag).trim() || DEFAULT_SETTINGS.doneTag,
     requestDetectionMode: String(detection.mode || DEFAULT_SETTINGS.requestDetectionMode).trim() || DEFAULT_SETTINGS.requestDetectionMode,
     minTextLength: normalizeNumber(detection.min_text_length, DEFAULT_SETTINGS.minTextLength),
@@ -66,7 +69,7 @@ async function getBotSettings({ force = false } = {}) {
   try {
     const rows = await supabase.select('bot_settings', {
       select: 'key,value',
-      key: 'in.(ai_mode,ai_integration,done_tag,request_detection,main_group)'
+      key: 'in.(ai_mode,ai_integration,auto_reply,done_tag,request_detection,main_group)'
     });
     cachedSettings = normalizeSettings(rows || []);
     cachedAt = now;

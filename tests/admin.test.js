@@ -174,6 +174,46 @@ async function testAiModeDisableSendsMainGroupNotice() {
   }
 }
 
+async function testAutoReplySettingSaved() {
+  const originalSelect = supabase.select;
+  const originalInsert = supabase.insert;
+  let insertedRows = null;
+
+  supabase.select = async (table) => {
+    assert.strictEqual(table, 'bot_settings');
+    return [
+      { key: 'ai_mode', value: { enabled: false, provider: null } },
+      { key: 'main_group', value: { chat_id: '-100777' } },
+      { key: 'done_tag', value: { tag: '#done' } },
+      { key: 'request_detection', value: { mode: 'keyword', min_text_length: 10 } }
+    ];
+  };
+  supabase.insert = async (table, rows) => {
+    assert.strictEqual(table, 'bot_settings');
+    insertedRows = rows;
+    return rows;
+  };
+
+  try {
+    const result = await callSettings({
+      settings: [
+        { key: 'ai_mode', value: { enabled: false, provider: null } },
+        { key: 'auto_reply', value: { enabled: true } },
+        { key: 'main_group', value: { chat_id: '-100777' } },
+        { key: 'done_tag', value: { tag: '#done', auto_reply: true } },
+        { key: 'request_detection', value: { mode: 'keyword', min_text_length: 10 } }
+      ]
+    });
+
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.ok, true);
+    assert.strictEqual(insertedRows.some(row => row.key === 'auto_reply' && row.value.enabled === true), true);
+  } finally {
+    supabase.select = originalSelect;
+    supabase.insert = originalInsert;
+  }
+}
+
 async function testAiIntegrationSaveMasksTokenAndNotifiesMainGroup() {
   const originalSelect = supabase.select;
   const originalInsert = supabase.insert;
