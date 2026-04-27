@@ -122,7 +122,7 @@ async function handleStart(message) {
     '✅ <b>Uyqur texnik yordam boti ishga tushdi</b>',
     '',
     'Bu bot Uyqur dasturi bo‘yicha mijozlardan tushgan savol, muammo va o‘rgatish so‘rovlarini statistikaga qo‘shadi.',
-    'Xodim masalani yakunlaganda <b>#done</b> tegini yuboradi yoki mijoz xabariga reply qiladi.',
+    'Xodim masalani yakunlaganda javob yozadi, <b>#done</b> tegini yuboradi yoki mijoz xabariga reply qiladi.',
     webapp ? `Admin panel: ${escapeHtml(webapp)}` : ''
   ].filter(Boolean).join('\n');
   await sendMessage(message.chat.id, text);
@@ -413,7 +413,7 @@ async function handleHelp(message) {
     '',
     '1) Mijoz Uyqur dasturidagi savol yoki muammoni guruh/business chatga yozadi.',
     '2) Bot uni <b>open request</b> sifatida saqlaydi.',
-    '3) Xodim tushuntirib yoki muammoni hal qilib bo‘lgach <b>#done</b> yozadi yoki mijoz xabariga reply qiladi.',
+    '3) Xodim tushuntirib yoki muammoni hal qilib javob yozganda ticket yopiladi. <b>#done</b> va reply ham ishlaydi.',
     '4) Statistika webappda yangilanadi.',
     '5) Guruh webappda ko‘rinmasa guruh ichida <b>/register</b> yuboring.',
     '',
@@ -679,6 +679,31 @@ async function maybeCloseRequestFromReply(message, classification, employee) {
   return true;
 }
 
+function hasCustomerFacingPayload(message = {}, text = '') {
+  return !!(
+    String(text || message.text || message.caption || '').trim()
+    || (Array.isArray(message.photo) && message.photo.length)
+    || message.video
+    || message.voice
+    || message.audio
+    || message.video_note
+    || message.animation
+    || message.document
+    || message.sticker
+  );
+}
+
+async function maybeCloseRequestFromEmployeeAnswer(message, classification, employee, text) {
+  if (!employee || !employee.id) return false;
+  if (message.from && message.from.is_bot) return false;
+  if (message.reply_to_message) return false;
+  if (['done', 'command'].includes(classification)) return false;
+  if (!hasCustomerFacingPayload(message, text)) return false;
+
+  const result = await metrics.closeLatestRequest({ message, employee, recordMissing: false });
+  return !!result.closed;
+}
+
 async function handleCommand(updateKind, message, sourceType, text, classification) {
   const tracking = recordIncomingMessage(updateKind, message, sourceType, classification);
   const chat = message.chat || {};
@@ -760,6 +785,8 @@ async function processMessage(updateKind, message) {
   }
 
   if (await maybeCloseRequestFromReply(message, classification, employee)) return;
+
+  if (await maybeCloseRequestFromEmployeeAnswer(message, classification, employee, text)) return;
 
   if (classification === 'request') {
     await metrics.createSupportRequest({

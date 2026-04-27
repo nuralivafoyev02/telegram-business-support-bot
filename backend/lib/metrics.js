@@ -266,7 +266,7 @@ async function closeRequestRecord({ request, message, employee }) {
   return { closed: true, request: closedRows[0] || request };
 }
 
-async function closeLatestRequest({ message, employee }) {
+async function closeLatestRequest({ message, employee, recordMissing = true }) {
   const chat = message.chat || {};
   const from = message.from || {};
   const open = await supabase.select('support_requests', {
@@ -278,6 +278,7 @@ async function closeLatestRequest({ message, employee }) {
   });
   const request = open[0];
   if (!request) {
+    if (!recordMissing) return { closed: false, request: null };
     await supabase.insert('request_events', [{
       request_id: null,
       chat_id: chat.id,
