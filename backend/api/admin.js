@@ -363,7 +363,7 @@ function messageDirection({ message, employee }) {
   const rawSource = message.raw && message.raw.source;
   if (rawSource === 'admin_send') return 'outbound';
   if (employee) return 'outbound';
-  if (['admin_reply', 'employee_message'].includes(message.classification)) return 'outbound';
+  if (['admin_reply', 'employee_message', 'ai_reply'].includes(message.classification)) return 'outbound';
   return 'inbound';
 }
 

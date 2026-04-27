@@ -7,7 +7,7 @@ const { sendMessage, deleteMessage, answerCallbackQuery, editMessageReplyMarkup,
 const { getMessageText, classifyMessage, isGreetingOnly } = require('../lib/parser');
 const { getBotSettings } = require('../lib/bot-settings');
 const { resolveMainStatsChatId, sendMainStatsReport } = require('../lib/report');
-const { shouldUseExternalAi, classifyWithAi } = require('../lib/ai');
+const { shouldUseExternalAi, classifyWithAi, generateSupportReply } = require('../lib/ai');
 const metrics = require('../lib/metrics');
 
 const START_RE = /^\/start(?:@\w+)?(?:\s|$)/i;
@@ -731,6 +731,57 @@ async function maybeReplyPrivateFallback(updateKind, message, classification) {
   return true;
 }
 
+async function saveAiReplyMessage({ telegramResult, sourceMessage, sourceType, text, settings }) {
+  if (!telegramResult || !telegramResult.message_id) return;
+  const chat = sourceMessage.chat || {};
+  await supabase.insert('messages', [{
+    tg_message_id: telegramResult.message_id,
+    chat_id: chat.id,
+    from_tg_user_id: null,
+    from_name: settings.aiModelLabel || settings.aiModel || 'Uyqur AI',
+    from_username: null,
+    source_type: sourceType,
+    update_kind: 'ai_auto_reply',
+    text,
+    classification: 'ai_reply',
+    employee_id: null,
+    business_connection_id: sourceMessage.business_connection_id || null,
+    raw: {
+      source: 'ai_auto_reply',
+      reply_to_message_id: sourceMessage.message_id,
+      telegram: telegramResult
+    },
+    created_at: new Date().toISOString()
+  }], { upsert: true, onConflict: 'chat_id,tg_message_id', prefer: 'return=minimal' }).catch(error => logBackgroundError('save-ai-reply', error));
+}
+
+async function maybeSendAiAutoReply({ updateKind, message, sourceType, text, settings }) {
+  if (!shouldUseExternalAi(settings)) return false;
+  if (message.from && message.from.is_bot) return false;
+  if (!hasCustomerFacingPayload(message, text)) return false;
+
+  try {
+    const reply = await generateSupportReply({
+      text,
+      chatType: (message.chat || {}).type,
+      sourceType,
+      settings
+    });
+    if (!reply) return false;
+
+    const options = { reply_to_message_id: message.message_id, parse_mode: null };
+    if (String(updateKind).includes('business') && message.business_connection_id) {
+      options.business_connection_id = message.business_connection_id;
+    }
+    const telegramResult = await sendMessage(message.chat.id, reply, options);
+    await saveAiReplyMessage({ telegramResult, sourceMessage: message, sourceType, text: reply, settings });
+    return true;
+  } catch (error) {
+    logBackgroundError('ai-auto-reply', error);
+    return false;
+  }
+}
+
 async function handleCommand(updateKind, message, sourceType, text, classification) {
   const tracking = recordIncomingMessage(updateKind, message, sourceType, classification);
   const chat = message.chat || {};
@@ -823,6 +874,7 @@ async function processMessage(updateKind, message) {
       sourceType,
       companyId: chatRow ? chatRow.company_id : null
     });
+    if (await maybeSendAiAutoReply({ updateKind, message, sourceType, text, settings })) return;
     await maybeReplyPrivateFallback(updateKind, message, classification);
     return;
   }
