@@ -123,21 +123,22 @@
                     <div class="card-title">Eng ko‘p ticket yopgan xodimlar</div>
                     <div class="card-note">{{ selectedPeriodLabel }} kesimi</div>
                   </div>
-                  <section class="card">
-                    <div class="card-header">
-                      <div>
-                        <div class="card-title">Ochiq so‘rovlar</div>
-                      </div>
-                    </div>
-                    <DataTable :columns="openRequestColumns" :rows="dashboard.openRequests || []"
-                      empty="Ochiq so‘rov yo‘q" />
-                  </section>
+
                 </div>
                 <DataTable :columns="topEmployeeColumns" :rows="topEmployeeRows" empty="Bu davrda yopilgan ticket yo‘q">
                   <template #employeeShare="{ row }">
                     <MetricBar :value="row.close_share_pct" />
                   </template>
                 </DataTable>
+              </section>
+              <section class="card">
+                <div class="card-header">
+                  <div>
+                    <div class="card-title">Ochiq so‘rovlar</div>
+                  </div>
+                </div>
+                <DataTable :columns="openRequestColumns" :rows="dashboard.openRequests || []"
+                  empty="Ochiq so‘rov yo‘q" />
               </section>
               <!-- <section class="card">
                 <div class="card-header">
