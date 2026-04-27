@@ -225,7 +225,11 @@
                   </div>
                 </div>
                 <DataTable :columns="openRequestColumns" :rows="dashboard.openRequests || []"
-                  empty="Ochiq so‘rov yo‘q" :on-cell-action="handleTableCellAction" />
+                  empty="Ochiq so‘rov yo‘q" :on-cell-action="handleTableCellAction">
+                  <template #requestReply="{ row }">
+                    <button class="btn small" type="button" @click.stop="openRequestReply(row)">Javob</button>
+                  </template>
+                </DataTable>
               </section>
 
               <section class="card">
@@ -606,7 +610,32 @@
     <Transition name="modal-fade">
       <Modal v-if="modal === 'requests'" title="So‘rovlar tarixi" wide @close="closeModal">
         <DataTable :columns="requestColumns" :rows="requestRows" empty="Bu chatda so‘rovlar yo‘q"
-          :on-cell-action="handleTableCellAction" />
+          :on-cell-action="handleTableCellAction">
+          <template #requestReply="{ row }">
+            <button class="btn small" type="button" :disabled="row.status !== 'open'"
+              @click.stop="openRequestReply(row)">Javob</button>
+          </template>
+        </DataTable>
+      </Modal>
+    </Transition>
+
+    <Transition name="modal-fade">
+      <Modal v-if="modal === 'requestReply'" title="Ochiq ticketga javob" @close="closeModal">
+        <form class="form" @submit.prevent="sendRequestReply">
+          <label class="label">Mijoz
+            <input class="input" :value="requestReplyForm.customer_name || requestReplyForm.chat_id || '—'" disabled />
+          </label>
+          <label class="label">Ticket matni
+            <textarea class="textarea" :value="requestReplyForm.initial_text || '—'" disabled></textarea>
+          </label>
+          <label class="label">Javob
+            <textarea v-model.trim="requestReplyForm.text" class="textarea"
+              placeholder="Mijozga yuboriladigan javob..."></textarea>
+          </label>
+          <button class="btn primary" :disabled="loadingAction === 'replyRequest'">
+            {{ loadingAction === 'replyRequest' ? 'Yuborilmoqda...' : 'Javob berib yopish' }}
+          </button>
+        </form>
       </Modal>
     </Transition>
 
@@ -638,7 +667,12 @@
               <div class="card-note">{{ fmtNumber(chatDetail.requests?.length) }} ta yozuv</div>
             </div>
             <DataTable :columns="chatRequestColumns" :rows="chatDetail.requests || []" empty="Bu chatda ticket yo‘q"
-              :on-cell-action="handleTableCellAction" />
+              :on-cell-action="handleTableCellAction">
+              <template #requestReply="{ row }">
+                <button class="btn small" type="button" :disabled="row.status !== 'open'"
+                  @click.stop="openRequestReply(row)">Javob</button>
+              </template>
+            </DataTable>
           </section>
 
           <section class="detail-section">
@@ -773,6 +807,7 @@ const settingsTab = tabs.find(tab => tab.key === 'settings');
 
 const loginForm = reactive({ username: 'admin', password: '' });
 const messageForm = reactive({ text: '' });
+const requestReplyForm = reactive({ request_id: '', chat_id: '', customer_name: '', initial_text: '', text: '' });
 const broadcastForm = reactive({ target_type: 'groups', title: 'Yangilik', text: '' });
 const employeeForm = reactive({ id: '', tg_user_id: '', full_name: '', username: '', phone: '', role: 'support', is_active: true });
 const adminForm = reactive({ username: 'admin', full_name: 'System Admin', new_password: '' });
@@ -859,6 +894,7 @@ const loadingText = computed(() => ({
   employeeSend: 'Yuborilmoqda...',
   selectedSend: 'Yuborilmoqda...',
   chatDetail: 'Chat tafsiloti yuklanmoqda...',
+  replyRequest: 'Javob yuborilmoqda...',
   saveAdmin: 'Saqlamoqda...',
   mainStats: 'Yuborilmoqda...',
   webhookInfo: 'Tekshirilmoqda...',
@@ -913,6 +949,12 @@ function barWidth(value, max) {
 
 function fmtMinutes(value) {
   return `${fmtNumber(value)} min`;
+}
+
+function listPreview(value) {
+  const list = Array.isArray(value) ? value : String(value || '').split(',').map(item => item.trim()).filter(Boolean);
+  if (!list.length) return '—';
+  return list.join(', ');
 }
 
 function pct(row) {
@@ -986,6 +1028,11 @@ const employeeColumns = [
   { key: 'username', label: 'Username', format: v => v ? `@${v}` : '—', action: 'employeeInfo' },
   { key: 'role', label: 'Rol', badge: true, action: 'employeeInfo' },
   { key: 'closed_requests', label: 'Yopilgan', action: 'employeeInfo' },
+  { key: 'today_received_requests', label: 'Bugun ticket', format: fmtNumber, action: 'employeeInfo' },
+  { key: 'today_answered_requests', label: 'Javob berilgan', format: fmtNumber, action: 'employeeInfo' },
+  { key: 'today_open_requests', label: 'Ochiq qolgan', format: fmtNumber, action: 'employeeInfo' },
+  { key: 'today_written_groups', label: 'Yozgan guruhlar', format: listPreview, truncate: true, action: 'employeeInfo' },
+  { key: 'today_open_customers', label: 'Qolgan so‘rovlar', format: listPreview, truncate: true, action: 'employeeInfo' },
   { key: 'can_message', label: 'Yozish', format: v => v ? 'Mumkin' : 'Start kerak', action: 'employeeMessage' },
   { key: 'is_active', label: 'Status', format: v => v ? 'Aktiv' : 'O‘chiq', badge: true, action: 'employeeInfo' },
   { key: 'actions', label: 'Amal', slot: 'actions' }
@@ -995,7 +1042,8 @@ const openRequestColumns = [
   { key: 'customer_name', label: 'Mijoz', action: 'chatDetail' },
   { key: 'source_type', label: 'Manba', badge: true, action: 'chatDetail' },
   { key: 'initial_text', label: 'Matn', truncate: true, action: 'chatDetail' },
-  { key: 'created_at', label: 'Vaqt', format: fmtDate, action: 'chatDetail' }
+  { key: 'created_at', label: 'Vaqt', format: fmtDate, action: 'chatDetail' },
+  { key: 'reply', label: 'Javob', slot: 'requestReply' }
 ];
 
 const groupColumns = [
@@ -1026,7 +1074,8 @@ const requestColumns = [
   { key: 'status', label: 'Status', badge: true, action: 'chatDetail' },
   { key: 'closed_by_name', label: 'Yopgan', format: v => v || '—', action: 'chatDetail' },
   { key: 'created_at', label: 'Kelgan', format: fmtDate, action: 'chatDetail' },
-  { key: 'closed_at', label: 'Yopilgan', format: fmtDate, action: 'chatDetail' }
+  { key: 'closed_at', label: 'Yopilgan', format: fmtDate, action: 'chatDetail' },
+  { key: 'reply', label: 'Javob', slot: 'requestReply' }
 ];
 
 const chatRequestColumns = [
@@ -1036,7 +1085,8 @@ const chatRequestColumns = [
   { key: 'closed_by_name', label: 'Yopgan', format: v => v || '—', action: 'chatDetail' },
   { key: 'solution_text', label: 'Yechim/Javob', truncate: true, format: v => v || '—', action: 'chatDetail' },
   { key: 'created_at', label: 'Kelgan', format: fmtDate },
-  { key: 'solution_at', label: 'Javob vaqti', format: fmtDate }
+  { key: 'solution_at', label: 'Javob vaqti', format: fmtDate },
+  { key: 'reply', label: 'Javob', slot: 'requestReply' }
 ];
 
 function timelineTypeLabel(type) {
@@ -1548,6 +1598,47 @@ async function loadRequests(row) {
   selectedTarget.value = row;
   requestRows.value = await api.requests({ chat_id: row.chat_id });
   modal.value = 'requests';
+}
+
+function openRequestReply(row = {}) {
+  Object.assign(requestReplyForm, {
+    request_id: row.id || row.request_id || '',
+    chat_id: row.chat_id || selectedTarget.value?.chat_id || '',
+    customer_name: row.customer_name || row.title || '',
+    initial_text: row.initial_text || row.request_text || '',
+    text: ''
+  });
+  if (!requestReplyForm.request_id) return showToast('Ticket ID topilmadi');
+  modal.value = 'requestReply';
+}
+
+async function refreshAfterRequestReply(chatId) {
+  await loadDashboard();
+  if (activeTab.value === 'groups') groups.value = await api.groups();
+  if (activeTab.value === 'privates') privates.value = await api.privates();
+  if (activeTab.value === 'employees') employees.value = await api.employees();
+  if (chatId) {
+    requestRows.value = await api.requests({ chat_id: chatId }).catch(() => requestRows.value);
+  }
+}
+
+async function sendRequestReply() {
+  if (!requestReplyForm.request_id) return showToast('Ticket tanlanmagan');
+  if (!requestReplyForm.text.trim()) return showToast('Javob matnini kiriting');
+  startLoading('replyRequest');
+  try {
+    const result = await api.replyRequest({
+      request_id: requestReplyForm.request_id,
+      text: requestReplyForm.text
+    });
+    await refreshAfterRequestReply(result.chat_id || requestReplyForm.chat_id);
+    showToast('Javob yuborildi va ticket yopildi');
+    closeModal();
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    stopLoading('replyRequest');
+  }
 }
 
 async function loadChatDetail(row) {

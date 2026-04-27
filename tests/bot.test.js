@@ -1267,8 +1267,10 @@ async function testReplyToCustomerTicketClosesRequest() {
   const originalInsert = supabase.insert;
   const originalSelect = supabase.select;
   const originalPatch = supabase.patch;
+  const originalFetch = global.fetch;
   const inserted = [];
   const patched = [];
+  const telegramCalls = [];
   clearBotSettingsCache();
 
   supabase.select = async (table, query = {}) => {
@@ -1296,6 +1298,13 @@ async function testReplyToCustomerTicketClosesRequest() {
   supabase.patch = async (table, query, values) => {
     patched.push({ table, query, values });
     return [{ id: 'request-1', ...values }];
+  };
+  global.fetch = async (_url, options) => {
+    telegramCalls.push({ url: _url, body: JSON.parse(options.body) });
+    return {
+      ok: true,
+      json: async () => ({ ok: true, result: true })
+    };
   };
 
   try {
@@ -1327,10 +1336,15 @@ async function testReplyToCustomerTicketClosesRequest() {
     assert.strictEqual(inserted.some(item => item.table === 'employees'), true);
     assert.strictEqual(inserted.some(item => item.table === 'support_requests'), false);
     assert.strictEqual(inserted.some(item => item.table === 'request_events' && item.rows[0].event_type === 'closed'), true);
+    assert.strictEqual(telegramCalls.length, 1);
+    assert.match(telegramCalls[0].url, /setMessageReaction$/);
+    assert.strictEqual(telegramCalls[0].body.message_id, 41);
+    assert.strictEqual(telegramCalls[0].body.reaction[0].emoji, '⚡');
   } finally {
     supabase.insert = originalInsert;
     supabase.select = originalSelect;
     supabase.patch = originalPatch;
+    global.fetch = originalFetch;
     clearBotSettingsCache();
   }
 }
@@ -1400,7 +1414,10 @@ async function testEmployeePlainAnswerClosesLatestOpenRequest() {
     assert.strictEqual(closePatch.values.done_message_id, 42);
     assert.strictEqual(inserted.some(item => item.table === 'request_events' && item.rows[0].event_type === 'closed'), true);
     assert.strictEqual(inserted.some(item => item.table === 'request_events' && item.rows[0].event_type === 'done_without_request'), false);
-    assert.strictEqual(telegramCalls.length, 0);
+    assert.strictEqual(telegramCalls.length, 1);
+    assert.match(telegramCalls[0].url, /setMessageReaction$/);
+    assert.strictEqual(telegramCalls[0].body.message_id, 42);
+    assert.strictEqual(telegramCalls[0].body.reaction[0].emoji, '⚡');
   } finally {
     supabase.insert = originalInsert;
     supabase.select = originalSelect;

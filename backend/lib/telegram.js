@@ -49,6 +49,14 @@ async function deleteMessage(chatId, messageId) {
   });
 }
 
+async function reactToMessage(chatId, messageId, emoji = '⚡') {
+  return telegram('setMessageReaction', {
+    chat_id: chatId,
+    message_id: messageId,
+    reaction: [{ type: 'emoji', emoji }]
+  });
+}
+
 async function sendBusinessMessage(businessConnectionId, chatId, text, options = {}) {
   return telegram('sendMessage', {
     business_connection_id: businessConnectionId,
@@ -104,4 +112,4 @@ function escapeHtml(str = '') {
     .replaceAll('"', '&quot;');
 }
 
-module.exports = { telegram, sendMessage, deleteMessage, sendBusinessMessage, answerCallbackQuery, editMessageReplyMarkup, getWebhookInfo, setWebhook, getFile, downloadFile, tgUserName, escapeHtml };
+module.exports = { telegram, sendMessage, deleteMessage, reactToMessage, sendBusinessMessage, answerCallbackQuery, editMessageReplyMarkup, getWebhookInfo, setWebhook, getFile, downloadFile, tgUserName, escapeHtml };

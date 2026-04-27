@@ -3,7 +3,7 @@
 const { sendJson, readBody, getQuery } = require('../lib/http');
 const { optionalEnv, boolEnv } = require('../lib/env');
 const supabase = require('../lib/supabase');
-const { sendMessage, deleteMessage, answerCallbackQuery, editMessageReplyMarkup, escapeHtml, tgUserName } = require('../lib/telegram');
+const { sendMessage, deleteMessage, reactToMessage, answerCallbackQuery, editMessageReplyMarkup, escapeHtml, tgUserName } = require('../lib/telegram');
 const { getMessageText, classifyMessage, isGreetingOnly } = require('../lib/parser');
 const { getBotSettings } = require('../lib/bot-settings');
 const { resolveMainStatsChatId, sendMainStatsReport, buildMainStatsQuestionReply } = require('../lib/report');
@@ -439,14 +439,13 @@ function logBackgroundError(label, error) {
 }
 
 async function maybeReplyDone(message, result) {
-  if (isGroupChat(message.chat || {})) return;
-  const silent = boolEnv('SILENT_DONE_REPLY', false);
-  if (silent) return;
   if (result.closed) {
-    await sendMessage(message.chat.id, `✅ So‘rov yopildi. Yopgan xodim: <b>${escapeHtml(result.request.closed_by_name || 'Xodim')}</b>`, {
-      reply_to_message_id: message.message_id
-    }).catch(error => logBackgroundError('reply-done', error));
+    await reactToMessage(message.chat.id, message.message_id, '⚡')
+      .catch(error => logBackgroundError('ticket-close-reaction', error));
   } else {
+    if (isGroupChat(message.chat || {})) return;
+    const silent = boolEnv('SILENT_DONE_REPLY', false);
+    if (silent) return;
     await sendMessage(message.chat.id, '⚠️ #done qabul qilindi, lekin bu chatda ochiq so‘rov topilmadi.', {
       reply_to_message_id: message.message_id
     }).catch(error => logBackgroundError('reply-done', error));
@@ -714,6 +713,10 @@ async function maybeCloseRequestFromEmployeeAnswer(message, classification, empl
   if (!hasCustomerFacingPayload(message, text)) return false;
 
   const result = await metrics.closeLatestRequest({ message, employee, recordMissing: false });
+  if (result.closed) {
+    await reactToMessage(message.chat.id, message.message_id, '⚡')
+      .catch(error => logBackgroundError('ticket-close-reaction', error));
+  }
   return !!result.closed;
 }
 

@@ -54,6 +54,7 @@ export const api = {
   telegramFile: fileId => requestBlob('telegramFile', { query: { file_id: fileId } }),
   settings: () => request('settings').then(r => r.data),
   sendMessage: payload => request('sendMessage', { method: 'POST', body: payload }).then(r => r.data),
+  replyRequest: payload => request('replyRequest', { method: 'POST', body: payload }).then(r => r.data),
   broadcast: payload => request('broadcast', { method: 'POST', body: payload }).then(r => r.data),
   saveEmployee: payload => request('employee', { method: 'POST', body: payload }).then(r => r.data),
   deleteGroup: payload => request('deleteGroup', { method: 'POST', body: payload }).then(r => r.data),

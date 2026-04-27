@@ -593,6 +593,105 @@ async function testSendToChatStoresOutgoingAdminMessage() {
   }
 }
 
+async function testReplyRequestSendsMessageAndClosesTicket() {
+  const originalSelect = supabase.select;
+  const originalInsert = supabase.insert;
+  const originalPatch = supabase.patch;
+  const originalFetch = global.fetch;
+  const inserts = [];
+  const patches = [];
+  const telegramCalls = [];
+
+  supabase.select = async (table) => {
+    if (table === 'support_requests') {
+      return [{
+        id: 'request-1',
+        source_type: 'group',
+        chat_id: -1001,
+        customer_name: 'Mijoz',
+        initial_message_id: 55,
+        initial_text: 'Lift ishlamayapti',
+        status: 'open',
+        business_connection_id: null
+      }];
+    }
+    if (table === 'tg_chats') return [{ chat_id: -1001, title: 'Mijoz guruhi', source_type: 'group', business_connection_id: null }];
+    return [];
+  };
+  supabase.insert = async (table, rows, options = {}) => {
+    inserts.push({ table, rows, options });
+    return rows;
+  };
+  supabase.patch = async (table, query, values) => {
+    patches.push({ table, query, values });
+    return [{ id: 'request-1', ...values }];
+  };
+  global.fetch = async (url, options) => {
+    telegramCalls.push({ url, body: JSON.parse(options.body) });
+    return {
+      ok: true,
+      json: async () => ({ ok: true, result: { message_id: 7002 } })
+    };
+  };
+
+  try {
+    const result = await callAdmin('replyRequest', {
+      method: 'POST',
+      body: { request_id: 'request-1', text: 'Lift qayta ishga tushirildi' }
+    });
+
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.data.sent, true);
+    assert.strictEqual(telegramCalls[0].body.chat_id, -1001);
+    assert.strictEqual(telegramCalls[0].body.reply_to_message_id, 55);
+    assert.strictEqual(telegramCalls[0].body.text, 'Lift qayta ishga tushirildi');
+
+    const requestPatch = patches.find(item => item.table === 'support_requests');
+    assert.ok(requestPatch);
+    assert.strictEqual(requestPatch.values.status, 'closed');
+    assert.strictEqual(requestPatch.values.done_message_id, 7002);
+
+    assert.strictEqual(inserts.some(item => item.table === 'messages' && item.rows[0].raw.source === 'admin_request_reply'), true);
+    assert.strictEqual(inserts.some(item => item.table === 'request_events' && item.rows[0].event_type === 'closed'), true);
+  } finally {
+    supabase.select = originalSelect;
+    supabase.insert = originalInsert;
+    supabase.patch = originalPatch;
+    global.fetch = originalFetch;
+  }
+}
+
+async function testEmployeesIncludeDailyWorkStats() {
+  const originalSelect = supabase.select;
+  const today = new Date().toISOString();
+
+  supabase.select = async (table) => {
+    if (table === 'employees') return [{ id: 'emp-1', tg_user_id: 777, full_name: 'Ali', username: 'ali', is_active: true }];
+    if (table === 'support_requests') {
+      return [
+        { id: 'r1', closed_by_employee_id: 'emp-1', status: 'closed', chat_id: -1001, customer_name: 'Mijoz A', initial_text: 'A', created_at: today, closed_at: today },
+        { id: 'r2', closed_by_employee_id: null, status: 'open', chat_id: -1001, customer_name: 'Mijoz B', initial_text: 'B', created_at: today, closed_at: null }
+      ];
+    }
+    if (table === 'tg_chats') return [{ chat_id: -1001, title: 'Support guruhi', source_type: 'group', is_active: true }];
+    if (table === 'messages') return [{ chat_id: -1001, from_tg_user_id: 777, employee_id: 'emp-1', source_type: 'group', text: 'Javob', created_at: today }];
+    return [];
+  };
+
+  try {
+    const result = await callAdmin('employees');
+    assert.strictEqual(result.status, 200);
+    const employee = result.payload.data[0];
+    assert.strictEqual(employee.today_received_requests, 2);
+    assert.strictEqual(employee.today_answered_requests, 1);
+    assert.strictEqual(employee.today_open_requests, 1);
+    assert.deepStrictEqual(employee.today_written_groups, ['Support guruhi']);
+    assert.deepStrictEqual(employee.today_open_customers, ['Mijoz B']);
+  } finally {
+    supabase.select = originalSelect;
+  }
+}
+
 async function run() {
   await testAiModeEnableSendsMainGroupNotice();
   await testAiModeDisableSendsMainGroupNotice();
@@ -603,6 +702,8 @@ async function run() {
   await testPrivateChatsExcludeEmployees();
   await testChatDetailIncludesTicketSolutionAndTimeline();
   await testSendToChatStoresOutgoingAdminMessage();
+  await testReplyRequestSendsMessageAndClosesTicket();
+  await testEmployeesIncludeDailyWorkStats();
   console.log('Admin tests passed');
 }
 

@@ -630,35 +630,72 @@ async function listEmployees(query) {
       limit: limitQuery(query)
     }),
     supabase.select('support_requests', {
-      select: 'id,closed_by_employee_id,status,chat_id,closed_at,created_at',
+      select: 'id,closed_by_employee_id,status,chat_id,customer_name,customer_tg_id,initial_text,closed_at,created_at',
       limit: '5000'
     }).catch(() => []),
     supabase.select('tg_chats', {
       select: 'chat_id,title,source_type,business_connection_id,is_active,last_message_at',
-      source_type: 'in.(private,business)',
       is_active: 'eq.true',
       limit: '5000'
     }).catch(() => []),
     supabase.select('messages', {
-      select: 'chat_id,from_tg_user_id,business_connection_id,source_type,created_at',
-      source_type: 'in.(private,business)',
+      select: 'chat_id,from_tg_user_id,from_name,from_username,employee_id,business_connection_id,source_type,classification,text,created_at',
       order: supabase.order('created_at', false),
       limit: '5000'
     }).catch(() => [])
   ]);
 
+  const today = tashkentDateKey();
+  const chatMap = new Map(chats.map(chat => [telegramIdKey(chat.chat_id), chat]));
+  const isToday = value => value && tashkentDateKey(value) === today;
+  const chatTitle = chatId => {
+    const chat = chatMap.get(telegramIdKey(chatId));
+    return chat ? displayChatTitle(chat) : telegramIdKey(chatId);
+  };
+
   return employees.map(employee => {
     const related = requests.filter(request => request.closed_by_employee_id === employee.id);
     const closed = related.filter(request => request.status === 'closed');
-    const directChat = chats.find(chat => String(chat.chat_id) === String(employee.tg_user_id));
-    const latestMessage = messages.find(message => String(message.from_tg_user_id) === String(employee.tg_user_id));
+    const directChat = chats.find(chat => isPrivateLikeChat(chat) && String(chat.chat_id) === String(employee.tg_user_id));
+    const latestMessage = messages.find(message => isPrivateLikeChat(message) && String(message.from_tg_user_id) === String(employee.tg_user_id));
     const businessConnectionId = (directChat && directChat.business_connection_id) || (latestMessage && latestMessage.business_connection_id) || '';
+    const employeeMessagesToday = messages.filter(message => {
+      const sameEmployee = message.employee_id === employee.id || telegramIdKey(message.from_tg_user_id) === telegramIdKey(employee.tg_user_id);
+      return sameEmployee && isToday(message.created_at);
+    });
+    const writtenGroupIds = new Set(employeeMessagesToday
+      .filter(message => {
+        const chat = chatMap.get(telegramIdKey(message.chat_id));
+        return message.source_type === 'group' || (chat && chat.source_type === 'group');
+      })
+      .map(message => telegramIdKey(message.chat_id))
+      .filter(Boolean));
+    const todayClosed = closed.filter(request => isToday(request.closed_at));
+    const relatedChatIds = new Set([
+      ...writtenGroupIds,
+      ...todayClosed.map(request => telegramIdKey(request.chat_id)).filter(Boolean)
+    ]);
+    const todayRelatedRequests = requests.filter(request => {
+      const requestChatId = telegramIdKey(request.chat_id);
+      const closedByEmployee = request.closed_by_employee_id === employee.id;
+      return isToday(request.created_at) && (closedByEmployee || relatedChatIds.has(requestChatId));
+    });
+    const todayOpenRequests = todayRelatedRequests.filter(request => request.status === 'open');
+    const openCustomerNames = [...new Set(todayOpenRequests.map(request => request.customer_name || request.initial_text || telegramIdKey(request.customer_tg_id)).filter(Boolean))].slice(0, 6);
+    const writtenGroupNames = [...new Set([...writtenGroupIds].map(chatTitle).filter(Boolean))].slice(0, 6);
     return {
       ...employee,
       received_requests: related.length,
       closed_requests: closed.length,
       handled_chats: new Set(related.map(request => request.chat_id).filter(Boolean)).size,
       last_closed_at: closed.map(request => request.closed_at).filter(Boolean).sort().at(-1) || null,
+      today_received_requests: todayRelatedRequests.length,
+      today_answered_requests: todayClosed.length,
+      today_open_requests: todayOpenRequests.length,
+      today_message_count: employeeMessagesToday.length,
+      today_written_groups_count: writtenGroupIds.size,
+      today_written_groups: writtenGroupNames,
+      today_open_customers: openCustomerNames,
       contact_chat_id: directChat ? directChat.chat_id : (latestMessage && latestMessage.chat_id) || employee.tg_user_id || null,
       business_connection_id: businessConnectionId || null,
       can_message: !!(employee.tg_user_id && (directChat || latestMessage || businessConnectionId))
@@ -831,6 +868,84 @@ async function sendToChat(body) {
       : Promise.resolve(null)
   ]);
   return { sent: true, telegram: result };
+}
+
+async function replyToRequest(body, currentAdmin = {}) {
+  const requestId = body.request_id || body.id;
+  const text = String(body.text || '').trim();
+  if (!requestId || !text) throw new Error('request_id va text majburiy');
+
+  const requests = await supabase.select('support_requests', {
+    select: 'id,source_type,chat_id,company_id,customer_tg_id,customer_name,customer_username,initial_message_id,initial_text,status,business_connection_id,created_at',
+    id: supabase.eq(requestId),
+    limit: '1'
+  });
+  const request = requests[0];
+  if (!request) throw new Error('Ticket topilmadi');
+  if (request.status !== 'open') throw new Error('Bu ticket allaqachon yopilgan');
+
+  const chats = await supabase.select('tg_chats', {
+    select: 'chat_id,title,source_type,business_connection_id',
+    chat_id: supabase.eq(request.chat_id),
+    limit: '1'
+  }).catch(() => []);
+  const chat = chats[0] || {};
+  const businessConnectionId = body.business_connection_id || request.business_connection_id || chat.business_connection_id || null;
+  const sendOptions = request.initial_message_id ? { reply_to_message_id: request.initial_message_id } : {};
+  let telegramResult;
+  if (businessConnectionId) {
+    telegramResult = await sendBusinessMessage(businessConnectionId, request.chat_id, text, sendOptions);
+  } else {
+    telegramResult = await sendMessage(request.chat_id, text, sendOptions);
+  }
+
+  const actorName = currentAdmin.full_name || currentAdmin.username || 'admin';
+  const closedAt = nowIso();
+  const [closedRows] = await Promise.all([
+    supabase.patch('support_requests', { id: supabase.eq(request.id) }, {
+      status: 'closed',
+      closed_at: closedAt,
+      closed_by_employee_id: null,
+      closed_by_tg_id: null,
+      closed_by_name: actorName,
+      done_message_id: telegramResult && telegramResult.message_id || null
+    }),
+    telegramResult && telegramResult.message_id ? supabase.insert('messages', [{
+      tg_message_id: telegramResult.message_id,
+      chat_id: request.chat_id,
+      from_tg_user_id: null,
+      from_name: actorName,
+      from_username: currentAdmin.username || null,
+      source_type: request.source_type || chat.source_type || 'private',
+      update_kind: 'admin_request_reply',
+      text,
+      classification: 'admin_reply',
+      employee_id: null,
+      business_connection_id: businessConnectionId,
+      raw: { source: 'admin_request_reply', request_id: request.id, created_by: currentAdmin.username || 'admin', telegram: telegramResult },
+      created_at: closedAt
+    }], { upsert: true, onConflict: 'chat_id,tg_message_id', prefer: 'return=minimal' }).catch(() => null) : Promise.resolve(null),
+    supabase.insert('request_events', [{
+      request_id: request.id,
+      chat_id: request.chat_id,
+      tg_message_id: telegramResult && telegramResult.message_id || null,
+      event_type: 'closed',
+      actor_tg_id: null,
+      actor_name: actorName,
+      employee_id: null,
+      text,
+      raw: { source: 'admin_request_reply', request_id: request.id, created_by: currentAdmin.username || 'admin', telegram: telegramResult },
+      created_at: closedAt
+    }], { prefer: 'return=minimal' }).catch(() => null)
+  ]);
+
+  return {
+    sent: true,
+    request_id: request.id,
+    chat_id: request.chat_id,
+    telegram: telegramResult,
+    request: closedRows[0] || { ...request, status: 'closed', closed_at: closedAt, closed_by_name: actorName }
+  };
 }
 
 async function deactivateGroup(body) {
@@ -1222,6 +1337,7 @@ async function handleGet(action, query) {
 async function handlePost(action, body, currentAdmin) {
   switch (action) {
     case 'sendMessage': return sendToChat({ ...body, created_by: currentAdmin.username });
+    case 'replyRequest': return replyToRequest(body, currentAdmin);
     case 'broadcast': return broadcast({ ...body, created_by: currentAdmin.username });
     case 'company': return upsertCompany(body);
     case 'employee': return upsertEmployee(body);
