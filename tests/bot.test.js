@@ -669,12 +669,12 @@ async function testMainGroupBroadcastPreview() {
     assert.strictEqual(result.status, 200);
     assert.strictEqual(result.payload.handled, 'message');
     assert.strictEqual(broadcastRow.status, 'created');
-    assert.strictEqual(broadcastRow.total_targets, 1);
+    assert.strictEqual(broadcastRow.total_targets, 2);
     assert.strictEqual(broadcastRow.text, announcementText);
     const preview = telegramCalls.find(call => /sendMessage$/.test(call.url));
     assert.ok(preview);
     assert.match(preview.body.text, /Ommaviy xabar preview/);
-    assert.match(preview.body.text, /Yuboriladigan guruhlar:<\/b> 1 ta/);
+    assert.match(preview.body.text, /Yuboriladigan guruhlar:<\/b> 2 ta/);
     assert.match(preview.body.text, /1\. Smeta eksporti\n2\. Ombor qoldig‘i\n3\. Xodimlar hisoboti/);
     assert.strictEqual(preview.body.reply_markup.inline_keyboard[0][0].callback_data, 'broadcast_confirm:broadcast-1');
   } finally {
@@ -757,17 +757,18 @@ async function testMainGroupBroadcastConfirmSendsAndReports() {
 
     assert.strictEqual(result.status, 200);
     assert.strictEqual(result.payload.handled, 'callback_query');
-    const targetSends = telegramCalls.filter(call => /sendMessage$/.test(call.url) && [-1001, -1002].includes(Number(call.body.chat_id)));
-    assert.strictEqual(targetSends.length, 2);
+    const targetSends = telegramCalls.filter(call => /sendMessage$/.test(call.url) && [-1001, -1002, -100777].includes(Number(call.body.chat_id)) && call.body.text === announcementText);
+    assert.strictEqual(targetSends.length, 3);
     assert.strictEqual(targetSends[0].body.parse_mode, undefined);
     assert.strictEqual(targetSends[0].body.text, announcementText);
     const resultMessage = telegramCalls.find(call => /sendMessage$/.test(call.url) && Number(call.body.chat_id) === -100777 && /Ommaviy xabar yakunlandi/.test(call.body.text));
     assert.ok(resultMessage);
     assert.match(resultMessage.body.text, /New Era ✅/);
     assert.match(resultMessage.body.text, /Fayus 🔴/);
-    assert.doesNotMatch(resultMessage.body.text, /Main group/);
+    assert.match(resultMessage.body.text, /Main group ✅/);
     assert.strictEqual(targetRows.some(row => row.chat_id === -1001 && row.status === 'sent'), true);
     assert.strictEqual(targetRows.some(row => row.chat_id === -1002 && row.status === 'failed'), true);
+    assert.strictEqual(targetRows.some(row => row.chat_id === -100777 && row.status === 'sent'), true);
     assert.strictEqual(patches.some(item => item.table === 'broadcasts' && item.values.status === 'completed_with_errors'), true);
   } finally {
     supabase.insert = originalInsert;

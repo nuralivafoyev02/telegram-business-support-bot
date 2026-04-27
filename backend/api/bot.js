@@ -173,7 +173,7 @@ function actorName(user = {}) {
   return tgUserName(user);
 }
 
-async function listActiveGroupBroadcastTargets(excludeChatId) {
+async function listActiveGroupBroadcastTargets() {
   const rows = await supabase.select('tg_chats', {
     select: 'chat_id,title,business_connection_id,source_type',
     source_type: 'eq.group',
@@ -181,7 +181,7 @@ async function listActiveGroupBroadcastTargets(excludeChatId) {
     order: supabase.order('title', true),
     limit: '1000'
   });
-  return rows.filter(row => !sameChatId(row.chat_id, excludeChatId));
+  return rows;
 }
 
 async function loadGroupBroadcastWithTargets(id = null) {
@@ -317,7 +317,7 @@ async function maybeStartGroupBroadcastPreview(message, text) {
     return true;
   }
 
-  const targets = await listActiveGroupBroadcastTargets(chat.id);
+  const targets = await listActiveGroupBroadcastTargets();
   if (!targets.length) {
     await sendMessage(chat.id, '⚠️ Yuborish uchun faol guruh topilmadi.', {
       reply_to_message_id: message.message_id
@@ -446,8 +446,8 @@ async function cancelBroadcastPreview(id) {
   return rows[0] || null;
 }
 
-async function sendPendingGroupBroadcast({ broadcast, sourceChatId }) {
-  const targets = await listActiveGroupBroadcastTargets(sourceChatId);
+async function sendPendingGroupBroadcast({ broadcast }) {
+  const targets = await listActiveGroupBroadcastTargets();
   let sent = 0;
   let failed = 0;
   const details = [];
@@ -583,7 +583,7 @@ async function handleBroadcastCallback(query, parsed) {
       .catch(error => logBackgroundError('broadcast-confirm-markup', error));
   }
 
-  const result = await sendPendingGroupBroadcast({ broadcast, sourceChatId: chat.id });
+  const result = await sendPendingGroupBroadcast({ broadcast });
   const messages = broadcastResultMessages(result);
   for (let index = 0; index < messages.length; index += 1) {
     await sendMessage(chat.id, messages[index], index === 0 ? { reply_to_message_id: callbackMessage.message_id } : {})
