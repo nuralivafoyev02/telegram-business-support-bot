@@ -125,7 +125,8 @@
                   </div>
 
                 </div>
-                <DataTable :columns="topEmployeeColumns" :rows="topEmployeeRows" empty="Bu davrda yopilgan ticket yo‘q">
+                <DataTable :columns="topEmployeeColumns" :rows="topEmployeeRows" empty="Bu davrda yopilgan ticket yo‘q"
+                  :on-cell-action="handleTableCellAction">
                   <template #employeeShare="{ row }">
                     <MetricBar :value="row.close_share_pct" />
                   </template>
@@ -138,7 +139,7 @@
                   </div>
                 </div>
                 <DataTable :columns="openRequestColumns" :rows="dashboard.openRequests || []"
-                  empty="Ochiq so‘rov yo‘q" />
+                  empty="Ochiq so‘rov yo‘q" :on-cell-action="handleTableCellAction" />
               </section>
             </div>
 
@@ -152,7 +153,7 @@
                 </div>
               </div>
               <DataTable :columns="groupPerformanceColumns" :rows="groupPerformanceRows"
-                empty="Bu davrda guruhlardan so‘rov tushmagan">
+                empty="Bu davrda guruhlardan so‘rov tushmagan" :on-cell-action="handleTableCellAction">
                 <template #groupClose="{ row }">
                   <MetricBar :value="row.close_rate" />
                 </template>
@@ -169,7 +170,7 @@
                   </div>
                 </div>
                 <DataTable :columns="employeeStatColumns" :rows="filteredEmployeeStats"
-                  empty="Hozircha xodim statistikasi yo‘q" />
+                  empty="Hozircha xodim statistikasi yo‘q" :on-cell-action="handleTableCellAction" />
               </section>
             </div>
           </template>
@@ -191,7 +192,8 @@
                   <div class="card-title">Guruhlar ro‘yxati</div>
                 </div>
               </div>
-              <DataTable :columns="groupColumns" :rows="filteredGroups" empty="Guruh topilmadi">
+              <DataTable :columns="groupColumns" :rows="filteredGroups" empty="Guruh topilmadi"
+                :on-cell-action="handleTableCellAction">
                 <template #select="{ row }">
                   <input class="row-check" type="checkbox" :checked="isGroupSelected(row)"
                     @change="toggleGroup(row, $event.target.checked)" />
@@ -215,7 +217,8 @@
                   <div class="card-title">Chatlar</div>
                 </div>
               </div>
-              <DataTable :columns="privateColumns" :rows="filteredPrivates" empty="Shaxsiy chat topilmadi">
+              <DataTable :columns="privateColumns" :rows="filteredPrivates" empty="Shaxsiy chat topilmadi"
+                :on-cell-action="handleTableCellAction">
                 <template #actions="{ row }">
                   <button class="btn small" @click="openSend(row)">Yozish</button>
                   <button class="btn small" @click="loadChatDetail(row)">Tafsilot</button>
@@ -244,7 +247,8 @@
                   <div class="card-title">Xodimlar</div>
                 </div>
               </div>
-              <DataTable :columns="employeeColumns" :rows="filteredEmployees" empty="Xodim topilmadi">
+              <DataTable :columns="employeeColumns" :rows="filteredEmployees" empty="Xodim topilmadi"
+                :on-cell-action="handleTableCellAction">
                 <template #select="{ row }">
                   <input class="row-check" type="checkbox" :checked="isEmployeeSelected(row)"
                     @change="toggleEmployee(row, $event.target.checked)" />
@@ -519,7 +523,8 @@
 
     <Transition name="modal-fade">
       <Modal v-if="modal === 'requests'" title="So‘rovlar tarixi" wide @close="closeModal">
-        <DataTable :columns="requestColumns" :rows="requestRows" empty="Bu chatda so‘rovlar yo‘q" />
+        <DataTable :columns="requestColumns" :rows="requestRows" empty="Bu chatda so‘rovlar yo‘q"
+          :on-cell-action="handleTableCellAction" />
       </Modal>
     </Transition>
 
@@ -550,7 +555,8 @@
               <div class="card-title">Ticketlar va yechimlar</div>
               <div class="card-note">{{ fmtNumber(chatDetail.requests?.length) }} ta yozuv</div>
             </div>
-            <DataTable :columns="chatRequestColumns" :rows="chatDetail.requests || []" empty="Bu chatda ticket yo‘q" />
+            <DataTable :columns="chatRequestColumns" :rows="chatDetail.requests || []" empty="Bu chatda ticket yo‘q"
+              :on-cell-action="handleTableCellAction" />
           </section>
 
           <section class="detail-section">
@@ -821,22 +827,22 @@ const chatDetailTitle = computed(() => {
 const chatConversation = computed(() => chatDetail.value.conversation || []);
 
 const employeeStatColumns = [
-  { key: 'full_name', label: 'Xodim' },
-  { key: 'username', label: 'Username', format: v => v ? `@${v}` : '—' },
-  { key: 'received_requests', label: 'Qabul' },
-  { key: 'closed_requests', label: 'Yopilgan' },
-  { key: 'avg_close_minutes', label: 'O‘rt. daqiqa', format: fmtMinutes },
-  { key: 'last_closed_at', label: 'Oxirgi #done', format: fmtDate }
+  { key: 'full_name', label: 'Xodim', action: 'employeeInfo' },
+  { key: 'username', label: 'Username', format: v => v ? `@${v}` : '—', action: 'employeeInfo' },
+  { key: 'received_requests', label: 'Qabul', action: 'employeeInfo' },
+  { key: 'closed_requests', label: 'Yopilgan', action: 'employeeInfo' },
+  { key: 'avg_close_minutes', label: 'O‘rt. daqiqa', format: fmtMinutes, action: 'employeeInfo' },
+  { key: 'last_closed_at', label: 'Oxirgi #done', format: fmtDate, action: 'employeeInfo' }
 ];
 
 const topEmployeeColumns = [
-  { key: 'full_name', label: 'Xodim' },
-  { key: 'username', label: 'Username', format: v => v ? `@${v}` : '—' },
-  { key: 'closed_requests', label: 'Yopilgan' },
-  { key: 'close_share_pct', label: 'Yopish ulushi', slot: 'employeeShare' },
-  { key: 'handled_chats', label: 'Chatlar' },
-  { key: 'avg_close_minutes', label: 'O‘rt. vaqt', format: fmtMinutes },
-  { key: 'last_closed_at', label: 'Oxirgi yopish', format: fmtDate }
+  { key: 'full_name', label: 'Xodim', action: 'employeeInfo' },
+  { key: 'username', label: 'Username', format: v => v ? `@${v}` : '—', action: 'employeeInfo' },
+  { key: 'closed_requests', label: 'Yopilgan', action: 'employeeInfo' },
+  { key: 'close_share_pct', label: 'Yopish ulushi', slot: 'employeeShare', action: 'employeeInfo' },
+  { key: 'handled_chats', label: 'Chatlar', action: 'employeeInfo' },
+  { key: 'avg_close_minutes', label: 'O‘rt. vaqt', format: fmtMinutes, action: 'employeeInfo' },
+  { key: 'last_closed_at', label: 'Oxirgi yopish', format: fmtDate, action: 'employeeInfo' }
 ];
 
 const periodColumns = [
@@ -851,71 +857,71 @@ const periodColumns = [
 ];
 
 const groupPerformanceColumns = [
-  { key: 'title', label: 'Guruh' },
-  { key: 'total_requests', label: 'Jami so‘rov', format: fmtNumber },
-  { key: 'open_requests', label: 'Ochiq', format: fmtNumber },
-  { key: 'closed_requests', label: 'Yopilgan', format: fmtNumber },
-  { key: 'close_rate', label: 'Yopilish', slot: 'groupClose' },
-  { key: 'unique_customers', label: 'Mijozlar', format: fmtNumber },
-  { key: 'last_request_at', label: 'Oxirgi so‘rov', format: fmtDate }
+  { key: 'title', label: 'Guruh', action: 'chatDetail' },
+  { key: 'total_requests', label: 'Jami so‘rov', format: fmtNumber, action: 'requests' },
+  { key: 'open_requests', label: 'Ochiq', format: fmtNumber, action: 'requests' },
+  { key: 'closed_requests', label: 'Yopilgan', format: fmtNumber, action: 'requests' },
+  { key: 'close_rate', label: 'Yopilish', slot: 'groupClose', action: 'requests' },
+  { key: 'unique_customers', label: 'Mijozlar', format: fmtNumber, action: 'chatDetail' },
+  { key: 'last_request_at', label: 'Oxirgi so‘rov', format: fmtDate, action: 'chatDetail' }
 ];
 
 const employeeColumns = [
   { key: 'select', label: '', slot: 'select' },
-  { key: 'full_name', label: 'Xodim' },
-  { key: 'tg_user_id', label: 'Telegram ID', format: v => v || '—' },
-  { key: 'username', label: 'Username', format: v => v ? `@${v}` : '—' },
-  { key: 'role', label: 'Rol', badge: true },
-  { key: 'closed_requests', label: 'Yopilgan' },
-  { key: 'can_message', label: 'Yozish', format: v => v ? 'Mumkin' : 'Start kerak' },
-  { key: 'is_active', label: 'Status', format: v => v ? 'Aktiv' : 'O‘chiq', badge: true },
+  { key: 'full_name', label: 'Xodim', action: 'employeeInfo' },
+  { key: 'tg_user_id', label: 'Telegram ID', format: v => v || '—', action: 'employeeInfo' },
+  { key: 'username', label: 'Username', format: v => v ? `@${v}` : '—', action: 'employeeInfo' },
+  { key: 'role', label: 'Rol', badge: true, action: 'employeeInfo' },
+  { key: 'closed_requests', label: 'Yopilgan', action: 'employeeInfo' },
+  { key: 'can_message', label: 'Yozish', format: v => v ? 'Mumkin' : 'Start kerak', action: 'employeeMessage' },
+  { key: 'is_active', label: 'Status', format: v => v ? 'Aktiv' : 'O‘chiq', badge: true, action: 'employeeInfo' },
   { key: 'actions', label: 'Amal', slot: 'actions' }
 ];
 
 const openRequestColumns = [
-  { key: 'customer_name', label: 'Mijoz' },
-  { key: 'source_type', label: 'Manba', badge: true },
-  { key: 'initial_text', label: 'Matn', truncate: true },
-  { key: 'created_at', label: 'Vaqt', format: fmtDate }
+  { key: 'customer_name', label: 'Mijoz', action: 'chatDetail' },
+  { key: 'source_type', label: 'Manba', badge: true, action: 'chatDetail' },
+  { key: 'initial_text', label: 'Matn', truncate: true, action: 'chatDetail' },
+  { key: 'created_at', label: 'Vaqt', format: fmtDate, action: 'chatDetail' }
 ];
 
 const groupColumns = [
   { key: 'select', label: '', slot: 'select' },
-  { key: 'title', label: 'Guruh' },
-  { key: 'chat_id', label: 'Chat ID' },
-  { key: 'total_requests', label: 'So‘rov' },
-  { key: 'open_requests', label: 'Ochiq' },
-  { key: 'closed_requests', label: 'Yopilgan' },
-  { key: 'progress', label: 'Yopilish', format: (_, row) => pct(row) },
-  { key: 'last_message_at', label: 'Aktivlik', format: fmtDate },
+  { key: 'title', label: 'Guruh', action: 'chatDetail' },
+  { key: 'chat_id', label: 'Chat ID', action: 'chatDetail' },
+  { key: 'total_requests', label: 'So‘rov', action: 'requests' },
+  { key: 'open_requests', label: 'Ochiq', action: 'requests' },
+  { key: 'closed_requests', label: 'Yopilgan', action: 'requests' },
+  { key: 'progress', label: 'Yopilish', format: (_, row) => pct(row), action: 'requests' },
+  { key: 'last_message_at', label: 'Aktivlik', format: fmtDate, action: 'chatDetail' },
   { key: 'actions', label: 'Amal', slot: 'actions' }
 ];
 
 const privateColumns = [
-  { key: 'title', label: 'Chat' },
-  { key: 'source_type', label: 'Tur', badge: true },
-  { key: 'total_requests', label: 'So‘rov' },
-  { key: 'open_requests', label: 'Ochiq' },
-  { key: 'closed_requests', label: 'Yopilgan' },
-  { key: 'last_message_at', label: 'Oxirgi xabar', format: fmtDate },
+  { key: 'title', label: 'Chat', action: 'chatDetail' },
+  { key: 'source_type', label: 'Tur', badge: true, action: 'chatDetail' },
+  { key: 'total_requests', label: 'So‘rov', action: 'chatDetail' },
+  { key: 'open_requests', label: 'Ochiq', action: 'chatDetail' },
+  { key: 'closed_requests', label: 'Yopilgan', action: 'chatDetail' },
+  { key: 'last_message_at', label: 'Oxirgi xabar', format: fmtDate, action: 'chatDetail' },
   { key: 'actions', label: 'Amal', slot: 'actions' }
 ];
 
 const requestColumns = [
-  { key: 'customer_name', label: 'Mijoz' },
-  { key: 'initial_text', label: 'Matn', truncate: true },
-  { key: 'status', label: 'Status', badge: true },
-  { key: 'closed_by_name', label: 'Yopgan', format: v => v || '—' },
-  { key: 'created_at', label: 'Kelgan', format: fmtDate },
-  { key: 'closed_at', label: 'Yopilgan', format: fmtDate }
+  { key: 'customer_name', label: 'Mijoz', action: 'chatDetail' },
+  { key: 'initial_text', label: 'Matn', truncate: true, action: 'chatDetail' },
+  { key: 'status', label: 'Status', badge: true, action: 'chatDetail' },
+  { key: 'closed_by_name', label: 'Yopgan', format: v => v || '—', action: 'chatDetail' },
+  { key: 'created_at', label: 'Kelgan', format: fmtDate, action: 'chatDetail' },
+  { key: 'closed_at', label: 'Yopilgan', format: fmtDate, action: 'chatDetail' }
 ];
 
 const chatRequestColumns = [
-  { key: 'customer_name', label: 'Mijoz', format: v => v || '—' },
-  { key: 'initial_text', label: 'Kelgan ticket', truncate: true },
-  { key: 'status', label: 'Status', badge: true },
-  { key: 'closed_by_name', label: 'Yopgan', format: v => v || '—' },
-  { key: 'solution_text', label: 'Yechim/Javob', truncate: true, format: v => v || '—' },
+  { key: 'customer_name', label: 'Mijoz', format: v => v || '—', action: 'chatDetail' },
+  { key: 'initial_text', label: 'Kelgan ticket', truncate: true, action: 'chatDetail' },
+  { key: 'status', label: 'Status', badge: true, action: 'chatDetail' },
+  { key: 'closed_by_name', label: 'Yopgan', format: v => v || '—', action: 'chatDetail' },
+  { key: 'solution_text', label: 'Yechim/Javob', truncate: true, format: v => v || '—', action: 'chatDetail' },
   { key: 'created_at', label: 'Kelgan', format: fmtDate },
   { key: 'solution_at', label: 'Javob vaqti', format: fmtDate }
 ];
@@ -1189,6 +1195,61 @@ function openSelectedMessage(type) {
   if (!selectedRecipients.value.length) return showToast('Kamida bitta qabul qiluvchi tanlang');
   messageForm.text = '';
   modal.value = 'selectedSend';
+}
+
+function tableActionChatRow(row = {}) {
+  const chatId = row.chat_id || selectedTarget.value?.chat_id || row.contact_chat_id;
+  if (!chatId) return null;
+  return {
+    ...selectedTarget.value,
+    ...row,
+    chat_id: chatId,
+    title: row.title || row.customer_name || selectedTarget.value?.title || String(chatId)
+  };
+}
+
+function tableActionEmployeeRow(row = {}) {
+  const employee = {
+    ...row,
+    id: row.id || row.employee_id || '',
+    full_name: row.full_name || row.closed_by_name || row.solution_by || 'Xodim'
+  };
+  if (!employee.id && employee.tg_user_id) {
+    const found = employees.value.find(item => String(item.tg_user_id || '') === String(employee.tg_user_id));
+    return found || employee;
+  }
+  return employee;
+}
+
+function handleTableCellAction({ action, row }) {
+  if (!action) return;
+  if (action === 'chatDetail') {
+    const chatRow = tableActionChatRow(row);
+    if (!chatRow) return showToast('Chat tafsiloti uchun chat ID topilmadi');
+    loadChatDetail(chatRow);
+    return;
+  }
+  if (action === 'requests') {
+    const chatRow = tableActionChatRow(row);
+    if (!chatRow) return showToast('So‘rovlar uchun chat ID topilmadi');
+    loadRequests(chatRow);
+    return;
+  }
+  if (action === 'employeeInfo') {
+    openEmployee(tableActionEmployeeRow(row));
+    return;
+  }
+  if (action === 'employeeMessage') {
+    const employee = tableActionEmployeeRow(row);
+    if (!employee.id && !employee.employee_id && !employee.tg_user_id) return showToast('Xodim Telegram ID topilmadi');
+    openEmployeeMessage(employee);
+    return;
+  }
+  if (action === 'send') {
+    const chatRow = tableActionChatRow(row);
+    if (!chatRow) return showToast('Xabar yuborish uchun chat ID topilmadi');
+    openSend(chatRow);
+  }
 }
 
 function removeSelectedRecipient(row) {
@@ -1571,8 +1632,15 @@ const MetricBar = defineComponent({
 });
 
 const DataTable = defineComponent({
-  props: { columns: Array, rows: Array, empty: String },
+  props: { columns: Array, rows: Array, empty: String, onCellAction: Function },
   setup(props, { slots }) {
+    const resolveAction = (column, row) => typeof column.action === 'function' ? column.action(row, column) : column.action;
+    const triggerAction = (event, column, row) => {
+      const action = resolveAction(column, row);
+      if (!action || typeof props.onCellAction !== 'function') return;
+      event.preventDefault();
+      props.onCellAction({ action, row, column, event });
+    };
     const renderValue = (column, row) => {
       if (column.slot && slots[column.slot]) return slots[column.slot]({ row });
       const value = row[column.key];
@@ -1588,7 +1656,25 @@ const DataTable = defineComponent({
       props.rows && props.rows.length
         ? h('table', [
           h('thead', h('tr', props.columns.map(col => h('th', { class: col.key === 'select' ? 'select-cell' : '' }, col.label)))),
-          h('tbody', props.rows.map(row => h('tr', props.columns.map(col => h('td', { class: col.key === 'select' ? 'select-cell' : '' }, renderValue(col, row))))))
+          h('tbody', props.rows.map(row => h('tr', props.columns.map(col => {
+            const action = resolveAction(col, row);
+            const cellProps = {
+              class: [
+                col.key === 'select' ? 'select-cell' : '',
+                action ? 'cell-action' : ''
+              ].filter(Boolean).join(' ')
+            };
+            if (action) {
+              cellProps.role = 'button';
+              cellProps.tabindex = 0;
+              cellProps.title = 'Ochish';
+              cellProps.onClick = event => triggerAction(event, col, row);
+              cellProps.onKeydown = event => {
+                if (event.key === 'Enter' || event.key === ' ') triggerAction(event, col, row);
+              };
+            }
+            return h('td', cellProps, renderValue(col, row));
+          }))))
         ])
         : h('div', { class: 'empty' }, props.empty || 'Ma’lumot yo‘q')
     ]);

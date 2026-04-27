@@ -5,6 +5,12 @@ const { normalizeAiIntegration, isAiIntegrationReady, DEFAULT_AI_SYSTEM_PROMPT }
 const ALLOWED_CLASSIFICATIONS = new Set(['request', 'message', 'ignore']);
 const MAX_KNOWLEDGE_CHARS = 60000;
 const MAX_AUTO_REPLY_CHARS = 1800;
+const MATCH_STOP_WORDS = new Set([
+  'bilan', 'uchun', 'qanday', 'qanaqa', 'qayerda', 'qayerdan', 'qachon', 'nega', 'nimaga', 'nima',
+  'qism', 'qismi', 'bolim', 'bolimi', 'haqida', 'kerak', 'mumkin', 'mumkinmi', 'iltimos',
+  'the', 'and', 'for', 'how', 'what', 'where', 'when', 'why',
+  'как', 'что', 'где', 'когда', 'почему', 'для'
+]);
 
 function chatCompletionsUrl(baseUrl = '') {
   const clean = String(baseUrl || '').replace(/\/+$/, '');
@@ -160,9 +166,16 @@ function mentionsHiddenAiConfig(value = '') {
   return /\b(system\s+prompt|api\s*key|bearer\s+token|ichki\s+token|maxfiy\s+sozlama)\b/i.test(value);
 }
 
+function normalizeForMatch(value = '') {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/[‘’ʼʻ`']/g, '')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ');
+}
+
 function tokenizeForMatch(value = '') {
-  const normalized = String(value || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ');
-  return [...new Set(normalized.split(/\s+/).filter(token => token.length > 2))];
+  const normalized = normalizeForMatch(value);
+  return [...new Set(normalized.split(/\s+/).filter(token => token.length > 2 && !MATCH_STOP_WORDS.has(token)))];
 }
 
 function commonPrefixLength(left = '', right = '') {
@@ -186,7 +199,9 @@ function scoreTextMatch(source = '', query = '') {
   const queryTokens = tokenizeForMatch(query);
   if (!sourceTokens.length || !queryTokens.length) return 0;
   const common = queryTokens.filter(queryToken => sourceTokens.some(sourceToken => tokenMatches(sourceToken, queryToken))).length;
-  return common / Math.max(sourceTokens.length, queryTokens.length);
+  const queryCoverage = common / queryTokens.length;
+  const sourceCoverage = common / sourceTokens.length;
+  return Math.max(sourceCoverage, queryCoverage * 0.8);
 }
 
 function parseInlineKnowledgeEntry(text = '') {

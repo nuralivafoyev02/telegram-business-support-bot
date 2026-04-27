@@ -893,6 +893,141 @@ async function testAutoReplyFallbackUsesLocalKnowledge() {
   }
 }
 
+async function testMainGroupEmployeeQuestionGetsAutoReply() {
+  const originalSelect = supabase.select;
+  const originalInsert = supabase.insert;
+  const originalFetch = global.fetch;
+  const telegramCalls = [];
+  const inserted = [];
+  clearBotSettingsCache();
+
+  supabase.select = async (table) => {
+    if (table === 'bot_settings') {
+      return [
+        { key: 'main_group', value: { chat_id: '-100777' } },
+        { key: 'ai_mode', value: { enabled: false, provider: null } },
+        { key: 'auto_reply', value: { enabled: true } },
+        {
+          key: 'ai_integration',
+          value: {
+            enabled: true,
+            provider: 'openai_compatible',
+            knowledge_text: 'Plan, fakt va bashorat loyihalar kesimida alohida ustunlarda ko‘rsatiladi. Plan rejalashtirilgan summa, fakt bajarilgan ish, bashorat esa kutilayotgan natijani bildiradi.'
+          }
+        },
+        { key: 'request_detection', value: { mode: 'keyword', min_text_length: 10 } }
+      ];
+    }
+    if (table === 'employees') return [{ id: 'employee-1', tg_user_id: 777, full_name: 'Admin', username: 'admin', is_active: true }];
+    return [];
+  };
+  supabase.insert = async (table, rows) => {
+    inserted.push({ table, rows });
+    return rows.map(row => ({ id: `${table}-row`, ...row }));
+  };
+  global.fetch = async (_url, options) => {
+    telegramCalls.push({ url: _url, body: JSON.parse(options.body) });
+    return {
+      ok: true,
+      json: async () => ({ ok: true, result: { message_id: 803 } })
+    };
+  };
+
+  try {
+    const result = await callHandler({
+      update_id: 83,
+      message: {
+        message_id: 183,
+        date: 1777100000,
+        text: 'Loyihalarning plan, fakt va bashorat qismi qanday ko‘rsatiladi?',
+        chat: { id: -100777, type: 'supergroup', title: 'Main group' },
+        from: { id: 777, first_name: 'Admin', username: 'admin', is_bot: false }
+      }
+    });
+
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.handled, 'message');
+    assert.strictEqual(telegramCalls.length, 1);
+    assert.strictEqual(telegramCalls[0].body.chat_id, -100777);
+    assert.strictEqual(telegramCalls[0].body.reply_to_message_id, 183);
+    assert.match(telegramCalls[0].body.text, /Plan, fakt va bashorat/);
+    assert.strictEqual(inserted.some(item => item.table === 'support_requests'), false);
+    assert.strictEqual(inserted.some(item => item.table === 'messages' && item.rows[0].classification === 'ai_reply'), true);
+  } finally {
+    supabase.insert = originalInsert;
+    supabase.select = originalSelect;
+    global.fetch = originalFetch;
+    clearBotSettingsCache();
+  }
+}
+
+async function testMainGroupCustomerRequestDoesNotCreateTicket() {
+  const originalSelect = supabase.select;
+  const originalInsert = supabase.insert;
+  const originalFetch = global.fetch;
+  const telegramCalls = [];
+  const inserted = [];
+  clearBotSettingsCache();
+
+  supabase.select = async (table) => {
+    if (table === 'bot_settings') {
+      return [
+        { key: 'main_group', value: { chat_id: '-100777' } },
+        { key: 'ai_mode', value: { enabled: false, provider: null } },
+        { key: 'auto_reply', value: { enabled: true } },
+        {
+          key: 'ai_integration',
+          value: {
+            enabled: true,
+            provider: 'openai_compatible',
+            knowledge_text: 'Login ishlamasa parolni tiklash oynasidan qayta urinib ko‘ring.'
+          }
+        },
+        { key: 'request_detection', value: { mode: 'keyword', min_text_length: 10 } }
+      ];
+    }
+    if (table === 'employees') return [];
+    if (table === 'support_requests') return [];
+    return [];
+  };
+  supabase.insert = async (table, rows) => {
+    inserted.push({ table, rows });
+    return rows.map(row => ({ id: `${table}-row`, ...row }));
+  };
+  global.fetch = async (_url, options) => {
+    telegramCalls.push({ url: _url, body: JSON.parse(options.body) });
+    return {
+      ok: true,
+      json: async () => ({ ok: true, result: { message_id: 804 } })
+    };
+  };
+
+  try {
+    const result = await callHandler({
+      update_id: 84,
+      message: {
+        message_id: 184,
+        date: 1777100000,
+        text: 'Login qilolmayapman, qanday tiklayman?',
+        chat: { id: -100777, type: 'supergroup', title: 'Main group' },
+        from: { id: 1001, first_name: 'Mijoz', is_bot: false }
+      }
+    });
+
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.handled, 'message');
+    assert.strictEqual(inserted.some(item => item.table === 'support_requests'), false);
+    assert.strictEqual(inserted.some(item => item.table === 'request_events'), false);
+    assert.strictEqual(telegramCalls.length, 1);
+    assert.match(telegramCalls[0].body.text, /parolni tiklash/);
+  } finally {
+    supabase.insert = originalInsert;
+    supabase.select = originalSelect;
+    global.fetch = originalFetch;
+    clearBotSettingsCache();
+  }
+}
+
 async function testMainGroupStatsTriggerSendsReport() {
   const originalInsert = supabase.insert;
   const originalSelect = supabase.select;
@@ -1483,6 +1618,8 @@ async function testBotRemovalMarksGroupInactive() {
   await testClassifierJsonIsNotSentAsAutoReply();
   await testAiModeAutoRepliesToGroupRequest();
   await testAutoReplyFallbackUsesLocalKnowledge();
+  await testMainGroupEmployeeQuestionGetsAutoReply();
+  await testMainGroupCustomerRequestDoesNotCreateTicket();
   await testMainGroupStatsTriggerSendsReport();
   await testReplyToCustomerTicketClosesRequest();
   await testEmployeePlainAnswerClosesLatestOpenRequest();

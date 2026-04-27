@@ -28,6 +28,8 @@ const BROADCAST_CONCURRENCY = clampInt(optionalEnv('BROADCAST_CONCURRENCY', '8')
 const PRIVATE_GREETING_REPLY = "Va alaykum assalom! So'rovingiz bo'lsa guruhga yoki @uyqur_nurali ga yozishingiz mumkin.";
 const PRIVATE_UNKNOWN_REPLY = "So'rovingizni guruhga yoki @uyqur_nurali ga berishingiz mumkin";
 const PRIVATE_REQUEST_REPLY = "So'rovingiz qabul qilindi. Guruhga yoki @uyqur_nurali ga yozishingiz mumkin.";
+const MAIN_GROUP_AUTO_REPLY_MISS = "Bu savol bo'yicha bilim bazasida aniq javob topilmadi. Mas'ul xodim javob beradi.";
+const QUESTION_LIKE_RE = /[?؟]|\b(qanday|qanaqa|qayerda|qayerdan|qachon|nega|nimaga|nima\s+uchun|qancha|savol|tushuntir|ko'?rsat|o'?rgat|как|где|почему|зачем|сколько|what|how|where|why|when)\b/i;
 
 function clampInt(value, fallback, min, max) {
   const parsed = Number.parseInt(value, 10);
@@ -138,12 +140,21 @@ function sameChatId(left, right) {
   return String(left || '').trim() === String(right || '').trim();
 }
 
+function configuredMainGroupId(settings = null) {
+  return String(settings && settings.mainGroupId || optionalEnv('MAIN_GROUP_ID', '')).trim();
+}
+
+function isConfiguredMainGroup(chat = {}, settings = null) {
+  const configured = configuredMainGroupId(settings);
+  return Boolean(configured && sameChatId(configured, chat.id));
+}
+
 function isMainStatsTrigger(text = '') {
   return MAIN_STATS_TRIGGER_RE.test(text);
 }
 
 async function isMainStatsGroup(chat = {}, settings = null) {
-  const configured = String(settings && settings.mainGroupId || optionalEnv('MAIN_GROUP_ID', '')).trim();
+  const configured = configuredMainGroupId(settings);
   if (configured) return sameChatId(configured, chat.id);
 
   const target = await resolveMainStatsChatId().catch(error => {
@@ -759,7 +770,22 @@ function shouldAutoReply(settings = {}) {
   return Boolean(settings.autoReply);
 }
 
-async function maybeSendAiAutoReply({ updateKind, message, sourceType, text, settings }) {
+function isQuestionLike(text = '') {
+  return QUESTION_LIKE_RE.test(String(text || ''));
+}
+
+function classifyAsCustomerRequest({ updateKind, message, text, settings }) {
+  const chat = message.chat || {};
+  return classifyMessage({
+    text,
+    chatType: chat.type,
+    isKnownEmployee: false,
+    isBusiness: String(updateKind).includes('business'),
+    ...settings
+  }) === 'request';
+}
+
+async function maybeSendAiAutoReply({ updateKind, message, sourceType, text, settings, fallbackText = '' }) {
   if (!shouldAutoReply(settings)) return false;
   if (message.from && message.from.is_bot) return false;
   if (!hasCustomerFacingPayload(message, text)) return false;
@@ -782,6 +808,7 @@ async function maybeSendAiAutoReply({ updateKind, message, sourceType, text, set
         settings
       });
     }
+    if (!reply && fallbackText) reply = fallbackText;
     if (!reply) return false;
 
     const options = { reply_to_message_id: message.message_id, parse_mode: null };
@@ -795,6 +822,24 @@ async function maybeSendAiAutoReply({ updateKind, message, sourceType, text, set
     logBackgroundError('ai-auto-reply', error);
     return false;
   }
+}
+
+async function maybeAnswerMainGroupQuestion({ updateKind, message, sourceType, text, settings }) {
+  const chat = message.chat || {};
+  if (!isGroupChat(chat)) return false;
+  if (message.reply_to_message) return false;
+  if (!isQuestionLike(text)) return false;
+  if (!await isMainStatsGroup(chat, settings)) return false;
+  if (!classifyAsCustomerRequest({ updateKind, message, text, settings })) return false;
+
+  return maybeSendAiAutoReply({
+    updateKind,
+    message,
+    sourceType,
+    text,
+    settings,
+    fallbackText: MAIN_GROUP_AUTO_REPLY_MISS
+  });
 }
 
 async function handleCommand(updateKind, message, sourceType, text, classification) {
@@ -870,6 +915,11 @@ async function processMessage(updateKind, message) {
   if (await maybeStartGroupBroadcastDeletePreview(message, text, settings)) return;
   if (await maybeStartGroupBroadcastPreview(message, text, settings)) return;
 
+  if (isGroupChat(chat) && isConfiguredMainGroup(chat, settings)) {
+    await maybeAnswerMainGroupQuestion({ updateKind, message, sourceType, text, settings });
+    return;
+  }
+
   if (classification === 'done') {
     const closer = employee || await metrics.ensureEmployee(from);
     const result = await metrics.closeLatestRequest({ message, employee: closer });
@@ -881,6 +931,8 @@ async function processMessage(updateKind, message) {
 
   if (await maybeCloseRequestFromReply(message, classification, employee)) return;
 
+  if (await maybeAnswerMainGroupQuestion({ updateKind, message, sourceType, text, settings })) return;
+
   if (await maybeCloseRequestFromEmployeeAnswer(message, classification, employee, text)) return;
 
   if (classification === 'request') {
@@ -889,7 +941,10 @@ async function processMessage(updateKind, message) {
       sourceType,
       companyId: chatRow ? chatRow.company_id : null
     });
-    if (await maybeSendAiAutoReply({ updateKind, message, sourceType, text, settings })) return;
+    const mainGroupFallback = isGroupChat(chat) && isConfiguredMainGroup(chat, settings)
+      ? MAIN_GROUP_AUTO_REPLY_MISS
+      : '';
+    if (await maybeSendAiAutoReply({ updateKind, message, sourceType, text, settings, fallbackText: mainGroupFallback })) return;
     await maybeReplyPrivateFallback(updateKind, message, classification);
     return;
   }
