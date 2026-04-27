@@ -181,10 +181,10 @@ function buildMainStatsQuestionText({ text, summaryRows, employees, requests }) 
       lines.push('Bugun hali hech kim ticket yopmagan.');
     } else if (intents.wantsActiveEmployee && !intents.wantsTopCloser) {
       lines.push(`Eng faol xodim: <b>${escapeHtml(employeeLabel(top))}</b>`);
-      lines.push(`Yopgan ticket: <b>${formatNumber(top.closed_requests)}</b> ta, ishlagan chat: <b>${formatNumber(top.handled_chats)}</b> ta.`);
+      lines.push(`Yopilgan ticketlar: <b>${formatNumber(top.closed_requests)}</b> ta, jami: <b>${formatNumber(top.handled_chats)}</b> ta chatdan.`);
     } else {
       lines.push(`Eng ko‘p ticket yopgan xodim: <b>${escapeHtml(employeeLabel(top))}</b>`);
-      lines.push(`Bugun yopgan ticket: <b>${formatNumber(top.closed_requests)}</b> ta.`);
+      lines.push(`Bugun yopilgan ticketlar: <b>${formatNumber(top.closed_requests)}</b> ta.`);
     }
   }
 
