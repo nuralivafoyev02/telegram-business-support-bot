@@ -639,7 +639,7 @@ async function listEmployees(query) {
       limit: '5000'
     }).catch(() => []),
     supabase.select('messages', {
-      select: 'chat_id,from_tg_user_id,from_name,from_username,employee_id,business_connection_id,source_type,classification,text,created_at',
+      select: 'id,tg_message_id,chat_id,from_tg_user_id,from_name,from_username,employee_id,business_connection_id,source_type,classification,text,created_at',
       order: supabase.order('created_at', false),
       limit: '5000'
     }).catch(() => [])
@@ -652,6 +652,26 @@ async function listEmployees(query) {
     const chat = chatMap.get(telegramIdKey(chatId));
     return chat ? displayChatTitle(chat) : telegramIdKey(chatId);
   };
+  const requestSummary = request => ({
+    id: request.id,
+    chat_id: request.chat_id,
+    chat_title: chatTitle(request.chat_id),
+    status: request.status,
+    customer_name: request.customer_name || telegramIdKey(request.customer_tg_id) || 'Mijoz',
+    customer_tg_id: request.customer_tg_id || null,
+    initial_text: request.initial_text || '',
+    created_at: request.created_at || null,
+    closed_at: request.closed_at || null
+  });
+  const messageSummary = message => ({
+    id: message.id || null,
+    message_id: message.tg_message_id || null,
+    chat_id: message.chat_id,
+    chat_title: chatTitle(message.chat_id),
+    text: message.text || '',
+    created_at: message.created_at || null,
+    classification: message.classification || ''
+  });
 
   return employees.map(employee => {
     const related = requests.filter(request => request.closed_by_employee_id === employee.id);
@@ -683,6 +703,39 @@ async function listEmployees(query) {
     const todayOpenRequests = todayRelatedRequests.filter(request => request.status === 'open');
     const openCustomerNames = [...new Set(todayOpenRequests.map(request => request.customer_name || request.initial_text || telegramIdKey(request.customer_tg_id)).filter(Boolean))].slice(0, 6);
     const writtenGroupNames = [...new Set([...writtenGroupIds].map(chatTitle).filter(Boolean))].slice(0, 6);
+    const groupActivityIds = new Set([
+      ...writtenGroupIds,
+      ...todayClosed.map(request => telegramIdKey(request.chat_id)).filter(Boolean),
+      ...todayOpenRequests.map(request => telegramIdKey(request.chat_id)).filter(Boolean)
+    ]);
+    const todayGroupActivity = [...groupActivityIds]
+      .map(chatId => {
+        const groupMessages = employeeMessagesToday
+          .filter(message => telegramIdKey(message.chat_id) === chatId)
+          .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))
+          .slice(0, 20)
+          .map(messageSummary);
+        const groupClosed = todayClosed
+          .filter(request => telegramIdKey(request.chat_id) === chatId)
+          .sort((a, b) => String(b.closed_at || '').localeCompare(String(a.closed_at || '')))
+          .map(requestSummary);
+        const groupOpen = todayOpenRequests
+          .filter(request => telegramIdKey(request.chat_id) === chatId)
+          .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))
+          .map(requestSummary);
+        return {
+          chat_id: chatId,
+          title: chatTitle(chatId),
+          message_count: groupMessages.length,
+          closed_count: groupClosed.length,
+          open_count: groupOpen.length,
+          messages: groupMessages,
+          closed_requests: groupClosed,
+          open_requests: groupOpen
+        };
+      })
+      .filter(group => group.message_count || group.closed_count || group.open_count)
+      .sort((a, b) => (b.message_count + b.closed_count + b.open_count) - (a.message_count + a.closed_count + a.open_count));
     return {
       ...employee,
       received_requests: related.length,
@@ -696,6 +749,10 @@ async function listEmployees(query) {
       today_written_groups_count: writtenGroupIds.size,
       today_written_groups: writtenGroupNames,
       today_open_customers: openCustomerNames,
+      today_group_activity: todayGroupActivity,
+      today_open_requests_detail: todayOpenRequests
+        .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))
+        .map(requestSummary),
       contact_chat_id: directChat ? directChat.chat_id : (latestMessage && latestMessage.chat_id) || employee.tg_user_id || null,
       business_connection_id: businessConnectionId || null,
       can_message: !!(employee.tg_user_id && (directChat || latestMessage || businessConnectionId))

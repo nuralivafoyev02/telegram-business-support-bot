@@ -687,6 +687,10 @@ async function testEmployeesIncludeDailyWorkStats() {
     assert.strictEqual(employee.today_open_requests, 1);
     assert.deepStrictEqual(employee.today_written_groups, ['Support guruhi']);
     assert.deepStrictEqual(employee.today_open_customers, ['Mijoz B']);
+    assert.strictEqual(employee.today_group_activity[0].title, 'Support guruhi');
+    assert.strictEqual(employee.today_group_activity[0].messages[0].text, 'Javob');
+    assert.strictEqual(employee.today_group_activity[0].closed_requests[0].initial_text, 'A');
+    assert.strictEqual(employee.today_open_requests_detail[0].initial_text, 'B');
   } finally {
     supabase.select = originalSelect;
   }

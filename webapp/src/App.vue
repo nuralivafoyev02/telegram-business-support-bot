@@ -620,6 +620,63 @@
     </Transition>
 
     <Transition name="modal-fade">
+      <Modal v-if="modal === 'employeeGroups'" :title="employeeDrilldownTitle" wide @close="closeModal">
+        <div v-if="employeeGroupActivity.length" class="drilldown-stack">
+          <section v-for="group in employeeGroupActivity" :key="group.chat_id" class="drilldown-group">
+            <div class="drilldown-head">
+              <div>
+                <div class="card-title">{{ group.title || group.chat_id }}</div>
+                <div class="card-note">
+                  {{ fmtNumber(group.message_count) }} xabar · {{ fmtNumber(group.closed_count) }} yopilgan · {{
+                    fmtNumber(group.open_count) }} ochiq
+                </div>
+              </div>
+              <button class="btn small" type="button" @click="loadChatDetail(group)">Chat tafsiloti</button>
+            </div>
+
+            <div class="drilldown-columns">
+              <div class="drilldown-panel">
+                <div class="drilldown-label">Yozgan xabarlari</div>
+                <div v-if="group.messages?.length" class="mini-list">
+                  <article v-for="message in group.messages" :key="message.id || message.message_id || message.created_at"
+                    class="mini-item">
+                    <p>{{ message.text || 'Matn yo‘q' }}</p>
+                    <time>{{ fmtDate(message.created_at) }}</time>
+                  </article>
+                </div>
+                <div v-else class="empty compact">Xabar yo‘q</div>
+              </div>
+
+              <div class="drilldown-panel">
+                <div class="drilldown-label">Yopilgan so‘rovlar</div>
+                <div v-if="group.closed_requests?.length" class="mini-list">
+                  <article v-for="request in group.closed_requests" :key="request.id" class="mini-item">
+                    <b>{{ request.customer_name || 'Mijoz' }}</b>
+                    <p>{{ request.initial_text || 'Ticket matni yo‘q' }}</p>
+                    <time>{{ fmtDate(request.closed_at) }}</time>
+                  </article>
+                </div>
+                <div v-else class="empty compact">Yopilgan so‘rov yo‘q</div>
+              </div>
+            </div>
+          </section>
+        </div>
+        <div v-else class="empty">Bugun yozgan guruhlar topilmadi</div>
+      </Modal>
+    </Transition>
+
+    <Transition name="modal-fade">
+      <Modal v-if="modal === 'employeeOpenRequests'" :title="employeeDrilldownTitle" wide @close="closeModal">
+        <DataTable :columns="employeeOpenRequestColumns" :rows="employeeOpenRequests" empty="Ochiq qolgan so‘rov yo‘q"
+          :on-cell-action="handleTableCellAction">
+          <template #requestReply="{ row }">
+            <button class="btn small" type="button" @click.stop="openRequestReply(row)">Javob</button>
+          </template>
+        </DataTable>
+      </Modal>
+    </Transition>
+
+    <Transition name="modal-fade">
       <Modal v-if="modal === 'requestReply'" title="Ochiq ticketga javob" @close="closeModal">
         <form class="form" @submit.prevent="sendRequestReply">
           <label class="label">Mijoz
@@ -791,6 +848,9 @@ const privates = ref([]);
 const employees = ref([]);
 const requestRows = ref([]);
 const chatDetail = ref({ chat: null, requests: [], timeline: [] });
+const employeeDrilldown = ref(null);
+const employeeGroupActivity = ref([]);
+const employeeOpenRequests = ref([]);
 const mediaUrls = ref({});
 const mediaLoading = ref({});
 const mediaErrors = ref({});
@@ -980,6 +1040,7 @@ const chatDetailTitle = computed(() => {
   return chat ? `Chat: ${chat.title || chat.chat_id}` : 'Chat tafsiloti';
 });
 const chatConversation = computed(() => chatDetail.value.conversation || []);
+const employeeDrilldownTitle = computed(() => employeeDrilldown.value ? `Xodim: ${employeeDrilldown.value.full_name || employeeDrilldown.value.username || '—'}` : 'Xodim tafsiloti');
 
 const employeeStatColumns = [
   { key: 'full_name', label: 'Xodim', action: 'employeeInfo' },
@@ -1030,9 +1091,9 @@ const employeeColumns = [
   { key: 'closed_requests', label: 'Yopilgan', action: 'employeeInfo' },
   { key: 'today_received_requests', label: 'Bugun ticket', format: fmtNumber, action: 'employeeInfo' },
   { key: 'today_answered_requests', label: 'Javob berilgan', format: fmtNumber, action: 'employeeInfo' },
-  { key: 'today_open_requests', label: 'Ochiq qolgan', format: fmtNumber, action: 'employeeInfo' },
-  { key: 'today_written_groups', label: 'Yozgan guruhlar', format: listPreview, truncate: true, action: 'employeeInfo' },
-  { key: 'today_open_customers', label: 'Qolgan so‘rovlar', format: listPreview, truncate: true, action: 'employeeInfo' },
+  { key: 'today_open_requests', label: 'Ochiq qolgan', format: fmtNumber, action: 'employeeOpenRequests' },
+  { key: 'today_written_groups', label: 'Yozgan guruhlar', format: listPreview, truncate: true, action: 'employeeGroups' },
+  { key: 'today_open_customers', label: 'Qolgan so‘rovlar', format: listPreview, truncate: true, action: 'employeeOpenRequests' },
   { key: 'can_message', label: 'Yozish', format: v => v ? 'Mumkin' : 'Start kerak', action: 'employeeMessage' },
   { key: 'is_active', label: 'Status', format: v => v ? 'Aktiv' : 'O‘chiq', badge: true, action: 'employeeInfo' },
   { key: 'actions', label: 'Amal', slot: 'actions' }
@@ -1086,6 +1147,14 @@ const chatRequestColumns = [
   { key: 'solution_text', label: 'Yechim/Javob', truncate: true, format: v => v || '—', action: 'chatDetail' },
   { key: 'created_at', label: 'Kelgan', format: fmtDate },
   { key: 'solution_at', label: 'Javob vaqti', format: fmtDate },
+  { key: 'reply', label: 'Javob', slot: 'requestReply' }
+];
+
+const employeeOpenRequestColumns = [
+  { key: 'chat_title', label: 'Guruh', action: 'chatDetail' },
+  { key: 'customer_name', label: 'Mijoz', action: 'chatDetail' },
+  { key: 'initial_text', label: 'So‘rov', truncate: true, action: 'chatDetail' },
+  { key: 'created_at', label: 'Kelgan', format: fmtDate, action: 'chatDetail' },
   { key: 'reply', label: 'Javob', slot: 'requestReply' }
 ];
 
@@ -1426,6 +1495,14 @@ function handleTableCellAction({ action, row }) {
     openEmployee(tableActionEmployeeRow(row));
     return;
   }
+  if (action === 'employeeGroups') {
+    openEmployeeGroups(row);
+    return;
+  }
+  if (action === 'employeeOpenRequests') {
+    openEmployeeOpenRequests(row);
+    return;
+  }
   if (action === 'employeeMessage') {
     const employee = tableActionEmployeeRow(row);
     if (!employee.id && !employee.employee_id && !employee.tg_user_id) return showToast('Xodim Telegram ID topilmadi');
@@ -1469,6 +1546,20 @@ function openEmployee(row = null) {
     is_active: row?.is_active ?? true
   });
   modal.value = 'employee';
+}
+
+function openEmployeeGroups(row = {}) {
+  employeeDrilldown.value = row;
+  employeeGroupActivity.value = Array.isArray(row.today_group_activity) ? row.today_group_activity : [];
+  if (!employeeGroupActivity.value.length) return showToast('Bugun yozgan guruhlar topilmadi');
+  modal.value = 'employeeGroups';
+}
+
+function openEmployeeOpenRequests(row = {}) {
+  employeeDrilldown.value = row;
+  employeeOpenRequests.value = Array.isArray(row.today_open_requests_detail) ? row.today_open_requests_detail : [];
+  if (!employeeOpenRequests.value.length) return showToast('Ochiq qolgan so‘rov topilmadi');
+  modal.value = 'employeeOpenRequests';
 }
 
 function closeModal() {
