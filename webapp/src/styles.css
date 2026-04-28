@@ -1396,6 +1396,15 @@ body {
   color: var(--muted);
   font-size: 15px;
 }
+.clickable-metric,
+.alert-item.clickable {
+  cursor: pointer;
+}
+.clickable-metric:focus-visible,
+.alert-item.clickable:focus-visible {
+  outline: 3px solid rgba(59, 130, 246, .28);
+  outline-offset: 3px;
+}
 .danger-text {
   color: var(--danger) !important;
 }

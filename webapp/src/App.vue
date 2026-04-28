@@ -1,11 +1,11 @@
 <template>
   <main v-if="!token" class="login-screen">
     <section class="card login-card">
-      <div class="logo">AN</div>
-      <h1>Analytics</h1>
-      <p>Rahbar uchun nazorat paneli</p>
+      <div class="logo">UQ</div>
+      <h1>Uyqur Support</h1>
+      <p>Texnik yordam paneli</p>
       <form class="form" @submit.prevent="submitLogin">
-        <label class="label">Login
+        <label class="label">Kirish nomi
           <input v-model.trim="loginForm.username" class="input" autocomplete="username" placeholder="admin"
             :disabled="loadingAction === 'login'" @input="clearLoginFeedback" />
         </label>
@@ -34,9 +34,10 @@
   <div v-else class="app-shell">
     <aside class="sidebar">
       <div class="brand">
+        <div class="logo">UQ</div>
         <div>
-          <div class="brand-title">Analytics</div>
-          <div class="brand-subtitle">Rahbar uchun nazorat paneli</div>
+          <div class="brand-title">Uyqur Support</div>
+          <div class="brand-subtitle">Texnik yordam paneli</div>
         </div>
       </div>
 
@@ -82,8 +83,8 @@
           <template v-if="activeTab === 'stats'">
             <div class="analytics-hero">
               <div>
-                <h2>1-bo‘lim: Support Performance</h2>
-                <p>Support hodimlari aktivligi, javob tezligi va javobsiz ticketlar nazorati</p>
+                <h2>1-bo‘lim: Texnik yordam natijalari</h2>
+                <p>Xodimlar faolligi, javob tezligi va ochiq qolgan so‘rovlar nazorati</p>
               </div>
               <div class="segmented" role="group" aria-label="Statistika davri">
                 <button v-for="period in periodOptions" :key="period.key"
@@ -97,7 +98,7 @@
             <div class="metric-strip">
               <article class="card metric">
                 <div class="metric-head">
-                  <div class="metric-label">{{ selectedPeriodLabel }} ticketlar</div>
+                  <div class="metric-label">{{ selectedPeriodLabel }} so‘rovlar</div>
                   <span class="metric-icon">🎫</span>
                 </div>
                 <div class="metric-value">{{ fmtNumber(selectedPeriodStats.total_requests) }}</div>
@@ -109,23 +110,25 @@
                   <span class="metric-icon good">✅</span>
                 </div>
                 <div class="metric-value">{{ fmtNumber(selectedPeriodStats.closed_requests) }}</div>
-                <div class="metric-mini">{{ fmtPercent(selectedPeriodStats.close_rate) }} ticket yopilgan</div>
+                <div class="metric-mini">{{ fmtPercent(selectedPeriodStats.close_rate) }} so‘rov yopilgan</div>
               </article>
-              <article class="card metric">
+              <article class="card metric clickable-metric" role="button" tabindex="0" title="Ochiq so‘rovlarni ko‘rish"
+                @click="openRemainingRequests" @keydown.enter.prevent="openRemainingRequests"
+                @keydown.space.prevent="openRemainingRequests">
                 <div class="metric-head">
-                  <div class="metric-label">Javobsiz</div>
+                  <div class="metric-label">Ochiq so‘rovlar</div>
                   <span class="metric-icon warn">⚠️</span>
                 </div>
                 <div class="metric-value danger-text">{{ fmtNumber(selectedPeriodStats.open_requests) }}</div>
-                <div class="metric-mini">{{ fmtNumber(unansweredAlertTotal) }} ta alert nazoratda</div>
+                <div class="metric-mini">{{ fmtNumber(unansweredAlertTotal) }} ta so‘rov javob kutmoqda</div>
               </article>
               <article class="card metric">
                 <div class="metric-head">
-                  <div class="metric-label">Avg response</div>
+                  <div class="metric-label">O‘rtacha javob</div>
                   <span class="metric-icon">⏱️</span>
                 </div>
                 <div class="metric-value">{{ fmtNumber(selectedPeriodStats.avg_close_minutes) }} min</div>
-                <div class="metric-mini">SLA: {{ fmtPercent(selectedPeriodStats.close_rate) }}</div>
+                <div class="metric-mini">Yopilish foizi: {{ fmtPercent(selectedPeriodStats.close_rate) }}</div>
               </article>
             </div>
 
@@ -135,10 +138,10 @@
               <section class="card performance-card">
                 <div class="card-header performance-head">
                   <div>
-                    <div class="card-title">Hodimlar performance jadvali</div>
-                    <div class="card-note">Kim qancha ticketga javob berdi va SLA qanday</div>
+                    <div class="card-title">Xodimlar natija jadvali</div>
+                    <div class="card-note">Kim qancha so‘rovga javob berdi va yopilish foizi qanday</div>
                   </div>
-                  <span v-if="topPerformerName" class="success-pill">Top hodim: {{ topPerformerName }}</span>
+                  <span v-if="topPerformerName" class="success-pill">Eng faol xodim: {{ topPerformerName }}</span>
                 </div>
                 <div class="performance-table-wrap">
                   <table class="performance-table">
@@ -148,8 +151,8 @@
                         <th>Chatlar</th>
                         <th>Javob</th>
                         <th>Javobsiz</th>
-                        <th>Avg vaqt</th>
-                        <th>SLA</th>
+                        <th>O‘rtacha vaqt</th>
+                        <th>Yopilish foizi</th>
                         <th>Baho</th>
                       </tr>
                     </thead>
@@ -165,19 +168,20 @@
                       </tr>
                     </tbody>
                   </table>
-                  <div v-if="!supportPerformanceRows.length" class="empty compact">Hozircha performance ma’lumoti yo‘q</div>
+                  <div v-if="!supportPerformanceRows.length" class="empty compact">Hozircha natija ma’lumoti yo‘q</div>
                 </div>
               </section>
 
               <section class="card alert-card">
                 <div class="card-header">
                   <div>
-                    <div class="card-title">⚠️ Javobsiz alertlar</div>
-                    <div class="card-note">Ochiq qolgan ticketlar</div>
+                    <div class="card-title">⚠️ Ochiq so‘rovlar</div>
+                    <div class="card-note">Javob kutayotgan murojaatlar</div>
                   </div>
                 </div>
                 <div class="alert-list">
-                  <article v-for="row in unansweredAlerts" :key="row.key" class="alert-item">
+                  <article v-for="row in unansweredAlerts" :key="row.key" class="alert-item"
+                    :class="{ clickable: row.chat_id }" @click="openAlertRequests(row)">
                     <div class="alert-item-head">
                       <b>{{ row.title }}</b>
                       <span>{{ fmtNumber(row.open_requests) }} ta</span>
@@ -185,7 +189,7 @@
                     <p>{{ row.oldest_label }}</p>
                     <small>Mas’ul: {{ row.owner }}</small>
                   </article>
-                  <div v-if="!unansweredAlerts.length" class="empty compact">Javobsiz alert yo‘q</div>
+                  <div v-if="!unansweredAlerts.length" class="empty compact">Ochiq so‘rov yo‘q</div>
                 </div>
               </section>
             </div>
@@ -196,7 +200,7 @@
               <section class="card chart-card">
                 <div class="card-header">
                   <div>
-                    <div class="card-title">Davrlar bo‘yicha ticketlar</div>
+                    <div class="card-title">Davrlar bo‘yicha so‘rovlar</div>
                     <div class="card-note">Bugun, hafta, oy va jami kesimi</div>
                   </div>
                 </div>
@@ -214,8 +218,8 @@
               <section class="card chart-card">
                 <div class="card-header">
                   <div>
-                    <div class="card-title">Top xodimlar</div>
-                    <div class="card-note">Yopilgan ticketlar bo‘yicha</div>
+                    <div class="card-title">Eng faol xodimlar</div>
+                    <div class="card-note">Yopilgan so‘rovlar bo‘yicha</div>
                   </div>
                 </div>
                 <div class="chart-bars">
@@ -256,12 +260,12 @@
               <section class="card">
                 <div class="card-header">
                   <div>
-                    <div class="card-title">Eng ko‘p ticket yopgan xodimlar</div>
+                    <div class="card-title">Eng ko‘p so‘rov yopgan xodimlar</div>
                     <div class="card-note">{{ selectedPeriodLabel }} kesimi</div>
                   </div>
 
                 </div>
-                <DataTable :columns="topEmployeeColumns" :rows="topEmployeeRows" empty="Bu davrda yopilgan ticket yo‘q"
+                <DataTable :columns="topEmployeeColumns" :rows="topEmployeeRows" empty="Bu davrda yopilgan so‘rov yo‘q"
                   :on-cell-action="handleTableCellAction">
                   <template #employeeShare="{ row }">
                     <MetricBar :value="row.close_share_pct" />
@@ -286,7 +290,7 @@
                 <div class="card-header">
                   <div>
                     <div class="card-title">Guruhlar bo‘yicha mijoz so‘rovlari</div>
-                    <div class="card-note">Jami so‘rov, ochiq ticket va yopilish foizi</div>
+                    <div class="card-note">Jami so‘rov, ochiq murojaat va yopilish foizi</div>
                   </div>
                 </div>
                 <DataTable :columns="groupPerformanceColumns" :rows="groupPerformanceRows"
@@ -406,7 +410,7 @@
                   </div>
                 </div>
                 <form class="form settings-form" @submit.prevent="saveAdmin">
-                  <label class="label">Login
+                  <label class="label">Kirish nomi
                     <input v-model.trim="adminForm.username" class="input" placeholder="admin" />
                   </label>
                   <label class="label">Ism
@@ -428,16 +432,16 @@
                   </div>
                 </div>
                 <form class="form settings-form" @submit.prevent="saveSettings">
-                  <label class="label">AI mode
+                  <label class="label">AI rejimi
                     <select v-model="settingsForm.ai_mode" class="select">
-                      <option value="false">O‘chiq</option>
+                      <option value="false">O‘chirilgan</option>
                       <option value="true">Local smart</option>
                       <option value="model" :disabled="!aiIntegrationReady">{{ aiModelOptionLabel }}</option>
                     </select>
                   </label>
-                  <label class="label">Avto javob
+                  <label class="label">Avtomatik javob
                     <select v-model="settingsForm.auto_reply" class="select">
-                      <option value="false">O‘chiq</option>
+                      <option value="false">O‘chirilgan</option>
                       <option value="true">AI yoki bot</option>
                     </select>
                   </label>
@@ -449,8 +453,8 @@
                   </label>
                   <label class="label">So‘rov aniqlash rejimi
                     <select v-model="settingsForm.request_detection" class="select">
-                      <option value="keyword">Keyword</option>
-                      <option value="all_private_keyword_group">Private hammasi, group keyword</option>
+                      <option value="keyword">Kalit so‘z</option>
+                      <option value="all_private_keyword_group">Shaxsiy chatlar hammasi, guruhlar kalit so‘z bilan</option>
                     </select>
                   </label>
                   <button class="btn primary" :disabled="loadingAction === 'saveSettings'">{{ loadingAction ===
@@ -458,14 +462,14 @@
                 </form>
                 <div class="webhook-panel">
                   <div>
-                    <div class="card-title">Telegram webhook</div>
+                    <div class="card-title">Telegram ulanishi</div>
                   </div>
                   <div class="actions webhook-actions">
                     <button class="btn" :disabled="loadingAction === 'webhookInfo'" @click="checkTelegramWebhook">{{
                       loadingAction === 'webhookInfo' ? 'Tekshirilmoqda...' : 'Holatni ko‘rish' }}</button>
                     <button class="btn primary" :disabled="loadingAction === 'webhookConnect'"
                       @click="reconnectTelegramWebhook">{{ loadingAction === 'webhookConnect' ? 'Ulanmoqda...' :
-                        'Webhookni ulash' }}</button>
+                        'Telegram ulanishini yangilash' }}</button>
                   </div>
                 </div>
                 <Transition name="fade">
@@ -485,32 +489,32 @@
                   <span class="status-pill" :class="{ ready: aiIntegrationReady, error: aiIntegrationHasError }">{{ aiIntegrationStatus }}</span>
                 </div>
                 <form class="form settings-form integration-form" @submit.prevent="saveIntegration">
-                  <label class="label">Provider
+                  <label class="label">Xizmat turi
                     <select v-model="integrationForm.provider" class="select">
-                      <option value="openai_compatible">OpenAI-compatible</option>
+                      <option value="openai_compatible">OpenAI formatiga mos</option>
                     </select>
                   </label>
-                  <label class="label">Model label
+                  <label class="label">Model nomi
                     <input v-model.trim="integrationForm.label" class="input" placeholder="Uyqur AI" />
                   </label>
-                  <label class="label">Base URL
+                  <label class="label">Asosiy manzil
                     <input v-model.trim="integrationForm.base_url" class="input"
                       placeholder="https://api.openai.com/v1" />
                   </label>
                   <label class="label">Model
                     <input v-model.trim="integrationForm.model" class="input" placeholder="gpt-4o-mini" />
                   </label>
-                  <label class="label">API token
+                  <label class="label">API kalit
                     <input v-model="integrationForm.api_key" class="input" type="password"
-                      :placeholder="integrationForm.has_api_key ? 'Saqlangan tokenni almashtirish' : 'sk-...'" />
+                      :placeholder="integrationForm.has_api_key ? 'Saqlangan kalitni almashtirish' : 'sk-...'" />
                   </label>
                   <label class="label">Holat
                     <select v-model="integrationForm.enabled" class="select">
-                      <option :value="true">Aktiv</option>
-                      <option :value="false">O‘chiq</option>
+                      <option :value="true">Faol</option>
+                      <option :value="false">O‘chirilgan</option>
                     </select>
                   </label>
-                  <label class="label wide">System prompt
+                  <label class="label wide">Tizim ko‘rsatmasi
                     <textarea v-model="integrationForm.system_prompt" class="textarea tall"></textarea>
                   </label>
                   <label class="label wide">Bilim bazasi
@@ -581,7 +585,7 @@
           <label class="label">Telegram ID
             <input v-model.trim="employeeForm.tg_user_id" class="input" placeholder="123456789" />
           </label>
-          <label class="label">Username
+          <label class="label">Foydalanuvchi nomi
             <input v-model.trim="employeeForm.username" class="input" placeholder="username" />
           </label>
           <label class="label">Telefon
@@ -594,10 +598,10 @@
               <option value="owner">Ega</option>
             </select>
           </label>
-          <label class="label">Status
+          <label class="label">Holat
             <select v-model="employeeForm.is_active" class="select">
-              <option :value="true">Aktiv</option>
-              <option :value="false">O‘chiq</option>
+              <option :value="true">Faol</option>
+              <option :value="false">O‘chirilgan</option>
             </select>
           </label>
           <button class="btn primary" style="grid-column: 1 / -1" :disabled="loadingAction === 'saveEmployee'">{{
@@ -670,6 +674,17 @@
     </Transition>
 
     <Transition name="modal-fade">
+      <Modal v-if="modal === 'openRequests'" :title="openRequestsTitle" wide @close="closeModal">
+        <DataTable :columns="openRequestColumns" :rows="dashboard.openRequests || []"
+          empty="Ochiq so‘rov qolmagan" :on-cell-action="handleTableCellAction">
+          <template #requestReply="{ row }">
+            <button class="btn small" type="button" @click.stop="openRequestReply(row)">Javob</button>
+          </template>
+        </DataTable>
+      </Modal>
+    </Transition>
+
+    <Transition name="modal-fade">
       <Modal v-if="modal === 'employeeGroups'" :title="employeeDrilldownTitle" wide @close="closeModal">
         <div v-if="employeeGroupActivity.length" class="drilldown-stack">
           <section v-for="group in employeeGroupActivity" :key="group.chat_id" class="drilldown-group">
@@ -702,7 +717,7 @@
                 <div v-if="group.closed_requests?.length" class="mini-list">
                   <article v-for="request in group.closed_requests" :key="request.id" class="mini-item">
                     <b>{{ request.customer_name || 'Mijoz' }}</b>
-                    <p>{{ request.initial_text || 'Ticket matni yo‘q' }}</p>
+                    <p>{{ request.initial_text || 'So‘rov matni yo‘q' }}</p>
                     <time>{{ fmtDate(request.closed_at) }}</time>
                   </article>
                 </div>
@@ -727,12 +742,12 @@
     </Transition>
 
     <Transition name="modal-fade">
-      <Modal v-if="modal === 'requestReply'" title="Ochiq ticketga javob" @close="closeModal">
+      <Modal v-if="modal === 'requestReply'" title="Ochiq so‘rovga javob" @close="closeModal">
         <form class="form" @submit.prevent="sendRequestReply">
           <label class="label">Mijoz
             <input class="input" :value="requestReplyForm.customer_name || requestReplyForm.chat_id || '—'" disabled />
           </label>
-          <label class="label">Ticket matni
+          <label class="label">So‘rov matni
             <textarea class="textarea" :value="requestReplyForm.initial_text || '—'" disabled></textarea>
           </label>
           <label class="label">Javob
@@ -751,7 +766,7 @@
         <div class="detail-stack">
           <section class="detail-summary">
             <div>
-              <span>Ticketlar</span>
+              <span>So‘rovlar</span>
               <b>{{ fmtNumber(chatDetail.chat?.total_requests) }}</b>
             </div>
             <div>
@@ -770,10 +785,10 @@
 
           <section class="detail-section">
             <div class="detail-section-head">
-              <div class="card-title">Ticketlar va yechimlar</div>
+              <div class="card-title">So‘rovlar va yechimlar</div>
               <div class="card-note">{{ fmtNumber(chatDetail.requests?.length) }} ta yozuv</div>
             </div>
-            <DataTable :columns="chatRequestColumns" :rows="chatDetail.requests || []" empty="Bu chatda ticket yo‘q"
+            <DataTable :columns="chatRequestColumns" :rows="chatDetail.requests || []" empty="Bu chatda so‘rov yo‘q"
               :on-cell-action="handleTableCellAction">
               <template #requestReply="{ row }">
                 <button class="btn small" type="button" :disabled="row.status !== 'open'"
@@ -806,7 +821,7 @@
                   </div>
                   <p v-if="message.text">{{ message.text }}</p>
                   <div class="chat-bubble-footer">
-                    <span v-if="message.request_text" class="chat-ticket">Ticket</span>
+              <span v-if="message.request_text" class="chat-ticket">So‘rov</span>
                     <time>{{ fmtChatTime(message.created_at) }}</time>
                   </div>
                 </div>
@@ -829,7 +844,7 @@
                   <span>{{ fmtDate(item.created_at) }}</span>
                 </div>
                 <p>{{ item.text || 'Matn yo‘q' }}</p>
-                <small v-if="item.request_text && item.type !== 'ticket'">Ticket: {{ item.request_text }}</small>
+                <small v-if="item.request_text && item.type !== 'ticket'">So‘rov: {{ item.request_text }}</small>
               </article>
             </div>
           </section> -->
@@ -856,11 +871,11 @@ import { api, getToken, setToken } from './api';
 
 const ACTIVE_TAB_STORAGE_KEY = 'uyqur_support_active_tab';
 const tabs = [
-  { key: 'stats', label: 'Support Performance', icon: '🎧' },
-  { key: 'groups', label: 'Product Analytics', icon: '🧩' },
-  { key: 'privates', label: 'Client Activity', icon: '🏢' },
-  { key: 'employees', label: 'Team Control', icon: '👥' },
-  { key: 'integrations', label: 'AI Integratsiya', icon: '⚡️' },
+  { key: 'stats', label: 'Statistika', icon: '📊' },
+  { key: 'groups', label: 'Guruhlar', icon: '👥' },
+  { key: 'privates', label: 'Chatlar', icon: '💬' },
+  { key: 'employees', label: 'Xodimlar', icon: '🧑‍💼' },
+  { key: 'integrations', label: 'Integratsiya', icon: '⚡️' },
   { key: 'settings', label: 'Sozlamalar', icon: '⚙️' }
 ];
 
@@ -941,12 +956,12 @@ const savedIntegrationSignature = ref('');
 const current = computed(() => tabs.find(t => t.key === activeTab.value) || tabs[0]);
 const currentTitle = computed(() => current.value.label);
 const currentSubtitle = computed(() => ({
-  stats: 'Support hodimlari aktivligi, javob tezligi va javobsiz ticketlar nazorati',
-  groups: 'Guruhlar, ticket oqimi va mijoz murojaatlari',
-  privates: 'Shaxsiy va business chatlar bilan ishlash',
+  stats: 'Xodimlar faolligi, javob tezligi va ochiq so‘rovlar nazorati',
+  groups: 'Guruhlar, so‘rov oqimi va mijoz murojaatlari',
+  privates: 'Shaxsiy va biznes chatlar bilan ishlash',
   employees: 'Xodimlar aktivligi, javoblar va ochiq vazifalar',
-  integrations: 'AI model, bilim bazasi va ulanish holati',
-  settings: 'Bot, admin va Telegram webhook sozlamalari'
+  integrations: 'AI modeli, bilim bazasi va ulanish holati',
+  settings: 'Bot, admin va Telegram ulanishi sozlamalari'
 }[activeTab.value] || 'Texnik yordam paneli'));
 const loginFeedback = computed(() => loginError.value || loginStatus.value);
 const loginButtonText = computed(() => loadingAction.value === 'login' ? 'Tekshirilmoqda...' : 'Kirish');
@@ -974,7 +989,7 @@ const aiIntegrationReady = computed(() => !!(
 const aiIntegrationHasError = computed(() => ['error', 'failed'].includes(integrationForm.last_check_status));
 const aiModelOptionLabel = computed(() => aiIntegrationReady.value
   ? `${integrationForm.label || integrationForm.model} modeli`
-  : 'AI model tekshirilmagan');
+  : 'AI modeli tekshirilmagan');
 const aiIntegrationStatus = computed(() => {
   if (!integrationForm.enabled) return 'O‘chiq';
   if (aiIntegrationReady.value) return 'Ulangan va tekshirildi';
@@ -1056,22 +1071,25 @@ const supportPerformanceRows = computed(() => {
   });
 });
 const topPerformerName = computed(() => supportPerformanceRows.value[0]?.full_name || '');
+const openRequestsTitle = computed(() => `Ochiq so‘rovlar (${fmtNumber((dashboard.openRequests || []).length)})`);
 const unansweredAlerts = computed(() => {
   const grouped = groupPerformanceRows.value
     .filter(row => Number(row.open_requests || 0) > 0)
     .map((row, index) => ({
       key: String(row.chat_id || row.title || index),
+      chat_id: row.chat_id || '',
       title: row.company_name || row.title || `Chat ${row.chat_id || index + 1}`,
       open_requests: Number(row.open_requests || 0),
-      oldest_label: row.last_request_at ? `Oxirgi savol: ${fmtDate(row.last_request_at)}` : 'Ochiq ticket mavjud',
+      oldest_label: row.last_request_at ? `Oxirgi savol: ${fmtDate(row.last_request_at)}` : 'Ochiq so‘rov mavjud',
       owner: row.closed_by_name || 'Xodim biriktirilmagan'
     }));
   if (grouped.length) return grouped.sort((a, b) => b.open_requests - a.open_requests).slice(0, 5);
   return (dashboard.openRequests || []).slice(0, 5).map((row, index) => ({
     key: String(row.id || row.request_id || index),
-    title: row.chat_title || row.title || row.customer_name || `Ticket ${index + 1}`,
+    chat_id: row.chat_id || '',
+    title: row.chat_title || row.title || row.customer_name || `So‘rov ${index + 1}`,
     open_requests: 1,
-    oldest_label: row.created_at ? `Kelgan: ${fmtDate(row.created_at)}` : 'Ochiq ticket mavjud',
+    oldest_label: row.created_at ? `Kelgan: ${fmtDate(row.created_at)}` : 'Ochiq so‘rov mavjud',
     owner: row.closed_by_name || 'Xodim biriktirilmagan'
   }));
 });
@@ -1080,9 +1098,9 @@ const sidebarInsight = computed(() => {
   const today = analytics.value.periods?.today || emptyPeriodStats;
   const open = Number(today.open_requests || 0);
   const closed = Number(today.closed_requests || 0);
-  if (!Number(today.total_requests || 0)) return 'Bugun hali ticket tushmadi. Panel real vaqtga yaqin yangilanadi.';
-  if (open > 0) return `Bugun ${closed} ta javob bor, ${open} ta ticket nazoratda.`;
-  return `Bugun ${closed} ta ticket yopildi. Javobsiz risk yo‘q.`;
+  if (!Number(today.total_requests || 0)) return 'Bugun hali so‘rov tushmadi. Panel real vaqtga yaqin yangilanadi.';
+  if (open > 0) return `Bugun ${closed} ta javob bor, ${open} ta so‘rov nazoratda.`;
+  return `Bugun ${closed} ta so‘rov yopildi. Ochiq muammo yo‘q.`;
 });
 const loadingText = computed(() => ({
   login: 'Kirilmoqda...',
@@ -1164,6 +1182,32 @@ function pct(row) {
   return total ? `${Math.round((closed / total) * 100)}%` : '0%';
 }
 
+function sourceTypeLabel(value) {
+  return ({
+    group: 'Guruh',
+    private: 'Shaxsiy',
+    business: 'Biznes',
+    personal: 'Shaxsiy'
+  }[String(value || '').toLowerCase()] || value || '—');
+}
+
+function statusLabel(value) {
+  return ({
+    open: 'Ochiq',
+    closed: 'Yopilgan',
+    pending: 'Kutilmoqda'
+  }[String(value || '').toLowerCase()] || value || '—');
+}
+
+function roleLabel(value) {
+  return ({
+    support: 'Texnik yordam',
+    manager: 'Menejer',
+    owner: 'Ega',
+    admin: 'Admin'
+  }[String(value || '').toLowerCase()] || value || '—');
+}
+
 function includesSearch(row) {
   const q = search.value.toLowerCase().trim();
   if (!q) return true;
@@ -1185,7 +1229,7 @@ const employeeDrilldownTitle = computed(() => employeeDrilldown.value ? `Xodim: 
 
 const employeeStatColumns = [
   { key: 'full_name', label: 'Xodim', action: 'employeeInfo' },
-  { key: 'username', label: 'Username', format: v => v ? `@${v}` : '—', action: 'employeeInfo' },
+  { key: 'username', label: 'Foydalanuvchi nomi', format: v => v ? `@${v}` : '—', action: 'employeeInfo' },
   { key: 'received_requests', label: 'Qabul', action: 'employeeInfo' },
   { key: 'closed_requests', label: 'Yopilgan', action: 'employeeInfo' },
   { key: 'avg_close_minutes', label: 'O‘rt. daqiqa', format: fmtMinutes, action: 'employeeInfo' },
@@ -1194,7 +1238,7 @@ const employeeStatColumns = [
 
 const topEmployeeColumns = [
   { key: 'full_name', label: 'Xodim', action: 'employeeInfo' },
-  { key: 'username', label: 'Username', format: v => v ? `@${v}` : '—', action: 'employeeInfo' },
+  { key: 'username', label: 'Foydalanuvchi nomi', format: v => v ? `@${v}` : '—', action: 'employeeInfo' },
   { key: 'closed_requests', label: 'Yopilgan', action: 'employeeInfo' },
   { key: 'close_share_pct', label: 'Yopish ulushi', slot: 'employeeShare', action: 'employeeInfo' },
   { key: 'handled_chats', label: 'Chatlar', action: 'employeeInfo' },
@@ -1206,8 +1250,8 @@ const periodColumns = [
   { key: 'period_label', label: 'Davr' },
   { key: 'total_requests', label: 'Jami', format: fmtNumber },
   { key: 'group_requests', label: 'Guruh', format: fmtNumber },
-  { key: 'private_requests', label: 'Private', format: fmtNumber },
-  { key: 'business_requests', label: 'Business', format: fmtNumber },
+  { key: 'private_requests', label: 'Shaxsiy', format: fmtNumber },
+  { key: 'business_requests', label: 'Biznes', format: fmtNumber },
   { key: 'closed_requests', label: 'Yopilgan', format: fmtNumber },
   { key: 'close_rate', label: 'Yopilish', slot: 'periodClose' },
   { key: 'avg_close_minutes', label: 'O‘rt. vaqt', format: fmtMinutes }
@@ -1227,23 +1271,23 @@ const employeeColumns = [
   { key: 'select', label: '', slot: 'select' },
   { key: 'full_name', label: 'Xodim', action: 'employeeInfo' },
   { key: 'tg_user_id', label: 'Telegram ID', format: v => v || '—', action: 'employeeInfo' },
-  { key: 'username', label: 'Username', format: v => v ? `@${v}` : '—', action: 'employeeInfo' },
-  { key: 'role', label: 'Rol', badge: true, action: 'employeeInfo' },
+  { key: 'username', label: 'Foydalanuvchi nomi', format: v => v ? `@${v}` : '—', action: 'employeeInfo' },
+  { key: 'role', label: 'Vazifa', format: roleLabel, badge: true, action: 'employeeInfo' },
   { key: 'closed_requests', label: 'Yopilgan', action: 'employeeInfo' },
-  { key: 'today_received_requests', label: 'Bugun ticket', format: fmtNumber, action: 'employeeInfo' },
+  { key: 'today_received_requests', label: 'Bugungi so‘rov', format: fmtNumber, action: 'employeeInfo' },
   { key: 'today_answered_requests', label: 'Javob berilgan', format: fmtNumber, action: 'employeeInfo' },
   { key: 'today_open_requests', label: 'Ochiq qolgan', format: fmtNumber, action: 'employeeOpenRequests' },
   { key: 'today_written_groups', label: 'Yozgan guruhlar', format: listPreview, truncate: true, action: 'employeeGroups' },
   { key: 'today_open_customers', label: 'Qolgan so‘rovlar', format: listPreview, truncate: true, action: 'employeeOpenRequests' },
-  { key: 'can_message', label: 'Yozish', format: v => v ? 'Mumkin' : 'Start kerak', action: 'employeeMessage' },
-  { key: 'is_active', label: 'Status', format: v => v ? 'Aktiv' : 'O‘chiq', badge: true, action: 'employeeInfo' },
+  { key: 'can_message', label: 'Yozish', format: v => v ? 'Mumkin' : 'Botni boshlashi kerak', action: 'employeeMessage' },
+  { key: 'is_active', label: 'Holat', format: v => v ? 'Faol' : 'O‘chirilgan', badge: true, action: 'employeeInfo' },
   { key: 'actions', label: 'Amal', slot: 'actions' }
 ];
 
 const openRequestColumns = [
   { key: 'customer_name', label: 'Mijoz', action: 'chatDetail' },
-  { key: 'source_type', label: 'Manba', badge: true, action: 'chatDetail' },
-  { key: 'initial_text', label: 'Matn', truncate: true, action: 'chatDetail' },
+  { key: 'source_type', label: 'Manba', format: sourceTypeLabel, badge: true, action: 'chatDetail' },
+  { key: 'initial_text', label: 'So‘rov matni', truncate: true, action: 'chatDetail' },
   { key: 'created_at', label: 'Vaqt', format: fmtDate, action: 'chatDetail' },
   { key: 'reply', label: 'Javob', slot: 'requestReply' }
 ];
@@ -1256,13 +1300,13 @@ const groupColumns = [
   { key: 'open_requests', label: 'Ochiq', action: 'requests' },
   { key: 'closed_requests', label: 'Yopilgan', action: 'requests' },
   { key: 'progress', label: 'Yopilish', format: (_, row) => pct(row), action: 'requests' },
-  { key: 'last_message_at', label: 'Aktivlik', format: fmtDate, action: 'chatDetail' },
+  { key: 'last_message_at', label: 'Faollik', format: fmtDate, action: 'chatDetail' },
   { key: 'actions', label: 'Amal', slot: 'actions' }
 ];
 
 const privateColumns = [
   { key: 'title', label: 'Chat', action: 'telegram' },
-  { key: 'source_type', label: 'Tur', badge: true, action: 'chatDetail' },
+  { key: 'source_type', label: 'Tur', format: sourceTypeLabel, badge: true, action: 'chatDetail' },
   { key: 'total_requests', label: 'So‘rov', action: 'chatDetail' },
   { key: 'open_requests', label: 'Ochiq', action: 'chatDetail' },
   { key: 'closed_requests', label: 'Yopilgan', action: 'chatDetail' },
@@ -1272,8 +1316,8 @@ const privateColumns = [
 
 const requestColumns = [
   { key: 'customer_name', label: 'Mijoz', action: 'chatDetail' },
-  { key: 'initial_text', label: 'Matn', truncate: true, action: 'chatDetail' },
-  { key: 'status', label: 'Status', badge: true, action: 'chatDetail' },
+  { key: 'initial_text', label: 'So‘rov matni', truncate: true, action: 'chatDetail' },
+  { key: 'status', label: 'Holat', format: statusLabel, badge: true, action: 'chatDetail' },
   { key: 'closed_by_name', label: 'Yopgan', format: v => v || '—', action: 'chatDetail' },
   { key: 'created_at', label: 'Kelgan', format: fmtDate, action: 'chatDetail' },
   { key: 'closed_at', label: 'Yopilgan', format: fmtDate, action: 'chatDetail' },
@@ -1282,8 +1326,8 @@ const requestColumns = [
 
 const chatRequestColumns = [
   { key: 'customer_name', label: 'Mijoz', format: v => v || '—', action: 'chatDetail' },
-  { key: 'initial_text', label: 'Kelgan ticket', truncate: true, action: 'chatDetail' },
-  { key: 'status', label: 'Status', badge: true, action: 'chatDetail' },
+  { key: 'initial_text', label: 'Kelgan so‘rov', truncate: true, action: 'chatDetail' },
+  { key: 'status', label: 'Holat', format: statusLabel, badge: true, action: 'chatDetail' },
   { key: 'closed_by_name', label: 'Yopgan', format: v => v || '—', action: 'chatDetail' },
   { key: 'solution_text', label: 'Yechim/Javob', truncate: true, format: v => v || '—', action: 'chatDetail' },
   { key: 'created_at', label: 'Kelgan', format: fmtDate },
@@ -1301,13 +1345,13 @@ const employeeOpenRequestColumns = [
 
 function timelineTypeLabel(type) {
   return ({
-    ticket: 'Ticket',
+    ticket: 'So‘rov',
     note: 'Izoh',
     solution: 'Yechim',
     closed: 'Yopildi',
     employee_reply: 'Javob',
     admin_reply: 'Admin javobi',
-    done_without_request: 'Ticketsiz #done'
+    done_without_request: 'So‘rovsiz #done'
   }[type] || 'Hodisa');
 }
 
@@ -1343,18 +1387,18 @@ function isAudioMedia(media) {
 }
 
 function mediaPlaceholder(media) {
-  if (!media) return 'Media';
-  if (mediaErrors.value[media.file_id]) return 'Media yuklanmadi';
-  if (mediaLoading.value[media.file_id]) return 'Media yuklanmoqda...';
+  if (!media) return 'Fayl';
+  if (mediaErrors.value[media.file_id]) return 'Fayl yuklanmadi';
+  if (mediaLoading.value[media.file_id]) return 'Fayl yuklanmoqda...';
   return ({
     photo: 'Rasm',
     video: 'Video',
     video_note: 'Video xabar',
     animation: 'Animatsiya',
-    voice: 'Voice message',
+    voice: 'Ovozli xabar',
     audio: 'Audio',
     document: media.file_name || 'Fayl'
-  }[media.kind] || 'Media');
+  }[media.kind] || 'Fayl');
 }
 
 function clearMediaUrls() {
@@ -1484,22 +1528,22 @@ async function submitLogin() {
   loginStatus.value = '';
   loginStatusType.value = '';
   if (!loginForm.username || !loginForm.password) {
-    loginError.value = 'Login va parolni kiriting.';
+    loginError.value = 'Kirish nomi va parolni kiriting.';
     return;
   }
 
   startLoading('login');
-  loginStatus.value = 'Login va parol tekshirilmoqda...';
+  loginStatus.value = 'Kirish nomi va parol tekshirilmoqda...';
   try {
     const data = await api.login(loginForm.username, loginForm.password);
-    loginStatus.value = 'Muvaffaqiyatli. Dashboard yuklanmoqda...';
+    loginStatus.value = 'Muvaffaqiyatli. Panel yuklanmoqda...';
     loginStatusType.value = 'success';
     token.value = data.token;
     showToast(data.fallback ? 'Kirdingiz. DB admin yarating yoki parolni o‘zgartiring.' : 'Xush kelibsiz!');
     await loadDashboard();
   } catch (error) {
     loginError.value = /login|parol/i.test(error.message)
-      ? 'Login yoki parol noto‘g‘ri.'
+      ? 'Kirish nomi yoki parol noto‘g‘ri.'
       : error.message;
   } finally {
     stopLoading('login');
@@ -1708,6 +1752,17 @@ function openEmployeeOpenRequests(row = {}) {
   modal.value = 'employeeOpenRequests';
 }
 
+function openRemainingRequests() {
+  if (!(dashboard.openRequests || []).length) return showToast('Ochiq so‘rov qolmagan');
+  selectedTarget.value = null;
+  modal.value = 'openRequests';
+}
+
+function openAlertRequests(row = {}) {
+  if (!row.chat_id) return openRemainingRequests();
+  loadRequests({ chat_id: row.chat_id, title: row.title });
+}
+
 function closeModal() {
   if (modal.value === 'chatDetail') clearMediaUrls();
   modal.value = '';
@@ -1845,7 +1900,7 @@ function openRequestReply(row = {}) {
     initial_text: row.initial_text || row.request_text || '',
     text: ''
   });
-  if (!requestReplyForm.request_id) return showToast('Ticket ID topilmadi');
+  if (!requestReplyForm.request_id) return showToast('So‘rov ID topilmadi');
   modal.value = 'requestReply';
 }
 
@@ -1860,7 +1915,7 @@ async function refreshAfterRequestReply(chatId) {
 }
 
 async function sendRequestReply() {
-  if (!requestReplyForm.request_id) return showToast('Ticket tanlanmagan');
+  if (!requestReplyForm.request_id) return showToast('So‘rov tanlanmagan');
   if (!requestReplyForm.text.trim()) return showToast('Javob matnini kiriting');
   startLoading('replyRequest');
   try {
@@ -1869,7 +1924,7 @@ async function sendRequestReply() {
       text: requestReplyForm.text
     });
     await refreshAfterRequestReply(result.chat_id || requestReplyForm.chat_id);
-    showToast('Javob yuborildi va ticket yopildi');
+    showToast('Javob yuborildi va so‘rov yopildi');
     closeModal();
   } catch (error) {
     showToast(error.message);
@@ -1923,10 +1978,10 @@ const webhookStatusText = computed(() => {
   if (!webhookStatus.value) return '';
   const info = webhookStatus.value.webhook || webhookStatus.value;
   return [
-    `url: ${info.url || '—'}`,
-    `pending_update_count: ${info.pending_update_count ?? 0}`,
-    `allowed_updates: ${(info.allowed_updates || []).join(', ') || '—'}`,
-    `last_error: ${info.last_error_message || '—'}`
+    `Manzil: ${info.url || '—'}`,
+    `Kutilayotgan yangilanishlar: ${info.pending_update_count ?? 0}`,
+    `Ruxsat etilgan yangilanishlar: ${(info.allowed_updates || []).join(', ') || '—'}`,
+    `Oxirgi xato: ${info.last_error_message || '—'}`
   ].join('\n');
 });
 
@@ -1934,7 +1989,7 @@ async function checkTelegramWebhook(show = true) {
   if (show) startLoading('webhookInfo');
   try {
     webhookStatus.value = await api.telegramWebhookInfo();
-    if (show) showToast('Webhook holati yangilandi');
+    if (show) showToast('Telegram ulanishi holati yangilandi');
   } catch (error) {
     if (show) showToast(error.message);
   } finally {
@@ -1946,7 +2001,7 @@ async function reconnectTelegramWebhook() {
   startLoading('webhookConnect');
   try {
     webhookStatus.value = await api.setTelegramWebhook({ app_url: window.location.origin });
-    showToast('Webhook qayta ulandi. Endi Telegramda /register yuboring.');
+    showToast('Telegram ulanishi yangilandi. Endi Telegramda /register yuboring.');
   } catch (error) {
     showToast(error.message);
   } finally {
