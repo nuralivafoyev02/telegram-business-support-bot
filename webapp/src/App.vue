@@ -1,9 +1,9 @@
 <template>
   <main v-if="!token" class="login-screen">
     <section class="card login-card">
-      <div class="logo">UQ</div>
-      <h1>Uyqur Support</h1>
-      <p>Texnik yordam paneli</p>
+      <div class="logo">AN</div>
+      <h1>Analytics</h1>
+      <p>Rahbar uchun nazorat paneli</p>
       <form class="form" @submit.prevent="submitLogin">
         <label class="label">Login
           <input v-model.trim="loginForm.username" class="input" autocomplete="username" placeholder="admin"
@@ -34,10 +34,9 @@
   <div v-else class="app-shell">
     <aside class="sidebar">
       <div class="brand">
-        <div class="logo">UQ</div>
         <div>
-          <div class="brand-title">Uyqur Support</div>
-          <div class="brand-subtitle">Texnik yordam paneli</div>
+          <div class="brand-title">Analytics</div>
+          <div class="brand-subtitle">Rahbar uchun nazorat paneli</div>
         </div>
       </div>
 
@@ -50,6 +49,10 @@
       </nav>
 
       <nav class="nav nav-bottom">
+        <div class="sidebar-summary">
+          <b>Bugungi xulosa</b>
+          <span>{{ sidebarInsight }}</span>
+        </div>
         <button :class="{ active: activeTab === settingsTab.key }" @click="setTab(settingsTab.key)">
           <span>{{ settingsTab.icon }}</span>
           <b>{{ settingsTab.label }}</b>
@@ -61,6 +64,7 @@
       <header class="topbar">
         <div class="page-title">
           <h1>{{ currentTitle }}</h1>
+          <p>{{ currentSubtitle }}</p>
         </div>
         <TransitionGroup name="action-pop" tag="div" class="actions">
           <button key="refresh" class="btn" :disabled="loadingAction === 'refresh'" @click="refresh">{{ loadingAction
@@ -76,7 +80,11 @@
       <Transition name="page-shift" mode="out-in">
         <div class="page-body" :key="activeTab">
           <template v-if="activeTab === 'stats'">
-            <div class="stats-controls">
+            <div class="analytics-hero">
+              <div>
+                <h2>1-bo‘lim: Support Performance</h2>
+                <p>Support hodimlari aktivligi, javob tezligi va javobsiz ticketlar nazorati</p>
+              </div>
               <div class="segmented" role="group" aria-label="Statistika davri">
                 <button v-for="period in periodOptions" :key="period.key"
                   :class="{ active: selectedStatsPeriod === period.key }" type="button"
@@ -86,32 +94,100 @@
               </div>
             </div>
 
-            <div class="grid cards">
+            <div class="metric-strip">
               <article class="card metric">
-                <div class="metric-label">{{ selectedPeriodLabel }} so‘rovlari</div>
+                <div class="metric-head">
+                  <div class="metric-label">{{ selectedPeriodLabel }} ticketlar</div>
+                  <span class="metric-icon">🎫</span>
+                </div>
                 <div class="metric-value">{{ fmtNumber(selectedPeriodStats.total_requests) }}</div>
-                <div class="metric-mini">Jami ticketlar</div>
+                <div class="metric-mini">{{ fmtNumber(selectedPeriodStats.unique_customers) }} ta mijozdan kelgan</div>
               </article>
               <article class="card metric">
-                <div class="metric-label">Yopilgan</div>
+                <div class="metric-head">
+                  <div class="metric-label">Javob berilgan</div>
+                  <span class="metric-icon good">✅</span>
+                </div>
                 <div class="metric-value">{{ fmtNumber(selectedPeriodStats.closed_requests) }}</div>
-                <div class="metric-mini">Xodimlar yopgan ticketlar</div>
+                <div class="metric-mini">{{ fmtPercent(selectedPeriodStats.close_rate) }} ticket yopilgan</div>
               </article>
               <article class="card metric">
-                <div class="metric-label">Yopilish foizi</div>
-                <div class="metric-value">{{ fmtPercent(selectedPeriodStats.close_rate) }}</div>
-                <div class="metric-mini">Yopilgan / jami</div>
+                <div class="metric-head">
+                  <div class="metric-label">Javobsiz</div>
+                  <span class="metric-icon warn">⚠️</span>
+                </div>
+                <div class="metric-value danger-text">{{ fmtNumber(selectedPeriodStats.open_requests) }}</div>
+                <div class="metric-mini">{{ fmtNumber(unansweredAlertTotal) }} ta alert nazoratda</div>
               </article>
               <article class="card metric">
-                <div class="metric-label">Guruhlardan</div>
-                <div class="metric-value">{{ fmtNumber(selectedPeriodStats.group_requests) }}</div>
-                <div class="metric-mini">Mijozlardan tushgan so‘rovlar</div>
+                <div class="metric-head">
+                  <div class="metric-label">Avg response</div>
+                  <span class="metric-icon">⏱️</span>
+                </div>
+                <div class="metric-value">{{ fmtNumber(selectedPeriodStats.avg_close_minutes) }} min</div>
+                <div class="metric-mini">SLA: {{ fmtPercent(selectedPeriodStats.close_rate) }}</div>
               </article>
-              <article class="card metric">
-                <div class="metric-label">O‘rtacha yopish</div>
-                <div class="metric-value">{{ fmtNumber(selectedPeriodStats.avg_close_minutes) }}</div>
-                <div class="metric-mini">Daqiqa</div>
-              </article>
+            </div>
+
+            <div class="spacer"></div>
+
+            <div class="performance-layout">
+              <section class="card performance-card">
+                <div class="card-header performance-head">
+                  <div>
+                    <div class="card-title">Hodimlar performance jadvali</div>
+                    <div class="card-note">Kim qancha ticketga javob berdi va SLA qanday</div>
+                  </div>
+                  <span v-if="topPerformerName" class="success-pill">Top hodim: {{ topPerformerName }}</span>
+                </div>
+                <div class="performance-table-wrap">
+                  <table class="performance-table">
+                    <thead>
+                      <tr>
+                        <th>Hodim</th>
+                        <th>Chatlar</th>
+                        <th>Javob</th>
+                        <th>Javobsiz</th>
+                        <th>Avg vaqt</th>
+                        <th>SLA</th>
+                        <th>Baho</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="row in supportPerformanceRows" :key="row.key">
+                        <td>{{ row.full_name }}</td>
+                        <td>{{ fmtNumber(row.handled_chats) }}</td>
+                        <td>{{ fmtNumber(row.closed_requests) }}</td>
+                        <td :class="{ 'danger-text': row.open_requests > 0 }">{{ fmtNumber(row.open_requests) }}</td>
+                        <td>{{ fmtMinutes(row.avg_close_minutes) }}</td>
+                        <td>{{ fmtPercent(row.sla) }}</td>
+                        <td><span class="grade-pill" :class="performanceGradeClass(row.grade)">{{ row.grade }}</span></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <div v-if="!supportPerformanceRows.length" class="empty compact">Hozircha performance ma’lumoti yo‘q</div>
+                </div>
+              </section>
+
+              <section class="card alert-card">
+                <div class="card-header">
+                  <div>
+                    <div class="card-title">⚠️ Javobsiz alertlar</div>
+                    <div class="card-note">Ochiq qolgan ticketlar</div>
+                  </div>
+                </div>
+                <div class="alert-list">
+                  <article v-for="row in unansweredAlerts" :key="row.key" class="alert-item">
+                    <div class="alert-item-head">
+                      <b>{{ row.title }}</b>
+                      <span>{{ fmtNumber(row.open_requests) }} ta</span>
+                    </div>
+                    <p>{{ row.oldest_label }}</p>
+                    <small>Mas’ul: {{ row.owner }}</small>
+                  </article>
+                  <div v-if="!unansweredAlerts.length" class="empty compact">Javobsiz alert yo‘q</div>
+                </div>
+              </section>
             </div>
 
             <div class="spacer"></div>
@@ -131,32 +207,6 @@
                       <span class="chart-fill blue" :style="{ width: barWidth(row.total_requests, periodChartMax) }"></span>
                     </div>
                     <div class="chart-value">{{ fmtNumber(row.total_requests) }}</div>
-                  </div>
-                </div>
-              </section>
-
-              <section class="card chart-card">
-                <div class="card-header">
-                  <div>
-                    <div class="card-title">Manbalar</div>
-                    <div class="card-note">{{ selectedPeriodLabel }} bo‘yicha taqsimot</div>
-                  </div>
-                </div>
-                <div class="source-chart">
-                  <div class="donut" :style="sourceDonutStyle">
-                    <span>{{ fmtNumber(sourceTotal) }}</span>
-                  </div>
-                  <div class="source-bars">
-                    <div v-for="row in sourceChartRows" :key="row.key" class="chart-row compact">
-                      <div class="chart-label">
-                        <span class="legend-dot" :style="{ background: row.color }"></span>
-                        {{ row.label }}
-                      </div>
-                      <div class="chart-track">
-                        <span class="chart-fill" :style="{ width: barWidth(row.value, sourceChartMax), background: row.color }"></span>
-                      </div>
-                      <div class="chart-value">{{ fmtNumber(row.value) }}</div>
-                    </div>
                   </div>
                 </div>
               </section>
@@ -806,11 +856,11 @@ import { api, getToken, setToken } from './api';
 
 const ACTIVE_TAB_STORAGE_KEY = 'uyqur_support_active_tab';
 const tabs = [
-  { key: 'stats', label: 'Statistika', icon: '📊' },
-  { key: 'groups', label: 'Guruhlar', icon: '👥' },
-  { key: 'privates', label: 'Chatlar', icon: '💬' },
-  { key: 'employees', label: 'Xodimlar', icon: '🧑‍💼' },
-  { key: 'integrations', label: 'Integratsiya', icon: '⚡️' },
+  { key: 'stats', label: 'Support Performance', icon: '🎧' },
+  { key: 'groups', label: 'Product Analytics', icon: '🧩' },
+  { key: 'privates', label: 'Client Activity', icon: '🏢' },
+  { key: 'employees', label: 'Team Control', icon: '👥' },
+  { key: 'integrations', label: 'AI Integratsiya', icon: '⚡️' },
   { key: 'settings', label: 'Sozlamalar', icon: '⚙️' }
 ];
 
@@ -890,6 +940,14 @@ const savedIntegrationSignature = ref('');
 
 const current = computed(() => tabs.find(t => t.key === activeTab.value) || tabs[0]);
 const currentTitle = computed(() => current.value.label);
+const currentSubtitle = computed(() => ({
+  stats: 'Support hodimlari aktivligi, javob tezligi va javobsiz ticketlar nazorati',
+  groups: 'Guruhlar, ticket oqimi va mijoz murojaatlari',
+  privates: 'Shaxsiy va business chatlar bilan ishlash',
+  employees: 'Xodimlar aktivligi, javoblar va ochiq vazifalar',
+  integrations: 'AI model, bilim bazasi va ulanish holati',
+  settings: 'Bot, admin va Telegram webhook sozlamalari'
+}[activeTab.value] || 'Texnik yordam paneli'));
 const loginFeedback = computed(() => loginError.value || loginStatus.value);
 const loginButtonText = computed(() => loadingAction.value === 'login' ? 'Tekshirilmoqda...' : 'Kirish');
 function aiConnectionSignature(source = {}) {
@@ -953,28 +1011,79 @@ const periodRows = computed(() => periodOptions.map(period => ({
 })));
 const periodChartRows = computed(() => periodRows.value);
 const periodChartMax = computed(() => Math.max(1, ...periodChartRows.value.map(row => Number(row.total_requests || 0))));
-const sourceChartRows = computed(() => [
-  { key: 'group', label: 'Guruh', value: Number(selectedPeriodStats.value.group_requests || 0), color: '#8ec7ff' },
-  { key: 'private', label: 'Shaxsiy', value: Number(selectedPeriodStats.value.private_requests || 0), color: '#95ffc8' },
-  { key: 'business', label: 'Business', value: Number(selectedPeriodStats.value.business_requests || 0), color: '#ffd166' }
-]);
-const sourceTotal = computed(() => sourceChartRows.value.reduce((sum, row) => sum + row.value, 0));
-const sourceChartMax = computed(() => Math.max(1, ...sourceChartRows.value.map(row => row.value)));
-const sourceDonutStyle = computed(() => {
-  if (!sourceTotal.value) return { background: 'conic-gradient(rgba(255,255,255,.12) 0deg 360deg)' };
-  let start = 0;
-  const slices = sourceChartRows.value.map(row => {
-    const end = start + (row.value / sourceTotal.value) * 360;
-    const slice = `${row.color} ${start}deg ${end}deg`;
-    start = end;
-    return slice;
-  });
-  return { background: `conic-gradient(${slices.join(', ')}, rgba(255,255,255,.08) ${start}deg 360deg)` };
-});
 const topEmployeeChartRows = computed(() => topEmployeeRows.value.slice(0, 6));
 const topEmployeeChartMax = computed(() => Math.max(1, ...topEmployeeChartRows.value.map(row => Number(row.closed_requests || 0))));
 const groupChartRows = computed(() => groupPerformanceRows.value.slice(0, 6));
 const groupChartMax = computed(() => Math.max(1, ...groupChartRows.value.map(row => Number(row.total_requests || 0))));
+const employeeStatsMap = computed(() => new Map((dashboard.employeeStats || []).map(row => [String(row.id || row.employee_id || row.tg_user_id || row.full_name || ''), row])));
+function employeeLookupKey(row = {}) {
+  return String(row.employee_id || row.id || row.tg_user_id || row.full_name || '');
+}
+function performanceGrade(sla = 0, avgMinutes = 0) {
+  const value = Number(sla || 0);
+  const minutes = Number(avgMinutes || 0);
+  if (value >= 92 && minutes <= 10) return 'A+';
+  if (value >= 85) return 'A';
+  if (value >= 75) return 'B';
+  if (value >= 62) return 'C';
+  return 'D';
+}
+function performanceGradeClass(grade = '') {
+  if (grade === 'A+' || grade === 'A') return 'top';
+  if (grade === 'B') return 'mid';
+  return 'low';
+}
+const supportPerformanceRows = computed(() => {
+  const rows = topEmployeeRows.value.length ? topEmployeeRows.value : (dashboard.employeeStats || []);
+  return rows.slice(0, 8).map((row, index) => {
+    const stat = employeeStatsMap.value.get(employeeLookupKey(row)) || row;
+    const closed = Number(row.closed_requests || stat.closed_requests || stat.today_answered_requests || 0);
+    const open = Number(stat.today_open_requests || stat.open_requests || 0);
+    const total = closed + open;
+    const sla = total ? Math.round((closed / total) * 100) : Number(row.close_share_pct || selectedPeriodStats.value.close_rate || 0);
+    const avg = Number(row.avg_close_minutes || stat.avg_close_minutes || 0);
+    const grade = performanceGrade(sla, avg);
+    return {
+      key: employeeLookupKey(row) || `${row.full_name || 'employee'}-${index}`,
+      full_name: row.full_name || stat.full_name || 'Xodim',
+      handled_chats: Number(row.handled_chats || stat.handled_chats || stat.today_written_groups_count || 0),
+      closed_requests: closed,
+      open_requests: open,
+      avg_close_minutes: avg,
+      sla,
+      grade
+    };
+  });
+});
+const topPerformerName = computed(() => supportPerformanceRows.value[0]?.full_name || '');
+const unansweredAlerts = computed(() => {
+  const grouped = groupPerformanceRows.value
+    .filter(row => Number(row.open_requests || 0) > 0)
+    .map((row, index) => ({
+      key: String(row.chat_id || row.title || index),
+      title: row.company_name || row.title || `Chat ${row.chat_id || index + 1}`,
+      open_requests: Number(row.open_requests || 0),
+      oldest_label: row.last_request_at ? `Oxirgi savol: ${fmtDate(row.last_request_at)}` : 'Ochiq ticket mavjud',
+      owner: row.closed_by_name || 'Xodim biriktirilmagan'
+    }));
+  if (grouped.length) return grouped.sort((a, b) => b.open_requests - a.open_requests).slice(0, 5);
+  return (dashboard.openRequests || []).slice(0, 5).map((row, index) => ({
+    key: String(row.id || row.request_id || index),
+    title: row.chat_title || row.title || row.customer_name || `Ticket ${index + 1}`,
+    open_requests: 1,
+    oldest_label: row.created_at ? `Kelgan: ${fmtDate(row.created_at)}` : 'Ochiq ticket mavjud',
+    owner: row.closed_by_name || 'Xodim biriktirilmagan'
+  }));
+});
+const unansweredAlertTotal = computed(() => unansweredAlerts.value.reduce((sum, row) => sum + Number(row.open_requests || 0), 0));
+const sidebarInsight = computed(() => {
+  const today = analytics.value.periods?.today || emptyPeriodStats;
+  const open = Number(today.open_requests || 0);
+  const closed = Number(today.closed_requests || 0);
+  if (!Number(today.total_requests || 0)) return 'Bugun hali ticket tushmadi. Panel real vaqtga yaqin yangilanadi.';
+  if (open > 0) return `Bugun ${closed} ta javob bor, ${open} ta ticket nazoratda.`;
+  return `Bugun ${closed} ta ticket yopildi. Javobsiz risk yo‘q.`;
+});
 const loadingText = computed(() => ({
   login: 'Kirilmoqda...',
   refresh: 'Yangilanmoqda...',
