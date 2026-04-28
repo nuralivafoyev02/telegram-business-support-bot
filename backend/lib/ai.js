@@ -6,6 +6,11 @@ const ALLOWED_CLASSIFICATIONS = new Set(['request', 'message', 'ignore']);
 const MAX_KNOWLEDGE_CHARS = 60000;
 const MAX_AUTO_REPLY_CHARS = 1800;
 const MAX_LOCAL_REPLY_CHARS = 650;
+const QUESTION_LABEL_PATTERN = String.raw`(?:savol|question|q)(?:\s*[#№-]?\s*\d+)?`;
+const ANSWER_LABEL_PATTERN = String.raw`(?:javob|answer|a)(?:\s*[#№-]?\s*\d+)?`;
+const QUESTION_LABEL_RE = new RegExp(`^\\s*${QUESTION_LABEL_PATTERN}\\s*[:\\-]\\s*`, 'i');
+const ANSWER_LABEL_RE = new RegExp(`^\\s*${ANSWER_LABEL_PATTERN}\\s*[:\\-]\\s*`, 'i');
+const INLINE_QA_RE = new RegExp(`^\\s*${QUESTION_LABEL_PATTERN}\\s*[:\\-]\\s*([\\s\\S]*?)\\s+${ANSWER_LABEL_PATTERN}\\s*[:\\-]\\s*([\\s\\S]+)$`, 'i');
 const MATCH_STOP_WORDS = new Set([
   'bilan', 'uchun', 'qanday', 'qanaqa', 'qayerda', 'qayerdan', 'qachon', 'nega', 'nimaga', 'nima',
   'qism', 'qismi', 'bolim', 'bolimi', 'haqida', 'kerak', 'mumkin', 'mumkinmi', 'iltimos',
@@ -172,12 +177,17 @@ function autoReplyExtraInstruction(systemPrompt = '') {
   return prompt.slice(0, 4000);
 }
 
-function normalizeAiReplyText(value = '') {
-  const text = String(value || '')
+function normalizeAiReplyText(value = '', query = '') {
+  const rawText = String(value || '')
     .replace(/^```(?:text|markdown)?\s*/i, '')
     .replace(/\s*```$/i, '')
     .trim();
+  const inlineEntry = parseInlineKnowledgeEntry(rawText);
+  const text = inlineEntry && inlineEntry.answer
+    ? cleanupAnswerText(inlineEntry.answer)
+    : cleanupAnswerText(rawText);
   if (looksLikeClassifierOutput(text) || mentionsHiddenAiConfig(text)) return '';
+  if (looksLikeQuestionEcho(text, query)) return '';
   return text.slice(0, MAX_AUTO_REPLY_CHARS).trim();
 }
 
@@ -197,6 +207,31 @@ function looksLikeClassifierOutput(value = '') {
 
 function mentionsHiddenAiConfig(value = '') {
   return /\b(system\s+prompt|api\s*key|bearer\s+token|ichki\s+token|maxfiy\s+sozlama)\b/i.test(value);
+}
+
+function looksQuestionLike(value = '') {
+  return /[?؟]\s*$/.test(String(value || '').trim());
+}
+
+function cleanupQuestionText(value = '') {
+  return String(value || '')
+    .replace(QUESTION_LABEL_RE, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function looksLikeQuestionEcho(value = '', query = '') {
+  const text = String(value || '').trim();
+  if (!text) return true;
+  if (QUESTION_LABEL_RE.test(text) && !ANSWER_LABEL_RE.test(text)) return true;
+  if (!query || !looksQuestionLike(text)) return false;
+
+  const cleanText = normalizeForMatch(cleanupQuestionText(text));
+  const cleanQuery = normalizeForMatch(query);
+  if (!cleanText || !cleanQuery) return false;
+  if (cleanText === cleanQuery) return true;
+  if (cleanText.includes(cleanQuery) || cleanQuery.includes(cleanText)) return true;
+  return scoreTextMatch(cleanText, cleanQuery) >= 0.8;
 }
 
 function normalizeForMatch(value = '') {
@@ -307,10 +342,10 @@ function selectRelevantKnowledgeText(knowledgeText = '', query = '') {
 }
 
 function parseInlineKnowledgeEntry(text = '') {
-  const match = String(text || '').match(/^(?:savol|question|q)\s*[:\-]\s*([\s\S]*?)(?:\s+|\n)(?:javob|answer|a)\s*[:\-]\s*([\s\S]+)$/i);
+  const match = String(text || '').match(INLINE_QA_RE);
   if (!match) return null;
-  const question = match[1].trim();
-  const answer = match[2].trim();
+  const question = cleanupQuestionText(match[1]);
+  const answer = cleanupAnswerText(match[2]);
   if (!question || !answer) return null;
   return { question, answer, raw: `${question} ${answer}`.trim() };
 }
@@ -329,19 +364,31 @@ function prepareKnowledgeText(value = '') {
   return String(value || '')
     .replace(/\r\n/g, '\n')
     .replace(/\s+(?=\d+[.)]\s+[^?؟\n]{5,220}[?؟]\s+(?:javob|answer|a)\s*[:\-])/gi, '\n')
-    .replace(/\s+(?=(?:savol|question|q)\s*[:\-])/gi, '\n')
+    .replace(new RegExp(`\\s+(?=${QUESTION_LABEL_PATTERN}\\s*[:\\-])`, 'gi'), '\n')
     .trim();
 }
 
 function extractQaEntries(knowledgeText = '') {
   const prepared = `\n${prepareKnowledgeText(knowledgeText)}`;
   const entries = [];
+  const labeledQaRe = new RegExp(`${QUESTION_LABEL_PATTERN}\\s*[:\\-]\\s*([\\s\\S]*?)\\s+${ANSWER_LABEL_PATTERN}\\s*[:\\-]\\s*([\\s\\S]*?)(?=\\s+${QUESTION_LABEL_PATTERN}\\s*[:\\-]|$)`, 'gi');
+  let labeledMatch;
+  while ((labeledMatch = labeledQaRe.exec(prepared))) {
+    const question = cleanupQuestionText(labeledMatch[1]);
+    const answer = cleanupAnswerText(labeledMatch[2]);
+    if (question && answer && !looksLikeQuestionEcho(answer, question)) {
+      entries.push({ question, answer, raw: `${question} ${answer}`.trim(), type: 'qa' });
+    }
+  }
+
   const qaRe = /\n\s*(?:(?:savol|question|q)\s*[:\-]\s*)?(?:\d+[.)]\s*)?([^?\n؟]{6,220}[?؟])\s*(?:javob|answer|a)\s*[:\-]\s*([\s\S]*?)(?=\n\s*(?:(?:savol|question|q)\s*[:\-]\s*)?(?:\d+[.)]\s*)?[^?\n؟]{6,220}[?؟]\s*(?:javob|answer|a)\s*[:\-]|\n\s*(?:savol|question|q)\s*[:\-]|$)/gi;
   let match;
   while ((match = qaRe.exec(prepared))) {
-    const question = match[1].replace(/^\d+[.)]\s*/, '').trim();
+    const question = cleanupQuestionText(match[1].replace(/^\d+[.)]\s*/, ''));
     const answer = cleanupAnswerText(match[2]);
-    if (question && answer) entries.push({ question, answer, raw: `${question} ${answer}`.trim(), type: 'qa' });
+    if (question && answer && !looksLikeQuestionEcho(answer, question)) {
+      entries.push({ question, answer, raw: `${question} ${answer}`.trim(), type: 'qa' });
+    }
   }
   return entries;
 }
@@ -358,18 +405,18 @@ function parseKnowledgeEntry(chunk = '') {
   let inAnswer = false;
 
   for (const line of lines) {
-    if (/^(savol|question|q)\s*[:\-]/i.test(line)) {
-      question = line.replace(/^(savol|question|q)\s*[:\-]\s*/i, '').trim();
+    if (QUESTION_LABEL_RE.test(line)) {
+      question = cleanupQuestionText(line);
       inAnswer = false;
       continue;
     }
-    if (/^(javob|answer|a)\s*[:\-]/i.test(line)) {
-      answer = line.replace(/^(javob|answer|a)\s*[:\-]\s*/i, '').trim();
+    if (ANSWER_LABEL_RE.test(line)) {
+      answer = cleanupAnswerText(line);
       inAnswer = true;
       continue;
     }
-    if (!question && /[?؟]$/.test(line)) {
-      question = line;
+    if (!question && looksQuestionLike(line)) {
+      question = cleanupQuestionText(line);
       continue;
     }
     if (question && !answer) {
@@ -385,7 +432,14 @@ function parseKnowledgeEntry(chunk = '') {
   }
 
   if (!question) question = lines[0];
-  if (!answer) answer = lines.slice(1).join(' ') || lines[0];
+  if (!answer) {
+    const fallbackAnswer = lines.slice(1).join(' ').trim();
+    if (fallbackAnswer) answer = fallbackAnswer;
+    else if (looksQuestionLike(question) || QUESTION_LABEL_RE.test(lines[0])) return null;
+    else answer = lines[0];
+  }
+  answer = cleanupAnswerText(answer);
+  if (!answer || looksLikeQuestionEcho(answer, question)) return null;
 
   return { question, answer, raw: lines.join(' ') };
 }
@@ -401,7 +455,7 @@ function buildKnowledgeEntries(knowledgeText = '') {
 
 function cleanupAnswerText(value = '') {
   return String(value || '')
-    .replace(/^\s*(?:javob|answer|a)\s*[:\-]\s*/i, '')
+    .replace(ANSWER_LABEL_RE, '')
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -476,7 +530,7 @@ async function generateLocalSupportReply({ text, chatType, sourceType, settings 
   };
 
   if (best.score < 0.15 || !best.answer) return null;
-  return normalizeAiReplyText(formatLocalReply({ answer: best.answer, query: text }));
+  return normalizeAiReplyText(formatLocalReply({ answer: best.answer, query: text }), text);
 }
 
 async function generateSupportReply({ text, chatType, sourceType, settings }) {
@@ -520,7 +574,7 @@ async function generateSupportReply({ text, chatType, sourceType, settings }) {
     }
 
     const content = payload.choices && payload.choices[0] && payload.choices[0].message && payload.choices[0].message.content;
-    const reply = normalizeAiReplyText(content || '');
+    const reply = normalizeAiReplyText(content || '', text);
     return reply || null;
   } finally {
     clearTimeout(timeout);

@@ -29,6 +29,7 @@ const PRIVATE_GREETING_REPLY = "Va alaykum assalom! So'rovingiz bo'lsa guruhga y
 const PRIVATE_UNKNOWN_REPLY = "So'rovingizni guruhga yoki @uyqur_nurali ga berishingiz mumkin";
 const PRIVATE_REQUEST_REPLY = "So'rovingiz qabul qilindi. Guruhga yoki @uyqur_nurali ga yozishingiz mumkin.";
 const MAIN_GROUP_AUTO_REPLY_MISS = "Bu savol bo'yicha bilim bazasida aniq javob topilmadi. Mas'ul xodim javob beradi.";
+const AUTO_REPLY_MISS = "Savolingiz qabul qilindi. Bilim bazasida aniq javob topilmadi, mas'ul xodim javob beradi.";
 const QUESTION_LIKE_RE = /[?؟]|\b(qanday|qanaqa|qayerda|qayerdan|qachon|nega|nimaga|nima\s+uchun|qancha|savol|tushuntir|ko'?rsat|o'?rgat|как|где|почему|зачем|сколько|what|how|where|why|when)\b/i;
 
 function clampInt(value, fallback, min, max) {
@@ -788,6 +789,18 @@ function classifyAsCustomerRequest({ updateKind, message, text, settings }) {
   }) === 'request';
 }
 
+function hasConfiguredAutoReplySource(settings = {}) {
+  const knowledge = String(settings.aiIntegration && settings.aiIntegration.knowledge_text || '').trim();
+  return shouldUseExternalAi(settings) || Boolean(knowledge);
+}
+
+function autoReplyFallbackText({ updateKind, chat, settings }) {
+  if (isGroupChat(chat) && isConfiguredMainGroup(chat, settings)) return MAIN_GROUP_AUTO_REPLY_MISS;
+  if (!hasConfiguredAutoReplySource(settings)) return '';
+  if (isDirectBotPrivateChat(updateKind, chat)) return '';
+  return AUTO_REPLY_MISS;
+}
+
 async function maybeSendAiAutoReply({ updateKind, message, sourceType, text, settings, fallbackText = '' }) {
   if (!shouldAutoReply(settings)) return false;
   if (message.from && message.from.is_bot) return false;
@@ -796,12 +809,16 @@ async function maybeSendAiAutoReply({ updateKind, message, sourceType, text, set
   try {
     let reply = null;
     if (shouldUseExternalAi(settings)) {
-      reply = await generateSupportReply({
-        text,
-        chatType: (message.chat || {}).type,
-        sourceType,
-        settings
-      });
+      try {
+        reply = await generateSupportReply({
+          text,
+          chatType: (message.chat || {}).type,
+          sourceType,
+          settings
+        });
+      } catch (error) {
+        logBackgroundError('ai-auto-reply-external', error);
+      }
     }
     if (!reply) {
       reply = await generateLocalSupportReply({
@@ -968,10 +985,8 @@ async function processMessage(updateKind, message) {
       sourceType,
       companyId: chatRow ? chatRow.company_id : null
     });
-    const mainGroupFallback = isGroupChat(chat) && isConfiguredMainGroup(chat, settings)
-      ? MAIN_GROUP_AUTO_REPLY_MISS
-      : '';
-    if (await maybeSendAiAutoReply({ updateKind, message, sourceType, text, settings, fallbackText: mainGroupFallback })) return;
+    const fallbackText = autoReplyFallbackText({ updateKind, chat, settings });
+    if (await maybeSendAiAutoReply({ updateKind, message, sourceType, text, settings, fallbackText })) return;
     await maybeReplyPrivateFallback(updateKind, message, classification);
     return;
   }

@@ -905,6 +905,191 @@ async function testAutoReplyFallbackUsesLocalKnowledge() {
   }
 }
 
+async function testLocalKnowledgeParsesNumberedSavolJavobLabels() {
+  const reply = await generateLocalSupportReply({
+    text: 'Menyuda bo‘lim bor, lekin ichida ma’lumot chiqmayapti. Sababi nima bo‘lishi mumkin?',
+    chatType: 'private',
+    sourceType: 'business',
+    settings: {
+      aiIntegration: {
+        knowledge_text: 'Savol 003: Menyuda bo‘lim bor, lekin ichida ma’lumot chiqmayapti. Sababi nima bo‘lishi mumkin? Javob 003: Rol yoki tarifdagi ruxsatlar sababli bo‘lim ichida ma’lumot ko‘rinmasligi mumkin. Admin panelda xodim roli va bo‘lim ruxsatlarini tekshiring.'
+      }
+    }
+  });
+
+  assert.ok(reply);
+  assert.match(reply, /Rol yoki tarifdagi ruxsatlar/);
+  assert.doesNotMatch(reply, /Savol 003/);
+  assert.doesNotMatch(reply, /Javob 003/);
+}
+
+async function testLocalKnowledgeDoesNotEchoQuestionOnlyEntry() {
+  const reply = await generateLocalSupportReply({
+    text: 'Menyuda bo‘lim bor, lekin ichida ma’lumot chiqmayapti. Sababi nima bo‘lishi mumkin?',
+    chatType: 'private',
+    sourceType: 'business',
+    settings: {
+      aiIntegration: {
+        knowledge_text: 'Savol 003: Menyuda bo‘lim bor, lekin ichida ma’lumot chiqmayapti. Sababi nima bo‘lishi mumkin?'
+      }
+    }
+  });
+
+  assert.strictEqual(reply, null);
+}
+
+async function testBusinessAutoReplyFallsBackWhenKnowledgeEntryHasNoAnswer() {
+  const originalSelect = supabase.select;
+  const originalInsert = supabase.insert;
+  const originalFetch = global.fetch;
+  const telegramCalls = [];
+  const inserted = [];
+  clearBotSettingsCache();
+
+  supabase.select = async (table) => {
+    if (table === 'bot_settings') {
+      return [
+        { key: 'ai_mode', value: { enabled: false, provider: null } },
+        { key: 'auto_reply', value: { enabled: true } },
+        {
+          key: 'ai_integration',
+          value: {
+            enabled: true,
+            provider: 'openai_compatible',
+            knowledge_text: 'Savol 003: Menyuda bo‘lim bor, lekin ichida ma’lumot chiqmayapti. Sababi nima bo‘lishi mumkin?'
+          }
+        },
+        { key: 'request_detection', value: { mode: 'keyword', min_text_length: 10 } }
+      ];
+    }
+    if (table === 'employees') return [];
+    if (table === 'support_requests') return [];
+    return [];
+  };
+  supabase.insert = async (table, rows) => {
+    inserted.push({ table, rows });
+    return rows.map(row => ({ id: `${table}-row`, ...row }));
+  };
+  global.fetch = async (_url, options) => {
+    telegramCalls.push({ url: _url, body: JSON.parse(options.body) });
+    return {
+      ok: true,
+      json: async () => ({ ok: true, result: { message_id: 805 } })
+    };
+  };
+
+  try {
+    const result = await callHandler({
+      update_id: 87,
+      business_message: {
+        message_id: 187,
+        date: 1777100000,
+        text: 'Menyuda bo‘lim bor, lekin ichida ma’lumot chiqmayapti. Sababi nima bo‘lishi mumkin?',
+        business_connection_id: 'business-1',
+        chat: { id: 901, type: 'private', first_name: 'Mijoz' },
+        from: { id: 901, first_name: 'Mijoz', is_bot: false }
+      }
+    });
+
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.handled, 'business_message');
+    assert.strictEqual(telegramCalls.length, 1);
+    assert.strictEqual(telegramCalls[0].body.business_connection_id, 'business-1');
+    assert.strictEqual(telegramCalls[0].body.reply_to_message_id, 187);
+    assert.match(telegramCalls[0].body.text, /Bilim bazasida aniq javob topilmadi/);
+    assert.doesNotMatch(telegramCalls[0].body.text, /Savol 003/);
+    assert.strictEqual(inserted.some(item => item.table === 'support_requests'), true);
+    assert.strictEqual(inserted.some(item => item.table === 'messages' && item.rows[0].classification === 'ai_reply'), true);
+  } finally {
+    supabase.insert = originalInsert;
+    supabase.select = originalSelect;
+    global.fetch = originalFetch;
+    clearBotSettingsCache();
+  }
+}
+
+async function testExternalAiFailureStillUsesLocalKnowledge() {
+  const originalSelect = supabase.select;
+  const originalInsert = supabase.insert;
+  const originalFetch = global.fetch;
+  const originalConsoleError = console.error;
+  const telegramCalls = [];
+  const inserted = [];
+  clearBotSettingsCache();
+
+  supabase.select = async (table) => {
+    if (table === 'bot_settings') {
+      return [
+        { key: 'ai_mode', value: { enabled: true, provider: 'openai_compatible', model: 'test-model', model_label: 'Test AI' } },
+        { key: 'auto_reply', value: { enabled: true } },
+        {
+          key: 'ai_integration',
+          value: {
+            enabled: true,
+            provider: 'openai_compatible',
+            label: 'Test AI',
+            base_url: 'https://ai.example/v1',
+            model: 'test-model',
+            api_key: 'secret-token',
+            knowledge_text: 'Savol: Printer ishlamaydi? Javob: Printerni ochib qayta yoqib ko‘ring.'
+          }
+        },
+        { key: 'request_detection', value: { mode: 'keyword', min_text_length: 10 } }
+      ];
+    }
+    if (table === 'employees') return [];
+    if (table === 'support_requests') return [];
+    return [];
+  };
+  supabase.insert = async (table, rows) => {
+    inserted.push({ table, rows });
+    return rows.map(row => ({ id: `${table}-row`, ...row }));
+  };
+  console.error = () => {};
+  global.fetch = async (_url, options) => {
+    if (/api\.telegram\.org/.test(_url)) {
+      telegramCalls.push({ url: _url, body: JSON.parse(options.body) });
+      return {
+        ok: true,
+        json: async () => ({ ok: true, result: { message_id: 806 } })
+      };
+    }
+    return {
+      ok: false,
+      status: 502,
+      json: async () => ({ error: { message: 'upstream unavailable' } })
+    };
+  };
+
+  try {
+    const result = await callHandler({
+      update_id: 88,
+      business_message: {
+        message_id: 188,
+        date: 1777100000,
+        text: 'Printerim ishlamayapti',
+        business_connection_id: 'business-2',
+        chat: { id: 902, type: 'private', first_name: 'Mijoz' },
+        from: { id: 902, first_name: 'Mijoz', is_bot: false }
+      }
+    });
+
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.handled, 'business_message');
+    assert.strictEqual(telegramCalls.length, 1);
+    assert.strictEqual(telegramCalls[0].body.business_connection_id, 'business-2');
+    assert.match(telegramCalls[0].body.text, /ochib qayta yoqib/);
+    assert.strictEqual(inserted.some(item => item.table === 'support_requests'), true);
+    assert.strictEqual(inserted.some(item => item.table === 'messages' && item.rows[0].classification === 'ai_reply'), true);
+  } finally {
+    supabase.insert = originalInsert;
+    supabase.select = originalSelect;
+    global.fetch = originalFetch;
+    console.error = originalConsoleError;
+    clearBotSettingsCache();
+  }
+}
+
 async function testLocalKnowledgeUsesClosestMeaningAndShortPath() {
   const reply = await generateLocalSupportReply({
     text: 'Prognoz va reja bilan bajarilgan ish qayerda ko‘rinadi?',
@@ -1800,6 +1985,10 @@ async function testBotRemovalMarksGroupInactive() {
   await testClassifierJsonIsNotSentAsAutoReply();
   await testAiModeAutoRepliesToGroupRequest();
   await testAutoReplyFallbackUsesLocalKnowledge();
+  await testLocalKnowledgeParsesNumberedSavolJavobLabels();
+  await testLocalKnowledgeDoesNotEchoQuestionOnlyEntry();
+  await testBusinessAutoReplyFallsBackWhenKnowledgeEntryHasNoAnswer();
+  await testExternalAiFailureStillUsesLocalKnowledge();
   await testLocalKnowledgeUsesClosestMeaningAndShortPath();
   await testLocalKnowledgeDoesNotCrossWrongSection();
   await testMainGroupEmployeeQuestionGetsAutoReply();
