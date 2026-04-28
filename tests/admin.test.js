@@ -492,6 +492,132 @@ async function testAiIntegrationRejectsInvalidConnection() {
   }
 }
 
+async function testAiIntegrationAcceptsEmptyCompatibleChoice() {
+  const originalSelect = supabase.select;
+  const originalInsert = supabase.insert;
+  const originalFetch = global.fetch;
+  const telegramCalls = [];
+  let insertedRows = null;
+
+  supabase.select = async (table) => {
+    assert.strictEqual(table, 'bot_settings');
+    return [
+      { key: 'ai_mode', value: { enabled: false, provider: null } },
+      { key: 'main_group', value: { chat_id: '-100777' } },
+      { key: 'done_tag', value: { tag: '#done' } },
+      { key: 'request_detection', value: { mode: 'keyword', min_text_length: 10 } }
+    ];
+  };
+  supabase.insert = async (table, rows) => {
+    assert.strictEqual(table, 'bot_settings');
+    insertedRows = rows;
+    return rows;
+  };
+  global.fetch = async (url, options) => {
+    if (/ai\.example/.test(url)) {
+      const body = JSON.parse(options.body);
+      assert.strictEqual(body.model, 'uyqur-model');
+      return {
+        ok: true,
+        json: async () => ({
+          id: 'chatcmpl-test',
+          choices: [{ finish_reason: 'stop', message: { role: 'assistant', content: '' } }]
+        })
+      };
+    }
+    telegramCalls.push({ url, body: JSON.parse(options.body) });
+    return {
+      ok: true,
+      json: async () => ({ ok: true, result: { message_id: 504 } })
+    };
+  };
+
+  try {
+    const result = await callSettings({
+      settings: [{
+        key: 'ai_integration',
+        value: {
+          enabled: true,
+          provider: 'openai_compatible',
+          label: 'Uyqur AI',
+          base_url: 'https://ai.example/v1',
+          model: 'uyqur-model',
+          api_key: 'secret-token',
+          system_prompt: 'Classify support requests',
+          knowledge_text: 'Uyqurda obyekt va smeta bor.'
+        }
+      }]
+    });
+
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.ok, true);
+    assert.strictEqual(insertedRows.some(row => row.key === 'ai_integration' && row.value.last_check_status === 'ok'), true);
+    assert.strictEqual(telegramCalls.length, 1);
+  } finally {
+    supabase.select = originalSelect;
+    supabase.insert = originalInsert;
+    global.fetch = originalFetch;
+  }
+}
+
+async function testAiIntegrationAcceptsArrayContentChoice() {
+  const originalSelect = supabase.select;
+  const originalInsert = supabase.insert;
+  const originalFetch = global.fetch;
+
+  supabase.select = async (table) => {
+    assert.strictEqual(table, 'bot_settings');
+    return [
+      { key: 'ai_mode', value: { enabled: false, provider: null } },
+      { key: 'done_tag', value: { tag: '#done' } },
+      { key: 'request_detection', value: { mode: 'keyword', min_text_length: 10 } }
+    ];
+  };
+  supabase.insert = async (table, rows) => {
+    assert.strictEqual(table, 'bot_settings');
+    return rows;
+  };
+  global.fetch = async (url) => {
+    if (/ai\.example/.test(url)) {
+      return {
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { role: 'assistant', content: [{ type: 'text', text: 'OK' }] } }]
+        })
+      };
+    }
+    return {
+      ok: true,
+      json: async () => ({ ok: true, result: { message_id: 505 } })
+    };
+  };
+
+  try {
+    const result = await callSettings({
+      settings: [{
+        key: 'ai_integration',
+        value: {
+          enabled: true,
+          provider: 'openai_compatible',
+          label: 'Uyqur AI',
+          base_url: 'https://ai.example/v1',
+          model: 'uyqur-model',
+          api_key: 'secret-token'
+        }
+      }]
+    });
+
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.ok, true);
+    const integration = result.payload.data.find(row => row.key === 'ai_integration').value;
+    assert.strictEqual(integration.last_check_status, 'ok');
+  } finally {
+    supabase.select = originalSelect;
+    supabase.insert = originalInsert;
+    global.fetch = originalFetch;
+  }
+}
+
 async function testAiModeModelRequiresVerifiedIntegration() {
   const originalSelect = supabase.select;
   const originalInsert = supabase.insert;
@@ -831,6 +957,8 @@ async function run() {
   await testFirstAutoReplyEnableStillNotifiesMainGroup();
   await testAiIntegrationSaveMasksTokenAndNotifiesMainGroup();
   await testAiIntegrationRejectsInvalidConnection();
+  await testAiIntegrationAcceptsEmptyCompatibleChoice();
+  await testAiIntegrationAcceptsArrayContentChoice();
   await testAiModeModelRequiresVerifiedIntegration();
   await testPrivateChatsExcludeEmployees();
   await testChatDetailIncludesTicketSolutionAndTimeline();

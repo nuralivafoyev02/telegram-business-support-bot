@@ -106,6 +106,35 @@ function aiConnectionErrorMessage(error, responseStatus = 0) {
   return message || 'AI ulanish tekshiruvi muvaffaqiyatsiz';
 }
 
+function textFromAiContentParts(content) {
+  if (typeof content === 'string') return content;
+  if (!Array.isArray(content)) return '';
+  return content.map(part => {
+    if (typeof part === 'string') return part;
+    if (!part || typeof part !== 'object') return '';
+    if (typeof part.text === 'string') return part.text;
+    if (part.text && typeof part.text.value === 'string') return part.text.value;
+    if (typeof part.content === 'string') return part.content;
+    return '';
+  }).join('');
+}
+
+function isOpenAiCompatibleChatPayload(payload = {}) {
+  const choice = Array.isArray(payload.choices) ? payload.choices[0] : null;
+  if (!choice || typeof choice !== 'object') return false;
+
+  const message = choice.message;
+  if (message && typeof message === 'object') {
+    if (textFromAiContentParts(message.content).trim()) return true;
+    if (typeof message.reasoning_content === 'string' && message.reasoning_content.trim()) return true;
+    if (Object.prototype.hasOwnProperty.call(message, 'content') && choice.finish_reason) return true;
+    if (Object.prototype.hasOwnProperty.call(message, 'content') && payload.id) return true;
+  }
+
+  if (typeof choice.text === 'string') return true;
+  return false;
+}
+
 async function testAiIntegration(value = {}) {
   const config = normalizeAiIntegration(value);
   if (!config.enabled) return { ok: false, status: 'disabled', message: 'AI integratsiya o‘chiq' };
@@ -145,8 +174,7 @@ async function testAiIntegration(value = {}) {
       throw error;
     }
 
-    const content = payload.choices && payload.choices[0] && payload.choices[0].message && payload.choices[0].message.content;
-    if (!String(content || '').trim()) throw new Error('AI javobi OpenAI-compatible formatda emas');
+    if (!isOpenAiCompatibleChatPayload(payload)) throw new Error('AI javobi OpenAI-compatible formatda emas');
     return { ok: true, status: 'ok', model: config.model };
   } catch (error) {
     throw new Error(aiConnectionErrorMessage(error, error.status || 0));
