@@ -432,7 +432,7 @@
                   <div>
                     <div class="card-title">AI integratsiya</div>
                   </div>
-                  <span class="status-pill" :class="{ ready: aiIntegrationReady }">{{ aiIntegrationStatus }}</span>
+                  <span class="status-pill" :class="{ ready: aiIntegrationReady, error: aiIntegrationHasError }">{{ aiIntegrationStatus }}</span>
                 </div>
                 <form class="form settings-form integration-form" @submit.prevent="saveIntegration">
                   <label class="label">Provider
@@ -881,18 +881,50 @@ const integrationForm = reactive({
   api_key: '',
   has_api_key: false,
   system_prompt: '',
-  knowledge_text: ''
+  knowledge_text: '',
+  last_check_status: '',
+  last_checked_at: '',
+  last_check_error: ''
 });
+const savedIntegrationSignature = ref('');
 
 const current = computed(() => tabs.find(t => t.key === activeTab.value) || tabs[0]);
 const currentTitle = computed(() => current.value.label);
 const loginFeedback = computed(() => loginError.value || loginStatus.value);
 const loginButtonText = computed(() => loadingAction.value === 'login' ? 'Tekshirilmoqda...' : 'Kirish');
-const aiIntegrationReady = computed(() => !!(integrationForm.enabled && integrationForm.model && (integrationForm.api_key || integrationForm.has_api_key)));
+function aiConnectionSignature(source = {}) {
+  return [
+    source.enabled !== false,
+    source.provider || 'openai_compatible',
+    source.base_url || '',
+    source.model || '',
+    Boolean(source.has_api_key)
+  ].join('|');
+}
+
+const aiIntegrationDirty = computed(() => Boolean(
+  integrationForm.api_key
+  || (savedIntegrationSignature.value && aiConnectionSignature(integrationForm) !== savedIntegrationSignature.value)
+));
+const aiIntegrationReady = computed(() => !!(
+  integrationForm.enabled
+  && integrationForm.model
+  && (integrationForm.api_key || integrationForm.has_api_key)
+  && integrationForm.last_check_status === 'ok'
+  && !aiIntegrationDirty.value
+));
+const aiIntegrationHasError = computed(() => ['error', 'failed'].includes(integrationForm.last_check_status));
 const aiModelOptionLabel = computed(() => aiIntegrationReady.value
   ? `${integrationForm.label || integrationForm.model} modeli`
-  : 'AI model ulanmagan');
-const aiIntegrationStatus = computed(() => aiIntegrationReady.value ? 'Ulangan' : 'Token yoki model kerak');
+  : 'AI model tekshirilmagan');
+const aiIntegrationStatus = computed(() => {
+  if (!integrationForm.enabled) return 'O‘chiq';
+  if (aiIntegrationReady.value) return 'Ulangan va tekshirildi';
+  if (aiIntegrationHasError.value) return 'Ulanmadi';
+  if (aiIntegrationDirty.value) return 'Qayta tekshirish kerak';
+  if (integrationForm.last_check_status === 'incomplete') return 'Token yoki model kerak';
+  return 'Tekshirilmagan';
+});
 const periodOptions = [
   { key: 'today', label: 'Bugun' },
   { key: 'week', label: 'Hafta' },
@@ -1300,9 +1332,14 @@ async function loadSettings() {
     api_key: '',
     has_api_key: !!integration?.has_api_key,
     system_prompt: integration?.system_prompt || '',
-    knowledge_text: integration?.knowledge_text || ''
+    knowledge_text: integration?.knowledge_text || '',
+    last_check_status: integration?.last_check_status || '',
+    last_checked_at: integration?.last_checked_at || '',
+    last_check_error: integration?.last_check_error || ''
   });
-  settingsForm.ai_mode = ai?.enabled && ai?.provider ? 'model' : String(!!ai?.enabled);
+  savedIntegrationSignature.value = aiConnectionSignature(integrationForm);
+  const modelVerified = !!(integration?.last_check_status === 'ok' && integration?.model && integration?.has_api_key);
+  settingsForm.ai_mode = ai?.enabled && ai?.provider && modelVerified ? 'model' : String(!!ai?.enabled);
   const autoReplySetting = data.settings?.find(s => s.key === 'auto_reply')?.value;
   settingsForm.auto_reply = autoReplySetting !== undefined
     ? String(!!autoReplySetting.enabled)
@@ -1888,10 +1925,30 @@ async function saveIntegration() {
         }
       ]
     });
-    integrationForm.has_api_key = Boolean(integrationForm.api_key || integrationForm.has_api_key);
+    const saved = rows.find(row => row.key === 'ai_integration')?.value;
+    if (saved) {
+      Object.assign(integrationForm, {
+        enabled: saved.enabled !== false,
+        provider: saved.provider || 'openai_compatible',
+        label: saved.label || saved.model || 'Uyqur AI',
+        base_url: saved.base_url || 'https://api.openai.com/v1',
+        model: saved.model || '',
+        has_api_key: !!saved.has_api_key,
+        system_prompt: saved.system_prompt || '',
+        knowledge_text: saved.knowledge_text || '',
+        last_check_status: saved.last_check_status || '',
+        last_checked_at: saved.last_checked_at || '',
+        last_check_error: saved.last_check_error || ''
+      });
+    } else {
+      integrationForm.has_api_key = Boolean(integrationForm.api_key || integrationForm.has_api_key);
+    }
     integrationForm.api_key = '';
-    showToast('AI integratsiya saqlandi');
+    savedIntegrationSignature.value = aiConnectionSignature(integrationForm);
+    showToast(integrationForm.last_check_status === 'ok' ? 'AI tekshirildi va saqlandi' : 'AI integratsiya saqlandi');
   } catch (error) {
+    integrationForm.last_check_status = 'failed';
+    integrationForm.last_check_error = error.message;
     showToast(error.message);
   } finally {
     stopLoading('saveIntegration');

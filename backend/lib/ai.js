@@ -86,6 +86,75 @@ function shouldUseExternalAi(settings = {}) {
   return Boolean(settings.aiMode && settings.aiProvider && isAiIntegrationReady(settings.aiIntegration));
 }
 
+function assertValidAiBaseUrl(baseUrl = '') {
+  let parsed;
+  try {
+    parsed = new URL(String(baseUrl || ''));
+  } catch (_error) {
+    throw new Error('AI base URL noto‘g‘ri formatda');
+  }
+  if (!['http:', 'https:'].includes(parsed.protocol)) {
+    throw new Error('AI base URL faqat http yoki https bo‘lishi mumkin');
+  }
+}
+
+function aiConnectionErrorMessage(error, responseStatus = 0) {
+  const message = String(error && error.message || '').trim();
+  if (error && error.name === 'AbortError') return 'AI tekshiruv vaqti tugadi';
+  if (responseStatus === 401 || responseStatus === 403) return 'AI API token noto‘g‘ri yoki ruxsat berilmagan';
+  if (/fetch failed|ENOTFOUND|ECONNREFUSED|invalid url|network/i.test(message)) return 'AI base URL bilan bog‘lanib bo‘lmadi';
+  return message || 'AI ulanish tekshiruvi muvaffaqiyatsiz';
+}
+
+async function testAiIntegration(value = {}) {
+  const config = normalizeAiIntegration(value);
+  if (!config.enabled) return { ok: false, status: 'disabled', message: 'AI integratsiya o‘chiq' };
+  if (!config.provider) throw new Error('AI provider tanlanmagan');
+  if (!config.base_url) throw new Error('AI base URL majburiy');
+  if (!config.model) throw new Error('AI model nomi majburiy');
+  if (!config.api_key) throw new Error('AI API token majburiy');
+  assertValidAiBaseUrl(config.base_url);
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 9000);
+
+  try {
+    const response = await fetch(chatCompletionsUrl(config.base_url), {
+      method: 'POST',
+      signal: controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${config.api_key}`
+      },
+      body: JSON.stringify({
+        model: config.model,
+        temperature: 0,
+        max_tokens: 8,
+        messages: [
+          { role: 'system', content: 'You are a connection test. Reply with OK.' },
+          { role: 'user', content: 'OK' }
+        ]
+      })
+    });
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const detail = payload.error && payload.error.message ? payload.error.message : `AI HTTP ${response.status}`;
+      const error = new Error(aiConnectionErrorMessage(new Error(detail), response.status));
+      error.status = response.status;
+      throw error;
+    }
+
+    const content = payload.choices && payload.choices[0] && payload.choices[0].message && payload.choices[0].message.content;
+    if (!String(content || '').trim()) throw new Error('AI javobi OpenAI-compatible formatda emas');
+    return { ok: true, status: 'ok', model: config.model };
+  } catch (error) {
+    throw new Error(aiConnectionErrorMessage(error, error.status || 0));
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function classifyWithAi({ text, chatType, sourceType, settings }) {
   if (!shouldUseExternalAi(settings)) return null;
   const config = normalizeAiIntegration(settings.aiIntegration);
@@ -583,6 +652,7 @@ async function generateSupportReply({ text, chatType, sourceType, settings }) {
 
 module.exports = {
   shouldUseExternalAi,
+  testAiIntegration,
   classifyWithAi,
   generateSupportReply,
   generateLocalSupportReply

@@ -19,7 +19,10 @@ const DEFAULT_AI_INTEGRATION = Object.freeze({
   api_key: '',
   has_api_key: false,
   system_prompt: DEFAULT_AI_SYSTEM_PROMPT,
-  knowledge_text: ''
+  knowledge_text: '',
+  last_check_status: '',
+  last_checked_at: '',
+  last_check_error: ''
 });
 
 const SECRET_PLACEHOLDER_RE = /^(••••|\\*\\*\\*\\*|masked|__keep__|keep)$/i;
@@ -46,13 +49,21 @@ function normalizeAiIntegration(value = {}) {
     api_key: apiKey,
     has_api_key: Boolean(apiKey || source.has_api_key || source.hasApiKey),
     system_prompt: cleanString(source.system_prompt || source.systemPrompt || DEFAULT_AI_SYSTEM_PROMPT),
-    knowledge_text: cleanString(source.knowledge_text || source.knowledgeText)
+    knowledge_text: cleanString(source.knowledge_text || source.knowledgeText),
+    last_check_status: cleanString(source.last_check_status || source.lastCheckStatus || source.connection_status || source.connectionStatus),
+    last_checked_at: cleanString(source.last_checked_at || source.lastCheckedAt),
+    last_check_error: cleanString(source.last_check_error || source.lastCheckError)
   };
+}
+
+function isAiIntegrationConfigured(value = {}) {
+  const config = normalizeAiIntegration(value);
+  return Boolean(config.enabled && config.provider && config.base_url && config.model && (config.api_key || config.has_api_key));
 }
 
 function isAiIntegrationReady(value = {}) {
   const config = normalizeAiIntegration(value);
-  return Boolean(config.enabled && config.provider && config.base_url && config.model && (config.api_key || config.has_api_key));
+  return Boolean(isAiIntegrationConfigured(config) && config.last_check_status === 'ok');
 }
 
 function hasUsableApiKey(value = {}) {
@@ -64,7 +75,7 @@ function mergeAiIntegration(previous = {}, next = {}) {
   const oldConfig = normalizeAiIntegration(previous);
   const incoming = normalizeAiIntegration(next);
   if (!hasUsableApiKey(next)) incoming.api_key = oldConfig.api_key;
-  incoming.has_api_key = Boolean(incoming.api_key || oldConfig.api_key || incoming.has_api_key);
+  incoming.has_api_key = Boolean(incoming.api_key);
   return incoming;
 }
 
@@ -86,6 +97,7 @@ module.exports = {
   DEFAULT_AI_SYSTEM_PROMPT,
   DEFAULT_AI_INTEGRATION,
   normalizeAiIntegration,
+  isAiIntegrationConfigured,
   isAiIntegrationReady,
   mergeAiIntegration,
   sanitizeAiIntegration,

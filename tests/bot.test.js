@@ -552,6 +552,7 @@ async function testSelectedAiModelClassifiesRequest() {
             base_url: 'https://ai.example/v1',
             model: 'test-model',
             api_key: 'secret-token',
+            last_check_status: 'ok',
             system_prompt: 'Return JSON classification',
             knowledge_text: 'Uyqur technical support'
           }
@@ -654,6 +655,7 @@ async function testClassifierJsonIsNotSentAsAutoReply() {
             base_url: 'https://ai.example/v1',
             model: 'test-model',
             api_key: 'secret-token',
+            last_check_status: 'ok',
             system_prompt: 'Return JSON classification',
             knowledge_text: ''
           }
@@ -754,6 +756,7 @@ async function testAiModeAutoRepliesToGroupRequest() {
             base_url: 'https://ai.example/v1',
             model: 'test-model',
             api_key: 'secret-token',
+            last_check_status: 'ok',
             system_prompt: 'Return JSON classification',
             knowledge_text: 'Uyqur technical support'
           }
@@ -1031,6 +1034,7 @@ async function testExternalAiFailureStillUsesLocalKnowledge() {
             base_url: 'https://ai.example/v1',
             model: 'test-model',
             api_key: 'secret-token',
+            last_check_status: 'ok',
             knowledge_text: 'Savol: Printer ishlamaydi? Javob: Printerni ochib qayta yoqib ko‘ring.'
           }
         },

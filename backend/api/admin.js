@@ -7,7 +7,8 @@ const { login, requireAdmin, hashPassword } = require('../lib/auth');
 const { sendMessage, sendBusinessMessage, getWebhookInfo, setWebhook, getFile, downloadFile } = require('../lib/telegram');
 const { optionalEnv } = require('../lib/env');
 const { normalizeSettings, clearBotSettingsCache } = require('../lib/bot-settings');
-const { normalizeAiIntegration, mergeAiIntegration, sanitizeAiIntegration, isAiIntegrationReady, aiIntegrationSignature } = require('../lib/ai-config');
+const { normalizeAiIntegration, mergeAiIntegration, sanitizeAiIntegration, isAiIntegrationReady, isAiIntegrationConfigured, aiIntegrationSignature } = require('../lib/ai-config');
+const { testAiIntegration } = require('../lib/ai');
 const { extractTextFromUpload } = require('../lib/document-text');
 const { resolveMainStatsChatId, sendMainStatsReport } = require('../lib/report');
 const stats = require('../lib/stats');
@@ -1303,6 +1304,43 @@ function hasSetting(rows = [], key) {
   return rows.some(item => item && item.key === key);
 }
 
+async function prepareAiIntegrationForSave(previousIntegration = {}, nextValue = {}) {
+  const config = mergeAiIntegration(previousIntegration, nextValue);
+
+  if (!config.enabled) {
+    return {
+      ...config,
+      last_check_status: 'disabled',
+      last_checked_at: '',
+      last_check_error: ''
+    };
+  }
+
+  if (!isAiIntegrationConfigured(config)) {
+    return {
+      ...config,
+      last_check_status: 'incomplete',
+      last_checked_at: '',
+      last_check_error: config.model || config.has_api_key ? 'AI base URL, model va API token to‘liq kiritilishi kerak' : ''
+    };
+  }
+
+  try {
+    await testAiIntegration(config);
+    return {
+      ...config,
+      last_check_status: 'ok',
+      last_checked_at: nowIso(),
+      last_check_error: ''
+    };
+  } catch (error) {
+    const message = `AI ulanish tekshiruvidan o‘tmadi: ${error.message}`;
+    const validationError = new Error(message);
+    validationError.code = 'AI_CONNECTION_FAILED';
+    throw validationError;
+  }
+}
+
 async function updateSettings(body) {
   const items = Array.isArray(body.settings) ? body.settings : [];
   if (!items.length) return [];
@@ -1316,18 +1354,26 @@ async function updateSettings(body) {
   const previousIntegration = normalizeAiIntegration(settingValue(previousRows, 'ai_integration'));
   const previousIntegrationReady = isAiIntegrationReady(previousIntegration);
   const previousIntegrationSignature = aiIntegrationSignature(previousIntegration);
-  const rows = items.map(item => {
+  const timestamp = nowIso();
+  const rows = [];
+  for (const item of items) {
     const value = item.key === 'ai_integration'
-      ? mergeAiIntegration(previousIntegration, item.value)
+      ? await prepareAiIntegrationForSave(previousIntegration, item.value)
       : item.value;
-    return { key: item.key, value, updated_at: new Date().toISOString() };
-  });
-  const savedRows = await supabase.insert('bot_settings', rows, { upsert: true, onConflict: 'key' });
-  clearBotSettingsCache();
-
+    rows.push({ key: item.key, value, updated_at: timestamp });
+  }
   const mergedRows = new Map((previousRows || []).map(row => [row.key, row]));
   rows.forEach(row => mergedRows.set(row.key, row));
   const nextSettings = normalizeSettings([...mergedRows.values()]);
+  if (nextSettings.aiProvider && !isAiIntegrationReady(nextSettings.aiIntegration)) {
+    const error = new Error('AI model ishlashi tekshirilmagan. Avval AI integratsiyani to‘g‘ri token, base URL va model bilan saqlang.');
+    error.code = 'AI_CONNECTION_FAILED';
+    throw error;
+  }
+
+  const savedRows = await supabase.insert('bot_settings', rows, { upsert: true, onConflict: 'key' });
+  clearBotSettingsCache();
+
   if (!previousSettings.aiMode && nextSettings.aiMode) {
     await notifyAiModeChange(nextSettings, true).catch(error => console.error('[admin:ai-mode-notice:error]', error));
   }
@@ -1444,7 +1490,9 @@ async function handler(req, res) {
     return sendJson(res, 405, { ok: false, error: 'Method not allowed' });
   } catch (error) {
     console.error('[admin:error]', error);
-    const status = /token|login|parol|authorization/i.test(error.message) ? 401 : 400;
+    const status = error.code === 'AI_CONNECTION_FAILED'
+      ? 400
+      : (/token|login|parol|authorization/i.test(error.message) ? 401 : 400);
     return sendJson(res, status, { ok: false, error: error.message });
   }
 }

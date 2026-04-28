@@ -361,6 +361,7 @@ async function testAiIntegrationSaveMasksTokenAndNotifiesMainGroup() {
   const originalInsert = supabase.insert;
   const originalFetch = global.fetch;
   const telegramCalls = [];
+  const aiCalls = [];
 
   supabase.select = async (table) => {
     assert.strictEqual(table, 'bot_settings');
@@ -376,6 +377,17 @@ async function testAiIntegrationSaveMasksTokenAndNotifiesMainGroup() {
     return rows;
   };
   global.fetch = async (url, options) => {
+    if (/ai\.example/.test(url)) {
+      const body = JSON.parse(options.body);
+      aiCalls.push({ url, body, headers: options.headers });
+      assert.strictEqual(url, 'https://ai.example/v1/chat/completions');
+      assert.strictEqual(options.headers.Authorization, 'Bearer secret-token');
+      assert.strictEqual(body.model, 'uyqur-model');
+      return {
+        ok: true,
+        json: async () => ({ choices: [{ message: { content: 'OK' } }] })
+      };
+    }
     telegramCalls.push({ url, body: JSON.parse(options.body) });
     return {
       ok: true,
@@ -405,6 +417,9 @@ async function testAiIntegrationSaveMasksTokenAndNotifiesMainGroup() {
     const integration = result.payload.data.find(row => row.key === 'ai_integration').value;
     assert.strictEqual(integration.api_key, '');
     assert.strictEqual(integration.has_api_key, true);
+    assert.strictEqual(integration.last_check_status, 'ok');
+    assert.ok(integration.last_checked_at);
+    assert.strictEqual(aiCalls.length, 1);
     assert.strictEqual(telegramCalls.length, 1);
     assert.match(telegramCalls[0].body.text, /⚡️ <b>AI model ulandi<\/b>/);
     assert.match(telegramCalls[0].body.text, /Uyqur AI/);
@@ -413,6 +428,118 @@ async function testAiIntegrationSaveMasksTokenAndNotifiesMainGroup() {
     supabase.select = originalSelect;
     supabase.insert = originalInsert;
     global.fetch = originalFetch;
+  }
+}
+
+async function testAiIntegrationRejectsInvalidConnection() {
+  const originalSelect = supabase.select;
+  const originalInsert = supabase.insert;
+  const originalFetch = global.fetch;
+  const originalConsoleError = console.error;
+  let insertCalled = false;
+
+  supabase.select = async (table) => {
+    assert.strictEqual(table, 'bot_settings');
+    return [
+      { key: 'ai_mode', value: { enabled: false, provider: null } },
+      { key: 'main_group', value: { chat_id: '-100777' } },
+      { key: 'done_tag', value: { tag: '#done' } },
+      { key: 'request_detection', value: { mode: 'keyword', min_text_length: 10 } }
+    ];
+  };
+  supabase.insert = async () => {
+    insertCalled = true;
+    return [];
+  };
+  console.error = () => {};
+  global.fetch = async (url) => {
+    assert.match(url, /ai\.example\/v1\/chat\/completions$/);
+    return {
+      ok: false,
+      status: 401,
+      json: async () => ({ error: { message: 'invalid api key' } })
+    };
+  };
+
+  try {
+    const result = await callSettings({
+      settings: [{
+        key: 'ai_integration',
+        value: {
+          enabled: true,
+          provider: 'openai_compatible',
+          label: 'Uyqur AI',
+          base_url: 'https://ai.example/v1',
+          model: 'uyqur-model',
+          api_key: 'bad-token',
+          system_prompt: 'Classify support requests',
+          knowledge_text: 'Uyqurda obyekt va smeta bor.'
+        }
+      }]
+    });
+
+    assert.strictEqual(result.status, 400);
+    assert.strictEqual(result.payload.ok, false);
+    assert.match(result.payload.error, /AI ulanish tekshiruvidan o‘tmadi/);
+    assert.match(result.payload.error, /token noto‘g‘ri/);
+    assert.strictEqual(insertCalled, false);
+    assert.doesNotMatch(JSON.stringify(result.payload), /bad-token/);
+  } finally {
+    supabase.select = originalSelect;
+    supabase.insert = originalInsert;
+    global.fetch = originalFetch;
+    console.error = originalConsoleError;
+  }
+}
+
+async function testAiModeModelRequiresVerifiedIntegration() {
+  const originalSelect = supabase.select;
+  const originalInsert = supabase.insert;
+  const originalConsoleError = console.error;
+  let insertCalled = false;
+
+  supabase.select = async (table) => {
+    assert.strictEqual(table, 'bot_settings');
+    return [
+      { key: 'ai_mode', value: { enabled: false, provider: null } },
+      {
+        key: 'ai_integration',
+        value: {
+          enabled: true,
+          provider: 'openai_compatible',
+          label: 'Uyqur AI',
+          base_url: 'https://ai.example/v1',
+          model: 'uyqur-model',
+          api_key: 'secret-token',
+          last_check_status: 'failed'
+        }
+      },
+      { key: 'main_group', value: { chat_id: '-100777' } },
+      { key: 'done_tag', value: { tag: '#done' } },
+      { key: 'request_detection', value: { mode: 'keyword', min_text_length: 10 } }
+    ];
+  };
+  supabase.insert = async () => {
+    insertCalled = true;
+    return [];
+  };
+  console.error = () => {};
+
+  try {
+    const result = await callSettings({
+      settings: [
+        { key: 'ai_mode', value: { enabled: true, provider: 'openai_compatible', model: 'uyqur-model', model_label: 'Uyqur AI' } }
+      ]
+    });
+
+    assert.strictEqual(result.status, 400);
+    assert.strictEqual(result.payload.ok, false);
+    assert.match(result.payload.error, /AI model ishlashi tekshirilmagan/);
+    assert.strictEqual(insertCalled, false);
+  } finally {
+    supabase.select = originalSelect;
+    supabase.insert = originalInsert;
+    console.error = originalConsoleError;
   }
 }
 
@@ -703,6 +830,8 @@ async function run() {
   await testAutoReplyDisableNotificationSendsMainGroupMessage();
   await testFirstAutoReplyEnableStillNotifiesMainGroup();
   await testAiIntegrationSaveMasksTokenAndNotifiesMainGroup();
+  await testAiIntegrationRejectsInvalidConnection();
+  await testAiModeModelRequiresVerifiedIntegration();
   await testPrivateChatsExcludeEmployees();
   await testChatDetailIncludesTicketSolutionAndTimeline();
   await testSendToChatStoresOutgoingAdminMessage();

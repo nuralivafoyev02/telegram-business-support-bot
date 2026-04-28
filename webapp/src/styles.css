@@ -545,6 +545,11 @@ tbody tr:hover { background: rgba(142, 199, 255, .035); }
   background: rgba(33, 214, 129, .11);
   color: #99ffc9;
 }
+.status-pill.error {
+  border-color: rgba(255, 93, 93, .42);
+  background: rgba(255, 93, 93, .12);
+  color: #ffb6b6;
+}
 .settings-form .btn {
   justify-self: start;
   min-width: 150px;
