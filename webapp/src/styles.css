@@ -1415,6 +1415,30 @@ body {
   gap: 22px;
   align-items: stretch;
 }
+.manager-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(180px, 1fr));
+  gap: 16px;
+}
+.manager-metric {
+  display: grid;
+  gap: 8px;
+  min-height: 128px;
+  padding: 20px;
+}
+.manager-metric span,
+.manager-metric small {
+  color: var(--muted);
+}
+.manager-metric b {
+  color: var(--text);
+  font-size: 26px;
+  line-height: 1.15;
+  font-weight: 900;
+}
+.manager-open-card .data-table {
+  padding: 0 20px 20px;
+}
 .performance-card,
 .alert-card {
   min-height: 420px;
@@ -1698,6 +1722,23 @@ tbody tr:hover {
 .modal-body {
   background: var(--surface);
 }
+.chat-detail-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(320px, .65fr);
+  gap: 16px;
+  align-items: start;
+}
+.ticket-panel,
+.dialog-panel {
+  min-width: 0;
+}
+.dialog-panel .telegram-thread {
+  max-height: min(64vh, 720px);
+  overflow: auto;
+}
+.dialog-panel .chat-bubble {
+  max-width: 96%;
+}
 .recipient-row,
 .timeline-row,
 .drilldown-head {
@@ -1752,10 +1793,12 @@ tbody tr:hover {
 }
 
 @media (max-width: 1180px) {
-  .metric-strip {
+  .metric-strip,
+  .manager-metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .performance-layout {
+  .performance-layout,
+  .chat-detail-layout {
     grid-template-columns: 1fr;
   }
 }
@@ -1790,6 +1833,7 @@ tbody tr:hover {
     align-items: stretch;
   }
   .metric-strip,
+  .manager-metrics,
   .stats-charts {
     grid-template-columns: 1fr;
   }

@@ -1026,6 +1026,67 @@ async function testReplyRequestSendsMessageAndClosesTicket() {
   }
 }
 
+async function testReplyRequestFallsBackWhenBusinessPeerInvalid() {
+  const originalSelect = supabase.select;
+  const originalInsert = supabase.insert;
+  const originalPatch = supabase.patch;
+  const originalFetch = global.fetch;
+  const telegramCalls = [];
+
+  supabase.select = async (table) => {
+    if (table === 'support_requests') {
+      return [{
+        id: 'request-business',
+        source_type: 'business',
+        chat_id: 303,
+        customer_name: 'Business mijoz',
+        initial_message_id: 77,
+        initial_text: 'Hisobot ochilmayapti',
+        status: 'open',
+        business_connection_id: 'bc-old'
+      }];
+    }
+    if (table === 'tg_chats') return [{ chat_id: 303, title: 'Business mijoz', source_type: 'business', business_connection_id: 'bc-old' }];
+    return [];
+  };
+  supabase.insert = async (_table, rows) => rows;
+  supabase.patch = async (_table, _query, values) => [{ id: 'request-business', ...values }];
+  global.fetch = async (_url, options) => {
+    const body = JSON.parse(options.body);
+    telegramCalls.push(body);
+    if (body.business_connection_id) {
+      return {
+        ok: false,
+        json: async () => ({ ok: false, error_code: 400, description: 'Bad Request: BUSINESS_PEER_INVALID' })
+      };
+    }
+    return {
+      ok: true,
+      json: async () => ({ ok: true, result: { message_id: 7003 } })
+    };
+  };
+
+  try {
+    const result = await callAdmin('replyRequest', {
+      method: 'POST',
+      body: { request_id: 'request-business', text: 'Hisobot qayta yuklandi' }
+    });
+
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.data.sent, true);
+    assert.strictEqual(result.payload.data.fallback_from_business, true);
+    assert.strictEqual(telegramCalls.length, 2);
+    assert.strictEqual(telegramCalls[0].business_connection_id, 'bc-old');
+    assert.strictEqual(telegramCalls[1].business_connection_id, undefined);
+    assert.strictEqual(telegramCalls[1].text, 'Hisobot qayta yuklandi');
+  } finally {
+    supabase.select = originalSelect;
+    supabase.insert = originalInsert;
+    supabase.patch = originalPatch;
+    global.fetch = originalFetch;
+  }
+}
+
 async function testEmployeesIncludeDailyWorkStats() {
   const originalSelect = supabase.select;
   const today = new Date().toISOString();
@@ -1078,6 +1139,7 @@ async function run() {
   await testChatDetailIncludesTicketSolutionAndTimeline();
   await testSendToChatStoresOutgoingAdminMessage();
   await testReplyRequestSendsMessageAndClosesTicket();
+  await testReplyRequestFallsBackWhenBusinessPeerInvalid();
   await testEmployeesIncludeDailyWorkStats();
   console.log('Admin tests passed');
 }

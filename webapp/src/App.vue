@@ -132,6 +132,48 @@
               </article>
             </div>
 
+            <template v-if="isManagerMode">
+              <div class="spacer"></div>
+              <div class="manager-metrics">
+                <article class="card manager-metric">
+                  <span>Guruhlardan tushgan so‘rovlar</span>
+                  <b>{{ fmtNumber(managerStats.group_requests) }}</b>
+                  <small>{{ fmtNumber(managerStats.group_open_requests) }} tasi ochiq</small>
+                </article>
+                <article class="card manager-metric">
+                  <span>Yopilgan so‘rovlar</span>
+                  <b>{{ fmtNumber(managerStats.closed_requests) }}</b>
+                  <small>Jami: {{ fmtNumber(managerStats.total_requests) }}</small>
+                </article>
+                <article class="card manager-metric">
+                  <span>Chatlardagi ochiq so‘rovlar</span>
+                  <b>{{ fmtNumber(managerStats.chat_open_requests) }}</b>
+                  <small>Shaxsiy va biznes chatlar</small>
+                </article>
+                <article class="card manager-metric">
+                  <span>Eng uzoq ochiq turgan</span>
+                  <b>{{ openDurationLabel(managerOpenRequests[0]?.created_at) }}</b>
+                  <small>{{ fmtNumber(managerStats.assigned_open_requests) }} ta so‘rovga xodim biriktirilgan</small>
+                </article>
+              </div>
+
+              <div class="spacer"></div>
+              <section class="card manager-open-card">
+                <div class="card-header">
+                  <div>
+                    <div class="card-title">Rahbar nazorati: ochiq so‘rovlar</div>
+                    <div class="card-note">Qaysi chatdan kelgani, qancha vaqtdan beri ochiq turgani va mas’ul xodim</div>
+                  </div>
+                </div>
+                <DataTable :columns="managerOpenRequestColumns" :rows="managerOpenRequests"
+                  empty="Ochiq so‘rov qolmagan" :on-cell-action="handleTableCellAction" :page-size="10">
+                  <template #requestReply="{ row }">
+                    <button class="btn small" type="button" @click.stop="openRequestReply(row)">Javob</button>
+                  </template>
+                </DataTable>
+              </section>
+            </template>
+
             <div class="spacer"></div>
 
             <div class="performance-layout">
@@ -432,6 +474,12 @@
                   </div>
                 </div>
                 <form class="form settings-form" @submit.prevent="saveSettings">
+                  <label class="label">Panel rejimi
+                    <select v-model="settingsForm.panel_mode" class="select">
+                      <option value="support">Support rejimi</option>
+                      <option value="manager">Rahbar rejimi</option>
+                    </select>
+                  </label>
                   <label class="label">AI rejimi
                     <select v-model="settingsForm.ai_mode" class="select">
                       <option value="false">O‘chirilgan</option>
@@ -783,52 +831,54 @@
             </div>
           </section>
 
-          <section class="detail-section">
-            <div class="detail-section-head">
-              <div class="card-title">So‘rovlar va yechimlar</div>
-              <div class="card-note">{{ fmtNumber(chatDetail.requests?.length) }} ta yozuv</div>
-            </div>
-            <DataTable :columns="chatRequestColumns" :rows="chatDetail.requests || []" empty="Bu chatda so‘rov yo‘q"
-              :on-cell-action="handleTableCellAction">
-              <template #requestReply="{ row }">
-                <button class="btn small" type="button" :disabled="row.status !== 'open'"
-                  @click.stop="openRequestReply(row)">Javob</button>
-              </template>
-            </DataTable>
-          </section>
+          <div class="chat-detail-layout">
+            <section class="detail-section ticket-panel">
+              <div class="detail-section-head">
+                <div class="card-title">So‘rovlar va yechimlar</div>
+                <div class="card-note">{{ fmtNumber(chatDetail.requests?.length) }} ta yozuv</div>
+              </div>
+              <DataTable :columns="chatRequestColumns" :rows="chatDetail.requests || []" empty="Bu chatda so‘rov yo‘q"
+                :on-cell-action="handleTableCellAction">
+                <template #requestReply="{ row }">
+                  <button class="btn small" type="button" :disabled="row.status !== 'open'"
+                    @click.stop="openRequestReply(row)">Javob</button>
+                </template>
+              </DataTable>
+            </section>
 
-          <section class="detail-section">
-            <div class="detail-section-head">
-              <div class="card-title">Dialog</div>
-              <div class="card-note">{{ fmtNumber(chatConversation.length) }} ta xabar</div>
-            </div>
-            <div v-if="chatConversation.length" class="telegram-thread">
-              <article v-for="message in chatConversation" :key="chatBubbleKey(message)" class="chat-bubble-row"
-                :class="{ outbound: message.direction === 'outbound' }">
-                <div class="chat-bubble">
-                  <div class="chat-bubble-author">{{ message.actor_name || (message.direction === 'outbound' ? 'Xodim' :
-                    'Mijoz') }}</div>
-                  <div v-if="message.media" class="chat-media">
-                    <img v-if="message.media.kind === 'photo' && mediaUrl(message.media)" class="chat-media-image"
-                      :src="mediaUrl(message.media)" alt="" />
-                    <video v-else-if="isVideoMedia(message.media) && mediaUrl(message.media)" class="chat-media-video"
-                      :src="mediaUrl(message.media)" controls playsinline></video>
-                    <audio v-else-if="isAudioMedia(message.media) && mediaUrl(message.media)" class="chat-media-audio"
-                      :src="mediaUrl(message.media)" controls></audio>
-                    <div v-else class="chat-media-placeholder">
-                      {{ mediaPlaceholder(message.media) }}
+            <section class="detail-section dialog-panel">
+              <div class="detail-section-head">
+                <div class="card-title">Dialog</div>
+                <div class="card-note">{{ fmtNumber(chatConversation.length) }} ta xabar</div>
+              </div>
+              <div v-if="chatConversation.length" class="telegram-thread">
+                <article v-for="message in chatConversation" :key="chatBubbleKey(message)" class="chat-bubble-row"
+                  :class="{ outbound: message.direction === 'outbound' }">
+                  <div class="chat-bubble">
+                    <div class="chat-bubble-author">{{ message.actor_name || (message.direction === 'outbound' ? 'Xodim' :
+                      'Mijoz') }}</div>
+                    <div v-if="message.media" class="chat-media">
+                      <img v-if="message.media.kind === 'photo' && mediaUrl(message.media)" class="chat-media-image"
+                        :src="mediaUrl(message.media)" alt="" />
+                      <video v-else-if="isVideoMedia(message.media) && mediaUrl(message.media)" class="chat-media-video"
+                        :src="mediaUrl(message.media)" controls playsinline></video>
+                      <audio v-else-if="isAudioMedia(message.media) && mediaUrl(message.media)" class="chat-media-audio"
+                        :src="mediaUrl(message.media)" controls></audio>
+                      <div v-else class="chat-media-placeholder">
+                        {{ mediaPlaceholder(message.media) }}
+                      </div>
+                    </div>
+                    <p v-if="message.text">{{ message.text }}</p>
+                    <div class="chat-bubble-footer">
+                      <span v-if="message.request_text" class="chat-ticket">So‘rov</span>
+                      <time>{{ fmtChatTime(message.created_at) }}</time>
                     </div>
                   </div>
-                  <p v-if="message.text">{{ message.text }}</p>
-                  <div class="chat-bubble-footer">
-              <span v-if="message.request_text" class="chat-ticket">So‘rov</span>
-                    <time>{{ fmtChatTime(message.created_at) }}</time>
-                  </div>
-                </div>
-              </article>
-            </div>
-            <div v-else class="empty compact">Dialog tarixi yo‘q</div>
-          </section>
+                </article>
+              </div>
+              <div v-else class="empty compact">Dialog tarixi yo‘q</div>
+            </section>
+          </div>
 
           <!-- <section v-if="chatDetail.timeline?.length" class="detail-section compact-section">
             <div class="detail-section-head">
@@ -866,7 +916,7 @@
 </template>
 
 <script setup>
-import { computed, defineComponent, h, onMounted, reactive, ref, watch } from 'vue';
+import { computed, defineComponent, h, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 import { api, getToken, setToken } from './api';
 
 const ACTIVE_TAB_STORAGE_KEY = 'uyqur_support_active_tab';
@@ -878,6 +928,8 @@ const tabs = [
   { key: 'integrations', label: 'Integratsiya', icon: '⚡️' },
   { key: 'settings', label: 'Sozlamalar', icon: '⚙️' }
 ];
+const supportTabKeys = ['stats', 'groups', 'privates', 'employees', 'integrations'];
+const managerTabKeys = ['stats', 'groups', 'privates', 'employees'];
 
 function isValidTab(key) {
   return tabs.some(tab => tab.key === key);
@@ -926,9 +978,23 @@ const showLoginPassword = ref(false);
 const loginStatus = ref('');
 const loginStatusType = ref('');
 const loginError = ref('');
+const nowTick = ref(Date.now());
+let durationTimer = null;
 
-const primaryTabs = computed(() => tabs.filter(tab => tab.key !== 'settings'));
+const settingsForm = reactive({ panel_mode: 'support', ai_mode: 'false', auto_reply: 'true', done_tag: '#done', main_group_id: '', request_detection: 'keyword' });
+const isManagerMode = computed(() => settingsForm.panel_mode === 'manager');
+const primaryTabs = computed(() => {
+  const keys = isManagerMode.value ? managerTabKeys : supportTabKeys;
+  return tabs.filter(tab => keys.includes(tab.key));
+});
 const settingsTab = tabs.find(tab => tab.key === 'settings');
+watch(isManagerMode, () => {
+  if (activeTab.value === 'settings') return;
+  if (!primaryTabs.value.some(tab => tab.key === activeTab.value)) {
+    activeTab.value = 'stats';
+    storeActiveTab('stats');
+  }
+});
 
 const loginForm = reactive({ username: 'admin', password: '' });
 const messageForm = reactive({ text: '' });
@@ -936,7 +1002,6 @@ const requestReplyForm = reactive({ request_id: '', chat_id: '', customer_name: 
 const broadcastForm = reactive({ target_type: 'groups', title: 'Yangilik', text: '' });
 const employeeForm = reactive({ id: '', tg_user_id: '', full_name: '', username: '', phone: '', role: 'support', is_active: true });
 const adminForm = reactive({ username: 'admin', full_name: 'System Admin', new_password: '' });
-const settingsForm = reactive({ ai_mode: 'false', auto_reply: 'true', done_tag: '#done', main_group_id: '', request_detection: 'keyword' });
 const integrationForm = reactive({
   enabled: true,
   provider: 'openai_compatible',
@@ -1030,6 +1095,10 @@ const topEmployeeChartRows = computed(() => topEmployeeRows.value.slice(0, 6));
 const topEmployeeChartMax = computed(() => Math.max(1, ...topEmployeeChartRows.value.map(row => Number(row.closed_requests || 0))));
 const groupChartRows = computed(() => groupPerformanceRows.value.slice(0, 6));
 const groupChartMax = computed(() => Math.max(1, ...groupChartRows.value.map(row => Number(row.total_requests || 0))));
+const managerStats = computed(() => dashboard.manager || {});
+const managerOpenRequests = computed(() => (dashboard.openRequests || [])
+  .slice()
+  .sort((a, b) => openMinutes(b.created_at) - openMinutes(a.created_at)));
 const employeeStatsMap = computed(() => new Map((dashboard.employeeStats || []).map(row => [String(row.id || row.employee_id || row.tg_user_id || row.full_name || ''), row])));
 function employeeLookupKey(row = {}) {
   return String(row.employee_id || row.id || row.tg_user_id || row.full_name || '');
@@ -1073,25 +1142,33 @@ const supportPerformanceRows = computed(() => {
 const topPerformerName = computed(() => supportPerformanceRows.value[0]?.full_name || '');
 const openRequestsTitle = computed(() => `Ochiq so‘rovlar (${fmtNumber((dashboard.openRequests || []).length)})`);
 const unansweredAlerts = computed(() => {
-  const grouped = groupPerformanceRows.value
-    .filter(row => Number(row.open_requests || 0) > 0)
-    .map((row, index) => ({
-      key: String(row.chat_id || row.title || index),
-      chat_id: row.chat_id || '',
-      title: row.company_name || row.title || `Chat ${row.chat_id || index + 1}`,
-      open_requests: Number(row.open_requests || 0),
-      oldest_label: row.last_request_at ? `Oxirgi savol: ${fmtDate(row.last_request_at)}` : 'Ochiq so‘rov mavjud',
-      owner: row.closed_by_name || 'Xodim biriktirilmagan'
-    }));
-  if (grouped.length) return grouped.sort((a, b) => b.open_requests - a.open_requests).slice(0, 5);
-  return (dashboard.openRequests || []).slice(0, 5).map((row, index) => ({
-    key: String(row.id || row.request_id || index),
-    chat_id: row.chat_id || '',
-    title: row.chat_title || row.title || row.customer_name || `So‘rov ${index + 1}`,
-    open_requests: 1,
-    oldest_label: row.created_at ? `Kelgan: ${fmtDate(row.created_at)}` : 'Ochiq so‘rov mavjud',
-    owner: row.closed_by_name || 'Xodim biriktirilmagan'
-  }));
+  const grouped = new Map();
+  (dashboard.openRequests || []).forEach((request, index) => {
+    const key = String(request.chat_id || request.id || index);
+    const current = grouped.get(key) || {
+      key,
+      chat_id: request.chat_id || '',
+      title: request.chat_title || request.title || request.customer_name || `So‘rov ${index + 1}`,
+      open_requests: 0,
+      oldest_created_at: request.created_at || null,
+      owner: request.responsible_employee_name || 'Xodim biriktirilmagan'
+    };
+    current.open_requests += 1;
+    if (request.created_at && (!current.oldest_created_at || String(request.created_at) < String(current.oldest_created_at))) {
+      current.oldest_created_at = request.created_at;
+    }
+    if (!current.owner || current.owner === 'Xodim biriktirilmagan') {
+      current.owner = request.responsible_employee_name || current.owner;
+    }
+    grouped.set(key, current);
+  });
+  return [...grouped.values()]
+    .map(row => ({
+      ...row,
+      oldest_label: row.oldest_created_at ? openDurationLabel(row.oldest_created_at) : 'Ochiq so‘rov mavjud'
+    }))
+    .sort((a, b) => openMinutes(b.oldest_created_at) - openMinutes(a.oldest_created_at) || b.open_requests - a.open_requests)
+    .slice(0, 5);
 });
 const unansweredAlertTotal = computed(() => unansweredAlerts.value.reduce((sum, row) => sum + Number(row.open_requests || 0), 0));
 const sidebarInsight = computed(() => {
@@ -1168,6 +1245,27 @@ function barWidth(value, max) {
 
 function fmtMinutes(value) {
   return `${fmtNumber(value)} min`;
+}
+
+function openMinutes(value) {
+  nowTick.value;
+  if (!value) return 0;
+  const diff = Date.now() - new Date(value).getTime();
+  return Number.isFinite(diff) && diff > 0 ? Math.floor(diff / 60000) : 0;
+}
+
+function openDurationLabel(value) {
+  if (!value) return '—';
+  const minutes = openMinutes(value);
+  if (minutes < 1) return 'hozirgina ochilgan';
+  const days = Math.floor(minutes / 1440);
+  const hours = Math.floor((minutes % 1440) / 60);
+  const mins = minutes % 60;
+  const parts = [];
+  if (days) parts.push(`${days} kun`);
+  if (hours) parts.push(`${hours} soat`);
+  if (mins || !parts.length) parts.push(`${mins} daqiqa`);
+  return `${parts.slice(0, 2).join(' ')} ochiq`;
 }
 
 function listPreview(value) {
@@ -1285,10 +1383,21 @@ const employeeColumns = [
 ];
 
 const openRequestColumns = [
+  { key: 'chat_title', label: 'Chat/Guruh', format: (value, row) => value || row.title || row.chat_id || '—', action: 'chatDetail' },
   { key: 'customer_name', label: 'Mijoz', action: 'chatDetail' },
   { key: 'source_type', label: 'Manba', format: sourceTypeLabel, badge: true, action: 'chatDetail' },
+  { key: 'created_at', label: 'Ochiq turgan vaqt', format: openDurationLabel, action: 'chatDetail' },
   { key: 'initial_text', label: 'So‘rov matni', truncate: true, action: 'chatDetail' },
-  { key: 'created_at', label: 'Vaqt', format: fmtDate, action: 'chatDetail' },
+  { key: 'responsible_employee_name', label: 'Mas’ul xodim', format: v => v || 'Biriktirilmagan', action: 'chatDetail' },
+  { key: 'reply', label: 'Javob', slot: 'requestReply' }
+];
+
+const managerOpenRequestColumns = [
+  { key: 'chat_title', label: 'Qayerdan kelgan', format: (value, row) => value || row.title || row.chat_id || '—', action: 'chatDetail' },
+  { key: 'customer_name', label: 'Mijoz', format: (value, row) => value || row.customer_username || row.customer_tg_id || '—', action: 'chatDetail' },
+  { key: 'responsible_employee_name', label: 'Mas’ul xodim', format: v => v || 'Biriktirilmagan', action: 'chatDetail' },
+  { key: 'created_at', label: 'Ochiq turgan vaqt', format: openDurationLabel, action: 'chatDetail' },
+  { key: 'initial_text', label: 'So‘rov matni', truncate: true, action: 'chatDetail' },
   { key: 'reply', label: 'Javob', slot: 'requestReply' }
 ];
 
@@ -1476,6 +1585,7 @@ async function loadSettings() {
   const done = data.settings?.find(s => s.key === 'done_tag')?.value;
   const mainGroup = data.settings?.find(s => s.key === 'main_group')?.value;
   const detect = data.settings?.find(s => s.key === 'request_detection')?.value;
+  const dashboardMode = data.settings?.find(s => s.key === 'dashboard_mode')?.value;
   Object.assign(integrationForm, {
     enabled: integration?.enabled !== false,
     provider: integration?.provider || 'openai_compatible',
@@ -1500,6 +1610,7 @@ async function loadSettings() {
   settingsForm.done_tag = done?.tag || '#done';
   settingsForm.main_group_id = mainGroup?.chat_id || '';
   settingsForm.request_detection = detect?.mode || 'keyword';
+  settingsForm.panel_mode = dashboardMode?.mode === 'manager' ? 'manager' : 'support';
   await checkTelegramWebhook(false);
 }
 
@@ -1540,6 +1651,7 @@ async function submitLogin() {
     loginStatusType.value = 'success';
     token.value = data.token;
     showToast(data.fallback ? 'Kirdingiz. DB admin yarating yoki parolni o‘zgartiring.' : 'Xush kelibsiz!');
+    await loadSettings().catch(error => showToast(error.message));
     await loadDashboard();
   } catch (error) {
     loginError.value = /login|parol/i.test(error.message)
@@ -2057,7 +2169,8 @@ async function saveSettings() {
         { key: 'auto_reply', value: { enabled: settingsForm.auto_reply === 'true' } },
         { key: 'done_tag', value: { tag: settingsForm.done_tag, auto_reply: true } },
         { key: 'main_group', value: { chat_id: settingsForm.main_group_id } },
-        { key: 'request_detection', value: { mode: settingsForm.request_detection, min_text_length: 10 } }
+        { key: 'request_detection', value: { mode: settingsForm.request_detection, min_text_length: 10 } },
+        { key: 'dashboard_mode', value: { mode: settingsForm.panel_mode === 'manager' ? 'manager' : 'support' } }
       ]
     });
     showToast('Sozlamalar saqlandi');
@@ -2120,7 +2233,17 @@ async function saveIntegration() {
 }
 
 onMounted(async () => {
-  if (token.value) await refresh();
+  durationTimer = setInterval(() => {
+    nowTick.value = Date.now();
+  }, 60_000);
+  if (token.value) {
+    await loadSettings().catch(error => showToast(error.message));
+    await refresh();
+  }
+});
+
+onUnmounted(() => {
+  if (durationTimer) clearInterval(durationTimer);
 });
 
 const Toolbar = defineComponent({
