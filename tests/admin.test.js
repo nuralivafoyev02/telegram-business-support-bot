@@ -669,6 +669,118 @@ async function testAiModeModelRequiresVerifiedIntegration() {
   }
 }
 
+async function testAiModeModelRejectsStaleHasApiKeyWithoutSecret() {
+  const originalSelect = supabase.select;
+  const originalInsert = supabase.insert;
+  const originalConsoleError = console.error;
+  let insertCalled = false;
+
+  supabase.select = async (table) => {
+    assert.strictEqual(table, 'bot_settings');
+    return [
+      { key: 'ai_mode', value: { enabled: false, provider: null } },
+      {
+        key: 'ai_integration',
+        value: {
+          enabled: true,
+          provider: 'openai_compatible',
+          label: 'Uyqur AI',
+          base_url: 'https://ai.example/v1',
+          model: 'uyqur-model',
+          api_key: '',
+          has_api_key: true,
+          last_check_status: 'ok'
+        }
+      },
+      { key: 'main_group', value: { chat_id: '-100777' } },
+      { key: 'done_tag', value: { tag: '#done' } },
+      { key: 'request_detection', value: { mode: 'keyword', min_text_length: 10 } }
+    ];
+  };
+  supabase.insert = async () => {
+    insertCalled = true;
+    return [];
+  };
+  console.error = () => {};
+
+  try {
+    const result = await callSettings({
+      settings: [
+        { key: 'ai_mode', value: { enabled: true, provider: 'openai_compatible', model: 'uyqur-model', model_label: 'Uyqur AI' } }
+      ]
+    });
+
+    assert.strictEqual(result.status, 400);
+    assert.strictEqual(result.payload.ok, false);
+    assert.match(result.payload.error, /AI model ishlashi tekshirilmagan/);
+    assert.strictEqual(insertCalled, false);
+  } finally {
+    supabase.select = originalSelect;
+    supabase.insert = originalInsert;
+    console.error = originalConsoleError;
+  }
+}
+
+async function testUnrelatedSettingsDoNotNotifyStaleAiIntegration() {
+  const originalSelect = supabase.select;
+  const originalInsert = supabase.insert;
+  const originalFetch = global.fetch;
+  const telegramCalls = [];
+
+  supabase.select = async (table) => {
+    assert.strictEqual(table, 'bot_settings');
+    return [
+      { key: 'ai_mode', value: { enabled: false, provider: null } },
+      {
+        key: 'ai_integration',
+        value: {
+          enabled: true,
+          provider: 'openai_compatible',
+          label: 'Uyqur AI',
+          base_url: 'https://ai.example/v1',
+          model: 'uyqur-model',
+          api_key: '',
+          has_api_key: true,
+          last_check_status: 'ok'
+        }
+      },
+      { key: 'main_group', value: { chat_id: '-100777' } },
+      { key: 'auto_reply', value: { enabled: false } },
+      { key: 'done_tag', value: { tag: '#done' } },
+      { key: 'request_detection', value: { mode: 'keyword', min_text_length: 10 } }
+    ];
+  };
+  supabase.insert = async (table, rows) => {
+    assert.strictEqual(table, 'bot_settings');
+    return rows;
+  };
+  global.fetch = async (url, options) => {
+    telegramCalls.push({ url, body: JSON.parse(options.body) });
+    return {
+      ok: true,
+      json: async () => ({ ok: true, result: { message_id: 506 } })
+    };
+  };
+
+  try {
+    const result = await callSettings({
+      settings: [
+        { key: 'auto_reply', value: { enabled: true } }
+      ]
+    });
+
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.ok, true);
+    assert.strictEqual(telegramCalls.length, 1);
+    assert.match(telegramCalls[0].body.text, /Avto javob rejimi yoqildi/);
+    assert.doesNotMatch(telegramCalls[0].body.text, /AI model ulandi/);
+  } finally {
+    supabase.select = originalSelect;
+    supabase.insert = originalInsert;
+    global.fetch = originalFetch;
+  }
+}
+
 async function testPrivateChatsExcludeEmployees() {
   const originalSelect = supabase.select;
   const originalStats = stats.selectChatStatistics;
@@ -960,6 +1072,8 @@ async function run() {
   await testAiIntegrationAcceptsEmptyCompatibleChoice();
   await testAiIntegrationAcceptsArrayContentChoice();
   await testAiModeModelRequiresVerifiedIntegration();
+  await testAiModeModelRejectsStaleHasApiKeyWithoutSecret();
+  await testUnrelatedSettingsDoNotNotifyStaleAiIntegration();
   await testPrivateChatsExcludeEmployees();
   await testChatDetailIncludesTicketSolutionAndTimeline();
   await testSendToChatStoresOutgoingAdminMessage();

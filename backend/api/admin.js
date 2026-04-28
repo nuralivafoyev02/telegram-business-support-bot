@@ -1351,6 +1351,7 @@ async function updateSettings(body) {
   const previousSettings = normalizeSettings(previousRows || []);
   const previousAutoReplyExists = hasSetting(previousRows, 'auto_reply');
   const autoReplySubmitted = items.some(item => item && item.key === 'auto_reply');
+  const aiIntegrationSubmitted = items.some(item => item && item.key === 'ai_integration');
   const previousIntegration = normalizeAiIntegration(settingValue(previousRows, 'ai_integration'));
   const previousIntegrationReady = isAiIntegrationReady(previousIntegration);
   const previousIntegrationSignature = aiIntegrationSignature(previousIntegration);
@@ -1385,7 +1386,7 @@ async function updateSettings(body) {
   }
   const nextIntegrationReady = isAiIntegrationReady(nextSettings.aiIntegration);
   const integrationChanged = previousIntegrationSignature !== aiIntegrationSignature(nextSettings.aiIntegration);
-  if (nextIntegrationReady && (!previousIntegrationReady || integrationChanged)) {
+  if (aiIntegrationSubmitted && nextIntegrationReady && (!previousIntegrationReady || integrationChanged)) {
     await notifyAiIntegrationConnected(nextSettings).catch(error => console.error('[admin:ai-integration-notice:error]', error));
   }
 

@@ -58,7 +58,7 @@ function normalizeAiIntegration(value = {}) {
 
 function isAiIntegrationConfigured(value = {}) {
   const config = normalizeAiIntegration(value);
-  return Boolean(config.enabled && config.provider && config.base_url && config.model && (config.api_key || config.has_api_key));
+  return Boolean(config.enabled && config.provider && config.base_url && config.model && config.api_key);
 }
 
 function isAiIntegrationReady(value = {}) {
