@@ -123,9 +123,13 @@ function supportContactsFromCompanies(companies = []) {
 
 function employeeMatchesSupport(employee = {}, contact = {}) {
   const employeeUsername = normalizeSupportUsername(employee.username);
+  const employeeNameUsername = normalizeSupportUsername(employee.full_name);
   const employeePhone = normalizePhone(employee.phone);
   return Boolean(
-    (contact.username && employeeUsername && contact.username === employeeUsername)
+    (contact.username && (
+      (employeeUsername && contact.username === employeeUsername)
+      || (employeeNameUsername && contact.username === employeeNameUsername)
+    ))
     || (contact.phone_digits && employeePhone && contact.phone_digits === employeePhone)
   );
 }

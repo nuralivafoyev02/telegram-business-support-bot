@@ -215,7 +215,10 @@
                         <b>{{ row.full_name }}</b>
                         <span>{{ row.username ? `@${row.username}` : roleLabel(row.role) }}</span>
                       </div>
-                      <span class="grade-pill" :class="performanceGradeClass(row.grade)">{{ row.grade }}</span>
+                      <div class="support-card-badges">
+                        <span class="rank-pill" :class="{ gold: row.rank === 1, silver: row.rank === 2 }">{{ row.rank }}-o‘rin</span>
+                        <span class="grade-pill" :class="performanceGradeClass(row.grade)">{{ row.grade }}</span>
+                      </div>
                     </div>
                     <div class="support-card-metrics">
                       <div><b>{{ fmtNumber(row.closed_requests) }}</b><span>Javob</span></div>
@@ -1625,39 +1628,75 @@ function performanceGradeClass(grade = '') {
   return 'low';
 }
 function supportRowKey(row = {}) {
-  const id = String(row.id || row.employee_id || '').trim();
-  if (id) return `id:${id}`;
-  const tgUserId = String(row.tg_user_id || '').trim();
-  if (tgUserId) return `tg:${tgUserId}`;
   const username = normalizeSupportUsername(row.username || row.uyqur_support_username);
   if (username) return `u:${username}`;
   const phone = normalizePhone(row.phone || row.uyqur_support_phone);
   if (phone) return `p:${phone}`;
+  const tgUserId = String(row.tg_user_id || '').trim();
+  if (tgUserId) return `tg:${tgUserId}`;
+  const id = String(row.id || row.employee_id || '').trim();
+  if (id) return `id:${id}`;
   return String(row.full_name || row.closed_by_name || '').trim().toLowerCase();
 }
 
-function mergeSupportCandidate(map, row = {}) {
+function mergeMetricOnce(current = {}, source = '', row = {}, field = 'closed_requests') {
+  const sourceKey = `${source}:${row.id || row.employee_id || row.tg_user_id || row.full_name || row.username || Math.random()}`;
+  const seenKey = `_${field}_seen`;
+  const seen = current[seenKey] || new Set();
+  if (seen.has(sourceKey)) return 0;
+  seen.add(sourceKey);
+  current[seenKey] = seen;
+  return Number(row[field] || 0);
+}
+
+function mergeWeightedAverage(current = {}, source = '', row = {}) {
+  const count = Number(row.closed_requests || row.today_answered_requests || 0);
+  const avg = Number(row.avg_close_minutes || 0);
+  if (!count || !avg) return;
+  const sourceKey = `${source}:${row.id || row.employee_id || row.tg_user_id || row.full_name || row.username || Math.random()}:avg`;
+  const seen = current._avg_seen || new Set();
+  if (seen.has(sourceKey)) return;
+  seen.add(sourceKey);
+  current._avg_seen = seen;
+  current._avg_weight = Number(current._avg_weight || 0) + count;
+  current._avg_total = Number(current._avg_total || 0) + (avg * count);
+}
+
+function mergeSupportCandidate(map, row = {}, source = 'identity') {
   const key = supportRowKey(row);
   if (!key) return;
   const current = map.get(key) || {};
+  const username = normalizeSupportUsername(row.username || row.uyqur_support_username);
+  const phone = row.phone || row.uyqur_support_phone || '';
+  const periodClosed = source === 'period' ? mergeMetricOnce(current, source, row, 'closed_requests') : 0;
+  const statsClosed = source === 'stats' ? mergeMetricOnce(current, source, row, 'closed_requests') : 0;
+  const periodHandled = source === 'period' ? mergeMetricOnce(current, source, row, 'handled_chats') : 0;
+  const statsHandled = source === 'stats' ? mergeMetricOnce(current, source, row, 'handled_chats') : 0;
+  const statsOpen = source === 'stats' ? mergeMetricOnce(current, source, row, 'today_open_requests') : 0;
+  mergeWeightedAverage(current, source, row);
   map.set(key, {
     ...current,
     ...row,
     id: current.id || row.id || row.employee_id || '',
     employee_id: current.employee_id || row.employee_id || row.id || '',
     tg_user_id: current.tg_user_id || row.tg_user_id || '',
-    username: current.username || row.username || row.uyqur_support_username || '',
-    phone: current.phone || row.phone || row.uyqur_support_phone || '',
+    username: current.username || username || '',
+    phone: current.phone || phone || '',
     role: current.role || row.role || 'support',
-    full_name: current.full_name || row.full_name || row.closed_by_name || row.uyqur_support_username || row.uyqur_support_phone || 'Xodim'
+    full_name: current.full_name || row.full_name || row.closed_by_name || (username ? `@${username}` : '') || phone || 'Xodim',
+    period_closed_requests: Number(current.period_closed_requests || 0) + periodClosed,
+    stats_closed_requests: Number(current.stats_closed_requests || 0) + statsClosed,
+    period_handled_chats: Number(current.period_handled_chats || 0) + periodHandled,
+    stats_handled_chats: Number(current.stats_handled_chats || 0) + statsHandled,
+    stats_open_requests: Number(current.stats_open_requests || 0) + statsOpen
   });
 }
 
 const supportPerformanceRows = computed(() => {
   const merged = new Map();
-  employees.value.forEach(row => mergeSupportCandidate(merged, row));
-  (dashboard.employeeStats || []).forEach(row => mergeSupportCandidate(merged, row));
-  topEmployeeRows.value.forEach(row => mergeSupportCandidate(merged, row));
+  employees.value.forEach(row => mergeSupportCandidate(merged, row, 'employee'));
+  (dashboard.employeeStats || []).forEach(row => mergeSupportCandidate(merged, row, 'stats'));
+  topEmployeeRows.value.forEach(row => mergeSupportCandidate(merged, row, 'period'));
   visibleCompanyInfoRows.value.forEach(company => {
     if (!hasCompanySupport(company)) return;
     mergeSupportCandidate(merged, {
@@ -1665,21 +1704,21 @@ const supportPerformanceRows = computed(() => {
       username: company.uyqur_support_username,
       phone: company.uyqur_support_phone,
       role: 'support'
-    });
+    }, 'company');
   });
 
   return [...merged.values()].map((row, index) => {
     const stat = employeeStatsMap.value.get(employeeLookupKey(row)) || row;
     const candidate = { ...row, ...stat };
     const assignedCompanyCount = visibleCompanyInfoRows.value.filter(company => companyMatchesEmployee(company, candidate)).length;
-    const closed = Number(row.closed_requests || stat.closed_requests || stat.today_answered_requests || 0);
-    const open = Number(stat.today_open_requests || stat.open_requests || 0);
+    const closed = Number(row.period_closed_requests || row.stats_closed_requests || row.closed_requests || stat.closed_requests || stat.today_answered_requests || 0);
+    const open = Number(row.stats_open_requests || stat.today_open_requests || stat.open_requests || 0);
     const total = closed + open;
     const sla = total ? Math.round((closed / total) * 100) : Number(row.close_share_pct || selectedPeriodStats.value.close_rate || 0);
-    const avg = Number(row.avg_close_minutes || stat.avg_close_minutes || 0);
+    const avg = Number(row._avg_weight ? Math.round((row._avg_total / row._avg_weight) * 10) / 10 : (row.avg_close_minutes || stat.avg_close_minutes || 0));
     const grade = performanceGrade(sla, avg);
     return {
-      key: employeeLookupKey(row) || `${row.full_name || 'employee'}-${index}`,
+      key: supportRowKey(row) || `${row.full_name || 'employee'}-${index}`,
       id: row.id || row.employee_id || stat.id || stat.employee_id || '',
       employee_id: row.employee_id || row.id || stat.employee_id || stat.id || '',
       tg_user_id: row.tg_user_id || stat.tg_user_id || '',
@@ -1687,7 +1726,7 @@ const supportPerformanceRows = computed(() => {
       phone: row.phone || stat.phone || '',
       role: row.role || stat.role || '',
       full_name: row.full_name || stat.full_name || 'Xodim',
-      handled_chats: Number(row.handled_chats || stat.handled_chats || stat.today_written_groups_count || 0),
+      handled_chats: Number(row.period_handled_chats || row.stats_handled_chats || row.handled_chats || stat.handled_chats || stat.today_written_groups_count || 0),
       closed_requests: closed,
       open_requests: open,
       assigned_company_count: assignedCompanyCount,
@@ -2216,12 +2255,13 @@ const supportPortfolioRows = computed(() => {
     .slice(0, 8);
 });
 const supportPortfolioChartMax = computed(() => Math.max(1, ...supportPortfolioRows.value.map(row => Number(row.count || 0))));
-const topSupportCards = computed(() => supportPerformanceRows.value.slice(0, 5).map(row => {
+const topSupportCards = computed(() => supportPerformanceRows.value.slice(0, 5).map((row, index) => {
   const employee = resolveEmployeeForCompany(row);
   const companies = visibleCompanyInfoRows.value.filter(company => companyMatchesEmployee(company, employee)).map(enrichCompanyUsage);
   return {
     ...row,
     ...employee,
+    rank: index + 1,
     assigned_companies: companies,
     company_summary: companyPortfolioSummary(companies)
   };

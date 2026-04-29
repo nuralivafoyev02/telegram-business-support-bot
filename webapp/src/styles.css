@@ -1979,6 +1979,14 @@ body {
   gap: 10px;
 }
 
+.support-card-badges {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
 .support-card-head b {
   display: block;
   color: var(--text);
@@ -2138,6 +2146,32 @@ body {
   font-weight: 900;
 }
 
+.rank-pill {
+  display: inline-grid;
+  place-items: center;
+  min-height: 28px;
+  padding: 5px 9px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  color: var(--muted-strong);
+  background: var(--surface);
+  font-size: 12px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.rank-pill.gold {
+  color: #713f12;
+  background: #fef3c7;
+  border-color: #fde68a;
+}
+
+.rank-pill.silver {
+  color: #334155;
+  background: #e2e8f0;
+  border-color: #cbd5e1;
+}
+
 .grade-pill.top {
   color: #166534;
   background: #dcfce7;
@@ -2173,6 +2207,18 @@ body {
     color: #fecaca;
     background: rgba(239, 68, 68, .14);
     border-color: rgba(239, 68, 68, .26);
+  }
+
+  .rank-pill.gold {
+    color: #fde68a;
+    background: rgba(245, 158, 11, .15);
+    border-color: rgba(245, 158, 11, .28);
+  }
+
+  .rank-pill.silver {
+    color: #cbd5e1;
+    background: rgba(148, 163, 184, .16);
+    border-color: rgba(148, 163, 184, .28);
   }
 }
 
