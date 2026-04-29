@@ -8,7 +8,7 @@ const { getMessageText, classifyMessage, isGreetingOnly } = require('../lib/pars
 const { getBotSettings } = require('../lib/bot-settings');
 const { resolveMainStatsChatId, sendMainStatsReport, buildMainStatsQuestionReply } = require('../lib/report');
 const { shouldUseExternalAi, classifyWithAi, generateSupportReply, generateLocalSupportReply } = require('../lib/ai');
-const { notifyOperationalError } = require('../lib/log-notifier');
+const { notifyIncomingLog, notifyOperationalError } = require('../lib/log-notifier');
 const metrics = require('../lib/metrics');
 
 const START_RE = /^\/start(?:@\w+)?(?:\s|$)/i;
@@ -66,6 +66,8 @@ function verifyWebhook(req) {
 function pickMessage(update) {
   if (update.message) return { kind: 'message', message: update.message };
   if (update.edited_message) return { kind: 'edited_message', message: update.edited_message };
+  if (update.channel_post) return { kind: 'channel_post', message: update.channel_post };
+  if (update.edited_channel_post) return { kind: 'edited_channel_post', message: update.edited_channel_post };
   if (update.business_message) return { kind: 'business_message', message: update.business_message };
   if (update.edited_business_message) return { kind: 'edited_business_message', message: update.edited_business_message };
   return null;
@@ -138,6 +140,10 @@ function isGroupChat(chat = {}) {
   return ['group', 'supergroup'].includes(chat.type);
 }
 
+function isChannelLogPost(updateKind = '', chat = {}) {
+  return chat.type === 'channel' || String(updateKind || '').includes('channel_post');
+}
+
 function sameChatId(left, right) {
   return String(left || '').trim() === String(right || '').trim();
 }
@@ -149,6 +155,24 @@ function configuredMainGroupId(settings = null) {
 function isConfiguredMainGroup(chat = {}, settings = null) {
   const configured = configuredMainGroupId(settings);
   return Boolean(configured && sameChatId(configured, chat.id));
+}
+
+function configuredLogSourceFor(chat = {}, settings = {}) {
+  const sources = settings.logNotifications && Array.isArray(settings.logNotifications.sources)
+    ? settings.logNotifications.sources
+    : [];
+  return sources.find(source => source.enabled !== false && sameChatId(source.chat_id, chat.id)) || null;
+}
+
+async function maybeRelayIncomingLog(updateKind, message, settings) {
+  const chat = message.chat || {};
+  if (!isChannelLogPost(updateKind, chat)) return false;
+  const source = configuredLogSourceFor(chat, settings);
+  if (!source) return true;
+  const text = getMessageText(message);
+  if (!text.trim()) return true;
+  await notifyIncomingLog({ source, text, message, settings });
+  return true;
 }
 
 function isMainStatsTrigger(text = '') {
@@ -913,6 +937,13 @@ async function processMessage(updateKind, message) {
   const chat = message.chat || {};
   const from = message.from || {};
   const text = getMessageText(message);
+
+  if (isChannelLogPost(updateKind, chat)) {
+    const settings = await getBotSettings();
+    await maybeRelayIncomingLog(updateKind, message, settings);
+    return;
+  }
+
   const sourceType = metrics.sourceTypeFrom(updateKind, chat.type);
 
   const commandClassification = classifyMessage({

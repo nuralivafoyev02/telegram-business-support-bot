@@ -44,10 +44,28 @@ function normalizeLogNotifications(value = {}) {
   const levels = [...new Set(rawLevels
     .map(level => String(level || '').trim().toLowerCase())
     .filter(level => ['error', 'info'].includes(level)))];
+  const rawSources = Array.isArray(value.sources) ? value.sources : [];
+  const sources = rawSources
+    .map((source, index) => {
+      const chatId = String(source && source.chat_id || '').trim();
+      if (!chatId) return null;
+      const type = ['mobile', 'web', 'backend', 'other'].includes(String(source.source || '').trim())
+        ? String(source.source).trim()
+        : 'other';
+      return {
+        id: String(source.id || `${type}-${chatId}-${index}`),
+        chat_id: chatId,
+        label: String(source.label || source.title || chatId).trim(),
+        source: type,
+        enabled: normalizeBoolean(source.enabled, true)
+      };
+    })
+    .filter(Boolean);
   return {
     enabled: normalizeBoolean(value.enabled, DEFAULT_SETTINGS.logNotifications.enabled),
     levels: levels.length ? levels : ['error'],
-    target: value.target === 'main_group' ? 'main_group' : 'main_group'
+    target: value.target === 'main_group' ? 'main_group' : 'main_group',
+    sources
   };
 }
 

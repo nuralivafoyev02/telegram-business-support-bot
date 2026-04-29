@@ -18,6 +18,8 @@ const stats = require('../lib/stats');
 const TELEGRAM_ALLOWED_UPDATES = [
   'message',
   'edited_message',
+  'channel_post',
+  'edited_channel_post',
   'business_message',
   'edited_business_message',
   'business_connection',

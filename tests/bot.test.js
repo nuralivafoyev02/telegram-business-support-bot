@@ -1974,6 +1974,68 @@ async function testBotRemovalMarksGroupInactive() {
   }
 }
 
+async function testConfiguredLogChannelRelaysReadableSummary() {
+  const originalSelect = supabase.select;
+  const originalInsert = supabase.insert;
+  const originalFetch = global.fetch;
+  const telegramCalls = [];
+
+  supabase.select = async (table) => {
+    if (table === 'bot_settings') {
+      return [
+        { key: 'main_group', value: { chat_id: '-100777' } },
+        {
+          key: 'log_notifications',
+          value: {
+            enabled: true,
+            levels: ['error', 'info'],
+            target: 'main_group',
+            sources: [{ chat_id: '-100900', label: 'Backend errors', source: 'backend', enabled: true }]
+          }
+        }
+      ];
+    }
+    return [];
+  };
+  supabase.insert = async () => {
+    throw new Error('channel log should not be stored as support message');
+  };
+  global.fetch = async (url, options = {}) => {
+    telegramCalls.push({ url, body: JSON.parse(options.body || '{}') });
+    return {
+      ok: true,
+      json: async () => ({ ok: true, result: { message_id: 900 } })
+    };
+  };
+
+  try {
+    const result = await callHandler({
+      update_id: 4900,
+      channel_post: {
+        message_id: 11,
+        date: Math.floor(Date.now() / 1000),
+        chat: { id: -100900, type: 'channel', title: 'Backend errors' },
+        text: 'ERROR TypeError: Cannot read properties of undefined\nPOST /api/login status=500'
+      }
+    });
+
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.handled, 'channel_post');
+    assert.strictEqual(telegramCalls.length, 1);
+    assert.strictEqual(telegramCalls[0].body.chat_id, '-100777');
+    assert.match(telegramCalls[0].body.text, /Uyqur Backend log/);
+    assert.match(telegramCalls[0].body.text, /ERROR/);
+    assert.match(telegramCalls[0].body.text, /Backend errors/);
+    assert.match(telegramCalls[0].body.text, /Cannot read properties/);
+    assert.match(telegramCalls[0].body.text, /\/api\/login/);
+  } finally {
+    supabase.select = originalSelect;
+    supabase.insert = originalInsert;
+    global.fetch = originalFetch;
+    clearBotSettingsCache();
+  }
+}
+
 (async () => {
   await testStartRepliesWhenDbTrackingFails();
   await testChatMemberUpdateRegistersGroup();
@@ -2006,6 +2068,7 @@ async function testBotRemovalMarksGroupInactive() {
   await testMainGroupBroadcastDeletePreview();
   await testMainGroupBroadcastDeleteConfirmDeletesAndReports();
   await testBotRemovalMarksGroupInactive();
+  await testConfiguredLogChannelRelaysReadableSummary();
   console.log('Bot tests passed');
 })().catch(error => {
   console.error(error);

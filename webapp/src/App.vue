@@ -756,6 +756,46 @@
                       </select>
                     </label>
                   </div>
+                  <div class="log-channel-panel">
+                    <div class="drilldown-label">Log kanallari</div>
+                    <div v-if="logForm.sources.length" class="log-channel-list">
+                      <article v-for="(source, index) in logForm.sources" :key="source.id || `${source.chat_id}-${index}`"
+                        class="log-channel-item">
+                        <label class="label">Kanal nomi
+                          <input v-model.trim="source.label" class="input" placeholder="Backend logs" />
+                        </label>
+                        <label class="label">Chat ID
+                          <input v-model.trim="source.chat_id" class="input" placeholder="-100..." />
+                        </label>
+                        <label class="label">Manba
+                          <select v-model="source.source" class="select">
+                            <option value="backend">Backend</option>
+                            <option value="web">Web</option>
+                            <option value="mobile">Mobile</option>
+                            <option value="other">Boshqa</option>
+                          </select>
+                        </label>
+                        <label class="switch-row compact">
+                          <input v-model="source.enabled" type="checkbox" />
+                          <span>Faol</span>
+                        </label>
+                        <button class="btn small danger" type="button" @click="removeLogSource(index)">Olib tashlash</button>
+                      </article>
+                    </div>
+                    <div v-else class="empty compact">Hali log kanali qo‘shilmagan</div>
+
+                    <div class="log-channel-add">
+                      <input v-model.trim="logSourceDraft.label" class="input" placeholder="Kanal nomi" />
+                      <input v-model.trim="logSourceDraft.chat_id" class="input" placeholder="Kanal chat ID: -100..." />
+                      <select v-model="logSourceDraft.source" class="select">
+                        <option value="backend">Backend</option>
+                        <option value="web">Web</option>
+                        <option value="mobile">Mobile</option>
+                        <option value="other">Boshqa</option>
+                      </select>
+                      <button class="btn" type="button" @click="addLogSource">Kanal qo‘shish</button>
+                    </div>
+                  </div>
                   <div class="actions">
                     <button class="btn primary" type="button" :disabled="loadingAction === 'saveLogSettings'"
                       @click="saveLogSettings">{{ loadingAction === 'saveLogSettings' ? 'Saqlanmoqda...' : 'Log sozlamasini saqlash' }}</button>
@@ -1309,7 +1349,8 @@ const integrationForm = reactive({
   last_checked_at: '',
   last_check_error: ''
 });
-const logForm = reactive({ enabled: false, levels: ['error'], target: 'main_group', test_level: 'info' });
+const logForm = reactive({ enabled: false, levels: ['error'], target: 'main_group', sources: [], test_level: 'info' });
+const logSourceDraft = reactive({ chat_id: '', label: '', source: 'backend' });
 const savedIntegrationSignature = ref('');
 
 const current = computed(() => tabs.find(t => t.key === activeTab.value) || tabs[0]);
@@ -1662,6 +1703,18 @@ function expiryStatusClass(row = {}) {
 
 function companySupportLabel(row = {}) {
   return [row.uyqur_support_username, row.uyqur_support_phone].filter(Boolean).join(' · ') || 'Biriktirilmagan';
+}
+
+function normalizeLogSources(sources = []) {
+  return (Array.isArray(sources) ? sources : [])
+    .map((source, index) => ({
+      id: source.id || `log-source-${Date.now()}-${index}`,
+      chat_id: String(source.chat_id || '').trim(),
+      label: String(source.label || '').trim(),
+      source: ['mobile', 'web', 'backend', 'other'].includes(source.source) ? source.source : 'other',
+      enabled: source.enabled !== false
+    }))
+    .filter(source => source.chat_id);
 }
 
 function hasCompanySupport(row = {}) {
@@ -2195,6 +2248,7 @@ async function loadSettings() {
     enabled: !!logNotifications?.enabled,
     levels: Array.isArray(logNotifications?.levels) && logNotifications.levels.length ? logNotifications.levels : ['error'],
     target: logNotifications?.target || 'main_group',
+    sources: normalizeLogSources(logNotifications?.sources || []),
     test_level: logForm.test_level || 'info'
   });
   savedIntegrationSignature.value = aiConnectionSignature(integrationForm);
@@ -2470,6 +2524,24 @@ function openEmployeeCompanies(row = {}) {
     summary: companyPortfolioSummary(companies)
   };
   modal.value = 'employeeCompanies';
+}
+
+function addLogSource() {
+  const chatId = String(logSourceDraft.chat_id || '').trim();
+  if (!chatId) return showToast('Kanal chat ID kiriting');
+  if (logForm.sources.some(source => String(source.chat_id) === chatId)) return showToast('Bu kanal allaqachon qo‘shilgan');
+  logForm.sources.push({
+    id: `log-source-${Date.now()}`,
+    chat_id: chatId,
+    label: logSourceDraft.label || chatId,
+    source: logSourceDraft.source || 'backend',
+    enabled: true
+  });
+  Object.assign(logSourceDraft, { chat_id: '', label: '', source: 'backend' });
+}
+
+function removeLogSource(index) {
+  logForm.sources.splice(index, 1);
 }
 
 async function openEmployeeActivity(row = {}) {
@@ -2884,7 +2956,8 @@ async function saveLogSettings() {
         value: {
           enabled: logForm.enabled,
           levels: [...logForm.levels],
-          target: logForm.target || 'main_group'
+          target: logForm.target || 'main_group',
+          sources: normalizeLogSources(logForm.sources)
         }
       }]
     });
@@ -2892,7 +2965,8 @@ async function saveLogSettings() {
     if (savedLogs) Object.assign(logForm, {
       enabled: !!savedLogs.enabled,
       levels: Array.isArray(savedLogs.levels) && savedLogs.levels.length ? savedLogs.levels : ['error'],
-      target: savedLogs.target || 'main_group'
+      target: savedLogs.target || 'main_group',
+      sources: normalizeLogSources(savedLogs.sources || [])
     });
     showToast('Log sozlamasi saqlandi');
   } catch (error) {

@@ -1216,13 +1216,19 @@ async function testLogNotificationsCanSendSelectedLevels() {
       body: {
         settings: [{
           key: 'log_notifications',
-          value: { enabled: true, levels: ['error', 'info'], target: 'main_group' }
+          value: {
+            enabled: true,
+            levels: ['error', 'info'],
+            target: 'main_group',
+            sources: [{ chat_id: '-100900', label: 'Backend logs', source: 'backend', enabled: true }]
+          }
         }]
       }
     });
     assert.strictEqual(saveResult.status, 200);
     assert.strictEqual(saveResult.payload.data[0].value.enabled, true);
     assert.deepStrictEqual(saveResult.payload.data[0].value.levels, ['error', 'info']);
+    assert.strictEqual(saveResult.payload.data[0].value.sources[0].label, 'Backend logs');
     assert.strictEqual(telegramCalls[0].body.chat_id, '-100777');
     assert.match(telegramCalls[0].body.text, /INFO log/);
 

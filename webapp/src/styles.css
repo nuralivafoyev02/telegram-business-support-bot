@@ -1939,6 +1939,34 @@ tbody tr:hover {
   color: var(--text);
   font-weight: 700;
 }
+.log-channel-panel {
+  display: grid;
+  gap: 12px;
+}
+.log-channel-list {
+  display: grid;
+  gap: 10px;
+}
+.log-channel-item {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) minmax(170px, .9fr) minmax(130px, .65fr) minmax(90px, .45fr) auto;
+  gap: 10px;
+  align-items: end;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.switch-row.compact {
+  min-height: 44px;
+  padding: 10px;
+}
+.log-channel-add {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) minmax(190px, 1fr) minmax(120px, .5fr) auto;
+  gap: 10px;
+  align-items: center;
+}
 .knowledge-area {
   min-height: 340px;
 }
@@ -2011,6 +2039,10 @@ tbody tr:hover {
   .manager-metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+  .log-channel-item,
+  .log-channel-add {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
   .performance-layout,
   .support-top-grid,
   .chat-detail-layout {
@@ -2059,7 +2091,9 @@ tbody tr:hover {
   .stats-charts,
   .top-support-list,
   .company-activity-stack .alert-list,
-  .log-settings-grid {
+  .log-settings-grid,
+  .log-channel-item,
+  .log-channel-add {
     grid-template-columns: 1fr;
   }
   .analytics-hero h2,
