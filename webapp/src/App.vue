@@ -200,8 +200,8 @@
               <section class="card top-support-card">
                 <div class="card-header performance-head">
                   <div>
-                    <div class="card-title">Top 5 support xodim</div>
-                    <div class="card-note">Javob sifati, biriktirilgan kompaniyalar va biznes statuslar</div>
+                    <div class="card-title">Support xodimlar statistikasi</div>
+                    <div class="card-note">Barcha xodimlar bo‘yicha javob sifati, biriktirilgan kompaniyalar va biznes statuslar</div>
                   </div>
                   <span v-if="topPerformerName" class="success-pill">Eng faol xodim: {{ topPerformerName }}</span>
                 </div>
@@ -2255,7 +2255,7 @@ const supportPortfolioRows = computed(() => {
     .slice(0, 8);
 });
 const supportPortfolioChartMax = computed(() => Math.max(1, ...supportPortfolioRows.value.map(row => Number(row.count || 0))));
-const topSupportCards = computed(() => supportPerformanceRows.value.slice(0, 5).map((row, index) => {
+const topSupportCards = computed(() => supportPerformanceRows.value.map((row, index) => {
   const employee = resolveEmployeeForCompany(row);
   const companies = visibleCompanyInfoRows.value.filter(company => companyMatchesEmployee(company, employee)).map(enrichCompanyUsage);
   return {

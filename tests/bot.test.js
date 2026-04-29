@@ -2097,6 +2097,76 @@ async function testConfiguredLogChannelDetectsBotJsonCodeBlock() {
   }
 }
 
+async function testConfiguredLogChannelSummarizesLaravelError() {
+  const originalSelect = supabase.select;
+  const originalInsert = supabase.insert;
+  const originalFetch = global.fetch;
+  const telegramCalls = [];
+
+  supabase.select = async (table) => {
+    if (table === 'bot_settings') {
+      return [
+        { key: 'main_group', value: { chat_id: '-100777' } },
+        {
+          key: 'log_notifications',
+          value: {
+            enabled: true,
+            levels: ['error', 'info'],
+            target: 'main_group',
+            sources: [{ chat_id: '-100901', label: 'Backend logs', source: 'backend', enabled: true }]
+          }
+        }
+      ];
+    }
+    return [];
+  };
+  supabase.insert = async () => {
+    throw new Error('channel log should not be stored as support message');
+  };
+  global.fetch = async (url, options = {}) => {
+    telegramCalls.push({ url, body: JSON.parse(options.body || '{}') });
+    return {
+      ok: true,
+      json: async () => ({ ok: true, result: { message_id: 902 } })
+    };
+  };
+
+  try {
+    const result = await callHandler({
+      update_id: 4902,
+      channel_post: {
+        message_id: 13,
+        date: Math.floor(Date.now() / 1000),
+        chat: { id: -100901, type: 'channel', title: 'Backend logs' },
+        text: [
+          '[2026-04-29 18:00:23] production.ERROR:',
+          'Route:',
+          'Message: The GET method is not supported for route main/auth/login. Supported methods: POST.',
+          'Error:',
+          '1.app.uyqur.uz/new_uyqur/public/index.php(51): Illuminate\\Foundation\\Http\\Kernel->handle()',
+          ' {"uz":"Api boshqa methodda!","ru":"API в другом методе!","en":"Api in another method!"}'
+        ].join('\n')
+      }
+    });
+
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.handled, 'channel_post');
+    assert.strictEqual(telegramCalls.length, 1);
+    assert.match(telegramCalls[0].body.text, /Uyqur Backend log/);
+    assert.match(telegramCalls[0].body.text, /production/);
+    assert.match(telegramCalls[0].body.text, /main\/auth\/login/);
+    assert.match(telegramCalls[0].body.text, /Method: <code>GET<\/code>/);
+    assert.match(telegramCalls[0].body.text, /Ruxsat etilgan method: <code>POST<\/code>/);
+    assert.match(telegramCalls[0].body.text, /Api boshqa methodda/);
+    assert.match(telegramCalls[0].body.text, /index\.php\(51\)/);
+  } finally {
+    supabase.select = originalSelect;
+    supabase.insert = originalInsert;
+    global.fetch = originalFetch;
+    clearBotSettingsCache();
+  }
+}
+
 (async () => {
   await testStartRepliesWhenDbTrackingFails();
   await testChatMemberUpdateRegistersGroup();
@@ -2131,6 +2201,7 @@ async function testConfiguredLogChannelDetectsBotJsonCodeBlock() {
   await testBotRemovalMarksGroupInactive();
   await testConfiguredLogChannelRelaysReadableSummary();
   await testConfiguredLogChannelDetectsBotJsonCodeBlock();
+  await testConfiguredLogChannelSummarizesLaravelError();
   console.log('Bot tests passed');
 })().catch(error => {
   console.error(error);

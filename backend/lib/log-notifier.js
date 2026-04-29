@@ -98,11 +98,60 @@ function valueFromPayload(payload = null, keys = []) {
   return findPayloadValue(payload, keys);
 }
 
+function extractLineValue(text = '', label = '') {
+  const match = String(text || '').match(new RegExp(`^${label}:\\s*(.*)$`, 'im'));
+  return match && match[1] ? match[1].trim() : '';
+}
+
+function extractBlockAfterLabel(text = '', label = '') {
+  const pattern = new RegExp(`^${label}:\\s*([\\s\\S]*?)(?=\\n[A-Z][A-Za-z_ ]{0,32}:|\\n\\s*\\{|"?$)`, 'im');
+  const match = String(text || '').match(pattern);
+  return match && match[1] ? match[1].trim() : '';
+}
+
+function extractLaravelMessage(text = '') {
+  const value = extractBlockAfterLabel(text, 'Message');
+  if (value) return value.split('\n').map(line => line.trim()).filter(Boolean).join(' ');
+  return '';
+}
+
+function extractErrorOrigin(text = '') {
+  const errorBlock = extractBlockAfterLabel(text, 'Error');
+  const firstFrame = errorBlock
+    .split('\n')
+    .map(line => line.trim())
+    .find(line => line && !line.startsWith('{'));
+  if (firstFrame) return firstFrame;
+  const frameMatch = String(text || '').match(/\b[\w.-]+(?:\/[\w./-]+)+\(\d+\):[^\n]+/);
+  return frameMatch ? frameMatch[0].trim() : '';
+}
+
+function extractMethod(text = '', payload = null) {
+  const direct = valueFromPayload(payload, ['method', 'httpMethod', 'http_method']);
+  if (direct) return direct.toUpperCase();
+  const match = String(text || '').match(/\b(GET|POST|PUT|PATCH|DELETE|OPTIONS|HEAD)\b(?:\s+method|\s+\/|\s+route|\s+is|\s+not|\s+supported)?/i);
+  return match ? match[1].toUpperCase() : '';
+}
+
+function extractSupportedMethods(text = '', payload = null) {
+  const direct = valueFromPayload(payload, ['supported_methods', 'supportedMethods', 'allowed_methods', 'allowedMethods']);
+  if (direct) return direct;
+  const match = String(text || '').match(/Supported methods?:\s*([A-Z,\s|]+)/i);
+  return match ? match[1].trim().replace(/\s+/g, ' ') : '';
+}
+
+function extractPayloadMessage(payload = null) {
+  return valueFromPayload(payload, ['uz', 'message_uz', 'user_message', 'userMessage', 'en', 'ru']);
+}
+
 function extractRoute(text = '', payload = null) {
   const direct = valueFromPayload(payload, ['route', 'path', 'url', 'endpoint']);
   if (direct) return direct;
-  const match = String(text || '').match(/\b(?:GET|POST|PUT|PATCH|DELETE)\s+([^\s]+)/i)
-    || String(text || '').match(/\b(?:path|route|url|endpoint)=([^\s]+)/i)
+  const labelled = extractLineValue(text, 'Route');
+  if (labelled) return labelled;
+  const match = String(text || '').match(/\b(?:GET|POST|PUT|PATCH|DELETE|OPTIONS|HEAD)\s+(\/[^\s]+)/i)
+    || String(text || '').match(/\b(?:path|route|url|endpoint)[=: ]+([^\s.]+)/i)
+    || String(text || '').match(/\broute\s+([^\s.]+(?:\/[^\s.]+)*)/i)
     || String(text || '').match(/\b(\/[a-z0-9_./:-]+)\b/i);
   return match ? match[1] : '';
 }
@@ -116,19 +165,32 @@ function extractStatus(text = '', payload = null) {
 }
 
 function summarizeIncomingLog(text = '', payload = null) {
-  const message = valueFromPayload(payload, ['message', 'msg', 'error', 'errorMessage', 'detail'])
+  const frameworkMessage = extractLaravelMessage(text);
+  const message = frameworkMessage
+    || valueFromPayload(payload, ['message', 'msg', 'error', 'errorMessage', 'detail'])
     || firstCleanLine(text)
     || 'Log xabari';
   const service = valueFromPayload(payload, ['service', 'app', 'module', 'component']);
-  const environment = valueFromPayload(payload, ['env', 'environment', 'stage']);
+  const header = String(text || '').match(/^\[([^\]]+)\]\s+([^.:\s]+)\.([A-Z]+):/i);
+  const environment = valueFromPayload(payload, ['env', 'environment', 'stage']) || (header ? header[2] : '');
   const route = extractRoute(text, payload);
   const status = extractStatus(text, payload);
+  const method = extractMethod(text, payload);
+  const supportedMethods = extractSupportedMethods(text, payload);
+  const userMessage = extractPayloadMessage(payload);
+  const origin = extractErrorOrigin(text);
+  const loggedAt = header ? header[1] : '';
   return {
     message: truncate(message, 300),
     service,
     environment,
     route,
     status,
+    method,
+    supportedMethods,
+    userMessage: truncate(userMessage, 260),
+    origin: truncate(origin, 320),
+    loggedAt,
     raw: truncate(text, 1200)
   };
 }
@@ -191,14 +253,19 @@ async function notifyIncomingLog({ source = {}, text = '', message = {}, setting
     `${icon} <b>Uyqur ${escapeHtml(sourceName)} log</b>`,
     `Kanal: <b>${escapeHtml(channelTitle)}</b>`,
     `Turi: <b>${LEVEL_LABELS[level]}</b>`,
+    summary.loggedAt ? `Log vaqti: <code>${escapeHtml(summary.loggedAt)}</code>` : '',
     summary.service ? `Servis: <code>${escapeHtml(summary.service)}</code>` : '',
     summary.environment ? `Muhit: <code>${escapeHtml(summary.environment)}</code>` : '',
-    summary.route ? `Joy: <code>${escapeHtml(summary.route)}</code>` : '',
+    summary.route ? `Route/Joy: <code>${escapeHtml(summary.route)}</code>` : '',
+    summary.method ? `Method: <code>${escapeHtml(summary.method)}</code>` : '',
+    summary.supportedMethods ? `Ruxsat etilgan method: <code>${escapeHtml(summary.supportedMethods)}</code>` : '',
     summary.status ? `Status: <code>${escapeHtml(summary.status)}</code>` : '',
     '',
     `<b>${problemLabel}:</b> ${escapeHtml(summary.message)}`,
+    summary.userMessage ? `<b>Ko‘rsatilgan xabar:</b> ${escapeHtml(summary.userMessage)}` : '',
+    summary.origin ? `<b>Error joyi:</b> <code>${escapeHtml(summary.origin)}</code>` : '',
     '',
-    `<pre>${escapeHtml(summary.raw)}</pre>`
+    `<pre>${escapeHtml(truncate(summary.raw, 650))}</pre>`
   ].filter(Boolean);
 
   await sendMessage(chatId, lines.join('\n'));
