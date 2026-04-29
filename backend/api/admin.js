@@ -12,6 +12,7 @@ const { testAiIntegration } = require('../lib/ai');
 const { extractTextFromUpload } = require('../lib/document-text');
 const { resolveMainStatsChatId, sendMainStatsReport } = require('../lib/report');
 const { fetchCompanyInfo } = require('../lib/company-info');
+const { notifyOperationalLog, notifyOperationalError } = require('../lib/log-notifier');
 const stats = require('../lib/stats');
 
 const TELEGRAM_ALLOWED_UPDATES = [
@@ -1690,12 +1691,13 @@ async function updateSettings(body) {
   if (!items.length) return [];
   const previousRows = await supabase.select('bot_settings', {
     select: 'key,value',
-    key: 'in.(ai_mode,ai_integration,auto_reply,done_tag,request_detection,main_group)'
+    key: 'in.(ai_mode,ai_integration,log_notifications,auto_reply,done_tag,request_detection,main_group)'
   }).catch(() => []);
   const previousSettings = normalizeSettings(previousRows || []);
   const previousAutoReplyExists = hasSetting(previousRows, 'auto_reply');
   const autoReplySubmitted = items.some(item => item && item.key === 'auto_reply');
   const aiIntegrationSubmitted = items.some(item => item && item.key === 'ai_integration');
+  const logNotificationsSubmitted = items.some(item => item && item.key === 'log_notifications');
   const previousIntegration = normalizeAiIntegration(settingValue(previousRows, 'ai_integration'));
   const previousIntegrationReady = isAiIntegrationReady(previousIntegration);
   const previousIntegrationSignature = aiIntegrationSignature(previousIntegration);
@@ -1733,6 +1735,20 @@ async function updateSettings(body) {
   if (aiIntegrationSubmitted && nextIntegrationReady && (!previousIntegrationReady || integrationChanged)) {
     await notifyAiIntegrationConnected(nextSettings).catch(error => console.error('[admin:ai-integration-notice:error]', error));
   }
+  if (logNotificationsSubmitted) {
+    await notifyOperationalLog('info', 'admin:log-notifications', 'Log yuborish sozlamalari yangilandi', {
+      enabled: nextSettings.logNotifications.enabled,
+      levels: nextSettings.logNotifications.levels,
+      target: nextSettings.logNotifications.target
+    }).catch(error => console.error('[admin:log-notifications-notice:error]', error));
+  }
+  if (aiIntegrationSubmitted) {
+    await notifyOperationalLog('info', 'admin:ai-integration', 'Integratsiya sozlamalari saqlandi', {
+      provider: nextSettings.aiIntegration.provider,
+      model: nextSettings.aiIntegration.model,
+      status: nextSettings.aiIntegration.last_check_status
+    }).catch(error => console.error('[admin:ai-integration-log:error]', error));
+  }
 
   return savedRows.map(row => row.key === 'ai_integration'
     ? { ...row, value: sanitizeAiIntegration(row.value) }
@@ -1741,6 +1757,14 @@ async function updateSettings(body) {
 
 async function extractAiKnowledge(body = {}) {
   return extractTextFromUpload(body.file || body);
+}
+
+async function sendTestLogNotification(body = {}, currentAdmin = {}) {
+  const level = body.level === 'error' ? 'error' : 'info';
+  return notifyOperationalLog(level, 'admin:test-log', body.message || 'Test log xabari', {
+    admin: currentAdmin.username || currentAdmin.full_name || 'admin',
+    source: 'webapp'
+  });
 }
 
 async function updateAdmin(body, currentAdmin) {
@@ -1799,6 +1823,7 @@ async function handlePost(action, body, currentAdmin) {
     case 'aiKnowledgeExtract': return extractAiKnowledge(body);
     case 'adminProfile': return updateAdmin(body, currentAdmin);
     case 'sendMainStats': return sendMainStatsReport(body.chat_id || body.main_group_id);
+    case 'testLogNotification': return sendTestLogNotification(body, currentAdmin);
     case 'setTelegramWebhook': return connectTelegramWebhook(body);
     default: throw new Error(`Unknown POST action: ${action}`);
   }
@@ -1806,10 +1831,11 @@ async function handlePost(action, body, currentAdmin) {
 
 async function handler(req, res) {
   if (allowCors(req, res)) return;
+  let action = 'unknown';
 
   try {
     const query = getQuery(req);
-    const action = query.action || 'dashboard';
+    action = query.action || 'dashboard';
 
     if (req.method === 'POST' && action === 'login') {
       const body = await readBody(req);
@@ -1837,6 +1863,7 @@ async function handler(req, res) {
     return sendJson(res, 405, { ok: false, error: 'Method not allowed' });
   } catch (error) {
     console.error('[admin:error]', error);
+    notifyOperationalError('admin:error', error, { action, method: req.method }).catch(logError => console.error('[admin:notify-log:error]', logError));
     const status = error.code === 'AI_CONNECTION_FAILED'
       ? 400
       : (/token|login|parol|authorization/i.test(error.message) ? 401 : 400);

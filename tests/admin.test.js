@@ -11,6 +11,7 @@ process.env.SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY ||
 const supabase = require('../backend/lib/supabase');
 const stats = require('../backend/lib/stats');
 const { createToken } = require('../backend/lib/auth');
+const { clearBotSettingsCache } = require('../backend/lib/bot-settings');
 const handler = require('../backend/api/admin');
 
 function createReq(body, token) {
@@ -1178,6 +1179,70 @@ async function testEmployeeActivityReturnsGroupsAndCustomers() {
   }
 }
 
+async function testLogNotificationsCanSendSelectedLevels() {
+  const originalSelect = supabase.select;
+  const originalInsert = supabase.insert;
+  const originalFetch = global.fetch;
+  let settingsRows = [
+    { key: 'main_group', value: { chat_id: '-100777' } },
+    { key: 'log_notifications', value: { enabled: false, levels: ['error'], target: 'main_group' } }
+  ];
+  const telegramCalls = [];
+
+  supabase.select = async (table) => {
+    if (table === 'bot_settings') return settingsRows;
+    return [];
+  };
+  supabase.insert = async (table, rows) => {
+    assert.strictEqual(table, 'bot_settings');
+    rows.forEach(row => {
+      const index = settingsRows.findIndex(item => item.key === row.key);
+      if (index >= 0) settingsRows[index] = row;
+      else settingsRows.push(row);
+    });
+    return rows;
+  };
+  global.fetch = async (url, options = {}) => {
+    telegramCalls.push({ url, body: JSON.parse(options.body || '{}') });
+    return {
+      ok: true,
+      json: async () => ({ ok: true, result: { message_id: telegramCalls.length } })
+    };
+  };
+
+  try {
+    const saveResult = await callAdmin('settings', {
+      method: 'POST',
+      body: {
+        settings: [{
+          key: 'log_notifications',
+          value: { enabled: true, levels: ['error', 'info'], target: 'main_group' }
+        }]
+      }
+    });
+    assert.strictEqual(saveResult.status, 200);
+    assert.strictEqual(saveResult.payload.data[0].value.enabled, true);
+    assert.deepStrictEqual(saveResult.payload.data[0].value.levels, ['error', 'info']);
+    assert.strictEqual(telegramCalls[0].body.chat_id, '-100777');
+    assert.match(telegramCalls[0].body.text, /INFO log/);
+
+    const testResult = await callAdmin('testLogNotification', {
+      method: 'POST',
+      body: { level: 'error', message: 'Sinov xatosi' }
+    });
+    assert.strictEqual(testResult.status, 200);
+    assert.strictEqual(testResult.payload.data.sent, true);
+    assert.strictEqual(telegramCalls[1].body.chat_id, '-100777');
+    assert.match(telegramCalls[1].body.text, /ERROR log/);
+    assert.match(telegramCalls[1].body.text, /Sinov xatosi/);
+  } finally {
+    supabase.select = originalSelect;
+    supabase.insert = originalInsert;
+    global.fetch = originalFetch;
+    clearBotSettingsCache();
+  }
+}
+
 async function testCompanyInfoProxyNormalizesExternalRows() {
   const originalFetch = global.fetch;
   const originalAuth = process.env.UYQUR_COMPANY_INFO_AUTH;
@@ -1255,6 +1320,7 @@ async function run() {
   await testReplyRequestFallsBackWhenBusinessPeerInvalid();
   await testEmployeesIncludeDailyWorkStats();
   await testEmployeeActivityReturnsGroupsAndCustomers();
+  await testLogNotificationsCanSendSelectedLevels();
   await testCompanyInfoProxyNormalizesExternalRows();
   console.log('Admin tests passed');
 }

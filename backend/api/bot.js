@@ -8,6 +8,7 @@ const { getMessageText, classifyMessage, isGreetingOnly } = require('../lib/pars
 const { getBotSettings } = require('../lib/bot-settings');
 const { resolveMainStatsChatId, sendMainStatsReport, buildMainStatsQuestionReply } = require('../lib/report');
 const { shouldUseExternalAi, classifyWithAi, generateSupportReply, generateLocalSupportReply } = require('../lib/ai');
+const { notifyOperationalError } = require('../lib/log-notifier');
 const metrics = require('../lib/metrics');
 
 const START_RE = /^\/start(?:@\w+)?(?:\s|$)/i;
@@ -437,6 +438,7 @@ async function handleHelp(message) {
 
 function logBackgroundError(label, error) {
   console.error(`[bot:${label}:error]`, error);
+  notifyOperationalError(`bot:${label}`, error).catch(logError => console.error('[bot:notify-log:error]', logError));
 }
 
 async function maybeReplyDone(message, result) {
@@ -1032,6 +1034,7 @@ async function handler(req, res) {
     return sendJson(res, 200, { ok: true, handled: 'ignored' });
   } catch (error) {
     console.error('[bot:error]', error);
+    notifyOperationalError('bot:error', error).catch(logError => console.error('[bot:notify-log:error]', logError));
     return sendJson(res, 500, { ok: false, error: error.message });
   }
 }

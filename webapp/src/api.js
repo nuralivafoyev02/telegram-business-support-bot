@@ -67,6 +67,7 @@ export const api = {
   extractAiKnowledge: payload => request('aiKnowledgeExtract', { method: 'POST', body: payload }).then(r => r.data),
   saveAdminProfile: payload => request('adminProfile', { method: 'POST', body: payload }).then(r => r.data),
   sendMainStats: payload => request('sendMainStats', { method: 'POST', body: payload || {} }).then(r => r.data),
+  testLogNotification: payload => request('testLogNotification', { method: 'POST', body: payload || {} }).then(r => r.data),
   telegramWebhookInfo: () => request('telegramWebhookInfo').then(r => r.data),
   setTelegramWebhook: payload => request('setTelegramWebhook', { method: 'POST', body: payload || {} }).then(r => r.data)
 };

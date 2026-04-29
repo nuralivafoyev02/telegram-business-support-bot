@@ -3,6 +3,7 @@
 const { sendJson, getQuery } = require('../lib/http');
 const { optionalEnv } = require('../lib/env');
 const { sendMainStatsReport } = require('../lib/report');
+const { notifyOperationalError } = require('../lib/log-notifier');
 
 function verify(req) {
   const secret = optionalEnv('CRON_SECRET', optionalEnv('TELEGRAM_WEBHOOK_SECRET', ''));
@@ -19,6 +20,7 @@ async function handler(req, res) {
     return sendJson(res, 200, { ok: true, data: result });
   } catch (error) {
     console.error('[cron:error]', error);
+    notifyOperationalError('cron:error', error).catch(logError => console.error('[cron:notify-log:error]', logError));
     return sendJson(res, 500, { ok: false, error: error.message });
   }
 }

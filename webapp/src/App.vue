@@ -686,7 +686,7 @@
                 <div class="settings-head">
                   <div>
                     <div class="card-title">Integratsiya</div>
-                    <div class="card-note">Model ulanishi va keyingi log oqimlari uchun tayyor joy</div>
+                    <div class="card-note">Model ulanishi va main guruhga yuboriladigan log oqimlari</div>
                   </div>
                   <span class="status-pill" :class="{ ready: aiIntegrationReady, error: aiIntegrationHasError }">{{ aiIntegrationStatus }}</span>
                 </div>
@@ -724,9 +724,44 @@
                     {{ loadingAction === 'saveIntegration' ? 'Saqlamoqda...' : 'Integratsiyani saqlash' }}
                   </button>
                 </form>
-                <div class="integration-note">
-                  <b>Log kanallari</b>
-                  <span>Error va oddiy loglarni ajratish, kanal/guruhga yuborish bo‘limlari shu panelga qo‘shiladi.</span>
+                <div class="integration-note log-settings-panel">
+                  <div class="settings-head compact">
+                    <div>
+                      <div class="card-title">Main guruh loglari</div>
+                      <div class="card-note">Error va oddiy loglar tanlangan bo‘lsa main guruhga yuboriladi</div>
+                    </div>
+                    <span class="status-pill" :class="{ ready: logForm.enabled, 'muted-status': !logForm.enabled }">
+                      {{ logForm.enabled ? 'Yoqilgan' : 'O‘chiq' }}
+                    </span>
+                  </div>
+                  <div class="log-settings-grid">
+                    <label class="switch-row">
+                      <input v-model="logForm.enabled" type="checkbox" />
+                      <span>Log yuborishni yoqish</span>
+                    </label>
+                    <label class="label">Qayerga yuboriladi
+                      <select v-model="logForm.target" class="select">
+                        <option value="main_group">Main guruh</option>
+                      </select>
+                    </label>
+                    <div class="log-levels">
+                      <span>Yuboriladigan loglar</span>
+                      <label><input v-model="logForm.levels" type="checkbox" value="error" /> Error log</label>
+                      <label><input v-model="logForm.levels" type="checkbox" value="info" /> Oddiy log</label>
+                    </div>
+                    <label class="label">Test turi
+                      <select v-model="logForm.test_level" class="select">
+                        <option value="info">Oddiy log</option>
+                        <option value="error">Error log</option>
+                      </select>
+                    </label>
+                  </div>
+                  <div class="actions">
+                    <button class="btn primary" type="button" :disabled="loadingAction === 'saveLogSettings'"
+                      @click="saveLogSettings">{{ loadingAction === 'saveLogSettings' ? 'Saqlanmoqda...' : 'Log sozlamasini saqlash' }}</button>
+                    <button class="btn" type="button" :disabled="loadingAction === 'testLog'"
+                      @click="sendTestLog">{{ loadingAction === 'testLog' ? 'Yuborilmoqda...' : 'Test log yuborish' }}</button>
+                  </div>
                 </div>
               </section>
             </div>
@@ -1274,6 +1309,7 @@ const integrationForm = reactive({
   last_checked_at: '',
   last_check_error: ''
 });
+const logForm = reactive({ enabled: false, levels: ['error'], target: 'main_group', test_level: 'info' });
 const savedIntegrationSignature = ref('');
 
 const current = computed(() => tabs.find(t => t.key === activeTab.value) || tabs[0]);
@@ -1466,6 +1502,8 @@ const loadingText = computed(() => ({
   employeeActivity: 'Xodim faoliyati yuklanmoqda...',
   saveSettings: 'Saqlamoqda...',
   saveIntegration: 'Saqlamoqda...',
+  saveLogSettings: 'Log sozlamasi saqlanmoqda...',
+  testLog: 'Test log yuborilmoqda...',
   extractKnowledge: 'Fayl o‘qilmoqda...'
 }[loadingAction.value] || 'Yuklanmoqda...'));
 
@@ -2135,6 +2173,7 @@ async function loadSettings() {
   }
   const ai = data.settings?.find(s => s.key === 'ai_mode')?.value;
   const integration = data.settings?.find(s => s.key === 'ai_integration')?.value;
+  const logNotifications = data.settings?.find(s => s.key === 'log_notifications')?.value;
   const done = data.settings?.find(s => s.key === 'done_tag')?.value;
   const mainGroup = data.settings?.find(s => s.key === 'main_group')?.value;
   const detect = data.settings?.find(s => s.key === 'request_detection')?.value;
@@ -2151,6 +2190,12 @@ async function loadSettings() {
     last_check_status: integration?.last_check_status || '',
     last_checked_at: integration?.last_checked_at || '',
     last_check_error: integration?.last_check_error || ''
+  });
+  Object.assign(logForm, {
+    enabled: !!logNotifications?.enabled,
+    levels: Array.isArray(logNotifications?.levels) && logNotifications.levels.length ? logNotifications.levels : ['error'],
+    target: logNotifications?.target || 'main_group',
+    test_level: logForm.test_level || 'info'
   });
   savedIntegrationSignature.value = aiConnectionSignature(integrationForm);
   const modelVerified = !!(integration?.last_check_status === 'ok' && integration?.model && integration?.has_api_key);
@@ -2826,6 +2871,51 @@ async function saveIntegration() {
     showToast(error.message);
   } finally {
     stopLoading('saveIntegration');
+  }
+}
+
+async function saveLogSettings() {
+  if (logForm.enabled && !logForm.levels.length) return showToast('Kamida bitta log turini tanlang');
+  startLoading('saveLogSettings');
+  try {
+    const rows = await api.saveSettings({
+      settings: [{
+        key: 'log_notifications',
+        value: {
+          enabled: logForm.enabled,
+          levels: [...logForm.levels],
+          target: logForm.target || 'main_group'
+        }
+      }]
+    });
+    const savedLogs = rows.find(row => row.key === 'log_notifications')?.value;
+    if (savedLogs) Object.assign(logForm, {
+      enabled: !!savedLogs.enabled,
+      levels: Array.isArray(savedLogs.levels) && savedLogs.levels.length ? savedLogs.levels : ['error'],
+      target: savedLogs.target || 'main_group'
+    });
+    showToast('Log sozlamasi saqlandi');
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    stopLoading('saveLogSettings');
+  }
+}
+
+async function sendTestLog() {
+  if (!logForm.enabled) return showToast('Avval log yuborishni yoqing va saqlang');
+  if (!logForm.levels.includes(logForm.test_level)) return showToast('Test turi tanlangan loglar ro‘yxatida yo‘q');
+  startLoading('testLog');
+  try {
+    const result = await api.testLogNotification({
+      level: logForm.test_level,
+      message: 'Webappdan yuborilgan test log'
+    });
+    showToast(result.sent ? `Test log yuborildi: ${result.chat_id}` : `Test log yuborilmadi: ${result.reason}`);
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    stopLoading('testLog');
   }
 }
 

@@ -1892,7 +1892,7 @@ tbody tr:hover {
 }
 .integration-note {
   display: grid;
-  gap: 6px;
+  gap: 14px;
   margin-top: 18px;
   padding: 14px;
   border: 1px solid var(--line);
@@ -1902,6 +1902,42 @@ tbody tr:hover {
 }
 .integration-note b {
   color: var(--text);
+}
+.settings-head.compact {
+  margin-bottom: 0;
+}
+.log-settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.switch-row,
+.log-levels {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 800;
+}
+.switch-row {
+  grid-template-columns: auto 1fr;
+  align-items: center;
+}
+.log-levels span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+.log-levels label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+  font-weight: 700;
 }
 .knowledge-area {
   min-height: 340px;
@@ -2022,7 +2058,8 @@ tbody tr:hover {
   .manager-metrics,
   .stats-charts,
   .top-support-list,
-  .company-activity-stack .alert-list {
+  .company-activity-stack .alert-list,
+  .log-settings-grid {
     grid-template-columns: 1fr;
   }
   .analytics-hero h2,
