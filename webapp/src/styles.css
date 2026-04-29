@@ -2028,6 +2028,64 @@ body {
   gap: 16px;
 }
 
+.support-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(180px, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.support-summary-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 132px;
+  padding: 24px 26px;
+  cursor: pointer;
+  transition: transform .16s ease, border-color .16s ease, background .16s ease;
+}
+
+.support-summary-card:hover,
+.support-summary-card:focus-visible {
+  border-color: var(--line-strong);
+  background: var(--surface-soft);
+  outline: none;
+  transform: translateY(-1px);
+}
+
+.support-summary-title {
+  color: var(--muted);
+  font-size: 17px;
+  line-height: 1.25;
+  font-weight: 700;
+}
+
+.support-summary-value {
+  margin-top: 12px;
+  color: var(--text);
+  font-size: 34px;
+  line-height: 1;
+  font-weight: 900;
+}
+
+.support-summary-value.danger {
+  color: var(--danger);
+}
+
+.support-summary-note {
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.3;
+}
+
+.support-summary-icon {
+  flex: 0 0 auto;
+  font-size: 30px;
+  line-height: 1;
+}
+
 .metric {
   padding: 24px;
   min-height: 132px;
@@ -2488,12 +2546,12 @@ td,
 }
 
 .line-chart-card {
-  min-height: 420px;
+  min-height: 300px;
 }
 
 .trend-chart,
 .vertical-bar-chart {
-  padding: 8px 22px 24px;
+  padding: 4px 18px 18px;
   overflow-x: auto;
 }
 
@@ -2501,7 +2559,7 @@ td,
 .vertical-bar-chart svg {
   display: block;
   width: 100%;
-  min-width: 720px;
+  min-width: 560px;
   height: auto;
 }
 
@@ -2513,13 +2571,13 @@ td,
 
 .trend-axis text {
   fill: var(--muted-strong);
-  font-size: 18px;
+  font-size: 14px;
   font-weight: 700;
 }
 
 .trend-line {
   stroke: #2f86c6;
-  stroke-width: 4;
+  stroke-width: 3;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
@@ -2527,11 +2585,11 @@ td,
 .trend-dot {
   fill: var(--surface);
   stroke: #2f86c6;
-  stroke-width: 4;
+  stroke-width: 3;
 }
 
 .active-company-chart {
-  min-height: 430px;
+  min-height: 310px;
 }
 
 .company-bar {
@@ -3278,6 +3336,7 @@ tbody tr:hover {
 @media (max-width: 1180px) {
 
   .metric-strip,
+  .support-summary-grid,
   .manager-metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -3364,6 +3423,7 @@ tbody tr:hover {
   }
 
   .metric-strip,
+  .support-summary-grid,
   .manager-metrics,
   .stats-charts,
   .top-support-list,

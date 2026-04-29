@@ -2,7 +2,7 @@
   <main v-if="!token" class="login-screen">
     <section class="card login-card">
       <div class="logo">UQ</div>
-      <h1>Uyqur Support</h1>
+      <h1>Uyqur Yordam</h1>
       <p>Texnik yordam paneli</p>
       <form class="form" @submit.prevent="submitLogin">
         <label class="label">Kirish nomi
@@ -36,7 +36,7 @@
       <div class="brand">
         <div class="logo">UQ</div>
         <div>
-          <div class="brand-title">Uyqur Support</div>
+          <div class="brand-title">Uyqur Yordam</div>
           <div class="brand-subtitle">Texnik yordam paneli</div>
         </div>
       </div>
@@ -98,11 +98,11 @@
               </button>
               <button type="button" @click="runHeaderAction(openBroadcast)">Umumiy xabar</button>
               <label class="theme-menu-row">
-                <span>Theme</span>
+                <span>Mavzu</span>
                 <select v-model="themeMode" class="select mini-select" @change="setThemeMode(themeMode)">
-                  <option value="system">System</option>
-                  <option value="light">Light</option>
-                  <option value="dark">Dark</option>
+                  <option value="system">Tizim</option>
+                  <option value="light">Yorug‘</option>
+                  <option value="dark">Qorong‘i</option>
                 </select>
               </label>
               <button class="danger-menu-item" type="button" @click="runHeaderAction(logout)">Chiqish</button>
@@ -123,6 +123,21 @@
                   </option>
                 </select>
               </label>
+            </div>
+
+            <div class="support-summary-grid">
+              <article v-for="card in supportSummaryCards" :key="card.key" class="card support-summary-card"
+                :class="{ alert: card.tone === 'danger' }" role="button" tabindex="0" :title="card.title"
+                @click="openSupportSummaryCard(card.action)"
+                @keydown.enter.prevent="openSupportSummaryCard(card.action)"
+                @keydown.space.prevent="openSupportSummaryCard(card.action)">
+                <div>
+                  <div class="support-summary-title">{{ card.title }}</div>
+                  <div class="support-summary-value" :class="{ danger: card.tone === 'danger' }">{{ card.value }}</div>
+                  <div class="support-summary-note">{{ card.note }}</div>
+                </div>
+                <span class="support-summary-icon" aria-hidden="true">{{ card.icon }}</span>
+              </article>
             </div>
 
             <template v-if="isManagerMode">
@@ -173,7 +188,7 @@
             <section class="card top-support-card">
               <div class="card-header performance-head">
                 <div>
-                  <div class="card-title">Support xodimlar statistikasi</div>
+                  <div class="card-title">Texnik yordam xodimlari statistikasi</div>
                   <div class="card-note">{{ selectedPeriodLabel }} kesimida barcha xodimlar, javoblar va biriktirilgan kompaniyalar</div>
                 </div>
                 <span v-if="topPerformerName" class="success-pill">Eng faol xodim: {{ topPerformerName }}</span>
@@ -195,28 +210,30 @@
               <section class="card chart-card line-chart-card">
                 <div class="card-header">
                   <div>
-                    <div class="card-title">Response time trend</div>
+                    <div class="card-title">Javob vaqti trendlari</div>
                     <div class="card-note">Soatlar bo‘yicha o‘rtacha javob vaqti</div>
                   </div>
                 </div>
                 <div class="trend-chart">
-                  <svg viewBox="0 0 960 300" role="img" aria-label="Response time trend">
+                  <svg viewBox="0 0 760 230" role="img" aria-label="Javob vaqti trendlari">
                     <g class="trend-grid">
-                      <line v-for="tick in responseTrendYTicks" :key="`y-${tick.value}`" x1="54" x2="920"
+                      <line v-for="tick in responseTrendYTicks" :key="`y-${tick.value}`" x1="50" x2="720"
                         :y1="tick.y" :y2="tick.y" />
                       <line v-for="point in responseTrendPoints" :key="`x-${point.label}`" :x1="point.x" :x2="point.x"
-                        y1="28" y2="248" />
+                        y1="24" y2="176" />
                     </g>
                     <g class="trend-axis">
-                      <text v-for="tick in responseTrendYTicks" :key="`yt-${tick.value}`" x="42" :y="tick.y + 5"
+                      <text v-for="tick in responseTrendYTicks" :key="`yt-${tick.value}`" x="40" :y="tick.y + 5"
                         text-anchor="end">{{ fmtNumber(tick.value) }}</text>
-                      <text v-for="point in responseTrendPoints" :key="`xt-${point.label}`" :x="point.x" y="282"
+                      <text v-for="point in responseTrendPoints" :key="`xt-${point.label}`" :x="point.x" y="210"
                         text-anchor="middle">{{ point.label }}</text>
                     </g>
                     <polyline class="trend-line" :points="responseTrendPolyline" fill="none" />
                     <g>
                       <circle v-for="point in responseTrendPoints" :key="`dot-${point.label}`" class="trend-dot"
-                        :cx="point.x" :cy="point.y" r="5" />
+                        :cx="point.x" :cy="point.y" r="4">
+                        <title>{{ responseTrendTooltip(point) }}</title>
+                      </circle>
                     </g>
                   </svg>
                 </div>
@@ -239,7 +256,7 @@
                   <span class="metric-icon">🏢</span>
                 </div>
                 <div class="metric-value">{{ fmtNumber(productUsageSummary.total) }}</div>
-                <div class="metric-mini">Support biriktirilgan kompaniyalar</div>
+                <div class="metric-mini">Texnik yordam biriktirilgan kompaniyalar</div>
               </article>
               <article class="card metric clickable-metric" role="button" tabindex="0" title="Aktiv kompaniyalarni ko‘rish"
                 @click="openProductMetricDetail('active')" @keydown.enter.prevent="openProductMetricDetail('active')"
@@ -280,7 +297,7 @@
                 <div class="card-header">
                   <div>
                     <div class="card-title">Kompaniyalar foydalanish indeksi</div>
-                    <div class="card-note">Biznes status, obuna holati va support ulanishiga qarab</div>
+                    <div class="card-note">Biznes holati, obuna holati va mas’ul biriktirilishiga qarab</div>
                   </div>
                 </div>
                 <div class="chart-bars">
@@ -322,7 +339,7 @@
                 <div class="card-header">
                   <div>
                     <div class="card-title">Kompaniyalar obuna timeline diagrammasi</div>
-                    <div class="card-note">Start, obuna muddati va qancha vaqtdan beri ishlatayotgani</div>
+                    <div class="card-note">Boshlanish, obuna muddati va qancha vaqtdan beri ishlatayotgani</div>
                   </div>
                 </div>
                 <div v-if="subscriptionTimelineRows.length" class="subscription-diagram">
@@ -352,7 +369,7 @@
                             :style="{ width: row.used_width }"></span>
                         </div>
                         <div class="timeline-labels">
-                          <span>Start: {{ row.start_label }}</span>
+                          <span>Boshlanish: {{ row.start_label }}</span>
                           <span>{{ row.subscription_label }}</span>
                           <span>{{ row.usage_duration_label }}</span>
                         </div>
@@ -401,7 +418,7 @@
                   <span class="metric-icon warn">⚠️</span>
                 </div>
                 <div class="metric-value">{{ fmtNumber(companyActivitySummary.business_paused) }}</div>
-                <div class="metric-mini">Biznes statusi pauzada</div>
+                <div class="metric-mini">Biznes holati pauzada</div>
               </article>
               <article class="card metric clickable-metric" role="button" tabindex="0" title="Obunasi yaqin yoki tugagan kompaniyalarni ko‘rish"
                 @click="openCompanyMetricDetail('expiry')" @keydown.enter.prevent="openCompanyMetricDetail('expiry')"
@@ -421,27 +438,29 @@
               <section class="card chart-card active-company-chart">
                 <div class="card-header">
                   <div>
-                    <div class="card-title">Eng active kompaniyalar</div>
-                    <div class="card-note">Session soni bo‘yicha</div>
+                    <div class="card-title">Eng faol kompaniyalar</div>
+                    <div class="card-note">Sessiya soni bo‘yicha</div>
                   </div>
                 </div>
                 <div class="vertical-bar-chart">
-                  <svg viewBox="0 0 920 360" role="img" aria-label="Eng active kompaniyalar">
+                  <svg viewBox="0 0 760 260" role="img" aria-label="Eng faol kompaniyalar">
                     <g class="trend-grid">
-                      <line v-for="tick in activeCompanyYTicks" :key="`company-y-${tick.value}`" x1="62" x2="880"
+                      <line v-for="tick in activeCompanyYTicks" :key="`company-y-${tick.value}`" x1="50" x2="720"
                         :y1="tick.y" :y2="tick.y" />
                       <line v-for="bar in activeCompanyChartBars" :key="`company-x-${bar.label}`" :x1="bar.x"
-                        :x2="bar.x" y1="48" y2="286" />
+                        :x2="bar.x" y1="36" y2="198" />
                     </g>
                     <g class="trend-axis">
-                      <text v-for="tick in activeCompanyYTicks" :key="`company-yt-${tick.value}`" x="50"
+                      <text v-for="tick in activeCompanyYTicks" :key="`company-yt-${tick.value}`" x="40"
                         :y="tick.y + 5" text-anchor="end">{{ fmtNumber(tick.value) }}</text>
                       <text v-for="bar in activeCompanyChartBars" :key="`company-label-${bar.label}`" :x="bar.x"
-                        y="326" text-anchor="middle">{{ bar.short_label }}</text>
+                        y="235" text-anchor="middle">{{ bar.short_label }}</text>
                     </g>
                     <g>
                       <rect v-for="bar in activeCompanyChartBars" :key="`company-bar-${bar.label}`" class="company-bar"
-                        :x="bar.x - bar.width / 2" :y="bar.y" :width="bar.width" :height="bar.height" rx="10" />
+                        :x="bar.x - bar.width / 2" :y="bar.y" :width="bar.width" :height="bar.height" rx="8">
+                        <title>{{ bar.label }}: {{ fmtNumber(bar.session_count) }} ta sessiya</title>
+                      </rect>
                     </g>
                   </svg>
                   <div v-if="!activeCompanyChartBars.length" class="empty compact">Faollik ma’lumoti yo‘q</div>
@@ -452,7 +471,7 @@
                 <div class="card-header">
                   <div>
                     <div class="card-title">Kompaniya aktivligi</div>
-                    <div class="card-note">API’dan olingan holat, support va obuna ma’lumotlari</div>
+                    <div class="card-note">API’dan olingan holat, mas’ul va obuna ma’lumotlari</div>
                   </div>
                 </div>
                 <DataTable :columns="companyActivityColumns" :rows="filteredCompanyInfoRows"
@@ -462,7 +481,7 @@
                       <img v-if="row.icon" :src="row.icon" alt="" />
                       <span>
                         <b>{{ row.name || 'Kompaniya' }}</b>
-                        <small>{{ row.brand || 'Brand kiritilmagan' }}</small>
+                        <small>{{ row.brand || 'Brend kiritilmagan' }}</small>
                       </span>
                     </span>
                   </template>
@@ -493,7 +512,7 @@
                       <span>{{ expiryAlertBadge(row) }}</span>
                     </div>
                     <p>{{ row.expired || 'Muddatsiz' }}</p>
-                    <small>Support: {{ companySupportLabel(row) }}</small>
+                    <small>Mas’ul: {{ companySupportLabel(row) }}</small>
                   </article>
                   <div v-if="!companyAlerts.length" class="empty compact">Obuna bo‘yicha xavfli holat yo‘q</div>
                 </div>
@@ -502,7 +521,7 @@
           </template>
 
           <template v-if="activeTab === 'groups'">
-            <Toolbar v-model="search" placeholder="Guruh nomi yoki chat ID bo‘yicha qidirish">
+            <Toolbar v-model="search" placeholder="Guruh nomi yoki chat raqami bo‘yicha qidirish">
               <TransitionGroup name="action-pop" tag="div" class="toolbar-actions">
                 <button key="send" class="btn primary" :disabled="!selectedGroups.length"
                   @click="openSelectedMessage('groups')">
@@ -543,7 +562,7 @@
               <div class="card-header">
                 <div>
                   <div class="card-title">Kompaniyalar</div>
-                  <div class="card-note">Uyqur API’dan kelgan support biriktirilgan kompaniyalar</div>
+                  <div class="card-note">Uyqur API’dan kelgan mas’ul biriktirilgan kompaniyalar</div>
                 </div>
               </div>
               <DataTable :columns="companyColumns" :rows="filteredCompanies" empty="Kompaniya topilmadi" />
@@ -551,7 +570,7 @@
           </template>
 
           <template v-if="activeTab === 'privates'">
-            <Toolbar v-model="search" placeholder="Mijoz nomi, chat ID yoki username bo‘yicha qidirish" />
+            <Toolbar v-model="search" placeholder="Mijoz nomi, chat raqami yoki foydalanuvchi nomi bo‘yicha qidirish" />
             <section class="card">
               <div class="card-header">
                 <div>
@@ -572,7 +591,7 @@
           <template v-if="activeTab === 'employees'">
             <div class="toolbar">
               <input v-model="search" class="search"
-                placeholder="Xodim ismi, username yoki Telegram ID bo‘yicha qidirish" />
+                placeholder="Xodim ismi, foydalanuvchi nomi yoki Telegram raqami bo‘yicha qidirish" />
               <TransitionGroup name="action-pop" tag="div" class="toolbar-actions">
                 <button key="send" class="btn primary" :disabled="!selectedEmployees.length"
                   @click="openSelectedMessage('employees')">
@@ -616,7 +635,7 @@
                     <input v-model.trim="adminForm.username" class="input" placeholder="admin" />
                   </label>
                   <label class="label">Ism
-                    <input v-model.trim="adminForm.full_name" class="input" placeholder="System Admin" />
+                    <input v-model.trim="adminForm.full_name" class="input" placeholder="Tizim admini" />
                   </label>
                   <label class="label">Yangi parol
                     <input v-model="adminForm.new_password" class="input" type="password"
@@ -650,7 +669,7 @@
                   <label class="label">Yopish tegi
                     <input v-model.trim="settingsForm.done_tag" class="input" placeholder="#done" />
                   </label>
-                  <label class="label">Main guruh chat ID
+                  <label class="label">Asosiy guruh raqami
                     <input v-model.trim="settingsForm.main_group_id" class="input" placeholder="-1001234567890" />
                   </label>
                   <label class="label">So‘rov aniqlash rejimi
@@ -688,7 +707,7 @@
                 <div class="settings-head">
                   <div>
                     <div class="card-title">Integratsiya</div>
-                    <div class="card-note">Model ulanishi va main guruhga yuboriladigan log oqimlari</div>
+                    <div class="card-note">Model ulanishi va asosiy guruhga yuboriladigan log oqimlari</div>
                   </div>
                   <span class="status-pill" :class="{ ready: aiIntegrationReady, error: aiIntegrationHasError }">{{
                     aiIntegrationStatus }}</span>
@@ -730,8 +749,8 @@
                 <div class="integration-note log-settings-panel">
                   <div class="settings-head compact">
                     <div>
-                      <div class="card-title">Main guruh loglari</div>
-                      <div class="card-note">Error va oddiy loglar tanlangan bo‘lsa main guruhga yuboriladi</div>
+                      <div class="card-title">Asosiy guruh loglari</div>
+                      <div class="card-note">Xato va oddiy loglar tanlangan bo‘lsa asosiy guruhga yuboriladi</div>
                     </div>
                     <span class="status-pill" :class="{ ready: logForm.enabled, 'muted-status': !logForm.enabled }">
                       {{ logForm.enabled ? 'Yoqilgan' : 'O‘chiq' }}
@@ -744,7 +763,7 @@
                     </label>
                     <label class="label">Qayerga yuboriladi
                       <select v-model="logForm.target" class="select">
-                        <option value="main_group">Main guruh</option>
+                        <option value="main_group">Asosiy guruh</option>
                       </select>
                     </label>
                     <div class="log-levels">
@@ -765,16 +784,16 @@
                       <article v-for="(source, index) in logForm.sources"
                         :key="source.id || `${source.chat_id}-${index}`" class="log-channel-item">
                         <label class="label">Kanal nomi
-                          <input v-model.trim="source.label" class="input" placeholder="Backend logs" />
+                          <input v-model.trim="source.label" class="input" placeholder="Server loglari" />
                         </label>
-                        <label class="label">Chat ID
+                        <label class="label">Kanal raqami
                           <input v-model.trim="source.chat_id" class="input" placeholder="-100..." />
                         </label>
                         <label class="label">Manba
                           <select v-model="source.source" class="select">
                             <option value="backend">Backend</option>
-                            <option value="web">Web</option>
-                            <option value="mobile">Mobile</option>
+                            <option value="web">Veb</option>
+                            <option value="mobile">Mobil</option>
                             <option value="other">Boshqa</option>
                           </select>
                         </label>
@@ -790,11 +809,11 @@
 
                     <div class="log-channel-add">
                       <input v-model.trim="logSourceDraft.label" class="input" placeholder="Kanal nomi" />
-                      <input v-model.trim="logSourceDraft.chat_id" class="input" placeholder="Kanal chat ID: -100..." />
+                      <input v-model.trim="logSourceDraft.chat_id" class="input" placeholder="Kanal raqami: -100..." />
                       <select v-model="logSourceDraft.source" class="select">
                         <option value="backend">Backend</option>
-                        <option value="web">Web</option>
-                        <option value="mobile">Mobile</option>
+                        <option value="web">Veb</option>
+                        <option value="mobile">Mobil</option>
                         <option value="other">Boshqa</option>
                       </select>
                       <button class="btn" type="button" @click="addLogSource">Kanal qo‘shish</button>
@@ -889,11 +908,11 @@
           <label class="label">Ism
             <input v-model.trim="employeeForm.full_name" class="input" placeholder="Xodim ismi" />
           </label>
-          <label class="label">Telegram ID
+          <label class="label">Telegram raqami
             <input v-model.trim="employeeForm.tg_user_id" class="input" placeholder="123456789" />
           </label>
           <label class="label">Foydalanuvchi nomi
-            <input v-model.trim="employeeForm.username" class="input" placeholder="username" />
+            <input v-model.trim="employeeForm.username" class="input" placeholder="foydalanuvchi nomi" />
           </label>
           <label class="label">Telefon
             <input v-model.trim="employeeForm.phone" class="input" placeholder="+998..." />
@@ -1298,8 +1317,8 @@ import { api, getToken, setToken } from './api';
 const ACTIVE_TAB_STORAGE_KEY = 'uyqur_support_active_tab';
 const THEME_STORAGE_KEY = 'uyqur_support_theme';
 const tabs = [
-  { key: 'stats', label: 'Support Samaradorlik', icon: '📊' },
-  { key: 'productAnalytics', label: 'Product Analitikasi', icon: '📈' },
+  { key: 'stats', label: 'Texnik yordam samaradorligi', icon: '📊' },
+  { key: 'productAnalytics', label: 'Mahsulot analitikasi', icon: '📈' },
   { key: 'companyActivity', label: 'Kompaniyalar faolligi', icon: '🏢' },
   { key: 'groups', label: 'Bot ulangan guruhlar', icon: '👥' },
   { key: 'employees', label: 'Xodimlar', icon: '🧑‍💼' },
@@ -1401,7 +1420,7 @@ const requestReplyForm = reactive({ request_id: '', chat_id: '', customer_name: 
 const broadcastForm = reactive({ target_type: 'groups', title: 'Yangilik', text: '' });
 const companyAssignForm = reactive({ companyKey: '', search: '' });
 const employeeForm = reactive({ id: '', tg_user_id: '', full_name: '', username: '', phone: '', role: 'support', is_active: true });
-const adminForm = reactive({ username: 'admin', full_name: 'System Admin', new_password: '' });
+const adminForm = reactive({ username: 'admin', full_name: 'Tizim admini', new_password: '' });
 const integrationForm = reactive({
   enabled: true,
   provider: 'openai_compatible',
@@ -1432,7 +1451,7 @@ const currentSubtitle = computed(() => ({
   companyActivity: 'Kompaniyalar holati, support biriktirilishi va obuna nazorati',
   groups: 'Bot ulangan guruhlar, so‘rov oqimi va mijoz murojaatlari',
   employees: 'Xodimlar aktivligi, javoblar va ochiq vazifalar',
-  companies: 'Uyqur API’dan kelgan kompaniyalar, support va obuna ma’lumotlari',
+  companies: 'Uyqur API’dan kelgan kompaniyalar, mas’ul va obuna ma’lumotlari',
   integrations: 'Tashqi ulanishlar va keyingi log oqimlari uchun boshqaruv',
   privates: 'Mijozlar bilan shaxsiy va biznes chatlar',
   knowledgeBase: 'AI o‘qitish matnlari, fayllar va modelga beriladigan bilim',
@@ -1507,29 +1526,66 @@ const responseTrendRows = computed(() => {
   const normalized = rows
     .map(row => ({
       label: row.hour_label || row.label || row.period_label || '—',
-      value: Number(row.avg_close_minutes ?? row.value ?? 0)
+      value: Number(row.avg_close_minutes ?? row.value ?? 0),
+      closed_requests: Number(row.closed_requests || row.total_requests || 0)
     }))
     .filter(row => row.label && Number.isFinite(row.value));
   if (normalized.length >= 2) return normalized;
   return periodRows.value.map(row => ({
     label: row.period_label,
-    value: Number(row.avg_close_minutes || 0)
+    value: Number(row.avg_close_minutes || 0),
+    closed_requests: Number(row.closed_requests || 0)
   }));
 });
 const responseTrendMax = computed(() => niceChartMax(Math.max(1, ...responseTrendRows.value.map(row => Number(row.value || 0)))));
 const responseTrendPoints = computed(() => lineChartPoints(responseTrendRows.value, responseTrendMax.value, {
-  left: 72,
-  right: 920,
-  top: 28,
-  bottom: 248
+  left: 50,
+  right: 720,
+  top: 24,
+  bottom: 176
 }));
 const responseTrendPolyline = computed(() => responseTrendPoints.value.map(point => `${point.x},${point.y}`).join(' '));
 const responseTrendYTicks = computed(() => chartYTicks(responseTrendMax.value, {
-  left: 72,
-  right: 920,
-  top: 28,
-  bottom: 248
+  left: 50,
+  right: 720,
+  top: 24,
+  bottom: 176
 }));
+const supportSummaryCards = computed(() => [
+  {
+    key: 'requests',
+    title: selectedStatsPeriod.value === 'today' ? 'Bugungi so‘rovlar' : `${selectedPeriodLabel.value} so‘rovlar`,
+    value: fmtNumber(selectedPeriodStats.value.total_requests),
+    note: `${fmtNumber(selectedPeriodStats.value.unique_customers)} ta mijozdan kelgan`,
+    icon: '🎫',
+    action: 'requests'
+  },
+  {
+    key: 'closed',
+    title: 'Javob berilgan',
+    value: fmtNumber(selectedPeriodStats.value.closed_requests),
+    note: `${fmtPercent(selectedPeriodStats.value.close_rate)} so‘rov yopilgan`,
+    icon: '✅',
+    action: 'closed'
+  },
+  {
+    key: 'open',
+    title: 'Javobsiz',
+    value: fmtNumber(selectedPeriodStats.value.open_requests),
+    note: `${fmtNumber(overdueOpenRequestsTotal.value)} tasi 30 daqiqadan oshgan`,
+    icon: '⚠️',
+    tone: 'danger',
+    action: 'open'
+  },
+  {
+    key: 'avg',
+    title: 'O‘rtacha javob',
+    value: fmtMinutes(selectedPeriodStats.value.avg_close_minutes),
+    note: `SLA: ${fmtPercent(selectedPeriodStats.value.close_rate)}`,
+    icon: '⏱️',
+    action: 'avg'
+  }
+]);
 const topEmployeeChartRows = computed(() => topEmployeeRows.value.slice(0, 6));
 const topEmployeeChartMax = computed(() => Math.max(1, ...topEmployeeChartRows.value.map(row => Number(row.closed_requests || 0))));
 const groupChartRows = computed(() => groupPerformanceRows.value.slice(0, 6));
@@ -1591,7 +1647,22 @@ function mergeWeightedAverage(current = {}, source = '', row = {}) {
   current._avg_total = Number(current._avg_total || 0) + (avg * count);
 }
 
+function isAdminLikeEmployee(row = {}) {
+  const role = String(row.role || '').trim().toLowerCase();
+  if (['admin', 'owner', 'superadmin', 'system_admin'].includes(role)) return true;
+
+  const username = normalizeSupportUsername(row.username || row.closed_by_username || '');
+  const adminUsername = normalizeSupportUsername(adminForm.username || 'admin');
+  if (username && adminUsername && username === adminUsername) return true;
+
+  const name = String(row.full_name || row.closed_by_name || row.solution_by || '').trim().toLowerCase();
+  const adminName = String(adminForm.full_name || '').trim().toLowerCase();
+  if (adminName && name && name === adminName) return true;
+  return ['admin', 'system admin', 'tizim admini'].includes(name);
+}
+
 function mergeSupportCandidate(map, row = {}, source = 'identity') {
+  if (isAdminLikeEmployee(row)) return;
   const key = supportRowKey(row);
   if (!key) return;
   const current = map.get(key) || {};
@@ -1623,20 +1694,20 @@ function mergeSupportCandidate(map, row = {}, source = 'identity') {
 
 const supportPerformanceRows = computed(() => {
   const merged = new Map();
-  employees.value.forEach(row => mergeSupportCandidate(merged, row, 'employee'));
+  employees.value.filter(row => !isAdminLikeEmployee(row)).forEach(row => mergeSupportCandidate(merged, row, 'employee'));
   (dashboard.employeeStats || []).forEach(row => mergeSupportCandidate(merged, row, 'stats'));
   topEmployeeRows.value.forEach(row => mergeSupportCandidate(merged, row, 'period'));
   visibleCompanyInfoRows.value.forEach(company => {
     if (!hasCompanySupport(company)) return;
     mergeSupportCandidate(merged, {
-      full_name: company.uyqur_support_username || company.uyqur_support_phone || 'Support xodim',
+      full_name: company.uyqur_support_username || company.uyqur_support_phone || 'Texnik yordam xodimi',
       username: company.uyqur_support_username,
       phone: company.uyqur_support_phone,
       role: 'support'
     }, 'company');
   });
 
-  return [...merged.values()].map((row, index) => {
+  return [...merged.values()].filter(row => !isAdminLikeEmployee(row)).map((row, index) => {
     const stat = employeeStatsMap.value.get(employeeLookupKey(row)) || row;
     const candidate = { ...row, ...stat };
     const assignedCompanyCount = visibleCompanyInfoRows.value.filter(company => companyMatchesEmployee(company, candidate)).length;
@@ -1699,6 +1770,8 @@ const unansweredAlerts = computed(() => {
     .slice(0, 5);
 });
 const unansweredAlertTotal = computed(() => unansweredAlerts.value.reduce((sum, row) => sum + Number(row.open_requests || 0), 0));
+const overdueOpenRequestsTotal = computed(() => (dashboard.openRequests || [])
+  .filter(request => openMinutes(request.created_at) > 30).length);
 const loadingText = computed(() => ({
   login: 'Kirilmoqda...',
   refresh: 'Yangilanmoqda...',
@@ -1828,6 +1901,10 @@ function barChartColumns(rows = [], max = 1, dims) {
 
 function fmtMinutes(value) {
   return `${fmtNumber(value)} min`;
+}
+
+function responseTrendTooltip(point = {}) {
+  return `${point.label}: ${fmtMinutes(point.value)} · ${fmtNumber(point.closed_requests)} ta javob berilgan`;
 }
 
 function openMinutes(value) {
@@ -2136,14 +2213,14 @@ function enrichCompanyTimeline(row = {}) {
   const subscriptionDays = start && expiry ? dayDiff(start, expiry) || 0 : 0;
   return {
     ...enriched,
-    start_label: start ? fmtCompanyDate(start) : 'Start belgilanmagan',
+    start_label: start ? fmtCompanyDate(start) : 'Boshlanish belgilanmagan',
     expiry_label: expiry ? fmtCompanyDate(expiry) : 'Muddatsiz',
     usage_days: usageDays,
     subscription_days: subscriptionDays,
     usage_duration_label: usageDays ? `${durationLabel(usageDays)} ishlatmoqda` : 'Muddat noma’lum',
     subscription_label: subscriptionDays ? `Obuna: ${durationLabel(subscriptionDays)}` : 'Obuna: muddatsiz',
     timeline_title: [
-      `Start: ${start ? fmtCompanyDate(start) : '—'}`,
+      `Boshlanish: ${start ? fmtCompanyDate(start) : '—'}`,
       `Tugash: ${expiry ? fmtCompanyDate(expiry) : 'muddatsiz'}`,
       usageDays ? `Ishlatmoqda: ${durationLabel(usageDays)}` : ''
     ].filter(Boolean).join(' · ')
@@ -2235,16 +2312,16 @@ const activeCompanyRows = computed(() => filteredCompanyInfoRows.value
   .slice(0, 6));
 const activeCompanyChartMax = computed(() => niceChartMax(Math.max(1, ...activeCompanyRows.value.map(row => Number(row.session_count || 0)))));
 const activeCompanyChartBars = computed(() => barChartColumns(activeCompanyRows.value, activeCompanyChartMax.value, {
-  left: 110,
-  right: 820,
-  top: 48,
-  bottom: 286
+  left: 95,
+  right: 685,
+  top: 36,
+  bottom: 198
 }));
 const activeCompanyYTicks = computed(() => chartYTicks(activeCompanyChartMax.value, {
-  left: 110,
-  right: 820,
-  top: 48,
-  bottom: 286
+  left: 95,
+  right: 685,
+  top: 36,
+  bottom: 198
 }));
 const companyAlerts = computed(() => visibleCompanyInfoRows.value
   .filter(row => ['expired', 'soon'].includes(row.expiry_state))
@@ -2376,20 +2453,20 @@ const groupPerformanceColumns = [
 const supportPerformanceColumns = [
   { key: 'rank', label: 'O‘rin', slot: 'rank', action: 'employeeCompanies' },
   { key: 'full_name', label: 'Xodim', action: 'employeeCompanies' },
-  { key: 'username', label: 'Username', format: v => v ? `@${v}` : '—', action: 'employeeCompanies' },
+  { key: 'username', label: 'Foydalanuvchi', format: v => v ? `@${v}` : '—', action: 'employeeCompanies' },
   { key: 'closed_requests', label: 'Javob', format: fmtNumber, action: 'employeeCompanies' },
   { key: 'handled_chats', label: 'Chatlar', format: fmtNumber, action: 'employeeCompanies' },
   { key: 'company_total', label: 'Kompaniya', format: fmtNumber, action: 'employeeCompanies' },
   { key: 'company_active', label: 'Aktiv', format: fmtNumber, action: 'employeeCompanies' },
   { key: 'company_churn', label: 'Churn', format: fmtNumber, action: 'employeeCompanies' },
   { key: 'avg_close_minutes', label: 'O‘rt. javob', format: fmtMinutes, action: 'employeeCompanies' },
-  { key: 'grade', label: 'Grade', slot: 'grade', action: 'employeeCompanies' }
+  { key: 'grade', label: 'Bahosi', slot: 'grade', action: 'employeeCompanies' }
 ];
 
 const employeeColumns = [
   { key: 'select', label: '', slot: 'select' },
   { key: 'full_name', label: 'Xodim', action: 'employeeInfo' },
-  { key: 'tg_user_id', label: 'Telegram ID', format: v => v || '—', action: 'employeeInfo' },
+  { key: 'tg_user_id', label: 'Telegram raqami', format: v => v || '—', action: 'employeeInfo' },
   { key: 'username', label: 'Foydalanuvchi nomi', format: v => v ? `@${v}` : '—', action: 'employeeInfo' },
   { key: 'role', label: 'Vazifa', format: roleLabel, badge: true, action: 'employeeInfo' },
   { key: 'closed_requests', label: 'Yopilgan', action: 'employeeInfo' },
@@ -2425,7 +2502,7 @@ const managerOpenRequestColumns = [
 const groupColumns = [
   { key: 'select', label: '', slot: 'select' },
   { key: 'title', label: 'Guruh', action: 'telegram' },
-  { key: 'chat_id', label: 'Chat ID', action: 'telegram' },
+  { key: 'chat_id', label: 'Chat raqami', action: 'telegram' },
   { key: 'company_name', label: 'Kompaniya', format: v => v || 'Biriktirilmagan', action: 'companyAssign' },
   { key: 'total_requests', label: 'So‘rov', action: 'requests' },
   { key: 'open_requests', label: 'Ochiq', action: 'requests' },
@@ -2437,34 +2514,34 @@ const groupColumns = [
 
 const companyColumns = [
   { key: 'name', label: 'Kompaniya' },
-  { key: 'brand', label: 'Brand', format: v => v || '—' },
-  { key: 'business_status', label: 'Biznes status', format: businessStatusLabel },
+  { key: 'brand', label: 'Brend', format: v => v || '—' },
+  { key: 'business_status', label: 'Biznes holati', format: businessStatusLabel },
   { key: 'director', label: 'Direktor', format: v => v || '—' },
-  { key: 'uyqur_support_username', label: 'Support', format: (_, row) => companySupportLabel(row) },
+  { key: 'uyqur_support_username', label: 'Mas’ul', format: (_, row) => companySupportLabel(row) },
   { key: 'phone', label: 'Telefon', format: v => v || '—' },
-  { key: 'subscription_start_date', label: 'Obuna start', format: v => v || '—' },
+  { key: 'subscription_start_date', label: 'Obuna boshlanishi', format: v => v || '—' },
   { key: 'expired', label: 'Obuna', format: (_, row) => expiryStatusLabel(row) },
-  { key: 'latest_status_change_at_iso', label: 'Status o‘zgargan', format: fmtDate }
+  { key: 'latest_status_change_at_iso', label: 'Holat o‘zgargan', format: fmtDate }
 ];
 
 const companyActivityColumns = [
   { key: 'name', label: 'Kompaniya', slot: 'companyIdentity' },
-  { key: 'business_status', label: 'Biznes status', slot: 'businessStatus' },
+  { key: 'business_status', label: 'Biznes holati', slot: 'businessStatus' },
   { key: 'director', label: 'Direktor', format: v => v || '—' },
-  { key: 'uyqur_support_username', label: 'Biriktirilgan support', slot: 'supportOwner' },
+  { key: 'uyqur_support_username', label: 'Biriktirilgan mas’ul', slot: 'supportOwner' },
   { key: 'phone', label: 'Telefon', format: v => v || '—' },
-  { key: 'subscription_start_date', label: 'Start', format: v => v || '—' },
+  { key: 'subscription_start_date', label: 'Boshlanish', format: v => v || '—' },
   { key: 'expired', label: 'Obuna', slot: 'expiryStatus' },
-  { key: 'latest_status_change_at_iso', label: 'Status o‘zgargan', format: fmtDate }
+  { key: 'latest_status_change_at_iso', label: 'Holat o‘zgargan', format: fmtDate }
 ];
 
 const productUsageColumns = [
   { key: 'name', label: 'Kompaniya' },
-  { key: 'brand', label: 'Brand', format: v => v || '—' },
+  { key: 'brand', label: 'Brend', format: v => v || '—' },
   { key: 'usage_score', label: 'Foydalanish', slot: 'usageScore' },
   { key: 'usage_level', label: 'Daraja' },
-  { key: 'business_status', label: 'Biznes status', slot: 'businessStatus' },
-  { key: 'uyqur_support_username', label: 'Support', format: (_, row) => companySupportLabel(row) },
+  { key: 'business_status', label: 'Biznes holati', slot: 'businessStatus' },
+  { key: 'uyqur_support_username', label: 'Mas’ul', format: (_, row) => companySupportLabel(row) },
   { key: 'expired', label: 'Obuna', format: (_, row) => expiryStatusLabel(row) }
 ];
 
@@ -2481,11 +2558,11 @@ const supportMetricColumns = [
 
 const productMetricColumns = [
   { key: 'name', label: 'Kompaniya' },
-  { key: 'brand', label: 'Brand', format: v => v || '—' },
-  { key: 'uyqur_support_username', label: 'Support', format: (_, row) => companySupportLabel(row) },
-  { key: 'business_status', label: 'Biznes status', format: businessStatusLabel },
+  { key: 'brand', label: 'Brend', format: v => v || '—' },
+  { key: 'uyqur_support_username', label: 'Mas’ul', format: (_, row) => companySupportLabel(row) },
+  { key: 'business_status', label: 'Biznes holati', format: businessStatusLabel },
   { key: 'usage_score', label: 'Foydalanish', format: v => fmtPercent(v) },
-  { key: 'start_label', label: 'Start' },
+  { key: 'start_label', label: 'Boshlanish' },
   { key: 'subscription_label', label: 'Obuna muddati' },
   { key: 'usage_duration_label', label: 'Ishlatmoqda' },
   { key: 'expired', label: 'Tugash', format: (_, row) => expiryStatusLabel(row) }
@@ -2493,19 +2570,19 @@ const productMetricColumns = [
 
 const companyMetricColumns = [
   { key: 'name', label: 'Kompaniya' },
-  { key: 'brand', label: 'Brand', format: v => v || '—' },
-  { key: 'business_status', label: 'Biznes status', format: businessStatusLabel },
-  { key: 'uyqur_support_username', label: 'Support', format: (_, row) => companySupportLabel(row) },
+  { key: 'brand', label: 'Brend', format: v => v || '—' },
+  { key: 'business_status', label: 'Biznes holati', format: businessStatusLabel },
+  { key: 'uyqur_support_username', label: 'Mas’ul', format: (_, row) => companySupportLabel(row) },
   { key: 'director', label: 'Direktor', format: v => v || '—' },
   { key: 'phone', label: 'Telefon', format: v => v || '—' },
-  { key: 'subscription_start_date', label: 'Start', format: v => v || '—' },
+  { key: 'subscription_start_date', label: 'Boshlanish', format: v => v || '—' },
   { key: 'expired', label: 'Obuna', format: (_, row) => expiryStatusLabel(row) }
 ];
 
 const employeeCompanyColumns = [
   { key: 'name', label: 'Kompaniya' },
-  { key: 'brand', label: 'Brand', format: v => v || '—' },
-  { key: 'business_status', label: 'Biznes status', slot: 'businessStatus' },
+  { key: 'brand', label: 'Brend', format: v => v || '—' },
+  { key: 'business_status', label: 'Biznes holati', slot: 'businessStatus' },
   { key: 'usage_score', label: 'Foydalanish', slot: 'usageScore' },
   { key: 'expired', label: 'Obuna', format: (_, row) => expiryStatusLabel(row) },
   { key: 'phone', label: 'Telefon', format: v => v || '—' }
@@ -2724,7 +2801,7 @@ async function loadSettings() {
   const admin = data.admins?.[0];
   if (admin) {
     adminForm.username = admin.username || 'admin';
-    adminForm.full_name = admin.full_name || 'System Admin';
+    adminForm.full_name = admin.full_name || 'Tizim admini';
   }
   const ai = data.settings?.find(s => s.key === 'ai_mode')?.value;
   const integration = data.settings?.find(s => s.key === 'ai_integration')?.value;
@@ -2934,7 +3011,7 @@ function telegramUrlFor(row = {}) {
 function openTelegramChat(row = {}) {
   const target = tableActionChatRow(row) || row;
   const url = telegramUrlFor(target);
-  if (!url) return showToast('Telegramda ochish uchun chat ID yoki username topilmadi');
+  if (!url) return showToast('Telegramda ochish uchun chat raqami yoki foydalanuvchi nomi topilmadi');
   window.open(url, '_blank', 'noopener,noreferrer');
 }
 
@@ -2959,13 +3036,13 @@ function handleTableCellAction({ action, row }) {
   }
   if (action === 'chatDetail') {
     const chatRow = tableActionChatRow(row);
-    if (!chatRow) return showToast('Chat tafsiloti uchun chat ID topilmadi');
+    if (!chatRow) return showToast('Chat tafsiloti uchun chat raqami topilmadi');
     loadChatDetail(chatRow);
     return;
   }
   if (action === 'requests') {
     const chatRow = tableActionChatRow(row);
-    if (!chatRow) return showToast('So‘rovlar uchun chat ID topilmadi');
+    if (!chatRow) return showToast('So‘rovlar uchun chat raqami topilmadi');
     loadRequests(chatRow);
     return;
   }
@@ -2991,13 +3068,13 @@ function handleTableCellAction({ action, row }) {
   }
   if (action === 'employeeMessage') {
     const employee = tableActionEmployeeRow(row);
-    if (!employee.id && !employee.employee_id && !employee.tg_user_id) return showToast('Xodim Telegram ID topilmadi');
+    if (!employee.id && !employee.employee_id && !employee.tg_user_id) return showToast('Xodim Telegram raqami topilmadi');
     openEmployeeMessage(employee);
     return;
   }
   if (action === 'send') {
     const chatRow = tableActionChatRow(row);
-    if (!chatRow) return showToast('Xabar yuborish uchun chat ID topilmadi');
+    if (!chatRow) return showToast('Xabar yuborish uchun chat raqami topilmadi');
     openSend(chatRow);
   }
 }
@@ -3015,10 +3092,10 @@ function recipientLabel(row) {
 function recipientMeta(row) {
   if (selectedSendType.value === 'employees') {
     const username = row.username ? `@${row.username}` : '';
-    const tgId = row.tg_user_id ? `Telegram ID: ${row.tg_user_id}` : 'Telegram ID ulanmagan';
+    const tgId = row.tg_user_id ? `Telegram raqami: ${row.tg_user_id}` : 'Telegram raqami ulanmagan';
     return [username, tgId].filter(Boolean).join(' · ');
   }
-  return `Chat ID: ${row.chat_id}`;
+  return `Chat raqami: ${row.chat_id}`;
 }
 
 function openEmployee(row = null) {
@@ -3089,7 +3166,7 @@ async function saveGroupCompanyAssignment() {
 
 function addLogSource() {
   const chatId = String(logSourceDraft.chat_id || '').trim();
-  if (!chatId) return showToast('Kanal chat ID kiriting');
+  if (!chatId) return showToast('Kanal raqamini kiriting');
   if (logForm.sources.some(source => String(source.chat_id) === chatId)) return showToast('Bu kanal allaqachon qo‘shilgan');
   logForm.sources.push({
     id: `log-source-${Date.now()}`,
@@ -3244,6 +3321,14 @@ function openCompanyMetricDetail(kind = 'total') {
   });
 }
 
+function openSupportSummaryCard(action = 'requests') {
+  if (action === 'open') {
+    openRemainingRequests();
+    return;
+  }
+  openSupportMetricDetail(action);
+}
+
 function openCompanyTimelineDetail(row = {}) {
   setMetricDetail({
     title: row.name || 'Kompaniya tafsiloti',
@@ -3251,7 +3336,7 @@ function openCompanyTimelineDetail(row = {}) {
     columns: productMetricColumns,
     empty: 'Kompaniya ma’lumoti topilmadi',
     summary: [
-      { label: 'Start', value: row.start_label || '—' },
+      { label: 'Boshlanish', value: row.start_label || '—' },
       { label: 'Obuna muddati', value: row.subscription_label || '—' },
       { label: 'Ishlatmoqda', value: row.usage_duration_label || '—' },
       { label: 'Foydalanish', value: fmtPercent(row.usage_score || 0) }
@@ -3657,7 +3742,7 @@ async function sendTestLog() {
   try {
     const result = await api.testLogNotification({
       level: logForm.test_level,
-      message: 'Webappdan yuborilgan test log'
+      message: 'Admin paneldan yuborilgan test log'
     });
     showToast(result.sent ? `Test log yuborildi: ${result.chat_id}` : `Test log yuborilmadi: ${result.reason}`);
   } catch (error) {
