@@ -164,12 +164,16 @@ function configuredLogSourceFor(chat = {}, settings = {}) {
   return sources.find(source => source.enabled !== false && sameChatId(source.chat_id, chat.id)) || null;
 }
 
+function getIncomingLogText(message = {}) {
+  return String(message.text || message.caption || '').trim();
+}
+
 async function maybeRelayIncomingLog(updateKind, message, settings) {
   const chat = message.chat || {};
   if (!isChannelLogPost(updateKind, chat)) return false;
   const source = configuredLogSourceFor(chat, settings);
   if (!source) return true;
-  const text = getMessageText(message);
+  const text = getIncomingLogText(message);
   if (!text.trim()) return true;
   await notifyIncomingLog({ source, text, message, settings });
   return true;

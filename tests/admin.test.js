@@ -1251,11 +1251,26 @@ async function testLogNotificationsCanSendSelectedLevels() {
 
 async function testCompanyInfoProxyNormalizesExternalRows() {
   const originalFetch = global.fetch;
+  const originalSelect = supabase.select;
+  const originalInsert = supabase.insert;
   const originalAuth = process.env.UYQUR_COMPANY_INFO_AUTH;
   const originalUrl = process.env.UYQUR_COMPANY_INFO_URL;
   process.env.UYQUR_COMPANY_INFO_AUTH = 'test-company-auth';
   process.env.UYQUR_COMPANY_INFO_URL = 'https://example.test/company-info';
   const calls = [];
+  const insertedEmployees = [];
+
+  supabase.select = async (table) => {
+    if (table === 'employees') return [];
+    return [];
+  };
+  supabase.insert = async (table, rows) => {
+    if (table === 'employees') {
+      insertedEmployees.push(...rows);
+      return rows.map((row, index) => ({ id: `employee-${index + 1}`, ...row }));
+    }
+    return rows;
+  };
 
   global.fetch = async (url, options = {}) => {
     calls.push({ url, options });
@@ -1294,10 +1309,15 @@ async function testCompanyInfoProxyNormalizesExternalRows() {
     assert.strictEqual(result.payload.data.summary.total, 1);
     assert.strictEqual(result.payload.data.summary.active, 1);
     assert.strictEqual(result.payload.data.summary.support_assigned, 1);
+    assert.strictEqual(result.payload.data.support_employee_sync.created, 1);
+    assert.strictEqual(insertedEmployees[0].username, 'uyqur_nurali');
+    assert.strictEqual(insertedEmployees[0].role, 'support');
     assert.strictEqual(result.payload.data.companies[0].name, 'Gagarin Avenue');
     assert.strictEqual(result.payload.data.companies[0].created_at_iso, '2023-12-21T04:11:11.000Z');
     assert.strictEqual(result.payload.data.companies[0].latest_status_change.new_status, 'ACTIVE');
   } finally {
+    supabase.select = originalSelect;
+    supabase.insert = originalInsert;
     global.fetch = originalFetch;
     if (originalAuth === undefined) delete process.env.UYQUR_COMPANY_INFO_AUTH;
     else process.env.UYQUR_COMPANY_INFO_AUTH = originalAuth;

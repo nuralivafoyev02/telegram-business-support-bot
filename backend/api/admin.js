@@ -143,14 +143,31 @@ function buildPeriodSummary(requests, periodKey, label, keys) {
 }
 
 function buildEmployeePerformance({ requests, employees, periodKey, keys }) {
-  const employeeMap = new Map(employees.map(employee => [employee.id, employee]));
-  const closed = requests.filter(request => request.status === 'closed' && request.closed_by_employee_id && inCurrentPeriod(request.closed_at, periodKey, keys));
-  const totals = new Map();
+  const employeeMap = new Map(employees.map(employee => [employee.id, employee]).filter(([id]) => id));
+  const employeeByTgId = new Map(employees.map(employee => [telegramIdKey(employee.tg_user_id), employee]).filter(([id]) => id));
+  const closed = requests.filter(request => {
+    if (request.status !== 'closed' || !inCurrentPeriod(request.closed_at, periodKey, keys)) return false;
+    return Boolean(request.closed_by_employee_id || request.closed_by_tg_id || request.closed_by_name);
+  });
+  const totals = new Map(employees.map(employee => [employee.id, {
+    employee_id: employee.id,
+    tg_user_id: employee.tg_user_id || null,
+    full_name: employee.full_name || 'Xodim',
+    username: employee.username || '',
+    role: employee.role || '',
+    closed_requests: 0,
+    handled_chats: new Set(),
+    close_minutes: [],
+    last_closed_at: null
+  }]).filter(([id]) => id));
 
   closed.forEach(request => {
-    const current = totals.get(request.closed_by_employee_id) || {
-      employee_id: request.closed_by_employee_id,
-      full_name: request.closed_by_name || 'Xodim',
+    const employee = employeeMap.get(request.closed_by_employee_id) || employeeByTgId.get(telegramIdKey(request.closed_by_tg_id));
+    const key = employee?.id || request.closed_by_employee_id || (request.closed_by_tg_id ? `tg:${request.closed_by_tg_id}` : `name:${request.closed_by_name}`);
+    const current = totals.get(key) || {
+      employee_id: employee?.id || request.closed_by_employee_id || '',
+      tg_user_id: employee?.tg_user_id || request.closed_by_tg_id || null,
+      full_name: request.closed_by_name || employee?.full_name || 'Xodim',
       username: '',
       role: '',
       closed_requests: 0,
@@ -158,19 +175,19 @@ function buildEmployeePerformance({ requests, employees, periodKey, keys }) {
       close_minutes: [],
       last_closed_at: null
     };
-    const employee = employeeMap.get(request.closed_by_employee_id);
     if (employee) {
       current.full_name = employee.full_name || current.full_name;
       current.username = employee.username || '';
       current.role = employee.role || '';
       current.tg_user_id = employee.tg_user_id || null;
+      current.employee_id = employee.id || current.employee_id;
     }
     current.closed_requests += 1;
     if (request.chat_id) current.handled_chats.add(String(request.chat_id));
     const closeMinute = minutesBetween(request.created_at, request.closed_at);
     if (closeMinute !== null) current.close_minutes.push(closeMinute);
     if (!current.last_closed_at || String(request.closed_at || '') > String(current.last_closed_at || '')) current.last_closed_at = request.closed_at || null;
-    totals.set(request.closed_by_employee_id, current);
+    totals.set(key, current);
   });
 
   return [...totals.values()]
@@ -190,27 +207,36 @@ function buildEmployeePerformance({ requests, employees, periodKey, keys }) {
     .slice(0, 20);
 }
 
-function buildGroupPerformance({ requests, chats, periodKey, keys }) {
+function buildChatPerformance({ requests, chats, periodKey, keys, sourceType = '' }) {
   const chatMap = new Map(chats.map(chat => [String(chat.chat_id), chat]));
-  const groupRequests = requests.filter(request => request.source_type === 'group' && inCurrentPeriod(request.created_at, periodKey, keys));
+  const periodRequests = requests.filter(request => {
+    if (sourceType && request.source_type !== sourceType) return false;
+    return inCurrentPeriod(request.created_at, periodKey, keys);
+  });
   const totals = new Map();
 
-  groupRequests.forEach(request => {
+  periodRequests.forEach(request => {
     const key = String(request.chat_id);
     const chat = chatMap.get(key) || {};
     const current = totals.get(key) || {
       chat_id: request.chat_id,
       title: chat.title || key,
       company_name: chat.company_name || null,
+      source_type: chat.source_type || request.source_type || '',
       total_requests: 0,
       open_requests: 0,
       closed_requests: 0,
+      close_minutes: [],
       customers: new Set(),
       last_request_at: null
     };
     current.total_requests += 1;
     if (request.status === 'open') current.open_requests += 1;
-    if (request.status === 'closed') current.closed_requests += 1;
+    if (request.status === 'closed') {
+      current.closed_requests += 1;
+      const closeMinute = minutesBetween(request.created_at, request.closed_at);
+      if (closeMinute !== null) current.close_minutes.push(closeMinute);
+    }
     if (request.customer_tg_id) current.customers.add(String(request.customer_tg_id));
     if (!current.last_request_at || String(request.created_at || '') > String(current.last_request_at || '')) current.last_request_at = request.created_at || null;
     totals.set(key, current);
@@ -221,15 +247,21 @@ function buildGroupPerformance({ requests, chats, periodKey, keys }) {
       chat_id: row.chat_id,
       title: row.title,
       company_name: row.company_name,
+      source_type: row.source_type,
       total_requests: row.total_requests,
       open_requests: row.open_requests,
       closed_requests: row.closed_requests,
       close_rate: percent(row.closed_requests, row.total_requests),
+      avg_close_minutes: average(row.close_minutes),
       unique_customers: row.customers.size,
       last_request_at: row.last_request_at
     }))
     .sort((a, b) => b.total_requests - a.total_requests || b.close_rate - a.close_rate)
     .slice(0, 30);
+}
+
+function buildGroupPerformance(args) {
+  return buildChatPerformance({ ...args, sourceType: 'group' });
 }
 
 function buildDashboardAnalytics({ requests, chats, employees }) {
@@ -244,6 +276,7 @@ function buildDashboardAnalytics({ requests, chats, employees }) {
   return {
     periods: Object.fromEntries(periods.map(([key, label]) => [key, buildPeriodSummary(requests, key, label, keys)])),
     employeePerformance: Object.fromEntries(periods.map(([key]) => [key, buildEmployeePerformance({ requests, employees, periodKey: key, keys })])),
+    chatPerformance: Object.fromEntries(periods.map(([key]) => [key, buildChatPerformance({ requests, chats, periodKey: key, keys })])),
     groupPerformance: Object.fromEntries(periods.map(([key]) => [key, buildGroupPerformance({ requests, chats, periodKey: key, keys })])),
     generated_at: new Date().toISOString()
   };
@@ -252,11 +285,11 @@ function buildDashboardAnalytics({ requests, chats, employees }) {
 async function getDashboardAnalytics() {
   const [requests, chats, employees] = await Promise.all([
     supabase.select('support_requests', {
-      select: 'id,source_type,chat_id,company_id,customer_tg_id,customer_name,status,closed_by_employee_id,closed_by_name,created_at,closed_at',
+      select: 'id,source_type,chat_id,company_id,customer_tg_id,customer_name,status,closed_by_employee_id,closed_by_tg_id,closed_by_name,created_at,closed_at',
       order: supabase.order('created_at', false),
       limit: '10000'
     }).catch(() => []),
-    stats.selectChatStatistics({ select: '*', source_type: 'eq.group', is_active: 'eq.true', limit: '1000' }).catch(() => []),
+    stats.selectChatStatistics({ select: '*', is_active: 'eq.true', limit: '1000' }).catch(() => []),
     supabase.select('employees', { select: 'id,tg_user_id,full_name,username,role,is_active', limit: '1000' }).catch(() => [])
   ]);
 
@@ -918,13 +951,20 @@ async function getEmployeeActivity(query = {}) {
   if (!employee) throw new Error('Xodim topilmadi');
 
   const keys = currentPeriodKeys();
-  const [requests, employeeMessagesById, employeeMessagesByTg] = await Promise.all([
+  const requestSelect = 'id,source_type,chat_id,customer_tg_id,customer_name,customer_username,initial_text,status,closed_at,closed_by_employee_id,closed_by_tg_id,closed_by_name,created_at';
+  const [requestsByEmployeeId, requestsByTgId, employeeMessagesById, employeeMessagesByTg] = await Promise.all([
     supabase.select('support_requests', {
-      select: 'id,source_type,chat_id,customer_tg_id,customer_name,customer_username,initial_text,status,closed_at,closed_by_employee_id,closed_by_name,created_at',
+      select: requestSelect,
       closed_by_employee_id: supabase.eq(employee.id),
       order: supabase.order('closed_at', false),
       limit: '5000'
     }).catch(() => []),
+    employee.tg_user_id ? supabase.select('support_requests', {
+      select: requestSelect,
+      closed_by_tg_id: supabase.eq(employee.tg_user_id),
+      order: supabase.order('closed_at', false),
+      limit: '5000'
+    }).catch(() => []) : Promise.resolve([]),
     supabase.select('messages', {
       select: 'id,tg_message_id,chat_id,from_tg_user_id,from_name,from_username,employee_id,source_type,classification,text,created_at',
       employee_id: supabase.eq(employee.id),
@@ -939,6 +979,7 @@ async function getEmployeeActivity(query = {}) {
     }).catch(() => []) : Promise.resolve([])
   ]);
 
+  const requests = uniqueRowsBy([...requestsByEmployeeId, ...requestsByTgId], row => row.id || `${row.chat_id}:${row.initial_message_id || row.closed_at}`);
   const closedRequests = requests
     .filter(request => request.status === 'closed')
     .filter(request => inCurrentPeriod(request.closed_at || request.created_at, periodKey, keys));

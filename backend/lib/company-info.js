@@ -1,6 +1,7 @@
 'use strict';
 
 const { optionalEnv } = require('./env');
+const supabase = require('./supabase');
 
 const DEFAULT_COMPANY_INFO_URL = 'https://backend.app.uyqur.uz/dev/company/info-for-bot';
 const EXPIRING_SOON_DAYS = 30;
@@ -38,6 +39,14 @@ function expiryState(days) {
   if (days < 0) return 'expired';
   if (days <= EXPIRING_SOON_DAYS) return 'soon';
   return 'ok';
+}
+
+function normalizeSupportUsername(value = '') {
+  return String(value || '').replace(/^@/, '').trim().toLowerCase();
+}
+
+function normalizePhone(value = '') {
+  return String(value || '').replace(/\D/g, '');
 }
 
 function normalizeCompany(row = {}) {
@@ -93,6 +102,64 @@ function buildSummary(companies = []) {
   };
 }
 
+function supportContactsFromCompanies(companies = []) {
+  const contacts = new Map();
+  companies.forEach(company => {
+    const username = normalizeSupportUsername(company.uyqur_support_username);
+    const phoneDigits = normalizePhone(company.uyqur_support_phone);
+    if (!username && !phoneDigits) return;
+    const key = username ? `u:${username}` : `p:${phoneDigits}`;
+    if (!contacts.has(key)) {
+      contacts.set(key, {
+        username: username || null,
+        phone: company.uyqur_support_phone || null,
+        phone_digits: phoneDigits || '',
+        full_name: username ? `@${username}` : (company.uyqur_support_phone || 'Support xodim')
+      });
+    }
+  });
+  return [...contacts.values()];
+}
+
+function employeeMatchesSupport(employee = {}, contact = {}) {
+  const employeeUsername = normalizeSupportUsername(employee.username);
+  const employeePhone = normalizePhone(employee.phone);
+  return Boolean(
+    (contact.username && employeeUsername && contact.username === employeeUsername)
+    || (contact.phone_digits && employeePhone && contact.phone_digits === employeePhone)
+  );
+}
+
+async function syncSupportEmployees(companies = []) {
+  const contacts = supportContactsFromCompanies(companies);
+  if (!contacts.length) return { created: 0, skipped: 0 };
+
+  try {
+    const employees = await supabase.select('employees', {
+      select: 'id,username,phone,tg_user_id,full_name,is_active',
+      limit: '5000'
+    });
+    const existing = Array.isArray(employees) ? employees : [];
+    const missing = contacts.filter(contact => !existing.some(employee => employeeMatchesSupport(employee, contact)));
+    if (!missing.length) return { created: 0, skipped: contacts.length };
+
+    const now = new Date().toISOString();
+    const rows = missing.map(contact => ({
+      full_name: contact.full_name,
+      username: contact.username,
+      phone: contact.phone,
+      role: 'support',
+      is_active: true,
+      last_activity_at: now
+    }));
+    await supabase.insert('employees', rows, { prefer: 'return=minimal' });
+    return { created: rows.length, skipped: contacts.length - rows.length };
+  } catch (error) {
+    console.warn('[company-info:sync-support-employees:error]', error.message);
+    return { created: 0, skipped: contacts.length, error: error.message };
+  }
+}
+
 function extractCompanyRows(payload = {}) {
   if (Array.isArray(payload)) return payload;
   if (Array.isArray(payload.data)) return payload.data;
@@ -117,13 +184,15 @@ async function fetchCompanyInfo() {
   }
 
   const companies = extractCompanyRows(payload).map(normalizeCompany);
+  const supportEmployeeSync = await syncSupportEmployees(companies);
   return {
     summary: buildSummary(companies),
     companies,
+    support_employee_sync: supportEmployeeSync,
     fetched_at: new Date().toISOString(),
     source: url,
     message: payload.message || null
   };
 }
 
-module.exports = { fetchCompanyInfo, normalizeCompany, buildSummary };
+module.exports = { fetchCompanyInfo, normalizeCompany, buildSummary, syncSupportEmployees };

@@ -109,7 +109,9 @@
             </div>
 
             <div class="metric-strip">
-              <article class="card metric">
+              <article class="card metric clickable-metric" role="button" tabindex="0" title="Davr bo‘yicha chat/guruhlarni ko‘rish"
+                @click="openSupportMetricDetail('requests')" @keydown.enter.prevent="openSupportMetricDetail('requests')"
+                @keydown.space.prevent="openSupportMetricDetail('requests')">
                 <div class="metric-head">
                   <div class="metric-label">{{ selectedPeriodLabel }} so‘rovlar</div>
                   <span class="metric-icon">🎫</span>
@@ -117,7 +119,9 @@
                 <div class="metric-value">{{ fmtNumber(selectedPeriodStats.total_requests) }}</div>
                 <div class="metric-mini">{{ fmtNumber(selectedPeriodStats.unique_customers) }} ta mijozdan kelgan</div>
               </article>
-              <article class="card metric">
+              <article class="card metric clickable-metric" role="button" tabindex="0" title="Javob berilgan chat/guruhlarni ko‘rish"
+                @click="openSupportMetricDetail('closed')" @keydown.enter.prevent="openSupportMetricDetail('closed')"
+                @keydown.space.prevent="openSupportMetricDetail('closed')">
                 <div class="metric-head">
                   <div class="metric-label">Javob berilgan</div>
                   <span class="metric-icon good">✅</span>
@@ -135,7 +139,9 @@
                 <div class="metric-value danger-text">{{ fmtNumber(selectedPeriodStats.open_requests) }}</div>
                 <div class="metric-mini">{{ fmtNumber(unansweredAlertTotal) }} ta so‘rov javob kutmoqda</div>
               </article>
-              <article class="card metric">
+              <article class="card metric clickable-metric" role="button" tabindex="0" title="O‘rtacha javob vaqtini chat/guruhlar bo‘yicha ko‘rish"
+                @click="openSupportMetricDetail('avg')" @keydown.enter.prevent="openSupportMetricDetail('avg')"
+                @keydown.space.prevent="openSupportMetricDetail('avg')">
                 <div class="metric-head">
                   <div class="metric-label">O‘rtacha javob</div>
                   <span class="metric-icon">⏱️</span>
@@ -308,7 +314,9 @@
             <div class="spacer"></div>
 
             <div class="metric-strip">
-              <article class="card metric">
+              <article class="card metric clickable-metric" role="button" tabindex="0" title="Kuzatuvdagi kompaniyalarni ko‘rish"
+                @click="openProductMetricDetail('total')" @keydown.enter.prevent="openProductMetricDetail('total')"
+                @keydown.space.prevent="openProductMetricDetail('total')">
                 <div class="metric-head">
                   <div class="metric-label">Kuzatuvdagi kompaniya</div>
                   <span class="metric-icon">🏢</span>
@@ -316,7 +324,9 @@
                 <div class="metric-value">{{ fmtNumber(productUsageSummary.total) }}</div>
                 <div class="metric-mini">Support biriktirilgan kompaniyalar</div>
               </article>
-              <article class="card metric">
+              <article class="card metric clickable-metric" role="button" tabindex="0" title="Aktiv kompaniyalarni ko‘rish"
+                @click="openProductMetricDetail('active')" @keydown.enter.prevent="openProductMetricDetail('active')"
+                @keydown.space.prevent="openProductMetricDetail('active')">
                 <div class="metric-head">
                   <div class="metric-label">Aktiv foydalanish</div>
                   <span class="metric-icon good">✅</span>
@@ -324,7 +334,9 @@
                 <div class="metric-value">{{ fmtNumber(productUsageSummary.active) }}</div>
                 <div class="metric-mini">{{ fmtPercent(productUsageSummary.active_rate) }} biznes aktiv</div>
               </article>
-              <article class="card metric">
+              <article class="card metric clickable-metric" role="button" tabindex="0" title="Yuqori foydalanishdagi kompaniyalarni ko‘rish"
+                @click="openProductMetricDetail('highUsage')" @keydown.enter.prevent="openProductMetricDetail('highUsage')"
+                @keydown.space.prevent="openProductMetricDetail('highUsage')">
                 <div class="metric-head">
                   <div class="metric-label">O‘rtacha foydalanish</div>
                   <span class="metric-icon">📊</span>
@@ -332,7 +344,9 @@
                 <div class="metric-value">{{ fmtNumber(productUsageSummary.average_score) }}%</div>
                 <div class="metric-mini">{{ fmtNumber(productUsageSummary.high_usage) }} ta yuqori foydalanmoqda</div>
               </article>
-              <article class="card metric">
+              <article class="card metric clickable-metric" role="button" tabindex="0" title="Riskdagi kompaniyalarni ko‘rish"
+                @click="openProductMetricDetail('risk')" @keydown.enter.prevent="openProductMetricDetail('risk')"
+                @keydown.space.prevent="openProductMetricDetail('risk')">
                 <div class="metric-head">
                   <div class="metric-label">Risk va churn</div>
                   <span class="metric-icon warn">⚠️</span>
@@ -387,23 +401,53 @@
             <div class="spacer"></div>
 
             <div class="stats-table-stack">
-              <section class="card">
+              <section class="card subscription-card">
                 <div class="card-header">
                   <div>
-                    <div class="card-title">Kompaniyalar foydalanish jadvali</div>
-                    <div class="card-note">Qaysi kompaniya dasturdan qay darajada foydalanayotgani</div>
+                    <div class="card-title">Kompaniyalar obuna timeline diagrammasi</div>
+                    <div class="card-note">Start, obuna muddati va qancha vaqtdan beri ishlatayotgani</div>
                   </div>
                 </div>
-                <DataTable :columns="productUsageColumns" :rows="filteredProductUsageRows"
-                  empty="Kompaniya foydalanish ma’lumoti yo‘q" :page-size="12">
-                  <template #usageScore="{ row }">
-                    <MetricBar :value="row.usage_score" />
-                  </template>
-                  <template #businessStatus="{ row }">
-                    <span class="status-pill mini" :class="businessStatusClass(row.business_status)">{{
-                      businessStatusLabel(row.business_status) }}</span>
-                  </template>
-                </DataTable>
+                <div v-if="subscriptionTimelineRows.length" class="subscription-diagram">
+                  <div class="subscription-leaders">
+                    <article v-for="(row, index) in longestUsageRows" :key="row.id || row.name || index"
+                      class="leader-item">
+                      <span>{{ index + 1 }}</span>
+                      <div>
+                        <b>{{ row.name || 'Kompaniya' }}</b>
+                        <small>{{ row.usage_duration_label }} · {{ row.subscription_label }}</small>
+                      </div>
+                    </article>
+                  </div>
+                  <div class="subscription-timeline">
+                    <article v-for="row in subscriptionTimelineRows" :key="row.id || row.name" class="timeline-company-row"
+                      role="button" tabindex="0" title="Kompaniya tafsilotini ko‘rish"
+                      @click="openCompanyTimelineDetail(row)" @keydown.enter.prevent="openCompanyTimelineDetail(row)"
+                      @keydown.space.prevent="openCompanyTimelineDetail(row)">
+                      <div class="timeline-company-meta">
+                        <b>{{ row.name || 'Kompaniya' }}</b>
+                        <span>{{ row.brand || companySupportLabel(row) }}</span>
+                      </div>
+                      <div class="timeline-visual">
+                        <div class="timeline-track" :title="row.timeline_title">
+                          <span class="timeline-total" :style="{ width: row.subscription_width }"></span>
+                          <span class="timeline-used" :class="timelineFillClass(row)"
+                            :style="{ width: row.used_width }"></span>
+                        </div>
+                        <div class="timeline-labels">
+                          <span>Start: {{ row.start_label }}</span>
+                          <span>{{ row.subscription_label }}</span>
+                          <span>{{ row.usage_duration_label }}</span>
+                        </div>
+                      </div>
+                      <div class="timeline-status">
+                        <span class="status-pill mini" :class="expiryStatusClass(row)">{{ expiryStatusLabel(row) }}</span>
+                        <small>{{ businessStatusLabel(row.business_status) }}</small>
+                      </div>
+                    </article>
+                  </div>
+                </div>
+                <div v-else class="empty compact">Kompaniya obuna ma’lumoti yo‘q</div>
               </section>
             </div>
           </template>
@@ -414,7 +458,9 @@
             </Toolbar>
 
             <div class="metric-strip company-metrics">
-              <article class="card metric">
+              <article class="card metric clickable-metric" role="button" tabindex="0" title="Kompaniyalar ro‘yxatini ko‘rish"
+                @click="openCompanyMetricDetail('total')" @keydown.enter.prevent="openCompanyMetricDetail('total')"
+                @keydown.space.prevent="openCompanyMetricDetail('total')">
                 <div class="metric-head">
                   <div class="metric-label">Kompaniyalar</div>
                   <span class="metric-icon">🏢</span>
@@ -422,7 +468,9 @@
                 <div class="metric-value">{{ fmtNumber(companyActivitySummary.total) }}</div>
                 <div class="metric-mini">{{ fmtNumber(companyActivitySummary.real) }} tasi real kompaniya</div>
               </article>
-              <article class="card metric">
+              <article class="card metric clickable-metric" role="button" tabindex="0" title="Biznes aktiv kompaniyalarni ko‘rish"
+                @click="openCompanyMetricDetail('active')" @keydown.enter.prevent="openCompanyMetricDetail('active')"
+                @keydown.space.prevent="openCompanyMetricDetail('active')">
                 <div class="metric-head">
                   <div class="metric-label">Biznes aktiv</div>
                   <span class="metric-icon good">✅</span>
@@ -430,7 +478,9 @@
                 <div class="metric-value">{{ fmtNumber(companyActivitySummary.business_active) }}</div>
                 <div class="metric-mini">{{ fmtNumber(companyActivitySummary.business_new) }} ta yangi kompaniya</div>
               </article>
-              <article class="card metric">
+              <article class="card metric clickable-metric" role="button" tabindex="0" title="Churn yoki pauzadagi kompaniyalarni ko‘rish"
+                @click="openCompanyMetricDetail('paused')" @keydown.enter.prevent="openCompanyMetricDetail('paused')"
+                @keydown.space.prevent="openCompanyMetricDetail('paused')">
                 <div class="metric-head">
                   <div class="metric-label">Churn/Pauza</div>
                   <span class="metric-icon warn">⚠️</span>
@@ -438,7 +488,9 @@
                 <div class="metric-value">{{ fmtNumber(companyActivitySummary.business_paused) }}</div>
                 <div class="metric-mini">Biznes statusi pauzada</div>
               </article>
-              <article class="card metric">
+              <article class="card metric clickable-metric" role="button" tabindex="0" title="Obunasi yaqin yoki tugagan kompaniyalarni ko‘rish"
+                @click="openCompanyMetricDetail('expiry')" @keydown.enter.prevent="openCompanyMetricDetail('expiry')"
+                @keydown.space.prevent="openCompanyMetricDetail('expiry')">
                 <div class="metric-head">
                   <div class="metric-label">Obuna yaqin</div>
                   <span class="metric-icon">📅</span>
@@ -994,6 +1046,21 @@
     </Transition>
 
     <Transition name="modal-fade">
+      <Modal v-if="modal === 'metricDetail'" :title="metricDetail.title" wide @close="closeModal">
+        <div class="detail-stack">
+          <div v-if="metricDetail.summary?.length" class="detail-summary metric-detail-summary">
+            <div v-for="item in metricDetail.summary" :key="item.label">
+              <span>{{ item.label }}</span>
+              <b>{{ item.value }}</b>
+            </div>
+          </div>
+          <DataTable :columns="metricDetail.columns" :rows="metricDetail.rows" :empty="metricDetail.empty"
+            :page-size="metricDetail.pageSize || 12" :on-cell-action="handleTableCellAction" />
+        </div>
+      </Modal>
+    </Transition>
+
+    <Transition name="modal-fade">
       <Modal v-if="modal === 'employeeGroups'" :title="employeeDrilldownTitle" wide @close="closeModal">
         <div v-if="employeeGroupActivity.length" class="drilldown-stack">
           <section v-for="group in employeeGroupActivity" :key="group.chat_id" class="drilldown-group">
@@ -1314,6 +1381,7 @@ const chatDetail = ref({ chat: null, requests: [], timeline: [] });
 const employeeDrilldown = ref(null);
 const employeeActivity = ref({ employee: null, summary: {}, groups: [], closed_requests: [], messages: [] });
 const employeeCompanyDetail = ref({ employee: null, summary: {}, companies: [] });
+const metricDetail = ref({ title: '', columns: [], rows: [], empty: 'Ma’lumot yo‘q', pageSize: 12, summary: [] });
 const employeeGroupActivity = ref([]);
 const employeeOpenRequests = ref([]);
 const mediaUrls = ref({});
@@ -1433,6 +1501,7 @@ const analytics = computed(() => dashboard.analytics || {});
 const selectedPeriodLabel = computed(() => periodOptions.find(period => period.key === selectedStatsPeriod.value)?.label || 'Hafta');
 const selectedPeriodStats = computed(() => analytics.value.periods?.[selectedStatsPeriod.value] || emptyPeriodStats);
 const topEmployeeRows = computed(() => analytics.value.employeePerformance?.[selectedStatsPeriod.value] || []);
+const chatPerformanceRows = computed(() => analytics.value.chatPerformance?.[selectedStatsPeriod.value] || []);
 const groupPerformanceRows = computed(() => analytics.value.groupPerformance?.[selectedStatsPeriod.value] || []);
 const periodRows = computed(() => periodOptions.map(period => ({
   ...(analytics.value.periods?.[period.key] || emptyPeriodStats),
@@ -1466,10 +1535,54 @@ function performanceGradeClass(grade = '') {
   if (grade === 'B') return 'mid';
   return 'low';
 }
+function supportRowKey(row = {}) {
+  const id = String(row.id || row.employee_id || '').trim();
+  if (id) return `id:${id}`;
+  const tgUserId = String(row.tg_user_id || '').trim();
+  if (tgUserId) return `tg:${tgUserId}`;
+  const username = normalizeSupportUsername(row.username || row.uyqur_support_username);
+  if (username) return `u:${username}`;
+  const phone = normalizePhone(row.phone || row.uyqur_support_phone);
+  if (phone) return `p:${phone}`;
+  return String(row.full_name || row.closed_by_name || '').trim().toLowerCase();
+}
+
+function mergeSupportCandidate(map, row = {}) {
+  const key = supportRowKey(row);
+  if (!key) return;
+  const current = map.get(key) || {};
+  map.set(key, {
+    ...current,
+    ...row,
+    id: current.id || row.id || row.employee_id || '',
+    employee_id: current.employee_id || row.employee_id || row.id || '',
+    tg_user_id: current.tg_user_id || row.tg_user_id || '',
+    username: current.username || row.username || row.uyqur_support_username || '',
+    phone: current.phone || row.phone || row.uyqur_support_phone || '',
+    role: current.role || row.role || 'support',
+    full_name: current.full_name || row.full_name || row.closed_by_name || row.uyqur_support_username || row.uyqur_support_phone || 'Xodim'
+  });
+}
+
 const supportPerformanceRows = computed(() => {
-  const rows = topEmployeeRows.value.length ? topEmployeeRows.value : (dashboard.employeeStats || []);
-  return rows.slice(0, 8).map((row, index) => {
+  const merged = new Map();
+  employees.value.forEach(row => mergeSupportCandidate(merged, row));
+  (dashboard.employeeStats || []).forEach(row => mergeSupportCandidate(merged, row));
+  topEmployeeRows.value.forEach(row => mergeSupportCandidate(merged, row));
+  visibleCompanyInfoRows.value.forEach(company => {
+    if (!hasCompanySupport(company)) return;
+    mergeSupportCandidate(merged, {
+      full_name: company.uyqur_support_username || company.uyqur_support_phone || 'Support xodim',
+      username: company.uyqur_support_username,
+      phone: company.uyqur_support_phone,
+      role: 'support'
+    });
+  });
+
+  return [...merged.values()].map((row, index) => {
     const stat = employeeStatsMap.value.get(employeeLookupKey(row)) || row;
+    const candidate = { ...row, ...stat };
+    const assignedCompanyCount = visibleCompanyInfoRows.value.filter(company => companyMatchesEmployee(company, candidate)).length;
     const closed = Number(row.closed_requests || stat.closed_requests || stat.today_answered_requests || 0);
     const open = Number(stat.today_open_requests || stat.open_requests || 0);
     const total = closed + open;
@@ -1488,11 +1601,14 @@ const supportPerformanceRows = computed(() => {
       handled_chats: Number(row.handled_chats || stat.handled_chats || stat.today_written_groups_count || 0),
       closed_requests: closed,
       open_requests: open,
+      assigned_company_count: assignedCompanyCount,
       avg_close_minutes: avg,
       sla,
       grade
     };
-  });
+  }).sort((a, b) => b.closed_requests - a.closed_requests
+    || b.assigned_company_count - a.assigned_company_count
+    || a.full_name.localeCompare(b.full_name));
 });
 const topPerformerName = computed(() => supportPerformanceRows.value[0]?.full_name || '');
 const openRequestsTitle = computed(() => `Ochiq so‘rovlar (${fmtNumber((dashboard.openRequests || []).length)})`);
@@ -1795,6 +1911,94 @@ function enrichCompanyUsage(row = {}) {
   };
 }
 
+function parseCompanyDate(value) {
+  if (value === undefined || value === null || value === '') return null;
+  if (value instanceof Date) return Number.isFinite(value.getTime()) ? value : null;
+  if (typeof value === 'number') {
+    const timestamp = value > 10_000_000_000 ? value : value * 1000;
+    const date = new Date(timestamp);
+    return Number.isFinite(date.getTime()) ? date : null;
+  }
+  const text = String(value || '').trim();
+  const dotted = text.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+  if (dotted) {
+    const [, day, month, year] = dotted;
+    const date = new Date(Number(year), Number(month) - 1, Number(day));
+    return Number.isFinite(date.getTime()) ? date : null;
+  }
+  const dashed = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (dashed) {
+    const [, year, month, day] = dashed;
+    const date = new Date(Number(year), Number(month) - 1, Number(day));
+    return Number.isFinite(date.getTime()) ? date : null;
+  }
+  const date = new Date(text);
+  return Number.isFinite(date.getTime()) ? date : null;
+}
+
+function dayDiff(start, end) {
+  if (!start || !end) return null;
+  const diff = end.getTime() - start.getTime();
+  if (!Number.isFinite(diff)) return null;
+  return Math.max(0, Math.ceil(diff / 86_400_000));
+}
+
+function fmtCompanyDate(value) {
+  const date = parseCompanyDate(value);
+  if (!date) return '—';
+  return new Intl.DateTimeFormat('uz-UZ', { dateStyle: 'medium' }).format(date);
+}
+
+function durationLabel(days) {
+  const value = Number(days);
+  if (!Number.isFinite(value) || value <= 0) return '—';
+  const years = Math.floor(value / 365);
+  const months = Math.floor((value % 365) / 30);
+  const restDays = value % 30;
+  const parts = [];
+  if (years) parts.push(`${years} yil`);
+  if (months) parts.push(`${months} oy`);
+  if (!years && !months) parts.push(`${restDays || value} kun`);
+  if (years && !months && restDays) parts.push(`${restDays} kun`);
+  return parts.slice(0, 2).join(' ');
+}
+
+function timelineWidth(value, max) {
+  const numeric = Number(value || 0);
+  const maximum = Number(max || 0);
+  if (!numeric || !maximum) return '0%';
+  return `${Math.min(100, Math.max(4, (numeric / maximum) * 100))}%`;
+}
+
+function enrichCompanyTimeline(row = {}) {
+  const enriched = enrichCompanyUsage(row);
+  const start = parseCompanyDate(row.subscription_start_date || row.created_at_iso || row.created_at);
+  const expiry = parseCompanyDate(row.expired);
+  const now = new Date();
+  const usageDays = start ? dayDiff(start, now) || 0 : 0;
+  const subscriptionDays = start && expiry ? dayDiff(start, expiry) || 0 : 0;
+  return {
+    ...enriched,
+    start_label: start ? fmtCompanyDate(start) : 'Start belgilanmagan',
+    expiry_label: expiry ? fmtCompanyDate(expiry) : 'Muddatsiz',
+    usage_days: usageDays,
+    subscription_days: subscriptionDays,
+    usage_duration_label: usageDays ? `${durationLabel(usageDays)} ishlatmoqda` : 'Muddat noma’lum',
+    subscription_label: subscriptionDays ? `Obuna: ${durationLabel(subscriptionDays)}` : 'Obuna: muddatsiz',
+    timeline_title: [
+      `Start: ${start ? fmtCompanyDate(start) : '—'}`,
+      `Tugash: ${expiry ? fmtCompanyDate(expiry) : 'muddatsiz'}`,
+      usageDays ? `Ishlatmoqda: ${durationLabel(usageDays)}` : ''
+    ].filter(Boolean).join(' · ')
+  };
+}
+
+function timelineFillClass(row = {}) {
+  if (row.expiry_state === 'expired') return 'expired';
+  if (row.expiry_state === 'soon') return 'soon';
+  return 'active';
+}
+
 function companyPortfolioSummary(rows = []) {
   const enriched = rows.map(enrichCompanyUsage);
   const totalScore = enriched.reduce((sum, row) => sum + Number(row.usage_score || 0), 0);
@@ -1857,6 +2061,16 @@ const productUsageRows = computed(() => visibleCompanyInfoRows.value
   .sort((a, b) => Number(b.usage_score || 0) - Number(a.usage_score || 0) || String(a.name || '').localeCompare(String(b.name || ''))));
 const filteredProductUsageRows = computed(() => productUsageRows.value.filter(includesSearch));
 const productUsageChartRows = computed(() => productUsageRows.value.slice(0, 8));
+const rawSubscriptionTimelineRows = computed(() => filteredProductUsageRows.value
+  .map(enrichCompanyTimeline)
+  .sort((a, b) => Number(b.usage_days || 0) - Number(a.usage_days || 0) || String(a.name || '').localeCompare(String(b.name || ''))));
+const subscriptionTimelineMaxDays = computed(() => Math.max(1, ...rawSubscriptionTimelineRows.value.map(row => Math.max(Number(row.subscription_days || 0), Number(row.usage_days || 0)))));
+const subscriptionTimelineRows = computed(() => rawSubscriptionTimelineRows.value.map(row => ({
+  ...row,
+  subscription_width: timelineWidth(row.subscription_days || row.usage_days, subscriptionTimelineMaxDays.value),
+  used_width: timelineWidth(Math.min(row.usage_days || 0, row.subscription_days || row.usage_days || 0), subscriptionTimelineMaxDays.value)
+})));
+const longestUsageRows = computed(() => subscriptionTimelineRows.value.slice(0, 5));
 const productUsageSummary = computed(() => {
   const summary = companyPortfolioSummary(productUsageRows.value);
   return {
@@ -2011,6 +2225,40 @@ const productUsageColumns = [
   { key: 'usage_level', label: 'Daraja' },
   { key: 'business_status', label: 'Biznes status', slot: 'businessStatus' },
   { key: 'uyqur_support_username', label: 'Support', format: (_, row) => companySupportLabel(row) },
+  { key: 'expired', label: 'Obuna', format: (_, row) => expiryStatusLabel(row) }
+];
+
+const supportMetricColumns = [
+  { key: 'title', label: 'Chat/Guruh', format: (value, row) => value || row.chat_id || '—', action: 'chatDetail' },
+  { key: 'source_type', label: 'Tur', format: sourceTypeLabel, badge: true, action: 'chatDetail' },
+  { key: 'total_requests', label: 'So‘rov', format: fmtNumber, action: 'requests' },
+  { key: 'closed_requests', label: 'Javob berilgan', format: fmtNumber, action: 'requests' },
+  { key: 'open_requests', label: 'Ochiq', format: fmtNumber, action: 'requests' },
+  { key: 'avg_close_minutes', label: 'O‘rtacha javob', format: fmtMinutes, action: 'chatDetail' },
+  { key: 'unique_customers', label: 'Mijozlar', format: fmtNumber, action: 'chatDetail' },
+  { key: 'last_request_at', label: 'Oxirgi so‘rov', format: fmtDate, action: 'chatDetail' }
+];
+
+const productMetricColumns = [
+  { key: 'name', label: 'Kompaniya' },
+  { key: 'brand', label: 'Brand', format: v => v || '—' },
+  { key: 'uyqur_support_username', label: 'Support', format: (_, row) => companySupportLabel(row) },
+  { key: 'business_status', label: 'Biznes status', format: businessStatusLabel },
+  { key: 'usage_score', label: 'Foydalanish', format: v => fmtPercent(v) },
+  { key: 'start_label', label: 'Start' },
+  { key: 'subscription_label', label: 'Obuna muddati' },
+  { key: 'usage_duration_label', label: 'Ishlatmoqda' },
+  { key: 'expired', label: 'Tugash', format: (_, row) => expiryStatusLabel(row) }
+];
+
+const companyMetricColumns = [
+  { key: 'name', label: 'Kompaniya' },
+  { key: 'brand', label: 'Brand', format: v => v || '—' },
+  { key: 'business_status', label: 'Biznes status', format: businessStatusLabel },
+  { key: 'uyqur_support_username', label: 'Support', format: (_, row) => companySupportLabel(row) },
+  { key: 'director', label: 'Direktor', format: v => v || '—' },
+  { key: 'phone', label: 'Telefon', format: v => v || '—' },
+  { key: 'subscription_start_date', label: 'Start', format: v => v || '—' },
   { key: 'expired', label: 'Obuna', format: (_, row) => expiryStatusLabel(row) }
 ];
 
@@ -2585,6 +2833,119 @@ function openRemainingRequests() {
   if (!(dashboard.openRequests || []).length) return showToast('Ochiq so‘rov qolmagan');
   selectedTarget.value = null;
   modal.value = 'openRequests';
+}
+
+function setMetricDetail({ title, rows, columns, empty = 'Ma’lumot topilmadi', pageSize = 12, summary = [] }) {
+  metricDetail.value = { title, rows, columns, empty, pageSize, summary };
+  modal.value = 'metricDetail';
+}
+
+function openSupportMetricDetail(kind = 'requests') {
+  const periodLabel = selectedPeriodLabel.value;
+  let rows = [...(chatPerformanceRows.value.length ? chatPerformanceRows.value : groupPerformanceRows.value)];
+  let title = `${periodLabel} so‘rovlar`;
+  if (kind === 'closed') {
+    rows = rows.filter(row => Number(row.closed_requests || 0) > 0)
+      .sort((a, b) => Number(b.closed_requests || 0) - Number(a.closed_requests || 0));
+    title = `${periodLabel}: javob berilgan chat/guruhlar`;
+  } else if (kind === 'avg') {
+    rows = rows.filter(row => Number(row.closed_requests || 0) > 0)
+      .sort((a, b) => Number(b.avg_close_minutes || 0) - Number(a.avg_close_minutes || 0));
+    title = `${periodLabel}: o‘rtacha javob vaqti`;
+  } else {
+    rows = rows.filter(row => Number(row.total_requests || 0) > 0)
+      .sort((a, b) => Number(b.total_requests || 0) - Number(a.total_requests || 0));
+  }
+  if (!rows.length) return showToast('Bu davr uchun chat/guruh ma’lumoti yo‘q');
+  setMetricDetail({
+    title,
+    rows,
+    columns: supportMetricColumns,
+    empty: 'Chat/guruh ma’lumoti topilmadi',
+    summary: [
+      { label: 'Jami so‘rov', value: fmtNumber(rows.reduce((sum, row) => sum + Number(row.total_requests || 0), 0)) },
+      { label: 'Javob berilgan', value: fmtNumber(rows.reduce((sum, row) => sum + Number(row.closed_requests || 0), 0)) },
+      { label: 'Ochiq', value: fmtNumber(rows.reduce((sum, row) => sum + Number(row.open_requests || 0), 0)) },
+      { label: 'Chat/guruh', value: fmtNumber(rows.length) }
+    ]
+  });
+}
+
+function productMetricRows(kind = 'total') {
+  const rows = productUsageRows.value.map(enrichCompanyTimeline);
+  if (kind === 'active') return rows.filter(row => row.business_status === 'ACTIVE');
+  if (kind === 'highUsage') return rows.filter(row => Number(row.usage_score || 0) >= 75);
+  if (kind === 'risk') return rows.filter(row => isCompanyChurn(row) || ['expired', 'soon'].includes(row.expiry_state));
+  return rows;
+}
+
+function openProductMetricDetail(kind = 'total') {
+  const titleMap = {
+    total: 'Kuzatuvdagi kompaniyalar',
+    active: 'Aktiv foydalanayotgan kompaniyalar',
+    highUsage: 'Yuqori foydalanishdagi kompaniyalar',
+    risk: 'Risk va churn kompaniyalari'
+  };
+  const rows = productMetricRows(kind);
+  if (!rows.length) return showToast('Bu metrika bo‘yicha kompaniya topilmadi');
+  setMetricDetail({
+    title: titleMap[kind] || 'Kompaniya tafsilotlari',
+    rows,
+    columns: productMetricColumns,
+    empty: 'Kompaniya ma’lumoti topilmadi',
+    summary: [
+      { label: 'Kompaniya', value: fmtNumber(rows.length) },
+      { label: 'Aktiv', value: fmtNumber(rows.filter(row => row.business_status === 'ACTIVE').length) },
+      { label: 'Risk', value: fmtNumber(rows.filter(row => isCompanyChurn(row) || ['expired', 'soon'].includes(row.expiry_state)).length) },
+      { label: 'O‘rtacha foydalanish', value: fmtPercent(rows.reduce((sum, row) => sum + Number(row.usage_score || 0), 0) / rows.length) }
+    ]
+  });
+}
+
+function companyMetricRows(kind = 'total') {
+  const rows = visibleCompanyInfoRows.value;
+  if (kind === 'active') return rows.filter(row => row.business_status === 'ACTIVE');
+  if (kind === 'paused') return rows.filter(row => row.business_status === 'PAUSED');
+  if (kind === 'expiry') return rows.filter(row => ['expired', 'soon'].includes(row.expiry_state));
+  return rows;
+}
+
+function openCompanyMetricDetail(kind = 'total') {
+  const titleMap = {
+    total: 'Kompaniyalar',
+    active: 'Biznes aktiv kompaniyalar',
+    paused: 'Churn/Pauzadagi kompaniyalar',
+    expiry: 'Obuna nazoratidagi kompaniyalar'
+  };
+  const rows = companyMetricRows(kind);
+  if (!rows.length) return showToast('Bu metrika bo‘yicha kompaniya topilmadi');
+  setMetricDetail({
+    title: titleMap[kind] || 'Kompaniya tafsilotlari',
+    rows,
+    columns: companyMetricColumns,
+    empty: 'Kompaniya ma’lumoti topilmadi',
+    summary: [
+      { label: 'Kompaniya', value: fmtNumber(rows.length) },
+      { label: 'Real', value: fmtNumber(rows.filter(row => Number(row.is_real || 0) === 1).length) },
+      { label: 'Aktiv', value: fmtNumber(rows.filter(row => row.business_status === 'ACTIVE').length) },
+      { label: 'Obuna xavfi', value: fmtNumber(rows.filter(row => ['expired', 'soon'].includes(row.expiry_state)).length) }
+    ]
+  });
+}
+
+function openCompanyTimelineDetail(row = {}) {
+  setMetricDetail({
+    title: row.name || 'Kompaniya tafsiloti',
+    rows: [row],
+    columns: productMetricColumns,
+    empty: 'Kompaniya ma’lumoti topilmadi',
+    summary: [
+      { label: 'Start', value: row.start_label || '—' },
+      { label: 'Obuna muddati', value: row.subscription_label || '—' },
+      { label: 'Ishlatmoqda', value: row.usage_duration_label || '—' },
+      { label: 'Foydalanish', value: fmtPercent(row.usage_score || 0) }
+    ]
+  });
 }
 
 function openAlertRequests(row = {}) {

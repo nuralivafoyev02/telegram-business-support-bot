@@ -35,22 +35,53 @@ function truncate(value = '', limit = 900) {
 }
 
 function parseJsonLog(text = '') {
-  const value = String(text || '').trim();
-  if (!value.startsWith('{') && !value.startsWith('[')) return null;
+  const value = String(text || '')
+    .trim()
+    .replace(/^```(?:json|log)?\s*/i, '')
+    .replace(/\s*```$/i, '')
+    .trim();
+  const jsonStart = value.search(/[\[{]/);
+  if (jsonStart < 0) return null;
+  const candidate = value.slice(jsonStart);
   try {
-    const parsed = JSON.parse(value);
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
+    const parsed = JSON.parse(candidate);
+    if (Array.isArray(parsed)) return parsed.find(item => item && typeof item === 'object' && !Array.isArray(item)) || null;
+    return parsed && typeof parsed === 'object' ? parsed : null;
   } catch (_error) {
-    return null;
+    const objectMatch = candidate.match(/\{[\s\S]*\}/);
+    if (!objectMatch) return null;
+    try {
+      const parsed = JSON.parse(objectMatch[0]);
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
+    } catch (_nestedError) {
+      return null;
+    }
   }
 }
 
+function findPayloadValue(payload = null, keys = [], depth = 0) {
+  if (!payload || typeof payload !== 'object' || depth > 4) return '';
+  for (const key of keys) {
+    if (payload[key] !== undefined && payload[key] !== null && payload[key] !== '') return String(payload[key]);
+  }
+  for (const value of Object.values(payload)) {
+    if (!value || typeof value !== 'object') continue;
+    const found = findPayloadValue(value, keys, depth + 1);
+    if (found) return found;
+  }
+  return '';
+}
+
 function detectIncomingLogLevel(text = '', payload = null) {
-  const rawLevel = payload && (payload.level || payload.severity || payload.status || payload.type);
+  const rawLevel = findPayloadValue(payload, ['level', 'severity', 'log_level', 'level_name', 'status', 'type']);
   const level = String(rawLevel || '').toLowerCase();
+  const numericStatus = Number.parseInt(level, 10);
+  if (Number.isFinite(numericStatus) && numericStatus >= 400) return 'error';
   if (/(error|fatal|panic|exception|critical|crit|failed|failure)/i.test(level)) return 'error';
   const value = String(text || '');
-  if (/(^|\b)(error|fatal|exception|stacktrace|traceback|unhandled|panic|failed|failure|crash|500|502|503|504)(\b|:)/i.test(value)) {
+  if (/(^|\b|[🚨🔴❌])(?:error|fatal|exception|stacktrace|stack trace|traceback|unhandled|panic|failed|failure|crash|xato|hatolik|ошибка|исключение|критич|аварийн)(\b|:)/i.test(value)
+    || /\b(?:status|statusCode|status_code|code)[=: ]+(?:4\d{2}|5\d{2})\b/i.test(value)
+    || /\b(?:500|502|503|504)\b/.test(value)) {
     return 'error';
   }
   return 'info';
@@ -64,11 +95,7 @@ function firstCleanLine(text = '') {
 }
 
 function valueFromPayload(payload = null, keys = []) {
-  if (!payload) return '';
-  for (const key of keys) {
-    if (payload[key] !== undefined && payload[key] !== null && payload[key] !== '') return String(payload[key]);
-  }
-  return '';
+  return findPayloadValue(payload, keys);
 }
 
 function extractRoute(text = '', payload = null) {

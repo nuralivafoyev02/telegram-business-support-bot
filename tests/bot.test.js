@@ -2036,6 +2036,67 @@ async function testConfiguredLogChannelRelaysReadableSummary() {
   }
 }
 
+async function testConfiguredLogChannelDetectsBotJsonCodeBlock() {
+  const originalSelect = supabase.select;
+  const originalInsert = supabase.insert;
+  const originalFetch = global.fetch;
+  const telegramCalls = [];
+
+  supabase.select = async (table) => {
+    if (table === 'bot_settings') {
+      return [
+        { key: 'main_group', value: { chat_id: '-100777' } },
+        {
+          key: 'log_notifications',
+          value: {
+            enabled: true,
+            levels: ['error', 'info'],
+            target: 'main_group',
+            sources: [{ chat_id: '-100900', label: 'Bot logs', source: 'other', enabled: true }]
+          }
+        }
+      ];
+    }
+    return [];
+  };
+  supabase.insert = async () => {
+    throw new Error('channel log should not be stored as support message');
+  };
+  global.fetch = async (url, options = {}) => {
+    telegramCalls.push({ url, body: JSON.parse(options.body || '{}') });
+    return {
+      ok: true,
+      json: async () => ({ ok: true, result: { message_id: 901 } })
+    };
+  };
+
+  try {
+    const result = await callHandler({
+      update_id: 4901,
+      channel_post: {
+        message_id: 12,
+        date: Math.floor(Date.now() / 1000),
+        chat: { id: -100900, type: 'channel', title: 'Bot logs' },
+        text: '🤖 External bot\n```json\n{"event":{"severity":"error","message":"Queue failed","statusCode":503,"path":"/jobs/sync"}}\n```'
+      }
+    });
+
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.handled, 'channel_post');
+    assert.strictEqual(telegramCalls.length, 1);
+    assert.match(telegramCalls[0].body.text, /Uyqur Boshqa log/);
+    assert.match(telegramCalls[0].body.text, /ERROR/);
+    assert.match(telegramCalls[0].body.text, /Queue failed/);
+    assert.match(telegramCalls[0].body.text, /\/jobs\/sync/);
+    assert.match(telegramCalls[0].body.text, /503/);
+  } finally {
+    supabase.select = originalSelect;
+    supabase.insert = originalInsert;
+    global.fetch = originalFetch;
+    clearBotSettingsCache();
+  }
+}
+
 (async () => {
   await testStartRepliesWhenDbTrackingFails();
   await testChatMemberUpdateRegistersGroup();
@@ -2069,6 +2130,7 @@ async function testConfiguredLogChannelRelaysReadableSummary() {
   await testMainGroupBroadcastDeleteConfirmDeletesAndReports();
   await testBotRemovalMarksGroupInactive();
   await testConfiguredLogChannelRelaysReadableSummary();
+  await testConfiguredLogChannelDetectsBotJsonCodeBlock();
   console.log('Bot tests passed');
 })().catch(error => {
   console.error(error);
