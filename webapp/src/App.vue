@@ -179,7 +179,8 @@
                 <div class="card-header">
                   <div>
                     <div class="card-title">Rahbar nazorati: ochiq so‘rovlar</div>
-                    <div class="card-note">Qaysi chatdan kelgani, qancha vaqtdan beri ochiq turgani va mas’ul xodim</div>
+                    <div class="card-note">Qaysi chatdan kelgani, qancha vaqtdan beri ochiq turgani va mas’ul xodim
+                    </div>
                   </div>
                 </div>
                 <DataTable :columns="managerOpenRequestColumns" :rows="managerOpenRequests"
@@ -205,7 +206,8 @@
                 <div class="top-support-list">
                   <article v-for="row in topSupportCards" :key="row.key" class="support-person-card" role="button"
                     tabindex="0" title="Biriktirilgan kompaniyalarni ko‘rish" @click="openEmployeeCompanies(row)"
-                    @keydown.enter.prevent="openEmployeeCompanies(row)" @keydown.space.prevent="openEmployeeCompanies(row)">
+                    @keydown.enter.prevent="openEmployeeCompanies(row)"
+                    @keydown.space.prevent="openEmployeeCompanies(row)">
                     <div class="support-card-head">
                       <div>
                         <b>{{ row.full_name }}</b>
@@ -264,7 +266,8 @@
                   <div v-for="row in periodChartRows" :key="row.period_label" class="chart-row">
                     <div class="chart-label">{{ row.period_label }}</div>
                     <div class="chart-track">
-                      <span class="chart-fill blue" :style="{ width: barWidth(row.total_requests, periodChartMax) }"></span>
+                      <span class="chart-fill blue"
+                        :style="{ width: barWidth(row.total_requests, periodChartMax) }"></span>
                     </div>
                     <div class="chart-value">{{ fmtNumber(row.total_requests) }}</div>
                   </div>
@@ -282,7 +285,8 @@
                   <div v-for="row in groupChartRows" :key="row.chat_id || row.title" class="chart-row">
                     <div class="chart-label">{{ row.title || row.chat_id }}</div>
                     <div class="chart-track">
-                      <span class="chart-fill orange" :style="{ width: barWidth(row.total_requests, groupChartMax) }"></span>
+                      <span class="chart-fill orange"
+                        :style="{ width: barWidth(row.total_requests, groupChartMax) }"></span>
                     </div>
                     <div class="chart-value">{{ fmtNumber(row.total_requests) }}</div>
                   </div>
@@ -375,7 +379,8 @@
                   <div v-for="row in businessStatusRows" :key="row.label" class="chart-row">
                     <div class="chart-label">{{ row.label }}</div>
                     <div class="chart-track">
-                      <span class="chart-fill" :class="row.color" :style="{ width: barWidth(row.count, businessStatusChartMax) }"></span>
+                      <span class="chart-fill" :class="row.color"
+                        :style="{ width: barWidth(row.count, businessStatusChartMax) }"></span>
                     </div>
                     <div class="chart-value">{{ fmtNumber(row.count) }}</div>
                   </div>
@@ -399,7 +404,8 @@
                     <MetricBar :value="row.usage_score" />
                   </template>
                   <template #businessStatus="{ row }">
-                    <span class="status-pill mini" :class="businessStatusClass(row.business_status)">{{ businessStatusLabel(row.business_status) }}</span>
+                    <span class="status-pill mini" :class="businessStatusClass(row.business_status)">{{
+                      businessStatusLabel(row.business_status) }}</span>
                   </template>
                 </DataTable>
               </section>
@@ -468,7 +474,8 @@
                     </span>
                   </template>
                   <template #businessStatus="{ row }">
-                    <span class="status-pill mini" :class="businessStatusClass(row.business_status)">{{ businessStatusLabel(row.business_status) }}</span>
+                    <span class="status-pill mini" :class="businessStatusClass(row.business_status)">{{
+                      businessStatusLabel(row.business_status) }}</span>
                   </template>
                   <template #supportOwner="{ row }">
                     <span class="support-owner">{{ companySupportLabel(row) }}</span>
@@ -655,7 +662,8 @@
                   <label class="label">So‘rov aniqlash rejimi
                     <select v-model="settingsForm.request_detection" class="select">
                       <option value="keyword">Kalit so‘z</option>
-                      <option value="all_private_keyword_group">Shaxsiy chatlar hammasi, guruhlar kalit so‘z bilan</option>
+                      <option value="all_private_keyword_group">Shaxsiy chatlar hammasi, guruhlar kalit so‘z bilan
+                      </option>
                     </select>
                   </label>
                   <button class="btn primary" :disabled="loadingAction === 'saveSettings'">{{ loadingAction ===
@@ -688,7 +696,8 @@
                     <div class="card-title">Integratsiya</div>
                     <div class="card-note">Model ulanishi va main guruhga yuboriladigan log oqimlari</div>
                   </div>
-                  <span class="status-pill" :class="{ ready: aiIntegrationReady, error: aiIntegrationHasError }">{{ aiIntegrationStatus }}</span>
+                  <span class="status-pill" :class="{ ready: aiIntegrationReady, error: aiIntegrationHasError }">{{
+                    aiIntegrationStatus }}</span>
                 </div>
                 <form class="form settings-form integration-form" @submit.prevent="saveIntegration">
                   <label class="label">Xizmat turi
@@ -759,8 +768,8 @@
                   <div class="log-channel-panel">
                     <div class="drilldown-label">Log kanallari</div>
                     <div v-if="logForm.sources.length" class="log-channel-list">
-                      <article v-for="(source, index) in logForm.sources" :key="source.id || `${source.chat_id}-${index}`"
-                        class="log-channel-item">
+                      <article v-for="(source, index) in logForm.sources"
+                        :key="source.id || `${source.chat_id}-${index}`" class="log-channel-item">
                         <label class="label">Kanal nomi
                           <input v-model.trim="source.label" class="input" placeholder="Backend logs" />
                         </label>
@@ -779,7 +788,8 @@
                           <input v-model="source.enabled" type="checkbox" />
                           <span>Faol</span>
                         </label>
-                        <button class="btn small danger" type="button" @click="removeLogSource(index)">Olib tashlash</button>
+                        <button class="btn small danger" type="button" @click="removeLogSource(index)">Olib
+                          tashlash</button>
                       </article>
                     </div>
                     <div v-else class="empty compact">Hali log kanali qo‘shilmagan</div>
@@ -798,9 +808,10 @@
                   </div>
                   <div class="actions">
                     <button class="btn primary" type="button" :disabled="loadingAction === 'saveLogSettings'"
-                      @click="saveLogSettings">{{ loadingAction === 'saveLogSettings' ? 'Saqlanmoqda...' : 'Log sozlamasini saqlash' }}</button>
-                    <button class="btn" type="button" :disabled="loadingAction === 'testLog'"
-                      @click="sendTestLog">{{ loadingAction === 'testLog' ? 'Yuborilmoqda...' : 'Test log yuborish' }}</button>
+                      @click="saveLogSettings">{{ loadingAction === 'saveLogSettings' ? 'Saqlanmoqda...' : 'Log
+                      sozlamasini saqlash' }}</button>
+                    <button class="btn" type="button" :disabled="loadingAction === 'testLog'" @click="sendTestLog">{{
+                      loadingAction === 'testLog' ? 'Yuborilmoqda...' : 'Test log yuborish' }}</button>
                   </div>
                 </div>
               </section>
@@ -815,7 +826,8 @@
                     <div class="card-title">Bilim bazasi</div>
                     <div class="card-note">AI o‘qitish matni va import qilinadigan hujjatlar</div>
                   </div>
-                  <span class="status-pill" :class="{ ready: aiIntegrationReady, error: aiIntegrationHasError }">{{ aiIntegrationStatus }}</span>
+                  <span class="status-pill" :class="{ ready: aiIntegrationReady, error: aiIntegrationHasError }">{{
+                    aiIntegrationStatus }}</span>
                 </div>
                 <form class="form settings-form" @submit.prevent="saveIntegration">
                   <label class="label">Bilim bazasi
@@ -976,8 +988,8 @@
 
     <Transition name="modal-fade">
       <Modal v-if="modal === 'openRequests'" :title="openRequestsTitle" wide @close="closeModal">
-        <DataTable :columns="openRequestColumns" :rows="dashboard.openRequests || []"
-          empty="Ochiq so‘rov qolmagan" :on-cell-action="handleTableCellAction">
+        <DataTable :columns="openRequestColumns" :rows="dashboard.openRequests || []" empty="Ochiq so‘rov qolmagan"
+          :on-cell-action="handleTableCellAction">
           <template #requestReply="{ row }">
             <button class="btn small" type="button" @click.stop="openRequestReply(row)">Javob</button>
           </template>
@@ -1004,8 +1016,8 @@
               <div class="drilldown-panel">
                 <div class="drilldown-label">Yozgan xabarlari</div>
                 <div v-if="group.messages?.length" class="mini-list">
-                  <article v-for="message in group.messages" :key="message.id || message.message_id || message.created_at"
-                    class="mini-item">
+                  <article v-for="message in group.messages"
+                    :key="message.id || message.message_id || message.created_at" class="mini-item">
                     <p>{{ message.text || 'Matn yo‘q' }}</p>
                     <time>{{ fmtDate(message.created_at) }}</time>
                   </article>
@@ -1043,7 +1055,8 @@
           <DataTable :columns="employeeCompanyColumns" :rows="employeeCompanyDetail.companies || []"
             empty="Bu xodimga kompaniya biriktirilmagan" :page-size="12">
             <template #businessStatus="{ row }">
-              <span class="status-pill mini" :class="businessStatusClass(row.business_status)">{{ businessStatusLabel(row.business_status) }}</span>
+              <span class="status-pill mini" :class="businessStatusClass(row.business_status)">{{
+                businessStatusLabel(row.business_status) }}</span>
             </template>
             <template #usageScore="{ row }">
               <MetricBar :value="row.usage_score" />
@@ -1092,8 +1105,8 @@
                 <div class="drilldown-panel">
                   <div class="drilldown-label">Yozgan xabarlari</div>
                   <div v-if="group.messages?.length" class="mini-list">
-                    <article v-for="message in group.messages" :key="message.id || message.message_id || message.created_at"
-                      class="mini-item">
+                    <article v-for="message in group.messages"
+                      :key="message.id || message.message_id || message.created_at" class="mini-item">
                       <p>{{ message.text || 'Matn yo‘q' }}</p>
                       <time>{{ fmtDate(message.created_at) }}</time>
                     </article>
@@ -1185,7 +1198,8 @@
                 <article v-for="message in chatConversation" :key="chatBubbleKey(message)" class="chat-bubble-row"
                   :class="{ outbound: message.direction === 'outbound' }">
                   <div class="chat-bubble">
-                    <div class="chat-bubble-author">{{ message.actor_name || (message.direction === 'outbound' ? 'Xodim' :
+                    <div class="chat-bubble-author">{{ message.actor_name || (message.direction === 'outbound' ? 'Xodim'
+                      :
                       'Mijoz') }}</div>
                     <div v-if="message.media" class="chat-media">
                       <img v-if="message.media.kind === 'photo' && mediaUrl(message.media)" class="chat-media-image"
@@ -1251,9 +1265,9 @@ import { api, getToken, setToken } from './api';
 
 const ACTIVE_TAB_STORAGE_KEY = 'uyqur_support_active_tab';
 const tabs = [
-  { key: 'stats', label: 'Support Performance', icon: '📊' },
-  { key: 'productAnalytics', label: 'Product Analytics', icon: '📈' },
-  { key: 'companyActivity', label: 'Company Activity', icon: '🏢' },
+  { key: 'stats', label: 'Support Samaradorligi', icon: '📊' },
+  { key: 'productAnalytics', label: 'Product Analitikasi', icon: '📈' },
+  { key: 'companyActivity', label: 'Kompaniyalar faolligi', icon: '🏢' },
   { key: 'groups', label: 'Bot ulangan guruhlar', icon: '👥' },
   { key: 'employees', label: 'Xodimlar', icon: '🧑‍💼' },
   { key: 'companies', label: 'Kompaniyalar', icon: '🏬' },
