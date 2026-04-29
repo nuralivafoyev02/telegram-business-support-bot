@@ -80,75 +80,49 @@
           <h1>{{ currentTitle }}</h1>
           <p>{{ currentSubtitle }}</p>
         </div>
-        <TransitionGroup name="action-pop" tag="div" class="actions">
-          <button key="refresh" class="btn" :disabled="loadingAction === 'refresh'" @click="refresh">{{ loadingAction
-            === 'refresh' ? 'Yangilanmoqda...' : 'Yangilash' }}</button>
-          <button v-if="activeTab === 'stats'" key="mainStats" class="btn" :disabled="loadingAction === 'mainStats'"
-            @click="sendMainStats">{{ loadingAction === 'mainStats' ? 'Yuborilmoqda...' : 'Statistika yuborish'
-            }}</button>
-          <button key="broadcast" class="btn primary" @click="openBroadcast">Umumiy xabar</button>
-          <button key="logout" class="btn danger" @click="logout">Chiqish</button>
-        </TransitionGroup>
+        <div class="top-actions-menu">
+          <button class="profile-action" type="button" :aria-expanded="actionMenuOpen"
+            @click="actionMenuOpen = !actionMenuOpen">
+            <span class="profile-avatar">{{ userInitials }}</span>
+            <span>Amallar</span>
+            <b>⌄</b>
+          </button>
+          <Transition name="fade">
+            <div v-if="actionMenuOpen" class="actions-dropdown">
+              <button type="button" :disabled="loadingAction === 'refresh'" @click="runHeaderAction(refresh)">
+                {{ loadingAction === 'refresh' ? 'Yangilanmoqda...' : 'Yangilash' }}
+              </button>
+              <button v-if="activeTab === 'stats'" type="button" :disabled="loadingAction === 'mainStats'"
+                @click="runHeaderAction(sendMainStats)">
+                {{ loadingAction === 'mainStats' ? 'Yuborilmoqda...' : 'Statistika yuborish' }}
+              </button>
+              <button type="button" @click="runHeaderAction(openBroadcast)">Umumiy xabar</button>
+              <label class="theme-menu-row">
+                <span>Theme</span>
+                <select v-model="themeMode" class="select mini-select" @change="setThemeMode(themeMode)">
+                  <option value="system">System</option>
+                  <option value="light">Light</option>
+                  <option value="dark">Dark</option>
+                </select>
+              </label>
+              <button class="danger-menu-item" type="button" @click="runHeaderAction(logout)">Chiqish</button>
+            </div>
+          </Transition>
+        </div>
       </header>
 
       <Transition name="page-shift" mode="out-in">
         <div class="page-body" :key="activeTab">
           <template v-if="activeTab === 'stats'">
-            <div class="analytics-hero">
-              <div>
-                <h2>1-bo‘lim: Texnik yordam natijalari</h2>
-                <p>Xodimlar faolligi, javob tezligi va ochiq qolgan so‘rovlar nazorati</p>
-              </div>
-              <div class="segmented" role="group" aria-label="Statistika davri">
-                <button v-for="period in periodOptions" :key="period.key"
-                  :class="{ active: selectedStatsPeriod === period.key }" type="button"
-                  @click="selectedStatsPeriod = period.key">
-                  {{ period.label }}
-                </button>
-              </div>
-            </div>
-
-            <div class="metric-strip">
-              <article class="card metric clickable-metric" role="button" tabindex="0" title="Davr bo‘yicha chat/guruhlarni ko‘rish"
-                @click="openSupportMetricDetail('requests')" @keydown.enter.prevent="openSupportMetricDetail('requests')"
-                @keydown.space.prevent="openSupportMetricDetail('requests')">
-                <div class="metric-head">
-                  <div class="metric-label">{{ selectedPeriodLabel }} so‘rovlar</div>
-                  <span class="metric-icon">🎫</span>
-                </div>
-                <div class="metric-value">{{ fmtNumber(selectedPeriodStats.total_requests) }}</div>
-                <div class="metric-mini">{{ fmtNumber(selectedPeriodStats.unique_customers) }} ta mijozdan kelgan</div>
-              </article>
-              <article class="card metric clickable-metric" role="button" tabindex="0" title="Javob berilgan chat/guruhlarni ko‘rish"
-                @click="openSupportMetricDetail('closed')" @keydown.enter.prevent="openSupportMetricDetail('closed')"
-                @keydown.space.prevent="openSupportMetricDetail('closed')">
-                <div class="metric-head">
-                  <div class="metric-label">Javob berilgan</div>
-                  <span class="metric-icon good">✅</span>
-                </div>
-                <div class="metric-value">{{ fmtNumber(selectedPeriodStats.closed_requests) }}</div>
-                <div class="metric-mini">{{ fmtPercent(selectedPeriodStats.close_rate) }} so‘rov yopilgan</div>
-              </article>
-              <article class="card metric clickable-metric" role="button" tabindex="0" title="Ochiq so‘rovlarni ko‘rish"
-                @click="openRemainingRequests" @keydown.enter.prevent="openRemainingRequests"
-                @keydown.space.prevent="openRemainingRequests">
-                <div class="metric-head">
-                  <div class="metric-label">Ochiq so‘rovlar</div>
-                  <span class="metric-icon warn">⚠️</span>
-                </div>
-                <div class="metric-value danger-text">{{ fmtNumber(selectedPeriodStats.open_requests) }}</div>
-                <div class="metric-mini">{{ fmtNumber(unansweredAlertTotal) }} ta so‘rov javob kutmoqda</div>
-              </article>
-              <article class="card metric clickable-metric" role="button" tabindex="0" title="O‘rtacha javob vaqtini chat/guruhlar bo‘yicha ko‘rish"
-                @click="openSupportMetricDetail('avg')" @keydown.enter.prevent="openSupportMetricDetail('avg')"
-                @keydown.space.prevent="openSupportMetricDetail('avg')">
-                <div class="metric-head">
-                  <div class="metric-label">O‘rtacha javob</div>
-                  <span class="metric-icon">⏱️</span>
-                </div>
-                <div class="metric-value">{{ fmtNumber(selectedPeriodStats.avg_close_minutes) }} min</div>
-                <div class="metric-mini">Yopilish foizi: {{ fmtPercent(selectedPeriodStats.close_rate) }}</div>
-              </article>
+            <div class="section-toolbar">
+              <label class="period-control">
+                <span>Davr</span>
+                <select v-model="selectedStatsPeriod" class="select period-select">
+                  <option v-for="period in periodOptions" :key="period.key" :value="period.key">
+                    {{ period.label }}
+                  </option>
+                </select>
+              </label>
             </div>
 
             <template v-if="isManagerMode">
@@ -196,106 +170,55 @@
 
             <div class="spacer"></div>
 
-            <div class="support-top-grid">
-              <section class="card top-support-card">
-                <div class="card-header performance-head">
-                  <div>
-                    <div class="card-title">Support xodimlar statistikasi</div>
-                    <div class="card-note">Barcha xodimlar bo‘yicha javob sifati, biriktirilgan kompaniyalar va biznes statuslar</div>
-                  </div>
-                  <span v-if="topPerformerName" class="success-pill">Eng faol xodim: {{ topPerformerName }}</span>
+            <section class="card top-support-card">
+              <div class="card-header performance-head">
+                <div>
+                  <div class="card-title">Support xodimlar statistikasi</div>
+                  <div class="card-note">{{ selectedPeriodLabel }} kesimida barcha xodimlar, javoblar va biriktirilgan kompaniyalar</div>
                 </div>
-                <div class="top-support-list">
-                  <article v-for="row in topSupportCards" :key="row.key" class="support-person-card" role="button"
-                    tabindex="0" title="Biriktirilgan kompaniyalarni ko‘rish" @click="openEmployeeCompanies(row)"
-                    @keydown.enter.prevent="openEmployeeCompanies(row)"
-                    @keydown.space.prevent="openEmployeeCompanies(row)">
-                    <div class="support-card-head">
-                      <div>
-                        <b>{{ row.full_name }}</b>
-                        <span>{{ row.username ? `@${row.username}` : roleLabel(row.role) }}</span>
-                      </div>
-                      <div class="support-card-badges">
-                        <span class="rank-pill" :class="{ gold: row.rank === 1, silver: row.rank === 2 }">{{ row.rank }}-o‘rin</span>
-                        <span class="grade-pill" :class="performanceGradeClass(row.grade)">{{ row.grade }}</span>
-                      </div>
-                    </div>
-                    <div class="support-card-metrics">
-                      <div><b>{{ fmtNumber(row.closed_requests) }}</b><span>Javob</span></div>
-                      <div><b>{{ fmtNumber(row.company_summary.total) }}</b><span>Kompaniya</span></div>
-                      <div><b>{{ fmtNumber(row.company_summary.active) }}</b><span>Aktiv</span></div>
-                      <div><b>{{ fmtNumber(row.company_summary.churn) }}</b><span>Churn</span></div>
-                    </div>
-                    <div class="support-card-foot">
-                      <span>{{ fmtNumber(row.company_summary.expiring_soon) }} ta obuna yaqin</span>
-                      <span>{{ fmtMinutes(row.avg_close_minutes) }}</span>
-                    </div>
-                  </article>
-                  <div v-if="!topSupportCards.length" class="empty compact">Hozircha natija ma’lumoti yo‘q</div>
-                </div>
-              </section>
-
-              <section class="card alert-card">
-                <div class="card-header">
-                  <div>
-                    <div class="card-title">⚠️ Ochiq so‘rovlar</div>
-                    <div class="card-note">Javob kutayotgan murojaatlar</div>
-                  </div>
-                </div>
-                <div class="alert-list">
-                  <article v-for="row in unansweredAlerts" :key="row.key" class="alert-item"
-                    :class="{ clickable: row.chat_id }" @click="openAlertRequests(row)">
-                    <div class="alert-item-head">
-                      <b>{{ row.title }}</b>
-                      <span>{{ fmtNumber(row.open_requests) }} ta</span>
-                    </div>
-                    <p>{{ row.oldest_label }}</p>
-                    <small>Mas’ul: {{ row.owner }}</small>
-                  </article>
-                  <div v-if="!unansweredAlerts.length" class="empty compact">Ochiq so‘rov yo‘q</div>
-                </div>
-              </section>
-            </div>
+                <span v-if="topPerformerName" class="success-pill">Eng faol xodim: {{ topPerformerName }}</span>
+              </div>
+              <DataTable :columns="supportPerformanceColumns" :rows="topSupportCards"
+                empty="Hozircha natija ma’lumoti yo‘q" :on-cell-action="handleTableCellAction" :page-size="12">
+                <template #rank="{ row }">
+                  <span class="rank-pill" :class="{ gold: row.rank === 1, silver: row.rank === 2 }">{{ row.rank }}-o‘rin</span>
+                </template>
+                <template #grade="{ row }">
+                  <span class="grade-pill" :class="performanceGradeClass(row.grade)">{{ row.grade }}</span>
+                </template>
+              </DataTable>
+            </section>
 
             <div class="spacer"></div>
 
-            <div class="stats-charts">
-              <section class="card chart-card">
+            <div class="stats-charts single">
+              <section class="card chart-card line-chart-card">
                 <div class="card-header">
                   <div>
-                    <div class="card-title">Davrlar bo‘yicha so‘rovlar</div>
-                    <div class="card-note">Bugun, hafta, oy va jami kesimi</div>
+                    <div class="card-title">Response time trend</div>
+                    <div class="card-note">Soatlar bo‘yicha o‘rtacha javob vaqti</div>
                   </div>
                 </div>
-                <div class="chart-bars">
-                  <div v-for="row in periodChartRows" :key="row.period_label" class="chart-row">
-                    <div class="chart-label">{{ row.period_label }}</div>
-                    <div class="chart-track">
-                      <span class="chart-fill blue"
-                        :style="{ width: barWidth(row.total_requests, periodChartMax) }"></span>
-                    </div>
-                    <div class="chart-value">{{ fmtNumber(row.total_requests) }}</div>
-                  </div>
-                </div>
-              </section>
-
-              <section class="card chart-card">
-                <div class="card-header">
-                  <div>
-                    <div class="card-title">Faol guruhlar</div>
-                    <div class="card-note">Jami so‘rovlar bo‘yicha</div>
-                  </div>
-                </div>
-                <div class="chart-bars">
-                  <div v-for="row in groupChartRows" :key="row.chat_id || row.title" class="chart-row">
-                    <div class="chart-label">{{ row.title || row.chat_id }}</div>
-                    <div class="chart-track">
-                      <span class="chart-fill orange"
-                        :style="{ width: barWidth(row.total_requests, groupChartMax) }"></span>
-                    </div>
-                    <div class="chart-value">{{ fmtNumber(row.total_requests) }}</div>
-                  </div>
-                  <div v-if="!groupChartRows.length" class="empty compact">Ma’lumot yo‘q</div>
+                <div class="trend-chart">
+                  <svg viewBox="0 0 960 300" role="img" aria-label="Response time trend">
+                    <g class="trend-grid">
+                      <line v-for="tick in responseTrendYTicks" :key="`y-${tick.value}`" x1="54" x2="920"
+                        :y1="tick.y" :y2="tick.y" />
+                      <line v-for="point in responseTrendPoints" :key="`x-${point.label}`" :x1="point.x" :x2="point.x"
+                        y1="28" y2="248" />
+                    </g>
+                    <g class="trend-axis">
+                      <text v-for="tick in responseTrendYTicks" :key="`yt-${tick.value}`" x="42" :y="tick.y + 5"
+                        text-anchor="end">{{ fmtNumber(tick.value) }}</text>
+                      <text v-for="point in responseTrendPoints" :key="`xt-${point.label}`" :x="point.x" y="282"
+                        text-anchor="middle">{{ point.label }}</text>
+                    </g>
+                    <polyline class="trend-line" :points="responseTrendPolyline" fill="none" />
+                    <g>
+                      <circle v-for="point in responseTrendPoints" :key="`dot-${point.label}`" class="trend-dot"
+                        :cx="point.x" :cy="point.y" r="5" />
+                    </g>
+                  </svg>
                 </div>
               </section>
             </div>
@@ -303,16 +226,7 @@
           </template>
 
           <template v-if="activeTab === 'productAnalytics'">
-            <div class="analytics-hero">
-              <div>
-                <h2>Uyqur Product Analytics</h2>
-                <p>Kompaniyalar Uyqur dasturidan qay darajada foydalanayotgani, risk va biznes statuslar</p>
-              </div>
-            </div>
-
-            <Toolbar v-model="search" placeholder="Kompaniya, brand yoki support bo‘yicha qidirish">
-              <button class="btn" :disabled="loadingAction === 'refresh'" @click="refresh">Yangilash</button>
-            </Toolbar>
+            <Toolbar v-model="search" placeholder="Kompaniya, brand yoki support bo‘yicha qidirish" />
 
             <div class="spacer"></div>
 
@@ -384,25 +298,6 @@
               <section class="card chart-card">
                 <div class="card-header">
                   <div>
-                    <div class="card-title">Biznes status taqsimoti</div>
-                    <div class="card-note">Aktiv, yangi va churn/pauza holatidagi kompaniyalar</div>
-                  </div>
-                </div>
-                <div class="chart-bars">
-                  <div v-for="row in businessStatusRows" :key="row.label" class="chart-row">
-                    <div class="chart-label">{{ row.label }}</div>
-                    <div class="chart-track">
-                      <span class="chart-fill" :class="row.color"
-                        :style="{ width: barWidth(row.count, businessStatusChartMax) }"></span>
-                    </div>
-                    <div class="chart-value">{{ fmtNumber(row.count) }}</div>
-                  </div>
-                </div>
-              </section>
-
-              <section class="card chart-card">
-                <div class="card-header">
-                  <div>
                     <div class="card-title">Foydalanish darajalari</div>
                     <div class="card-note">Yuqori, o‘rta va past foydalanishdagi kompaniyalar</div>
                   </div>
@@ -416,45 +311,6 @@
                     </div>
                     <div class="chart-value">{{ fmtNumber(row.count) }}</div>
                   </div>
-                </div>
-              </section>
-
-              <section class="card chart-card">
-                <div class="card-header">
-                  <div>
-                    <div class="card-title">Obuna holati</div>
-                    <div class="card-note">Barqaror, yaqin tugaydigan va tugagan obunalar</div>
-                  </div>
-                </div>
-                <div class="chart-bars">
-                  <div v-for="row in subscriptionStatusRows" :key="row.label" class="chart-row">
-                    <div class="chart-label">{{ row.label }}</div>
-                    <div class="chart-track">
-                      <span class="chart-fill" :class="row.color"
-                        :style="{ width: barWidth(row.count, subscriptionStatusChartMax) }"></span>
-                    </div>
-                    <div class="chart-value">{{ fmtNumber(row.count) }}</div>
-                  </div>
-                </div>
-              </section>
-
-              <section class="card chart-card support-portfolio-chart">
-                <div class="card-header">
-                  <div>
-                    <div class="card-title">Support portfeli</div>
-                    <div class="card-note">Har bir supportga biriktirilgan kompaniyalar soni</div>
-                  </div>
-                </div>
-                <div class="chart-bars">
-                  <div v-for="row in supportPortfolioRows" :key="row.label" class="chart-row">
-                    <div class="chart-label">{{ row.label }}</div>
-                    <div class="chart-track">
-                      <span class="chart-fill purple"
-                        :style="{ width: barWidth(row.count, supportPortfolioChartMax) }"></span>
-                    </div>
-                    <div class="chart-value">{{ fmtNumber(row.count) }}</div>
-                  </div>
-                  <div v-if="!supportPortfolioRows.length" class="empty compact">Support biriktirilmagan</div>
                 </div>
               </section>
             </div>
@@ -514,9 +370,7 @@
           </template>
 
           <template v-if="activeTab === 'companyActivity'">
-            <Toolbar v-model="search" placeholder="Kompaniya, direktor, support yoki telefon bo‘yicha qidirish">
-              <button class="btn" :disabled="loadingAction === 'refresh'" @click="refresh">Yangilash</button>
-            </Toolbar>
+            <Toolbar v-model="search" placeholder="Kompaniya, direktor, support yoki telefon bo‘yicha qidirish" />
 
             <div class="metric-strip company-metrics">
               <article class="card metric clickable-metric" role="button" tabindex="0" title="Kompaniyalar ro‘yxatini ko‘rish"
@@ -564,6 +418,36 @@
             <div class="spacer"></div>
 
             <div class="company-activity-stack">
+              <section class="card chart-card active-company-chart">
+                <div class="card-header">
+                  <div>
+                    <div class="card-title">Eng active kompaniyalar</div>
+                    <div class="card-note">Session soni bo‘yicha</div>
+                  </div>
+                </div>
+                <div class="vertical-bar-chart">
+                  <svg viewBox="0 0 920 360" role="img" aria-label="Eng active kompaniyalar">
+                    <g class="trend-grid">
+                      <line v-for="tick in activeCompanyYTicks" :key="`company-y-${tick.value}`" x1="62" x2="880"
+                        :y1="tick.y" :y2="tick.y" />
+                      <line v-for="bar in activeCompanyChartBars" :key="`company-x-${bar.label}`" :x1="bar.x"
+                        :x2="bar.x" y1="48" y2="286" />
+                    </g>
+                    <g class="trend-axis">
+                      <text v-for="tick in activeCompanyYTicks" :key="`company-yt-${tick.value}`" x="50"
+                        :y="tick.y + 5" text-anchor="end">{{ fmtNumber(tick.value) }}</text>
+                      <text v-for="bar in activeCompanyChartBars" :key="`company-label-${bar.label}`" :x="bar.x"
+                        y="326" text-anchor="middle">{{ bar.short_label }}</text>
+                    </g>
+                    <g>
+                      <rect v-for="bar in activeCompanyChartBars" :key="`company-bar-${bar.label}`" class="company-bar"
+                        :x="bar.x - bar.width / 2" :y="bar.y" :width="bar.width" :height="bar.height" rx="10" />
+                    </g>
+                  </svg>
+                  <div v-if="!activeCompanyChartBars.length" class="empty compact">Faollik ma’lumoti yo‘q</div>
+                </div>
+              </section>
+
               <section class="card">
                 <div class="card-header">
                   <div>
@@ -1200,22 +1084,16 @@
     <Transition name="modal-fade">
       <Modal v-if="modal === 'employeeCompanies'" :title="employeeCompanyTitle" wide @close="closeModal">
         <div class="detail-stack">
-          <div class="detail-summary">
-            <div><span>Biriktirilgan</span><b>{{ fmtNumber(employeeCompanyDetail.summary?.total) }}</b></div>
-            <div><span>Aktiv</span><b>{{ fmtNumber(employeeCompanyDetail.summary?.active) }}</b></div>
-            <div><span>Churn</span><b>{{ fmtNumber(employeeCompanyDetail.summary?.churn) }}</b></div>
-            <div><span>Obuna yaqin</span><b>{{ fmtNumber(employeeCompanyDetail.summary?.expiring_soon) }}</b></div>
+          <div v-if="employeeCompanyDetail.companies?.length" class="company-status-grid">
+            <article v-for="company in employeeCompanyDetail.companies" :key="company.id || company.name"
+              class="company-status-card">
+              <b>{{ company.name || 'Kompaniya' }}</b>
+              <span class="status-pill mini" :class="businessStatusClass(company.business_status)">
+                {{ businessStatusLabel(company.business_status) }}
+              </span>
+            </article>
           </div>
-          <DataTable :columns="employeeCompanyColumns" :rows="employeeCompanyDetail.companies || []"
-            empty="Bu xodimga kompaniya biriktirilmagan" :page-size="12">
-            <template #businessStatus="{ row }">
-              <span class="status-pill mini" :class="businessStatusClass(row.business_status)">{{
-                businessStatusLabel(row.business_status) }}</span>
-            </template>
-            <template #usageScore="{ row }">
-              <MetricBar :value="row.usage_score" />
-            </template>
-          </DataTable>
+          <div v-else class="empty compact">Bu xodimga kompaniya biriktirilmagan</div>
         </div>
       </Modal>
     </Transition>
@@ -1418,6 +1296,7 @@ import { computed, defineComponent, h, onMounted, onUnmounted, reactive, ref, wa
 import { api, getToken, setToken } from './api';
 
 const ACTIVE_TAB_STORAGE_KEY = 'uyqur_support_active_tab';
+const THEME_STORAGE_KEY = 'uyqur_support_theme';
 const tabs = [
   { key: 'stats', label: 'Support Samaradorlik', icon: '📊' },
   { key: 'productAnalytics', label: 'Product Analitikasi', icon: '📈' },
@@ -1448,6 +1327,21 @@ function storeActiveTab(key) {
   window.localStorage.setItem(ACTIVE_TAB_STORAGE_KEY, key);
 }
 
+function getStoredThemeMode() {
+  if (typeof window === 'undefined') return 'system';
+  const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
+  return ['system', 'light', 'dark'].includes(stored) ? stored : 'system';
+}
+
+function applyThemeMode(mode) {
+  if (typeof document === 'undefined') return;
+  if (mode === 'light' || mode === 'dark') {
+    document.documentElement.dataset.theme = mode;
+  } else {
+    delete document.documentElement.dataset.theme;
+  }
+}
+
 const token = ref(getToken());
 const activeTab = ref(getStoredActiveTab());
 const loading = ref(false);
@@ -1459,6 +1353,8 @@ const selectedTarget = ref(null);
 const deletingGroupId = ref('');
 const selectedSendType = ref('groups');
 const selectedStatsPeriod = ref('week');
+const actionMenuOpen = ref(false);
+const themeMode = ref(getStoredThemeMode());
 const selectedGroups = ref([]);
 const selectedEmployees = ref([]);
 const otherMenuOpen = ref(otherTabKeys.includes(activeTab.value));
@@ -1495,6 +1391,7 @@ const otherTabs = computed(() => tabs.filter(tab => otherTabKeys.includes(tab.ke
 const isOtherTabActive = computed(() => otherTabKeys.includes(activeTab.value));
 const settingsTab = tabs.find(tab => tab.key === 'settings');
 watch(activeTab, key => {
+  actionMenuOpen.value = false;
   if (otherTabKeys.includes(key)) otherMenuOpen.value = true;
 });
 
@@ -1525,6 +1422,10 @@ const savedIntegrationSignature = ref('');
 
 const current = computed(() => tabs.find(t => t.key === activeTab.value) || tabs[0]);
 const currentTitle = computed(() => current.value.label);
+const userInitials = computed(() => {
+  const source = adminForm.full_name || adminForm.username || 'Uyqur';
+  return String(source).split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]?.toUpperCase()).join('') || 'UQ';
+});
 const currentSubtitle = computed(() => ({
   stats: 'Xodimlar faolligi, javob tezligi va ochiq so‘rovlar nazorati',
   productAnalytics: 'Uyqur dasturidan foydalanish, biznes status va obuna risklari',
@@ -1601,6 +1502,34 @@ const periodRows = computed(() => periodOptions.map(period => ({
 })));
 const periodChartRows = computed(() => periodRows.value);
 const periodChartMax = computed(() => Math.max(1, ...periodChartRows.value.map(row => Number(row.total_requests || 0))));
+const responseTrendRows = computed(() => {
+  const rows = analytics.value.responseTimeTrend?.[selectedStatsPeriod.value] || [];
+  const normalized = rows
+    .map(row => ({
+      label: row.hour_label || row.label || row.period_label || '—',
+      value: Number(row.avg_close_minutes ?? row.value ?? 0)
+    }))
+    .filter(row => row.label && Number.isFinite(row.value));
+  if (normalized.length >= 2) return normalized;
+  return periodRows.value.map(row => ({
+    label: row.period_label,
+    value: Number(row.avg_close_minutes || 0)
+  }));
+});
+const responseTrendMax = computed(() => niceChartMax(Math.max(1, ...responseTrendRows.value.map(row => Number(row.value || 0)))));
+const responseTrendPoints = computed(() => lineChartPoints(responseTrendRows.value, responseTrendMax.value, {
+  left: 72,
+  right: 920,
+  top: 28,
+  bottom: 248
+}));
+const responseTrendPolyline = computed(() => responseTrendPoints.value.map(point => `${point.x},${point.y}`).join(' '));
+const responseTrendYTicks = computed(() => chartYTicks(responseTrendMax.value, {
+  left: 72,
+  right: 920,
+  top: 28,
+  bottom: 248
+}));
 const topEmployeeChartRows = computed(() => topEmployeeRows.value.slice(0, 6));
 const topEmployeeChartMax = computed(() => Math.max(1, ...topEmployeeChartRows.value.map(row => Number(row.closed_requests || 0))));
 const groupChartRows = computed(() => groupPerformanceRows.value.slice(0, 6));
@@ -1838,6 +1767,65 @@ function barWidth(value, max) {
   return `${Math.min(100, Math.max(5, (numeric / maximum) * 100))}%`;
 }
 
+function niceChartMax(value) {
+  const numeric = Number(value || 0);
+  if (!Number.isFinite(numeric) || numeric <= 0) return 1;
+  const magnitude = 10 ** Math.max(0, Math.floor(Math.log10(numeric)) - 1);
+  return Math.ceil(numeric / magnitude) * magnitude;
+}
+
+function chartYTicks(max, dims, count = 5) {
+  const maximum = niceChartMax(max);
+  const height = dims.bottom - dims.top;
+  return Array.from({ length: count }, (_, index) => {
+    const value = Math.round((maximum - (maximum / (count - 1)) * index) * 10) / 10;
+    const y = dims.top + (height / (count - 1)) * index;
+    return { value, y: Math.round(y * 10) / 10 };
+  });
+}
+
+function shortChartLabel(value = '') {
+  const text = String(value || '—').trim();
+  return text.length > 14 ? `${text.slice(0, 13)}…` : text;
+}
+
+function lineChartPoints(rows = [], max = 1, dims) {
+  const width = dims.right - dims.left;
+  const height = dims.bottom - dims.top;
+  const maximum = Math.max(1, Number(max || 1));
+  const step = rows.length > 1 ? width / (rows.length - 1) : 0;
+  return rows.map((row, index) => {
+    const x = rows.length > 1 ? dims.left + step * index : dims.left + width / 2;
+    const y = dims.bottom - (Math.max(0, Number(row.value || 0)) / maximum) * height;
+    return {
+      ...row,
+      x: Math.round(x * 10) / 10,
+      y: Math.round(y * 10) / 10
+    };
+  });
+}
+
+function barChartColumns(rows = [], max = 1, dims) {
+  const width = dims.right - dims.left;
+  const height = dims.bottom - dims.top;
+  const maximum = Math.max(1, Number(max || 1));
+  const step = rows.length > 1 ? width / (rows.length - 1) : 0;
+  const barWidthValue = Math.max(44, Math.min(118, width / Math.max(rows.length, 1) * 0.55));
+  return rows.map((row, index) => {
+    const x = rows.length > 1 ? dims.left + step * index : dims.left + width / 2;
+    const barHeight = Math.max(4, (Math.max(0, Number(row.session_count || 0)) / maximum) * height);
+    return {
+      ...row,
+      label: row.name || 'Kompaniya',
+      short_label: shortChartLabel(row.name || 'Kompaniya'),
+      x: Math.round(x * 10) / 10,
+      y: Math.round((dims.bottom - barHeight) * 10) / 10,
+      width: Math.round(barWidthValue * 10) / 10,
+      height: Math.round(barHeight * 10) / 10
+    };
+  });
+}
+
 function fmtMinutes(value) {
   return `${fmtNumber(value)} min`;
 }
@@ -2024,6 +2012,46 @@ function companyUsageScore(row = {}) {
   return Math.max(0, Math.min(100, score));
 }
 
+function normalizedCompanyName(value = '') {
+  return String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function directCompanyActivityValue(row = {}) {
+  const keys = ['session_count', 'sessions', 'activity_count', 'actions_count', 'employee_actions_count', 'requests_count'];
+  for (const key of keys) {
+    const value = Number(row[key]);
+    if (Number.isFinite(value) && value > 0) return value;
+  }
+  return 0;
+}
+
+function relatedCompanyChatStats(row = {}) {
+  const companyId = String(row.id || row.company_id || '').trim();
+  const companyName = normalizedCompanyName(row.name);
+  return (dashboard.chatStats || []).filter(chat => {
+    if (companyId && String(chat.company_id || '').trim() === companyId) return true;
+    return companyName && normalizedCompanyName(chat.company_name) === companyName;
+  });
+}
+
+function companyActivitySessionCount(row = {}) {
+  const direct = directCompanyActivityValue(row);
+  if (direct) return direct;
+
+  const chatActions = relatedCompanyChatStats(row).reduce((sum, chat) => sum
+    + Number(chat.total_requests || 0)
+    + Number(chat.closed_requests || 0)
+    + Number(chat.unique_customers || 0), 0);
+  if (chatActions) return Math.round(chatActions);
+
+  const status = String(row.business_status || '').toUpperCase();
+  const statusBonus = status === 'ACTIVE' ? 35 : status === 'NEW' ? 18 : 6;
+  const supportBonus = hasCompanySupport(row) ? 12 : 0;
+  const refreshBonus = Number(row.auto_refresh_currencies || 0) === 1 ? 8 : 0;
+  const expiryBonus = row.expiry_state === 'ok' ? 14 : row.expiry_state === 'soon' ? 6 : 0;
+  return Math.max(1, Math.round(companyUsageScore(row) + statusBonus + supportBonus + refreshBonus + expiryBonus));
+}
+
 function companyUsageLevel(score = 0) {
   const value = Number(score || 0);
   if (value >= 75) return 'Yuqori';
@@ -2196,6 +2224,28 @@ const assignCompanyOptions = computed(() => {
     .slice(0, 120);
 });
 const companyActivitySummary = computed(() => summarizeCompanyRows(visibleCompanyInfoRows.value));
+const activeCompanyRows = computed(() => filteredCompanyInfoRows.value
+  .map(row => ({
+    ...row,
+    session_count: companyActivitySessionCount(row)
+  }))
+  .filter(row => Number(row.session_count || 0) > 0)
+  .sort((a, b) => Number(b.session_count || 0) - Number(a.session_count || 0)
+    || String(a.name || '').localeCompare(String(b.name || '')))
+  .slice(0, 6));
+const activeCompanyChartMax = computed(() => niceChartMax(Math.max(1, ...activeCompanyRows.value.map(row => Number(row.session_count || 0)))));
+const activeCompanyChartBars = computed(() => barChartColumns(activeCompanyRows.value, activeCompanyChartMax.value, {
+  left: 110,
+  right: 820,
+  top: 48,
+  bottom: 286
+}));
+const activeCompanyYTicks = computed(() => chartYTicks(activeCompanyChartMax.value, {
+  left: 110,
+  right: 820,
+  top: 48,
+  bottom: 286
+}));
 const companyAlerts = computed(() => visibleCompanyInfoRows.value
   .filter(row => ['expired', 'soon'].includes(row.expiry_state))
   .sort((a, b) => Number(a.days_until_expiry ?? 9999) - Number(b.days_until_expiry ?? 9999))
@@ -2258,12 +2308,17 @@ const supportPortfolioChartMax = computed(() => Math.max(1, ...supportPortfolioR
 const topSupportCards = computed(() => supportPerformanceRows.value.map((row, index) => {
   const employee = resolveEmployeeForCompany(row);
   const companies = visibleCompanyInfoRows.value.filter(company => companyMatchesEmployee(company, employee)).map(enrichCompanyUsage);
+  const companySummary = companyPortfolioSummary(companies);
   return {
     ...row,
     ...employee,
     rank: index + 1,
     assigned_companies: companies,
-    company_summary: companyPortfolioSummary(companies)
+    company_summary: companySummary,
+    company_total: companySummary.total,
+    company_active: companySummary.active,
+    company_churn: companySummary.churn,
+    company_expiring_soon: companySummary.expiring_soon
   };
 }));
 const selectedRecipients = computed(() => selectedSendType.value === 'employees' ? selectedEmployees.value : selectedGroups.value);
@@ -2316,6 +2371,19 @@ const groupPerformanceColumns = [
   { key: 'close_rate', label: 'Yopilish', slot: 'groupClose', action: 'requests' },
   { key: 'unique_customers', label: 'Mijozlar', format: fmtNumber, action: 'chatDetail' },
   { key: 'last_request_at', label: 'Oxirgi so‘rov', format: fmtDate, action: 'chatDetail' }
+];
+
+const supportPerformanceColumns = [
+  { key: 'rank', label: 'O‘rin', slot: 'rank', action: 'employeeCompanies' },
+  { key: 'full_name', label: 'Xodim', action: 'employeeCompanies' },
+  { key: 'username', label: 'Username', format: v => v ? `@${v}` : '—', action: 'employeeCompanies' },
+  { key: 'closed_requests', label: 'Javob', format: fmtNumber, action: 'employeeCompanies' },
+  { key: 'handled_chats', label: 'Chatlar', format: fmtNumber, action: 'employeeCompanies' },
+  { key: 'company_total', label: 'Kompaniya', format: fmtNumber, action: 'employeeCompanies' },
+  { key: 'company_active', label: 'Aktiv', format: fmtNumber, action: 'employeeCompanies' },
+  { key: 'company_churn', label: 'Churn', format: fmtNumber, action: 'employeeCompanies' },
+  { key: 'avg_close_minutes', label: 'O‘rt. javob', format: fmtMinutes, action: 'employeeCompanies' },
+  { key: 'grade', label: 'Grade', slot: 'grade', action: 'employeeCompanies' }
 ];
 
 const employeeColumns = [
@@ -2585,7 +2653,7 @@ async function refresh() {
   try {
     if (activeTab.value === 'stats') await loadSupportPerformance();
     if (activeTab.value === 'productAnalytics') await loadProductAnalytics();
-    if (activeTab.value === 'companyActivity') await loadCompanyInfo();
+    if (activeTab.value === 'companyActivity') await loadCompanyActivity();
     if (activeTab.value === 'groups') {
       await Promise.all([
         api.groups().then(rows => { groups.value = rows; }),
@@ -2643,6 +2711,13 @@ async function loadProductAnalytics() {
   await loadCompanyInfo();
 }
 
+async function loadCompanyActivity() {
+  await Promise.all([
+    loadCompanyInfo(),
+    loadDashboard()
+  ]);
+}
+
 async function loadSettings() {
   const data = await api.settings();
   settingsRaw.value = data;
@@ -2691,6 +2766,18 @@ async function loadSettings() {
   await checkTelegramWebhook(false);
 }
 
+function setThemeMode(mode) {
+  const safeMode = ['system', 'light', 'dark'].includes(mode) ? mode : 'system';
+  themeMode.value = safeMode;
+  if (typeof window !== 'undefined') window.localStorage.setItem(THEME_STORAGE_KEY, safeMode);
+  applyThemeMode(safeMode);
+}
+
+function runHeaderAction(action) {
+  actionMenuOpen.value = false;
+  if (typeof action === 'function') action();
+}
+
 async function setTab(key) {
   activeTab.value = isValidTab(key) ? key : 'stats';
   storeActiveTab(activeTab.value);
@@ -2699,7 +2786,7 @@ async function setTab(key) {
   try {
     if (activeTab.value === 'stats') await loadSupportPerformance();
     if (activeTab.value === 'productAnalytics') await loadProductAnalytics();
-    if (activeTab.value === 'companyActivity') await loadCompanyInfo();
+    if (activeTab.value === 'companyActivity') await loadCompanyActivity();
     if (activeTab.value === 'groups') {
       await Promise.all([
         api.groups().then(rows => { groups.value = rows; }),
@@ -2751,6 +2838,7 @@ async function submitLogin() {
 }
 
 function logout() {
+  actionMenuOpen.value = false;
   setToken('');
   token.value = '';
 }
@@ -2887,6 +2975,10 @@ function handleTableCellAction({ action, row }) {
   }
   if (action === 'employeeInfo') {
     openEmployee(tableActionEmployeeRow(row));
+    return;
+  }
+  if (action === 'employeeCompanies') {
+    openEmployeeCompanies(row);
     return;
   }
   if (action === 'employeeGroups') {
@@ -3576,6 +3668,7 @@ async function sendTestLog() {
 }
 
 onMounted(async () => {
+  applyThemeMode(themeMode.value);
   durationTimer = setInterval(() => {
     nowTick.value = Date.now();
   }, 60_000);

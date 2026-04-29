@@ -67,6 +67,16 @@ function average(values) {
   return round(clean.reduce((sum, value) => sum + value, 0) / clean.length, 1);
 }
 
+function tashkentHourKey(value = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Tashkent',
+    hour: '2-digit',
+    hourCycle: 'h23'
+  }).formatToParts(new Date(value));
+  const hour = parts.find(part => part.type === 'hour')?.value || '00';
+  return `${hour.padStart(2, '0')}:00`;
+}
+
 function tashkentDateParts(value = new Date()) {
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Asia/Tashkent',
@@ -264,6 +274,33 @@ function buildGroupPerformance(args) {
   return buildChatPerformance({ ...args, sourceType: 'group' });
 }
 
+function buildResponseTimeTrend(requests, periodKey, keys) {
+  const buckets = new Map();
+  requests
+    .filter(request => request.status === 'closed' && inCurrentPeriod(request.created_at, periodKey, keys))
+    .forEach(request => {
+      const closeMinute = minutesBetween(request.created_at, request.closed_at);
+      if (closeMinute === null) return;
+      const hourLabel = tashkentHourKey(request.created_at);
+      const current = buckets.get(hourLabel) || {
+        hour_label: hourLabel,
+        response_minutes: [],
+        closed_requests: 0
+      };
+      current.response_minutes.push(closeMinute);
+      current.closed_requests += 1;
+      buckets.set(hourLabel, current);
+    });
+
+  return [...buckets.values()]
+    .sort((a, b) => a.hour_label.localeCompare(b.hour_label))
+    .map(row => ({
+      hour_label: row.hour_label,
+      avg_close_minutes: average(row.response_minutes),
+      closed_requests: row.closed_requests
+    }));
+}
+
 function buildDashboardAnalytics({ requests, chats, employees }) {
   const keys = currentPeriodKeys();
   const periods = [
@@ -278,6 +315,7 @@ function buildDashboardAnalytics({ requests, chats, employees }) {
     employeePerformance: Object.fromEntries(periods.map(([key]) => [key, buildEmployeePerformance({ requests, employees, periodKey: key, keys })])),
     chatPerformance: Object.fromEntries(periods.map(([key]) => [key, buildChatPerformance({ requests, chats, periodKey: key, keys })])),
     groupPerformance: Object.fromEntries(periods.map(([key]) => [key, buildGroupPerformance({ requests, chats, periodKey: key, keys })])),
+    responseTimeTrend: Object.fromEntries(periods.map(([key]) => [key, buildResponseTimeTrend(requests, key, keys)])),
     generated_at: new Date().toISOString()
   };
 }
