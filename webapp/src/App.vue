@@ -216,7 +216,9 @@
                       </tr>
                     </thead>
                     <tbody>
-                      <tr v-for="row in supportPerformanceRows" :key="row.key">
+                      <tr v-for="row in supportPerformanceRows" :key="row.key" class="clickable-row" tabindex="0"
+                        title="Xodim faoliyatini ko‘rish" @click="openEmployeeActivity(row)"
+                        @keydown.enter.prevent="openEmployeeActivity(row)" @keydown.space.prevent="openEmployeeActivity(row)">
                         <td>{{ row.full_name }}</td>
                         <td>{{ fmtNumber(row.handled_chats) }}</td>
                         <td>{{ fmtNumber(row.closed_requests) }}</td>
@@ -586,7 +588,8 @@
                       <b>{{ row.name }}</b>
                       <span>{{ row.expiry_state === 'expired' ? 'Tugagan' : 'Yaqin' }}</span>
                     </div>
-                    <p>{{ expiryStatusLabel(row) }}</p>
+                    <p>{{ row.expired || 'Muddatsiz' }}</p>
+                    <small>{{ expiryRemainingLabel(row) }}</small>
                     <small>Support: {{ companySupportLabel(row) }}</small>
                   </article>
                   <div v-if="!companyAlerts.length" class="empty compact">Obuna bo‘yicha xavfli holat yo‘q</div>
@@ -636,7 +639,7 @@
               <div class="card-header">
                 <div>
                   <div class="card-title">Kompaniyalar</div>
-                  <div class="card-note">Ichki Supabase kompaniya statistikasi</div>
+                  <div class="card-note">Uyqur API’dan kelgan support biriktirilgan kompaniyalar</div>
                 </div>
               </div>
               <DataTable :columns="companyColumns" :rows="filteredCompanies" empty="Kompaniya topilmadi" />
@@ -1057,6 +1060,61 @@
     </Transition>
 
     <Transition name="modal-fade">
+      <Modal v-if="modal === 'employeeActivity'" :title="employeeDrilldownTitle" wide @close="closeModal">
+        <div class="detail-stack">
+          <div class="detail-summary">
+            <div><span>Guruhlar</span><b>{{ fmtNumber(employeeActivity.summary?.handled_chats) }}</b></div>
+            <div><span>Xabarlar</span><b>{{ fmtNumber(employeeActivity.summary?.message_count) }}</b></div>
+            <div><span>Yopilgan so‘rov</span><b>{{ fmtNumber(employeeActivity.summary?.closed_requests) }}</b></div>
+            <div><span>Mijozlar</span><b>{{ fmtNumber(employeeActivity.summary?.customer_count) }}</b></div>
+          </div>
+
+          <div v-if="employeeActivity.groups?.length" class="drilldown-stack">
+            <section v-for="group in employeeActivity.groups" :key="group.chat_id" class="drilldown-group">
+              <div class="drilldown-head">
+                <div>
+                  <div class="card-title">{{ group.title || group.chat_id }}</div>
+                  <div class="card-note">
+                    {{ fmtNumber(group.message_count) }} xabar · {{ fmtNumber(group.closed_count) }} yopilgan ·
+                    {{ fmtNumber(group.customer_count) }} mijoz
+                  </div>
+                </div>
+                <button class="btn small" type="button" @click="loadChatDetail(group)">Chat tafsiloti</button>
+              </div>
+
+              <div class="drilldown-columns">
+                <div class="drilldown-panel">
+                  <div class="drilldown-label">Javob bergan mijozlar</div>
+                  <div v-if="group.closed_requests?.length" class="mini-list">
+                    <article v-for="request in group.closed_requests" :key="request.id" class="mini-item">
+                      <b>{{ request.customer_name || request.customer_username || 'Mijoz' }}</b>
+                      <p>{{ request.initial_text || 'So‘rov matni yo‘q' }}</p>
+                      <time>{{ fmtDate(request.closed_at) }}</time>
+                    </article>
+                  </div>
+                  <div v-else class="empty compact">Yopilgan so‘rov yo‘q</div>
+                </div>
+
+                <div class="drilldown-panel">
+                  <div class="drilldown-label">Yozgan xabarlari</div>
+                  <div v-if="group.messages?.length" class="mini-list">
+                    <article v-for="message in group.messages" :key="message.id || message.message_id || message.created_at"
+                      class="mini-item">
+                      <p>{{ message.text || 'Matn yo‘q' }}</p>
+                      <time>{{ fmtDate(message.created_at) }}</time>
+                    </article>
+                  </div>
+                  <div v-else class="empty compact">Xabar yo‘q</div>
+                </div>
+              </div>
+            </section>
+          </div>
+          <div v-else class="empty">Bu davrda xodim javoblari topilmadi</div>
+        </div>
+      </Modal>
+    </Transition>
+
+    <Transition name="modal-fade">
       <Modal v-if="modal === 'employeeOpenRequests'" :title="employeeDrilldownTitle" wide @close="closeModal">
         <DataTable :columns="employeeOpenRequestColumns" :rows="employeeOpenRequests" empty="Ochiq qolgan so‘rov yo‘q"
           :on-cell-action="handleTableCellAction">
@@ -1246,11 +1304,11 @@ const dashboard = reactive({ summary: {}, employeeStats: [], chatStats: [], open
 const groups = ref([]);
 const privates = ref([]);
 const employees = ref([]);
-const companies = ref([]);
 const companyInfo = ref({ summary: {}, companies: [], fetched_at: '', source: '' });
 const requestRows = ref([]);
 const chatDetail = ref({ chat: null, requests: [], timeline: [] });
 const employeeDrilldown = ref(null);
+const employeeActivity = ref({ employee: null, summary: {}, groups: [], closed_requests: [], messages: [] });
 const employeeGroupActivity = ref([]);
 const employeeOpenRequests = ref([]);
 const mediaUrls = ref({});
@@ -1312,7 +1370,7 @@ const currentSubtitle = computed(() => ({
   companyActivity: 'Kompaniyalar holati, support biriktirilishi va obuna nazorati',
   groups: 'Bot ulangan guruhlar, so‘rov oqimi va mijoz murojaatlari',
   employees: 'Xodimlar aktivligi, javoblar va ochiq vazifalar',
-  companies: 'Ichki kompaniyalar, ulangan guruhlar va request statistikasi',
+  companies: 'Uyqur API’dan kelgan kompaniyalar, support va obuna ma’lumotlari',
   integrations: 'Tashqi ulanishlar va keyingi log oqimlari uchun boshqaruv',
   privates: 'Mijozlar bilan shaxsiy va biznes chatlar',
   knowledgeBase: 'AI o‘qitish matnlari, fayllar va modelga beriladigan bilim',
@@ -1419,6 +1477,11 @@ const supportPerformanceRows = computed(() => {
     const grade = performanceGrade(sla, avg);
     return {
       key: employeeLookupKey(row) || `${row.full_name || 'employee'}-${index}`,
+      id: row.id || row.employee_id || stat.id || stat.employee_id || '',
+      employee_id: row.employee_id || row.id || stat.employee_id || stat.id || '',
+      tg_user_id: row.tg_user_id || stat.tg_user_id || '',
+      username: row.username || stat.username || '',
+      role: row.role || stat.role || '',
       full_name: row.full_name || stat.full_name || 'Xodim',
       handled_chats: Number(row.handled_chats || stat.handled_chats || stat.today_written_groups_count || 0),
       closed_requests: closed,
@@ -1485,6 +1548,7 @@ const loadingText = computed(() => ({
   mainStats: 'Yuborilmoqda...',
   webhookInfo: 'Tekshirilmoqda...',
   webhookConnect: 'Ulanmoqda...',
+  employeeActivity: 'Xodim faoliyati yuklanmoqda...',
   saveSettings: 'Saqlamoqda...',
   saveIntegration: 'Saqlamoqda...',
   extractKnowledge: 'Fayl o‘qilmoqda...'
@@ -1619,9 +1683,15 @@ function businessStatusClass(value) {
 
 function expiryStatusLabel(row = {}) {
   if (!row.expired) return 'Muddatsiz';
-  if (row.expiry_state === 'expired') return `${row.expired} tugagan`;
-  if (row.expiry_state === 'soon') return `${row.expired} yaqin`;
-  return row.expired;
+  return `${row.expired} · ${expiryRemainingLabel(row)}`;
+}
+
+function expiryRemainingLabel(row = {}) {
+  const days = Number(row.days_until_expiry);
+  if (!Number.isFinite(days)) return 'Kun belgilanmagan';
+  if (days < 0) return `${Math.abs(days)} kun oldin tugagan`;
+  if (days === 0) return 'Bugun tugaydi';
+  return `${days} kun qoldi`;
 }
 
 function expiryStatusClass(row = {}) {
@@ -1632,6 +1702,25 @@ function expiryStatusClass(row = {}) {
 
 function companySupportLabel(row = {}) {
   return [row.uyqur_support_username, row.uyqur_support_phone].filter(Boolean).join(' · ') || 'Biriktirilmagan';
+}
+
+function hasCompanySupport(row = {}) {
+  return Boolean(String(row.uyqur_support_username || '').trim() || String(row.uyqur_support_phone || '').trim());
+}
+
+function summarizeCompanyRows(rows = []) {
+  return {
+    total: rows.length,
+    active: rows.filter(company => company.status === 'active').length,
+    passive: rows.filter(company => company.status === 'passive').length,
+    real: rows.filter(company => Number(company.is_real || 0) === 1).length,
+    business_active: rows.filter(company => company.business_status === 'ACTIVE').length,
+    business_new: rows.filter(company => company.business_status === 'NEW').length,
+    business_paused: rows.filter(company => company.business_status === 'PAUSED').length,
+    support_assigned: rows.filter(hasCompanySupport).length,
+    expired: rows.filter(company => company.expiry_state === 'expired').length,
+    expiring_soon: rows.filter(company => company.expiry_state === 'soon').length
+  };
 }
 
 function roleLabel(value) {
@@ -1653,11 +1742,12 @@ const filteredEmployeeStats = computed(() => (dashboard.employeeStats || []).fil
 const filteredEmployees = computed(() => employees.value.filter(includesSearch));
 const filteredGroups = computed(() => groups.value.filter(includesSearch));
 const filteredPrivates = computed(() => privates.value.filter(includesSearch));
-const filteredCompanies = computed(() => companies.value.filter(includesSearch));
 const companyInfoRows = computed(() => companyInfo.value.companies || []);
-const filteredCompanyInfoRows = computed(() => companyInfoRows.value.filter(includesSearch));
-const companyActivitySummary = computed(() => companyInfo.value.summary || {});
-const companyAlerts = computed(() => companyInfoRows.value
+const visibleCompanyInfoRows = computed(() => companyInfoRows.value.filter(hasCompanySupport));
+const filteredCompanyInfoRows = computed(() => visibleCompanyInfoRows.value.filter(includesSearch));
+const filteredCompanies = computed(() => filteredCompanyInfoRows.value);
+const companyActivitySummary = computed(() => summarizeCompanyRows(visibleCompanyInfoRows.value));
+const companyAlerts = computed(() => visibleCompanyInfoRows.value
   .filter(row => ['expired', 'soon'].includes(row.expiry_state))
   .sort((a, b) => Number(a.days_until_expiry ?? 9999) - Number(b.days_until_expiry ?? 9999))
   .slice(0, 6));
@@ -1760,15 +1850,15 @@ const groupColumns = [
 
 const companyColumns = [
   { key: 'name', label: 'Kompaniya' },
-  { key: 'legal_name', label: 'Yuridik nom', format: v => v || '—' },
+  { key: 'brand', label: 'Brand', format: v => v || '—' },
+  { key: 'status', label: 'Panel holati', format: companyStatusLabel },
+  { key: 'business_status', label: 'Biznes status', format: businessStatusLabel },
+  { key: 'director', label: 'Direktor', format: v => v || '—' },
+  { key: 'uyqur_support_username', label: 'Support', format: (_, row) => companySupportLabel(row) },
   { key: 'phone', label: 'Telefon', format: v => v || '—' },
-  { key: 'chats_count', label: 'Guruhlar', format: fmtNumber },
-  { key: 'users_count', label: 'Mijozlar', format: fmtNumber },
-  { key: 'employees_count', label: 'Xodimlar', format: fmtNumber },
-  { key: 'total_requests', label: 'So‘rov', format: fmtNumber },
-  { key: 'open_requests', label: 'Ochiq', format: fmtNumber },
-  { key: 'closed_requests', label: 'Yopilgan', format: fmtNumber },
-  { key: 'last_request_at', label: 'Oxirgi so‘rov', format: fmtDate }
+  { key: 'subscription_start_date', label: 'Obuna start', format: v => v || '—' },
+  { key: 'expired', label: 'Obuna', format: (_, row) => expiryStatusLabel(row) },
+  { key: 'latest_status_change_at_iso', label: 'Status o‘zgargan', format: fmtDate }
 ];
 
 const companyActivityColumns = [
@@ -1929,7 +2019,7 @@ async function refresh() {
     if (activeTab.value === 'groups') groups.value = await api.groups();
     if (activeTab.value === 'privates') privates.value = await api.privates();
     if (activeTab.value === 'employees') employees.value = await api.employees();
-    if (activeTab.value === 'companies') companies.value = await api.companies();
+    if (activeTab.value === 'companies') await loadCompanyInfo();
     if (activeTab.value === 'integrations') await loadSettings();
     if (activeTab.value === 'knowledgeBase') await loadSettings();
     if (activeTab.value === 'settings') await loadSettings();
@@ -2004,7 +2094,7 @@ async function setTab(key) {
     if (activeTab.value === 'groups') groups.value = await api.groups();
     if (activeTab.value === 'privates') privates.value = await api.privates();
     if (activeTab.value === 'employees') employees.value = await api.employees();
-    if (activeTab.value === 'companies') companies.value = await api.companies();
+    if (activeTab.value === 'companies') await loadCompanyInfo();
     if (activeTab.value === 'integrations') await loadSettings();
     if (activeTab.value === 'knowledgeBase') await loadSettings();
     if (activeTab.value === 'settings') await loadSettings();
@@ -2237,6 +2327,34 @@ function openEmployeeGroups(row = {}) {
   employeeGroupActivity.value = Array.isArray(row.today_group_activity) ? row.today_group_activity : [];
   if (!employeeGroupActivity.value.length) return showToast('Bugun yozgan guruhlar topilmadi');
   modal.value = 'employeeGroups';
+}
+
+async function openEmployeeActivity(row = {}) {
+  const employee = tableActionEmployeeRow(row);
+  const employeeId = employee.id || employee.employee_id || '';
+  const tgUserId = employee.tg_user_id || '';
+  if (!employeeId && !tgUserId) return showToast('Xodim ID topilmadi');
+  startLoading('employeeActivity');
+  try {
+    const data = await api.employeeActivity({
+      employee_id: employeeId,
+      tg_user_id: tgUserId,
+      period: selectedStatsPeriod.value
+    });
+    employeeActivity.value = {
+      employee: data.employee || employee,
+      summary: data.summary || {},
+      groups: data.groups || [],
+      closed_requests: data.closed_requests || [],
+      messages: data.messages || []
+    };
+    employeeDrilldown.value = employeeActivity.value.employee;
+    modal.value = 'employeeActivity';
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    stopLoading('employeeActivity');
+  }
 }
 
 function openEmployeeOpenRequests(row = {}) {

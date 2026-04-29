@@ -876,6 +876,158 @@ async function listEmployees(query) {
   });
 }
 
+function uniqueRowsBy(rows = [], keyFn) {
+  const seen = new Set();
+  return rows.filter(row => {
+    const key = keyFn(row);
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function normalizePeriodKey(value = '') {
+  const key = String(value || 'today').trim();
+  return ['today', 'week', 'month', 'all'].includes(key) ? key : 'today';
+}
+
+async function getEmployeeActivity(query = {}) {
+  const periodKey = normalizePeriodKey(query.period);
+  const employeeId = String(query.employee_id || query.id || '').trim();
+  const tgUserId = query.tg_user_id ? normalizeTelegramId(query.tg_user_id) : null;
+
+  let employeeRows = [];
+  if (employeeId) {
+    employeeRows = await supabase.select('employees', {
+      select: 'id,tg_user_id,full_name,username,phone,role,is_active',
+      id: supabase.eq(employeeId),
+      limit: '1'
+    }).catch(() => []);
+  } else if (tgUserId) {
+    employeeRows = await supabase.select('employees', {
+      select: 'id,tg_user_id,full_name,username,phone,role,is_active',
+      tg_user_id: supabase.eq(tgUserId),
+      limit: '1'
+    }).catch(() => []);
+  }
+
+  const employee = employeeRows[0] || null;
+  if (!employee) throw new Error('Xodim topilmadi');
+
+  const keys = currentPeriodKeys();
+  const [requests, employeeMessagesById, employeeMessagesByTg] = await Promise.all([
+    supabase.select('support_requests', {
+      select: 'id,source_type,chat_id,customer_tg_id,customer_name,customer_username,initial_text,status,closed_at,closed_by_employee_id,closed_by_name,created_at',
+      closed_by_employee_id: supabase.eq(employee.id),
+      order: supabase.order('closed_at', false),
+      limit: '5000'
+    }).catch(() => []),
+    supabase.select('messages', {
+      select: 'id,tg_message_id,chat_id,from_tg_user_id,from_name,from_username,employee_id,source_type,classification,text,created_at',
+      employee_id: supabase.eq(employee.id),
+      order: supabase.order('created_at', false),
+      limit: '5000'
+    }).catch(() => []),
+    employee.tg_user_id ? supabase.select('messages', {
+      select: 'id,tg_message_id,chat_id,from_tg_user_id,from_name,from_username,employee_id,source_type,classification,text,created_at',
+      from_tg_user_id: supabase.eq(employee.tg_user_id),
+      order: supabase.order('created_at', false),
+      limit: '5000'
+    }).catch(() => []) : Promise.resolve([])
+  ]);
+
+  const closedRequests = requests
+    .filter(request => request.status === 'closed')
+    .filter(request => inCurrentPeriod(request.closed_at || request.created_at, periodKey, keys));
+  const messages = uniqueRowsBy([...employeeMessagesById, ...employeeMessagesByTg], row => `${row.chat_id}:${row.tg_message_id || row.id}`)
+    .filter(message => inCurrentPeriod(message.created_at, periodKey, keys));
+  const chatIds = [...new Set([
+    ...closedRequests.map(request => request.chat_id),
+    ...messages.map(message => message.chat_id)
+  ].filter(value => value !== undefined && value !== null))];
+  const chats = chatIds.length
+    ? await supabase.select('tg_chats', {
+      select: 'chat_id,title,username,source_type,last_message_at',
+      chat_id: supabase.inList(chatIds),
+      limit: '1000'
+    }).catch(() => [])
+    : [];
+  const chatMap = new Map(chats.map(chat => [telegramIdKey(chat.chat_id), chat]));
+  const chatTitle = chatId => displayChatTitle(chatMap.get(telegramIdKey(chatId)) || { chat_id: chatId });
+  const requestSummary = request => ({
+    id: request.id,
+    chat_id: request.chat_id,
+    chat_title: chatTitle(request.chat_id),
+    customer_name: request.customer_name || telegramIdKey(request.customer_tg_id) || 'Mijoz',
+    customer_username: request.customer_username || '',
+    initial_text: request.initial_text || '',
+    status: request.status,
+    created_at: request.created_at || null,
+    closed_at: request.closed_at || null
+  });
+  const messageSummary = message => ({
+    id: message.id || null,
+    message_id: message.tg_message_id || null,
+    chat_id: message.chat_id,
+    chat_title: chatTitle(message.chat_id),
+    text: message.text || '',
+    classification: message.classification || '',
+    created_at: message.created_at || null
+  });
+
+  const grouped = new Map();
+  const ensureGroup = chatId => {
+    const key = telegramIdKey(chatId);
+    const current = grouped.get(key) || {
+      chat_id: chatId,
+      title: chatTitle(chatId),
+      message_count: 0,
+      closed_count: 0,
+      customers: new Set(),
+      messages: [],
+      closed_requests: []
+    };
+    grouped.set(key, current);
+    return current;
+  };
+
+  closedRequests.forEach(request => {
+    const group = ensureGroup(request.chat_id);
+    group.closed_count += 1;
+    if (request.customer_name || request.customer_tg_id) group.customers.add(request.customer_name || telegramIdKey(request.customer_tg_id));
+    group.closed_requests.push(requestSummary(request));
+  });
+  messages.forEach(message => {
+    const group = ensureGroup(message.chat_id);
+    group.message_count += 1;
+    group.messages.push(messageSummary(message));
+  });
+
+  const groups = [...grouped.values()]
+    .map(group => ({
+      ...group,
+      customers: [...group.customers],
+      customer_count: group.customers.size,
+      messages: group.messages.sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || ''))).slice(0, 30),
+      closed_requests: group.closed_requests.sort((a, b) => String(b.closed_at || '').localeCompare(String(a.closed_at || ''))).slice(0, 30)
+    }))
+    .sort((a, b) => (b.closed_count + b.message_count) - (a.closed_count + a.message_count));
+
+  return {
+    employee,
+    period: periodKey,
+    summary: {
+      handled_chats: groups.length,
+      message_count: messages.length,
+      closed_requests: closedRequests.length,
+      customer_count: new Set(closedRequests.map(request => request.customer_tg_id || request.customer_name).filter(Boolean)).size
+    },
+    groups,
+    closed_requests: closedRequests.map(requestSummary),
+    messages: messages.map(messageSummary)
+  };
+}
+
 async function listSettings() {
   const [settings, admins] = await Promise.all([
     supabase.select('bot_settings', { select: 'key,value,updated_at', order: 'key.asc' }),
@@ -1625,6 +1777,7 @@ async function handleGet(action, query) {
     case 'companies': return listCompanies(query);
     case 'companyInfo': return fetchCompanyInfo();
     case 'employees': return listEmployees(query);
+    case 'employeeActivity': return getEmployeeActivity(query);
     case 'settings': return listSettings();
     case 'telegramWebhookInfo': return getTelegramWebhookStatus();
     default: throw new Error(`Unknown GET action: ${action}`);

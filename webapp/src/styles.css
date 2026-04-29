@@ -630,7 +630,7 @@ tbody tr:hover { background: rgba(142, 199, 255, .035); }
   z-index: 30;
 }
 .modal {
-  width: min(720px, calc(100vw - 32px));
+  width: min(860px, calc(100vw - 28px));
   max-height: calc(100dvh - 32px);
   display: flex;
   flex-direction: column;
@@ -641,7 +641,7 @@ tbody tr:hover { background: rgba(142, 199, 255, .035); }
   box-shadow: 0 16px 50px rgba(0,0,0,.38);
 }
 .modal-wide {
-  width: min(1180px, calc(100vw - 32px));
+  width: min(1380px, calc(100vw - 28px));
 }
 .modal-body {
   padding: 16px;
@@ -1513,6 +1513,17 @@ body {
 }
 .performance-table tr:last-child td {
   border-bottom: 0;
+}
+.performance-table tr.clickable-row {
+  cursor: pointer;
+  transition: background .16s ease, transform .16s ease;
+}
+.performance-table tr.clickable-row:hover td {
+  background: var(--surface-soft);
+}
+.performance-table tr.clickable-row:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
 }
 .grade-pill {
   display: inline-grid;

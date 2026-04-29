@@ -51,6 +51,7 @@ export const api = {
   companies: () => request('companies', { query: { limit: 500 } }).then(r => r.data),
   companyInfo: () => request('companyInfo').then(r => r.data),
   employees: () => request('employees').then(r => r.data),
+  employeeActivity: query => request('employeeActivity', { query }).then(r => r.data),
   requests: query => request('requests', { query }).then(r => r.data),
   chatDetail: query => request('chatDetail', { query }).then(r => r.data),
   telegramFile: fileId => requestBlob('telegramFile', { query: { file_id: fileId } }),

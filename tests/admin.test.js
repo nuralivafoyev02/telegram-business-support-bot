@@ -1122,6 +1122,62 @@ async function testEmployeesIncludeDailyWorkStats() {
   }
 }
 
+async function testEmployeeActivityReturnsGroupsAndCustomers() {
+  const originalSelect = supabase.select;
+  const today = new Date().toISOString();
+
+  supabase.select = async (table) => {
+    if (table === 'employees') return [{ id: 'emp-1', tg_user_id: 777, full_name: 'Ali', username: 'ali', is_active: true }];
+    if (table === 'support_requests') {
+      return [
+        {
+          id: 'r1',
+          source_type: 'group',
+          chat_id: -1001,
+          customer_tg_id: 501,
+          customer_name: 'Mijoz A',
+          customer_username: 'mijoz_a',
+          initial_text: 'Narx qancha?',
+          status: 'closed',
+          closed_by_employee_id: 'emp-1',
+          closed_by_name: 'Ali',
+          created_at: today,
+          closed_at: today
+        }
+      ];
+    }
+    if (table === 'messages') {
+      return [{
+        id: 'm1',
+        tg_message_id: 21,
+        chat_id: -1001,
+        from_tg_user_id: 777,
+        from_name: 'Ali',
+        from_username: 'ali',
+        employee_id: 'emp-1',
+        source_type: 'group',
+        classification: 'employee_message',
+        text: 'Javob berdim',
+        created_at: today
+      }];
+    }
+    if (table === 'tg_chats') return [{ chat_id: -1001, title: 'Support guruhi', source_type: 'group' }];
+    return [];
+  };
+
+  try {
+    const result = await callAdmin('employeeActivity', { query: { employee_id: 'emp-1', period: 'all' } });
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.data.summary.handled_chats, 1);
+    assert.strictEqual(result.payload.data.summary.closed_requests, 1);
+    assert.strictEqual(result.payload.data.groups[0].title, 'Support guruhi');
+    assert.strictEqual(result.payload.data.groups[0].closed_requests[0].customer_name, 'Mijoz A');
+    assert.strictEqual(result.payload.data.groups[0].messages[0].text, 'Javob berdim');
+  } finally {
+    supabase.select = originalSelect;
+  }
+}
+
 async function testCompanyInfoProxyNormalizesExternalRows() {
   const originalFetch = global.fetch;
   const originalAuth = process.env.UYQUR_COMPANY_INFO_AUTH;
@@ -1198,6 +1254,7 @@ async function run() {
   await testReplyRequestSendsMessageAndClosesTicket();
   await testReplyRequestFallsBackWhenBusinessPeerInvalid();
   await testEmployeesIncludeDailyWorkStats();
+  await testEmployeeActivityReturnsGroupsAndCustomers();
   await testCompanyInfoProxyNormalizesExternalRows();
   console.log('Admin tests passed');
 }
