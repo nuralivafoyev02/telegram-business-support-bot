@@ -193,43 +193,38 @@
 
             <div class="spacer"></div>
 
-            <div class="performance-layout">
-              <section class="card performance-card">
+            <div class="support-top-grid">
+              <section class="card top-support-card">
                 <div class="card-header performance-head">
                   <div>
-                    <div class="card-title">Xodimlar natija jadvali</div>
-                    <div class="card-note">Kim qancha so‘rovga javob berdi va yopilish foizi qanday</div>
+                    <div class="card-title">Top 5 support xodim</div>
+                    <div class="card-note">Javob sifati, biriktirilgan kompaniyalar va biznes statuslar</div>
                   </div>
                   <span v-if="topPerformerName" class="success-pill">Eng faol xodim: {{ topPerformerName }}</span>
                 </div>
-                <div class="performance-table-wrap">
-                  <table class="performance-table">
-                    <thead>
-                      <tr>
-                        <th>Hodim</th>
-                        <th>Chatlar</th>
-                        <th>Javob</th>
-                        <th>Javobsiz</th>
-                        <th>O‘rtacha vaqt</th>
-                        <th>Yopilish foizi</th>
-                        <th>Baho</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr v-for="row in supportPerformanceRows" :key="row.key" class="clickable-row" tabindex="0"
-                        title="Xodim faoliyatini ko‘rish" @click="openEmployeeActivity(row)"
-                        @keydown.enter.prevent="openEmployeeActivity(row)" @keydown.space.prevent="openEmployeeActivity(row)">
-                        <td>{{ row.full_name }}</td>
-                        <td>{{ fmtNumber(row.handled_chats) }}</td>
-                        <td>{{ fmtNumber(row.closed_requests) }}</td>
-                        <td :class="{ 'danger-text': row.open_requests > 0 }">{{ fmtNumber(row.open_requests) }}</td>
-                        <td>{{ fmtMinutes(row.avg_close_minutes) }}</td>
-                        <td>{{ fmtPercent(row.sla) }}</td>
-                        <td><span class="grade-pill" :class="performanceGradeClass(row.grade)">{{ row.grade }}</span></td>
-                      </tr>
-                    </tbody>
-                  </table>
-                  <div v-if="!supportPerformanceRows.length" class="empty compact">Hozircha natija ma’lumoti yo‘q</div>
+                <div class="top-support-list">
+                  <article v-for="row in topSupportCards" :key="row.key" class="support-person-card" role="button"
+                    tabindex="0" title="Biriktirilgan kompaniyalarni ko‘rish" @click="openEmployeeCompanies(row)"
+                    @keydown.enter.prevent="openEmployeeCompanies(row)" @keydown.space.prevent="openEmployeeCompanies(row)">
+                    <div class="support-card-head">
+                      <div>
+                        <b>{{ row.full_name }}</b>
+                        <span>{{ row.username ? `@${row.username}` : roleLabel(row.role) }}</span>
+                      </div>
+                      <span class="grade-pill" :class="performanceGradeClass(row.grade)">{{ row.grade }}</span>
+                    </div>
+                    <div class="support-card-metrics">
+                      <div><b>{{ fmtNumber(row.closed_requests) }}</b><span>Javob</span></div>
+                      <div><b>{{ fmtNumber(row.company_summary.total) }}</b><span>Kompaniya</span></div>
+                      <div><b>{{ fmtNumber(row.company_summary.active) }}</b><span>Aktiv</span></div>
+                      <div><b>{{ fmtNumber(row.company_summary.churn) }}</b><span>Churn</span></div>
+                    </div>
+                    <div class="support-card-foot">
+                      <span>{{ fmtNumber(row.company_summary.expiring_soon) }} ta obuna yaqin</span>
+                      <span>{{ fmtMinutes(row.avg_close_minutes) }}</span>
+                    </div>
+                  </article>
+                  <div v-if="!topSupportCards.length" class="empty compact">Hozircha natija ma’lumoti yo‘q</div>
                 </div>
               </section>
 
@@ -279,25 +274,6 @@
               <section class="card chart-card">
                 <div class="card-header">
                   <div>
-                    <div class="card-title">Eng faol xodimlar</div>
-                    <div class="card-note">Yopilgan so‘rovlar bo‘yicha</div>
-                  </div>
-                </div>
-                <div class="chart-bars">
-                  <div v-for="row in topEmployeeChartRows" :key="row.employee_id || row.full_name" class="chart-row">
-                    <div class="chart-label">{{ row.full_name || 'Xodim' }}</div>
-                    <div class="chart-track">
-                      <span class="chart-fill green" :style="{ width: barWidth(row.closed_requests, topEmployeeChartMax) }"></span>
-                    </div>
-                    <div class="chart-value">{{ fmtNumber(row.closed_requests) }}</div>
-                  </div>
-                  <div v-if="!topEmployeeChartRows.length" class="empty compact">Ma’lumot yo‘q</div>
-                </div>
-              </section>
-
-              <section class="card chart-card">
-                <div class="card-header">
-                  <div>
                     <div class="card-title">Faol guruhlar</div>
                     <div class="card-note">Jami so‘rovlar bo‘yicha</div>
                   </div>
@@ -315,112 +291,54 @@
               </section>
             </div>
 
-            <div class="spacer"></div>
-
-            <div class="stats-table-stack">
-              <section class="card">
-                <div class="card-header">
-                  <div>
-                    <div class="card-title">Eng ko‘p so‘rov yopgan xodimlar</div>
-                    <div class="card-note">{{ selectedPeriodLabel }} kesimi</div>
-                  </div>
-
-                </div>
-                <DataTable :columns="topEmployeeColumns" :rows="topEmployeeRows" empty="Bu davrda yopilgan so‘rov yo‘q"
-                  :on-cell-action="handleTableCellAction">
-                  <template #employeeShare="{ row }">
-                    <MetricBar :value="row.close_share_pct" />
-                  </template>
-                </DataTable>
-              </section>
-              <section class="card">
-                <div class="card-header">
-                  <div>
-                    <div class="card-title">Ochiq so‘rovlar</div>
-                  </div>
-                </div>
-                <DataTable :columns="openRequestColumns" :rows="dashboard.openRequests || []"
-                  empty="Ochiq so‘rov yo‘q" :on-cell-action="handleTableCellAction">
-                  <template #requestReply="{ row }">
-                    <button class="btn small" type="button" @click.stop="openRequestReply(row)">Javob</button>
-                  </template>
-                </DataTable>
-              </section>
-
-              <section class="card">
-                <div class="card-header">
-                  <div>
-                    <div class="card-title">Guruhlar bo‘yicha mijoz so‘rovlari</div>
-                    <div class="card-note">Jami so‘rov, ochiq murojaat va yopilish foizi</div>
-                  </div>
-                </div>
-                <DataTable :columns="groupPerformanceColumns" :rows="groupPerformanceRows"
-                  empty="Bu davrda guruhlardan so‘rov tushmagan" :on-cell-action="handleTableCellAction">
-                  <template #groupClose="{ row }">
-                    <MetricBar :value="row.close_rate" />
-                  </template>
-                </DataTable>
-              </section>
-
-              <section class="card">
-                <div class="card-header">
-                  <div>
-                    <div class="card-title">Xodimlar umumiy statistikasi</div>
-                  </div>
-                </div>
-                <DataTable :columns="employeeStatColumns" :rows="filteredEmployeeStats"
-                  empty="Hozircha xodim statistikasi yo‘q" :on-cell-action="handleTableCellAction" />
-              </section>
-            </div>
           </template>
 
           <template v-if="activeTab === 'productAnalytics'">
             <div class="analytics-hero">
               <div>
-                <h2>Product Analytics</h2>
-                <p>Uyqur support oqimidagi mahsulot so‘rovlari va kanal kesimlari</p>
-              </div>
-              <div class="segmented" role="group" aria-label="Analytics davri">
-                <button v-for="period in periodOptions" :key="period.key"
-                  :class="{ active: selectedStatsPeriod === period.key }" type="button"
-                  @click="selectedStatsPeriod = period.key">
-                  {{ period.label }}
-                </button>
+                <h2>Uyqur Product Analytics</h2>
+                <p>Kompaniyalar Uyqur dasturidan qay darajada foydalanayotgani, risk va biznes statuslar</p>
               </div>
             </div>
+
+            <Toolbar v-model="search" placeholder="Kompaniya, brand yoki support bo‘yicha qidirish">
+              <button class="btn" :disabled="loadingAction === 'refresh'" @click="refresh">Yangilash</button>
+            </Toolbar>
+
+            <div class="spacer"></div>
 
             <div class="metric-strip">
               <article class="card metric">
                 <div class="metric-head">
-                  <div class="metric-label">Jami so‘rov</div>
-                  <span class="metric-icon">🎫</span>
+                  <div class="metric-label">Kuzatuvdagi kompaniya</div>
+                  <span class="metric-icon">🏢</span>
                 </div>
-                <div class="metric-value">{{ fmtNumber(selectedPeriodStats.total_requests) }}</div>
-                <div class="metric-mini">{{ fmtNumber(selectedPeriodStats.unique_customers) }} ta mijozdan</div>
+                <div class="metric-value">{{ fmtNumber(productUsageSummary.total) }}</div>
+                <div class="metric-mini">Support biriktirilgan kompaniyalar</div>
               </article>
               <article class="card metric">
                 <div class="metric-head">
-                  <div class="metric-label">Guruhdan kelgan</div>
-                  <span class="metric-icon">👥</span>
-                </div>
-                <div class="metric-value">{{ fmtNumber(selectedPeriodStats.group_requests) }}</div>
-                <div class="metric-mini">Bot ulangan guruhlar kesimi</div>
-              </article>
-              <article class="card metric">
-                <div class="metric-head">
-                  <div class="metric-label">Chatlardan kelgan</div>
-                  <span class="metric-icon">💬</span>
-                </div>
-                <div class="metric-value">{{ fmtNumber(selectedPeriodStats.private_requests + selectedPeriodStats.business_requests) }}</div>
-                <div class="metric-mini">Shaxsiy va Business xabarlar</div>
-              </article>
-              <article class="card metric">
-                <div class="metric-head">
-                  <div class="metric-label">Yopilish foizi</div>
+                  <div class="metric-label">Aktiv foydalanish</div>
                   <span class="metric-icon good">✅</span>
                 </div>
-                <div class="metric-value">{{ fmtPercent(selectedPeriodStats.close_rate) }}</div>
-                <div class="metric-mini">O‘rtacha {{ fmtMinutes(selectedPeriodStats.avg_close_minutes) }}</div>
+                <div class="metric-value">{{ fmtNumber(productUsageSummary.active) }}</div>
+                <div class="metric-mini">{{ fmtPercent(productUsageSummary.active_rate) }} biznes aktiv</div>
+              </article>
+              <article class="card metric">
+                <div class="metric-head">
+                  <div class="metric-label">O‘rtacha foydalanish</div>
+                  <span class="metric-icon">📊</span>
+                </div>
+                <div class="metric-value">{{ fmtNumber(productUsageSummary.average_score) }}%</div>
+                <div class="metric-mini">{{ fmtNumber(productUsageSummary.high_usage) }} ta yuqori foydalanmoqda</div>
+              </article>
+              <article class="card metric">
+                <div class="metric-head">
+                  <div class="metric-label">Risk va churn</div>
+                  <span class="metric-icon warn">⚠️</span>
+                </div>
+                <div class="metric-value">{{ fmtNumber(productUsageSummary.risk) }}</div>
+                <div class="metric-mini">{{ fmtNumber(productUsageSummary.expiring_soon) }} ta obuna yaqin</div>
               </article>
             </div>
 
@@ -430,37 +348,37 @@
               <section class="card chart-card">
                 <div class="card-header">
                   <div>
-                    <div class="card-title">Davrlar bo‘yicha o‘sish</div>
-                    <div class="card-note">Bugun, hafta, oy va umumiy request oqimi</div>
+                    <div class="card-title">Kompaniyalar foydalanish indeksi</div>
+                    <div class="card-note">Biznes status, obuna holati va support ulanishiga qarab</div>
                   </div>
                 </div>
                 <div class="chart-bars">
-                  <div v-for="row in periodChartRows" :key="row.period_label" class="chart-row">
-                    <div class="chart-label">{{ row.period_label }}</div>
+                  <div v-for="row in productUsageChartRows" :key="row.id || row.name" class="chart-row">
+                    <div class="chart-label">{{ row.name || 'Kompaniya' }}</div>
                     <div class="chart-track">
-                      <span class="chart-fill blue" :style="{ width: barWidth(row.total_requests, periodChartMax) }"></span>
+                      <span class="chart-fill blue" :style="{ width: `${row.usage_score}%` }"></span>
                     </div>
-                    <div class="chart-value">{{ fmtNumber(row.total_requests) }}</div>
+                    <div class="chart-value">{{ fmtNumber(row.usage_score) }}%</div>
                   </div>
+                  <div v-if="!productUsageChartRows.length" class="empty compact">Kompaniya ma’lumoti yo‘q</div>
                 </div>
               </section>
 
               <section class="card chart-card">
                 <div class="card-header">
                   <div>
-                    <div class="card-title">Eng faol guruhlar</div>
-                    <div class="card-note">{{ selectedPeriodLabel }} ichida eng ko‘p so‘rov kelgan joylar</div>
+                    <div class="card-title">Biznes status taqsimoti</div>
+                    <div class="card-note">Aktiv, yangi va churn/pauza holatidagi kompaniyalar</div>
                   </div>
                 </div>
                 <div class="chart-bars">
-                  <div v-for="row in groupChartRows" :key="row.chat_id || row.title" class="chart-row">
-                    <div class="chart-label">{{ row.title || row.chat_id }}</div>
+                  <div v-for="row in businessStatusRows" :key="row.label" class="chart-row">
+                    <div class="chart-label">{{ row.label }}</div>
                     <div class="chart-track">
-                      <span class="chart-fill orange" :style="{ width: barWidth(row.total_requests, groupChartMax) }"></span>
+                      <span class="chart-fill" :class="row.color" :style="{ width: barWidth(row.count, businessStatusChartMax) }"></span>
                     </div>
-                    <div class="chart-value">{{ fmtNumber(row.total_requests) }}</div>
+                    <div class="chart-value">{{ fmtNumber(row.count) }}</div>
                   </div>
-                  <div v-if="!groupChartRows.length" class="empty compact">Ma’lumot yo‘q</div>
                 </div>
               </section>
             </div>
@@ -471,28 +389,17 @@
               <section class="card">
                 <div class="card-header">
                   <div>
-                    <div class="card-title">Davrlar kesimi</div>
-                    <div class="card-note">Manbalar va yopilish metrikalari</div>
+                    <div class="card-title">Kompaniyalar foydalanish jadvali</div>
+                    <div class="card-note">Qaysi kompaniya dasturdan qay darajada foydalanayotgani</div>
                   </div>
                 </div>
-                <DataTable :columns="periodColumns" :rows="periodRows" empty="Analytics ma’lumoti yo‘q">
-                  <template #periodClose="{ row }">
-                    <MetricBar :value="row.close_rate" />
+                <DataTable :columns="productUsageColumns" :rows="filteredProductUsageRows"
+                  empty="Kompaniya foydalanish ma’lumoti yo‘q" :page-size="12">
+                  <template #usageScore="{ row }">
+                    <MetricBar :value="row.usage_score" />
                   </template>
-                </DataTable>
-              </section>
-
-              <section class="card">
-                <div class="card-header">
-                  <div>
-                    <div class="card-title">Guruhlar product signal sifatida</div>
-                    <div class="card-note">Qaysi guruhda so‘rov, mijoz va ochiq vazifa ko‘p</div>
-                  </div>
-                </div>
-                <DataTable :columns="groupPerformanceColumns" :rows="groupPerformanceRows"
-                  empty="Bu davrda guruhlardan so‘rov tushmagan" :on-cell-action="handleTableCellAction">
-                  <template #groupClose="{ row }">
-                    <MetricBar :value="row.close_rate" />
+                  <template #businessStatus="{ row }">
+                    <span class="status-pill mini" :class="businessStatusClass(row.business_status)">{{ businessStatusLabel(row.business_status) }}</span>
                   </template>
                 </DataTable>
               </section>
@@ -515,33 +422,33 @@
               </article>
               <article class="card metric">
                 <div class="metric-head">
-                  <div class="metric-label">Faol panel</div>
+                  <div class="metric-label">Biznes aktiv</div>
                   <span class="metric-icon good">✅</span>
                 </div>
-                <div class="metric-value">{{ fmtNumber(companyActivitySummary.active) }}</div>
-                <div class="metric-mini">{{ fmtNumber(companyActivitySummary.passive) }} tasi passiv</div>
-              </article>
-              <article class="card metric">
-                <div class="metric-head">
-                  <div class="metric-label">Business status</div>
-                  <span class="metric-icon">📌</span>
-                </div>
                 <div class="metric-value">{{ fmtNumber(companyActivitySummary.business_active) }}</div>
-                <div class="metric-mini">{{ fmtNumber(companyActivitySummary.business_new) }} yangi, {{ fmtNumber(companyActivitySummary.business_paused) }} pauza</div>
+                <div class="metric-mini">{{ fmtNumber(companyActivitySummary.business_new) }} ta yangi kompaniya</div>
               </article>
               <article class="card metric">
                 <div class="metric-head">
-                  <div class="metric-label">Support biriktirilgan</div>
-                  <span class="metric-icon">🧑‍💼</span>
+                  <div class="metric-label">Churn/Pauza</div>
+                  <span class="metric-icon warn">⚠️</span>
                 </div>
-                <div class="metric-value">{{ fmtNumber(companyActivitySummary.support_assigned) }}</div>
-                <div class="metric-mini">{{ fmtNumber(companyActivitySummary.expiring_soon) }} ta obuna yaqin tugaydi</div>
+                <div class="metric-value">{{ fmtNumber(companyActivitySummary.business_paused) }}</div>
+                <div class="metric-mini">Biznes statusi pauzada</div>
+              </article>
+              <article class="card metric">
+                <div class="metric-head">
+                  <div class="metric-label">Obuna yaqin</div>
+                  <span class="metric-icon">📅</span>
+                </div>
+                <div class="metric-value">{{ fmtNumber(companyActivitySummary.expiring_soon) }}</div>
+                <div class="metric-mini">{{ fmtNumber(companyActivitySummary.expired) }} ta obuna tugagan</div>
               </article>
             </div>
 
             <div class="spacer"></div>
 
-            <div class="performance-layout company-layout">
+            <div class="company-activity-stack">
               <section class="card">
                 <div class="card-header">
                   <div>
@@ -559,9 +466,6 @@
                         <small>{{ row.brand || 'Brand kiritilmagan' }}</small>
                       </span>
                     </span>
-                  </template>
-                  <template #companyStatus="{ row }">
-                    <span class="status-pill mini" :class="companyStatusClass(row.status)">{{ companyStatusLabel(row.status) }}</span>
                   </template>
                   <template #businessStatus="{ row }">
                     <span class="status-pill mini" :class="businessStatusClass(row.business_status)">{{ businessStatusLabel(row.business_status) }}</span>
@@ -586,10 +490,9 @@
                   <article v-for="row in companyAlerts" :key="row.id" class="alert-item">
                     <div class="alert-item-head">
                       <b>{{ row.name }}</b>
-                      <span>{{ row.expiry_state === 'expired' ? 'Tugagan' : 'Yaqin' }}</span>
+                      <span>{{ expiryAlertBadge(row) }}</span>
                     </div>
                     <p>{{ row.expired || 'Muddatsiz' }}</p>
-                    <small>{{ expiryRemainingLabel(row) }}</small>
                     <small>Support: {{ companySupportLabel(row) }}</small>
                   </article>
                   <div v-if="!companyAlerts.length" class="empty compact">Obuna bo‘yicha xavfli holat yo‘q</div>
@@ -730,12 +633,6 @@
                   </div>
                 </div>
                 <form class="form settings-form" @submit.prevent="saveSettings">
-                  <label class="label">Panel rejimi
-                    <select v-model="settingsForm.panel_mode" class="select">
-                      <option value="support">Support rejimi</option>
-                      <option value="manager">Rahbar rejimi</option>
-                    </select>
-                  </label>
                   <label class="label">AI rejimi
                     <select v-model="settingsForm.ai_mode" class="select">
                       <option value="false">O‘chirilgan</option>
@@ -1060,6 +957,28 @@
     </Transition>
 
     <Transition name="modal-fade">
+      <Modal v-if="modal === 'employeeCompanies'" :title="employeeCompanyTitle" wide @close="closeModal">
+        <div class="detail-stack">
+          <div class="detail-summary">
+            <div><span>Biriktirilgan</span><b>{{ fmtNumber(employeeCompanyDetail.summary?.total) }}</b></div>
+            <div><span>Aktiv</span><b>{{ fmtNumber(employeeCompanyDetail.summary?.active) }}</b></div>
+            <div><span>Churn</span><b>{{ fmtNumber(employeeCompanyDetail.summary?.churn) }}</b></div>
+            <div><span>Obuna yaqin</span><b>{{ fmtNumber(employeeCompanyDetail.summary?.expiring_soon) }}</b></div>
+          </div>
+          <DataTable :columns="employeeCompanyColumns" :rows="employeeCompanyDetail.companies || []"
+            empty="Bu xodimga kompaniya biriktirilmagan" :page-size="12">
+            <template #businessStatus="{ row }">
+              <span class="status-pill mini" :class="businessStatusClass(row.business_status)">{{ businessStatusLabel(row.business_status) }}</span>
+            </template>
+            <template #usageScore="{ row }">
+              <MetricBar :value="row.usage_score" />
+            </template>
+          </DataTable>
+        </div>
+      </Modal>
+    </Transition>
+
+    <Transition name="modal-fade">
       <Modal v-if="modal === 'employeeActivity'" :title="employeeDrilldownTitle" wide @close="closeModal">
         <div class="detail-stack">
           <div class="detail-summary">
@@ -1309,6 +1228,7 @@ const requestRows = ref([]);
 const chatDetail = ref({ chat: null, requests: [], timeline: [] });
 const employeeDrilldown = ref(null);
 const employeeActivity = ref({ employee: null, summary: {}, groups: [], closed_requests: [], messages: [] });
+const employeeCompanyDetail = ref({ employee: null, summary: {}, companies: [] });
 const employeeGroupActivity = ref([]);
 const employeeOpenRequests = ref([]);
 const mediaUrls = ref({});
@@ -1324,18 +1244,12 @@ const loginError = ref('');
 const nowTick = ref(Date.now());
 let durationTimer = null;
 
-const settingsForm = reactive({ panel_mode: 'support', ai_mode: 'false', auto_reply: 'true', done_tag: '#done', main_group_id: '', request_detection: 'keyword' });
-const isManagerMode = computed(() => settingsForm.panel_mode === 'manager');
+const settingsForm = reactive({ ai_mode: 'false', auto_reply: 'true', done_tag: '#done', main_group_id: '', request_detection: 'keyword' });
+const isManagerMode = computed(() => false);
 const mainTabs = computed(() => tabs.filter(tab => mainTabKeys.includes(tab.key)));
 const otherTabs = computed(() => tabs.filter(tab => otherTabKeys.includes(tab.key)));
 const isOtherTabActive = computed(() => otherTabKeys.includes(activeTab.value));
 const settingsTab = tabs.find(tab => tab.key === 'settings');
-watch(isManagerMode, () => {
-  if (!isValidTab(activeTab.value)) {
-    activeTab.value = 'stats';
-    storeActiveTab('stats');
-  }
-});
 watch(activeTab, key => {
   if (otherTabKeys.includes(key)) otherMenuOpen.value = true;
 });
@@ -1366,7 +1280,7 @@ const current = computed(() => tabs.find(t => t.key === activeTab.value) || tabs
 const currentTitle = computed(() => current.value.label);
 const currentSubtitle = computed(() => ({
   stats: 'Xodimlar faolligi, javob tezligi va ochiq so‘rovlar nazorati',
-  productAnalytics: 'Mahsulot bo‘yicha so‘rovlar, manbalar va yopilish dinamikasi',
+  productAnalytics: 'Uyqur dasturidan foydalanish, biznes status va obuna risklari',
   companyActivity: 'Kompaniyalar holati, support biriktirilishi va obuna nazorati',
   groups: 'Bot ulangan guruhlar, so‘rov oqimi va mijoz murojaatlari',
   employees: 'Xodimlar aktivligi, javoblar va ochiq vazifalar',
@@ -1481,6 +1395,7 @@ const supportPerformanceRows = computed(() => {
       employee_id: row.employee_id || row.id || stat.employee_id || stat.id || '',
       tg_user_id: row.tg_user_id || stat.tg_user_id || '',
       username: row.username || stat.username || '',
+      phone: row.phone || stat.phone || '',
       role: row.role || stat.role || '',
       full_name: row.full_name || stat.full_name || 'Xodim',
       handled_chats: Number(row.handled_chats || stat.handled_chats || stat.today_written_groups_count || 0),
@@ -1694,6 +1609,13 @@ function expiryRemainingLabel(row = {}) {
   return `${days} kun qoldi`;
 }
 
+function expiryAlertBadge(row = {}) {
+  const days = Number(row.days_until_expiry);
+  if (!Number.isFinite(days)) return '—';
+  if (days < 0) return 'Tugagan';
+  return `${days} kun`;
+}
+
 function expiryStatusClass(row = {}) {
   if (row.expiry_state === 'expired') return 'error';
   if (row.expiry_state === 'soon') return 'new';
@@ -1706,6 +1628,92 @@ function companySupportLabel(row = {}) {
 
 function hasCompanySupport(row = {}) {
   return Boolean(String(row.uyqur_support_username || '').trim() || String(row.uyqur_support_phone || '').trim());
+}
+
+function normalizeSupportUsername(value = '') {
+  return String(value || '').replace(/^@/, '').trim().toLowerCase();
+}
+
+function normalizePhone(value = '') {
+  return String(value || '').replace(/\D/g, '');
+}
+
+function resolveEmployeeForCompany(row = {}) {
+  const username = normalizeSupportUsername(row.username);
+  const id = String(row.id || row.employee_id || '').trim();
+  const tgUserId = String(row.tg_user_id || '').trim();
+  const found = employees.value.find(employee => {
+    if (id && String(employee.id || '') === id) return true;
+    if (tgUserId && String(employee.tg_user_id || '') === tgUserId) return true;
+    return username && normalizeSupportUsername(employee.username) === username;
+  });
+  return { ...row, ...(found || {}) };
+}
+
+function companyMatchesEmployee(company = {}, employee = {}) {
+  const employeeUsername = normalizeSupportUsername(employee.username);
+  const companyUsername = normalizeSupportUsername(company.uyqur_support_username);
+  if (employeeUsername && companyUsername && employeeUsername === companyUsername) return true;
+  const employeePhone = normalizePhone(employee.phone);
+  const companyPhone = normalizePhone(company.uyqur_support_phone);
+  return Boolean(employeePhone && companyPhone && employeePhone === companyPhone);
+}
+
+function isCompanyChurn(row = {}) {
+  return String(row.business_status || '').toUpperCase() === 'PAUSED';
+}
+
+function isCompanyExpiringSoon(row = {}) {
+  return row.expiry_state === 'soon';
+}
+
+function companyUsageScore(row = {}) {
+  const businessStatus = String(row.business_status || '').toUpperCase();
+  const days = Number(row.days_until_expiry);
+  let score = 0;
+  if (businessStatus === 'ACTIVE') score += 45;
+  else if (businessStatus === 'NEW') score += 26;
+  else if (businessStatus === 'PAUSED') score += 8;
+
+  if (Number.isFinite(days)) {
+    if (days > 30) score += 22;
+    else if (days >= 0) score += 12;
+  }
+  if (hasCompanySupport(row)) score += 12;
+  if (Number(row.auto_refresh_currencies || 0) === 1) score += 6;
+  if (row.last_activity) score += 15;
+  else if (businessStatus === 'ACTIVE') score += 8;
+  return Math.max(0, Math.min(100, score));
+}
+
+function companyUsageLevel(score = 0) {
+  const value = Number(score || 0);
+  if (value >= 75) return 'Yuqori';
+  if (value >= 45) return 'O‘rta';
+  return 'Past';
+}
+
+function enrichCompanyUsage(row = {}) {
+  const usageScore = companyUsageScore(row);
+  return {
+    ...row,
+    usage_score: usageScore,
+    usage_level: companyUsageLevel(usageScore)
+  };
+}
+
+function companyPortfolioSummary(rows = []) {
+  const enriched = rows.map(enrichCompanyUsage);
+  const totalScore = enriched.reduce((sum, row) => sum + Number(row.usage_score || 0), 0);
+  return {
+    total: enriched.length,
+    active: enriched.filter(company => company.business_status === 'ACTIVE').length,
+    churn: enriched.filter(isCompanyChurn).length,
+    expiring_soon: enriched.filter(isCompanyExpiringSoon).length,
+    expired: enriched.filter(company => company.expiry_state === 'expired').length,
+    high_usage: enriched.filter(company => Number(company.usage_score || 0) >= 75).length,
+    average_score: enriched.length ? Math.round(totalScore / enriched.length) : 0
+  };
 }
 
 function summarizeCompanyRows(rows = []) {
@@ -1751,6 +1759,35 @@ const companyAlerts = computed(() => visibleCompanyInfoRows.value
   .filter(row => ['expired', 'soon'].includes(row.expiry_state))
   .sort((a, b) => Number(a.days_until_expiry ?? 9999) - Number(b.days_until_expiry ?? 9999))
   .slice(0, 6));
+const productUsageRows = computed(() => visibleCompanyInfoRows.value
+  .map(enrichCompanyUsage)
+  .sort((a, b) => Number(b.usage_score || 0) - Number(a.usage_score || 0) || String(a.name || '').localeCompare(String(b.name || ''))));
+const filteredProductUsageRows = computed(() => productUsageRows.value.filter(includesSearch));
+const productUsageChartRows = computed(() => productUsageRows.value.slice(0, 8));
+const productUsageSummary = computed(() => {
+  const summary = companyPortfolioSummary(productUsageRows.value);
+  return {
+    ...summary,
+    risk: productUsageRows.value.filter(row => isCompanyChurn(row) || ['expired', 'soon'].includes(row.expiry_state)).length,
+    active_rate: summary.total ? Math.round((summary.active / summary.total) * 100) : 0
+  };
+});
+const businessStatusRows = computed(() => [
+  { label: 'Aktiv', count: productUsageRows.value.filter(row => row.business_status === 'ACTIVE').length, color: 'green' },
+  { label: 'Yangi', count: productUsageRows.value.filter(row => row.business_status === 'NEW').length, color: 'blue' },
+  { label: 'Churn/Pauza', count: productUsageRows.value.filter(isCompanyChurn).length, color: 'orange' }
+]);
+const businessStatusChartMax = computed(() => Math.max(1, ...businessStatusRows.value.map(row => Number(row.count || 0))));
+const topSupportCards = computed(() => supportPerformanceRows.value.slice(0, 5).map(row => {
+  const employee = resolveEmployeeForCompany(row);
+  const companies = visibleCompanyInfoRows.value.filter(company => companyMatchesEmployee(company, employee)).map(enrichCompanyUsage);
+  return {
+    ...row,
+    ...employee,
+    assigned_companies: companies,
+    company_summary: companyPortfolioSummary(companies)
+  };
+}));
 const selectedRecipients = computed(() => selectedSendType.value === 'employees' ? selectedEmployees.value : selectedGroups.value);
 const selectedSendTitle = computed(() => selectedSendType.value === 'employees' ? 'Xodimlarga xabar yuborish' : 'Guruhlarga xabar yuborish');
 const chatDetailTitle = computed(() => {
@@ -1759,6 +1796,9 @@ const chatDetailTitle = computed(() => {
 });
 const chatConversation = computed(() => chatDetail.value.conversation || []);
 const employeeDrilldownTitle = computed(() => employeeDrilldown.value ? `Xodim: ${employeeDrilldown.value.full_name || employeeDrilldown.value.username || '—'}` : 'Xodim tafsiloti');
+const employeeCompanyTitle = computed(() => employeeCompanyDetail.value.employee
+  ? `Kompaniyalar: ${employeeCompanyDetail.value.employee.full_name || employeeCompanyDetail.value.employee.username || 'Xodim'}`
+  : 'Biriktirilgan kompaniyalar');
 
 const employeeStatColumns = [
   { key: 'full_name', label: 'Xodim', action: 'employeeInfo' },
@@ -1851,7 +1891,6 @@ const groupColumns = [
 const companyColumns = [
   { key: 'name', label: 'Kompaniya' },
   { key: 'brand', label: 'Brand', format: v => v || '—' },
-  { key: 'status', label: 'Panel holati', format: companyStatusLabel },
   { key: 'business_status', label: 'Biznes status', format: businessStatusLabel },
   { key: 'director', label: 'Direktor', format: v => v || '—' },
   { key: 'uyqur_support_username', label: 'Support', format: (_, row) => companySupportLabel(row) },
@@ -1863,7 +1902,6 @@ const companyColumns = [
 
 const companyActivityColumns = [
   { key: 'name', label: 'Kompaniya', slot: 'companyIdentity' },
-  { key: 'status', label: 'Panel holati', slot: 'companyStatus' },
   { key: 'business_status', label: 'Biznes status', slot: 'businessStatus' },
   { key: 'director', label: 'Direktor', format: v => v || '—' },
   { key: 'uyqur_support_username', label: 'Biriktirilgan support', slot: 'supportOwner' },
@@ -1871,6 +1909,25 @@ const companyActivityColumns = [
   { key: 'subscription_start_date', label: 'Start', format: v => v || '—' },
   { key: 'expired', label: 'Obuna', slot: 'expiryStatus' },
   { key: 'latest_status_change_at_iso', label: 'Status o‘zgargan', format: fmtDate }
+];
+
+const productUsageColumns = [
+  { key: 'name', label: 'Kompaniya' },
+  { key: 'brand', label: 'Brand', format: v => v || '—' },
+  { key: 'usage_score', label: 'Foydalanish', slot: 'usageScore' },
+  { key: 'usage_level', label: 'Daraja' },
+  { key: 'business_status', label: 'Biznes status', slot: 'businessStatus' },
+  { key: 'uyqur_support_username', label: 'Support', format: (_, row) => companySupportLabel(row) },
+  { key: 'expired', label: 'Obuna', format: (_, row) => expiryStatusLabel(row) }
+];
+
+const employeeCompanyColumns = [
+  { key: 'name', label: 'Kompaniya' },
+  { key: 'brand', label: 'Brand', format: v => v || '—' },
+  { key: 'business_status', label: 'Biznes status', slot: 'businessStatus' },
+  { key: 'usage_score', label: 'Foydalanish', slot: 'usageScore' },
+  { key: 'expired', label: 'Obuna', format: (_, row) => expiryStatusLabel(row) },
+  { key: 'phone', label: 'Telefon', format: v => v || '—' }
 ];
 
 const privateColumns = [
@@ -2013,8 +2070,8 @@ async function loadConversationMedia(messages = []) {
 async function refresh() {
   startLoading('refresh');
   try {
-    if (activeTab.value === 'stats') await loadDashboard();
-    if (activeTab.value === 'productAnalytics') await loadDashboard();
+    if (activeTab.value === 'stats') await loadSupportPerformance();
+    if (activeTab.value === 'productAnalytics') await loadProductAnalytics();
     if (activeTab.value === 'companyActivity') await loadCompanyInfo();
     if (activeTab.value === 'groups') groups.value = await api.groups();
     if (activeTab.value === 'privates') privates.value = await api.privates();
@@ -2040,6 +2097,34 @@ async function loadCompanyInfo() {
   companyInfo.value = await api.companyInfo();
 }
 
+async function loadCompanyInfoOptional() {
+  try {
+    await loadCompanyInfo();
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
+async function loadEmployeesOptional() {
+  try {
+    employees.value = await api.employees();
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
+async function loadSupportPerformance() {
+  await Promise.all([
+    loadDashboard(),
+    loadCompanyInfoOptional(),
+    loadEmployeesOptional()
+  ]);
+}
+
+async function loadProductAnalytics() {
+  await loadCompanyInfo();
+}
+
 async function loadSettings() {
   const data = await api.settings();
   settingsRaw.value = data;
@@ -2053,7 +2138,6 @@ async function loadSettings() {
   const done = data.settings?.find(s => s.key === 'done_tag')?.value;
   const mainGroup = data.settings?.find(s => s.key === 'main_group')?.value;
   const detect = data.settings?.find(s => s.key === 'request_detection')?.value;
-  const dashboardMode = data.settings?.find(s => s.key === 'dashboard_mode')?.value;
   Object.assign(integrationForm, {
     enabled: integration?.enabled !== false,
     provider: integration?.provider || 'openai_compatible',
@@ -2078,7 +2162,6 @@ async function loadSettings() {
   settingsForm.done_tag = done?.tag || '#done';
   settingsForm.main_group_id = mainGroup?.chat_id || '';
   settingsForm.request_detection = detect?.mode || 'keyword';
-  settingsForm.panel_mode = dashboardMode?.mode === 'manager' ? 'manager' : 'support';
   await checkTelegramWebhook(false);
 }
 
@@ -2088,8 +2171,8 @@ async function setTab(key) {
   search.value = '';
   startLoading('tab');
   try {
-    if (activeTab.value === 'stats') await loadDashboard();
-    if (activeTab.value === 'productAnalytics') await loadDashboard();
+    if (activeTab.value === 'stats') await loadSupportPerformance();
+    if (activeTab.value === 'productAnalytics') await loadProductAnalytics();
     if (activeTab.value === 'companyActivity') await loadCompanyInfo();
     if (activeTab.value === 'groups') groups.value = await api.groups();
     if (activeTab.value === 'privates') privates.value = await api.privates();
@@ -2124,7 +2207,9 @@ async function submitLogin() {
     token.value = data.token;
     showToast(data.fallback ? 'Kirdingiz. DB admin yarating yoki parolni o‘zgartiring.' : 'Xush kelibsiz!');
     await loadSettings().catch(error => showToast(error.message));
-    await loadDashboard();
+    if (activeTab.value === 'stats') await loadSupportPerformance();
+    else if (activeTab.value === 'productAnalytics') await loadProductAnalytics();
+    else await refresh();
   } catch (error) {
     loginError.value = /login|parol/i.test(error.message)
       ? 'Kirish nomi yoki parol noto‘g‘ri.'
@@ -2327,6 +2412,19 @@ function openEmployeeGroups(row = {}) {
   employeeGroupActivity.value = Array.isArray(row.today_group_activity) ? row.today_group_activity : [];
   if (!employeeGroupActivity.value.length) return showToast('Bugun yozgan guruhlar topilmadi');
   modal.value = 'employeeGroups';
+}
+
+function openEmployeeCompanies(row = {}) {
+  const employee = resolveEmployeeForCompany(row);
+  const companies = (row.assigned_companies || visibleCompanyInfoRows.value
+    .filter(company => companyMatchesEmployee(company, employee))
+    .map(enrichCompanyUsage));
+  employeeCompanyDetail.value = {
+    employee,
+    companies,
+    summary: companyPortfolioSummary(companies)
+  };
+  modal.value = 'employeeCompanies';
 }
 
 async function openEmployeeActivity(row = {}) {
@@ -2669,8 +2767,7 @@ async function saveSettings() {
         { key: 'auto_reply', value: { enabled: settingsForm.auto_reply === 'true' } },
         { key: 'done_tag', value: { tag: settingsForm.done_tag, auto_reply: true } },
         { key: 'main_group', value: { chat_id: settingsForm.main_group_id } },
-        { key: 'request_detection', value: { mode: settingsForm.request_detection, min_text_length: 10 } },
-        { key: 'dashboard_mode', value: { mode: settingsForm.panel_mode === 'manager' ? 'manager' : 'support' } }
+        { key: 'request_detection', value: { mode: settingsForm.request_detection, min_text_length: 10 } }
       ]
     });
     showToast('Sozlamalar saqlandi');

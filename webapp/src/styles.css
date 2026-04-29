@@ -1439,6 +1439,84 @@ body {
   gap: 22px;
   align-items: stretch;
 }
+.support-top-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(320px, .75fr);
+  gap: 22px;
+  align-items: stretch;
+}
+.top-support-card {
+  min-width: 0;
+}
+.top-support-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+  padding: 0 20px 20px;
+}
+.support-person-card {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  min-height: 184px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-soft);
+  cursor: pointer;
+  transition: border-color .16s ease, transform .16s ease, background .16s ease;
+}
+.support-person-card:hover,
+.support-person-card:focus-visible {
+  border-color: var(--primary);
+  background: var(--surface);
+  transform: translateY(-1px);
+  outline: none;
+}
+.support-card-head,
+.support-card-foot {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+.support-card-head b {
+  display: block;
+  color: var(--text);
+  font-size: 17px;
+  line-height: 1.2;
+}
+.support-card-head span,
+.support-card-foot {
+  color: var(--muted);
+  font-size: 12px;
+}
+.support-card-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.support-card-metrics div {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.support-card-metrics b,
+.support-card-metrics span {
+  display: block;
+}
+.support-card-metrics b {
+  color: var(--text);
+  font-size: 19px;
+  line-height: 1;
+}
+.support-card-metrics span {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
 .manager-metrics {
   display: grid;
   grid-template-columns: repeat(4, minmax(180px, 1fr));
@@ -1779,8 +1857,12 @@ tbody tr:hover {
   gap: 16px;
   align-items: start;
 }
-.company-layout {
-  grid-template-columns: minmax(0, 1.55fr) minmax(300px, .65fr);
+.company-activity-stack {
+  display: grid;
+  gap: 22px;
+}
+.company-activity-stack .alert-list {
+  grid-template-columns: repeat(3, minmax(220px, 1fr));
 }
 .company-identity {
   display: inline-flex;
@@ -1894,8 +1976,13 @@ tbody tr:hover {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .performance-layout,
+  .support-top-grid,
   .chat-detail-layout {
     grid-template-columns: 1fr;
+  }
+  .top-support-list,
+  .company-activity-stack .alert-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -1933,7 +2020,9 @@ tbody tr:hover {
   }
   .metric-strip,
   .manager-metrics,
-  .stats-charts {
+  .stats-charts,
+  .top-support-list,
+  .company-activity-stack .alert-list {
     grid-template-columns: 1fr;
   }
   .analytics-hero h2,
