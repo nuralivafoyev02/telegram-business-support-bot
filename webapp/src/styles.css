@@ -2266,6 +2266,14 @@ td,
   background: #f59e0b;
 }
 
+.chart-fill.red {
+  background: var(--danger);
+}
+
+.chart-fill.purple {
+  background: #8b5cf6;
+}
+
 .donut::after {
   background: var(--surface);
   border-color: var(--line);
@@ -2526,6 +2534,26 @@ tbody tr:hover {
 .support-owner {
   color: var(--muted);
   font-size: 12px;
+}
+
+.assignment-preview {
+  display: grid;
+  gap: 5px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-soft);
+}
+
+.assignment-preview span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.assignment-preview b {
+  color: var(--text);
+  overflow-wrap: anywhere;
 }
 
 .metric-detail-summary {

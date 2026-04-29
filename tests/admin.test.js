@@ -1326,6 +1326,56 @@ async function testCompanyInfoProxyNormalizesExternalRows() {
   }
 }
 
+async function testAssignGroupToExternalCompanyCreatesLocalCompany() {
+  const originalSelect = supabase.select;
+  const originalInsert = supabase.insert;
+  const originalPatch = supabase.patch;
+  const inserted = [];
+  const patched = [];
+
+  supabase.select = async (table) => {
+    if (table === 'companies') return [];
+    return [];
+  };
+  supabase.insert = async (table, rows) => {
+    inserted.push({ table, rows });
+    if (table === 'companies') return rows.map(row => ({ id: 'company-local-1', ...row }));
+    return rows;
+  };
+  supabase.patch = async (table, query, values) => {
+    patched.push({ table, query, values });
+    return [{ chat_id: -100900, ...values }];
+  };
+
+  try {
+    const result = await callAdmin('assignChatCompany', {
+      method: 'POST',
+      body: {
+        chat_id: -100900,
+        company: {
+          id: 33,
+          name: 'Gagarin Avenue',
+          brand: 'Gagarin',
+          director: 'Gagarin Admin',
+          phone: '+998900223355'
+        }
+      }
+    });
+
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(inserted[0].table, 'companies');
+    assert.strictEqual(inserted[0].rows[0].name, 'Gagarin Avenue');
+    assert.match(inserted[0].rows[0].notes, /Uyqur API ID: 33/);
+    assert.strictEqual(patched[0].table, 'tg_chats');
+    assert.strictEqual(patched[0].values.company_id, 'company-local-1');
+    assert.strictEqual(result.payload.data.assigned_company.id, 'company-local-1');
+  } finally {
+    supabase.select = originalSelect;
+    supabase.insert = originalInsert;
+    supabase.patch = originalPatch;
+  }
+}
+
 async function run() {
   await testAiModeEnableSendsMainGroupNotice();
   await testAiModeDisableSendsMainGroupNotice();
@@ -1348,6 +1398,7 @@ async function run() {
   await testEmployeeActivityReturnsGroupsAndCustomers();
   await testLogNotificationsCanSendSelectedLevels();
   await testCompanyInfoProxyNormalizesExternalRows();
+  await testAssignGroupToExternalCompanyCreatesLocalCompany();
   console.log('Admin tests passed');
 }
 

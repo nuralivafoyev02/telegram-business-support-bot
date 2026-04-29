@@ -396,6 +396,64 @@
                   </div>
                 </div>
               </section>
+
+              <section class="card chart-card">
+                <div class="card-header">
+                  <div>
+                    <div class="card-title">Foydalanish darajalari</div>
+                    <div class="card-note">Yuqori, o‘rta va past foydalanishdagi kompaniyalar</div>
+                  </div>
+                </div>
+                <div class="chart-bars">
+                  <div v-for="row in usageLevelRows" :key="row.label" class="chart-row">
+                    <div class="chart-label">{{ row.label }}</div>
+                    <div class="chart-track">
+                      <span class="chart-fill" :class="row.color"
+                        :style="{ width: barWidth(row.count, usageLevelChartMax) }"></span>
+                    </div>
+                    <div class="chart-value">{{ fmtNumber(row.count) }}</div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="card chart-card">
+                <div class="card-header">
+                  <div>
+                    <div class="card-title">Obuna holati</div>
+                    <div class="card-note">Barqaror, yaqin tugaydigan va tugagan obunalar</div>
+                  </div>
+                </div>
+                <div class="chart-bars">
+                  <div v-for="row in subscriptionStatusRows" :key="row.label" class="chart-row">
+                    <div class="chart-label">{{ row.label }}</div>
+                    <div class="chart-track">
+                      <span class="chart-fill" :class="row.color"
+                        :style="{ width: barWidth(row.count, subscriptionStatusChartMax) }"></span>
+                    </div>
+                    <div class="chart-value">{{ fmtNumber(row.count) }}</div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="card chart-card support-portfolio-chart">
+                <div class="card-header">
+                  <div>
+                    <div class="card-title">Support portfeli</div>
+                    <div class="card-note">Har bir supportga biriktirilgan kompaniyalar soni</div>
+                  </div>
+                </div>
+                <div class="chart-bars">
+                  <div v-for="row in supportPortfolioRows" :key="row.label" class="chart-row">
+                    <div class="chart-label">{{ row.label }}</div>
+                    <div class="chart-track">
+                      <span class="chart-fill purple"
+                        :style="{ width: barWidth(row.count, supportPortfolioChartMax) }"></span>
+                    </div>
+                    <div class="chart-value">{{ fmtNumber(row.count) }}</div>
+                  </div>
+                  <div v-if="!supportPortfolioRows.length" class="empty compact">Support biriktirilmagan</div>
+                </div>
+              </section>
             </div>
 
             <div class="spacer"></div>
@@ -581,6 +639,7 @@
                 </template>
                 <template #actions="{ row }">
                   <button class="btn small" @click="openTelegramChat(row)">Telegram</button>
+                  <button class="btn small" @click="openAssignCompany(row)">Kompaniya</button>
                   <button class="btn small" @click="openSend(row)">Xabar</button>
                   <button class="btn small" @click="loadRequests(row)">So‘rovlar</button>
                   <button class="btn small danger" :disabled="deletingGroupId === String(row.chat_id)"
@@ -1035,6 +1094,35 @@
     </Transition>
 
     <Transition name="modal-fade">
+      <Modal v-if="modal === 'assignCompany'" title="Guruhni kompaniyaga biriktirish" @close="closeModal">
+        <form class="form" @submit.prevent="saveGroupCompanyAssignment">
+          <label class="label">Guruh
+            <input class="input" :value="selectedTarget?.title || selectedTarget?.chat_id || '—'" disabled />
+          </label>
+          <label class="label">Kompaniya qidirish
+            <input v-model.trim="companyAssignForm.search" class="input"
+              placeholder="Kompaniya, brand, direktor yoki telefon..." />
+          </label>
+          <label class="label">Kompaniya
+            <select v-model="companyAssignForm.companyKey" class="select">
+              <option value="">Biriktirilmagan</option>
+              <option v-for="company in assignCompanyOptions" :key="company.assign_key" :value="company.assign_key">
+                {{ companyAssignLabel(company) }}
+              </option>
+            </select>
+          </label>
+          <div class="assignment-preview">
+            <span>Hozirgi biriktirish</span>
+            <b>{{ selectedTarget?.company_name || 'Biriktirilmagan' }}</b>
+          </div>
+          <button class="btn primary" :disabled="loadingAction === 'assignCompany'">
+            {{ loadingAction === 'assignCompany' ? 'Biriktirilmoqda...' : 'Biriktirishni saqlash' }}
+          </button>
+        </form>
+      </Modal>
+    </Transition>
+
+    <Transition name="modal-fade">
       <Modal v-if="modal === 'openRequests'" :title="openRequestsTitle" wide @close="closeModal">
         <DataTable :columns="openRequestColumns" :rows="dashboard.openRequests || []" empty="Ochiq so‘rov qolmagan"
           :on-cell-action="handleTableCellAction">
@@ -1411,6 +1499,7 @@ const loginForm = reactive({ username: 'admin', password: '' });
 const messageForm = reactive({ text: '' });
 const requestReplyForm = reactive({ request_id: '', chat_id: '', customer_name: '', initial_text: '', text: '' });
 const broadcastForm = reactive({ target_type: 'groups', title: 'Yangilik', text: '' });
+const companyAssignForm = reactive({ companyKey: '', search: '' });
 const employeeForm = reactive({ id: '', tg_user_id: '', full_name: '', username: '', phone: '', role: 'support', is_active: true });
 const adminForm = reactive({ username: 'admin', full_name: 'System Admin', new_password: '' });
 const integrationForm = reactive({
@@ -1652,6 +1741,7 @@ const loadingText = computed(() => ({
   deleteGroup: 'O‘chirilmoqda...',
   employeeSend: 'Yuborilmoqda...',
   selectedSend: 'Yuborilmoqda...',
+  assignCompany: 'Kompaniya biriktirilmoqda...',
   chatDetail: 'Chat tafsiloti yuklanmoqda...',
   replyRequest: 'Javob yuborilmoqda...',
   saveAdmin: 'Saqlamoqda...',
@@ -2051,6 +2141,21 @@ const companyInfoRows = computed(() => companyInfo.value.companies || []);
 const visibleCompanyInfoRows = computed(() => companyInfoRows.value.filter(hasCompanySupport));
 const filteredCompanyInfoRows = computed(() => visibleCompanyInfoRows.value.filter(includesSearch));
 const filteredCompanies = computed(() => filteredCompanyInfoRows.value);
+function companyAssignKey(row = {}) {
+  return String(row.id || row.name || row.phone || '').trim();
+}
+function companyAssignLabel(row = {}) {
+  return [row.name || 'Kompaniya', row.brand, row.director, row.phone].filter(Boolean).join(' · ');
+}
+const assignCompanyOptions = computed(() => {
+  const q = companyAssignForm.search.toLowerCase().trim();
+  return companyInfoRows.value
+    .map(row => ({ ...row, assign_key: companyAssignKey(row) }))
+    .filter(row => row.assign_key)
+    .filter(row => !q || companyAssignLabel(row).toLowerCase().includes(q))
+    .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')))
+    .slice(0, 120);
+});
 const companyActivitySummary = computed(() => summarizeCompanyRows(visibleCompanyInfoRows.value));
 const companyAlerts = computed(() => visibleCompanyInfoRows.value
   .filter(row => ['expired', 'soon'].includes(row.expiry_state))
@@ -2085,6 +2190,32 @@ const businessStatusRows = computed(() => [
   { label: 'Churn/Pauza', count: productUsageRows.value.filter(isCompanyChurn).length, color: 'orange' }
 ]);
 const businessStatusChartMax = computed(() => Math.max(1, ...businessStatusRows.value.map(row => Number(row.count || 0))));
+const usageLevelRows = computed(() => [
+  { label: 'Yuqori', count: productUsageRows.value.filter(row => Number(row.usage_score || 0) >= 75).length, color: 'green' },
+  { label: 'O‘rta', count: productUsageRows.value.filter(row => Number(row.usage_score || 0) >= 45 && Number(row.usage_score || 0) < 75).length, color: 'blue' },
+  { label: 'Past', count: productUsageRows.value.filter(row => Number(row.usage_score || 0) < 45).length, color: 'orange' }
+]);
+const usageLevelChartMax = computed(() => Math.max(1, ...usageLevelRows.value.map(row => Number(row.count || 0))));
+const subscriptionStatusRows = computed(() => [
+  { label: 'Barqaror', count: productUsageRows.value.filter(row => row.expiry_state === 'ok').length, color: 'green' },
+  { label: 'Yaqin tugaydi', count: productUsageRows.value.filter(row => row.expiry_state === 'soon').length, color: 'orange' },
+  { label: 'Tugagan', count: productUsageRows.value.filter(row => row.expiry_state === 'expired').length, color: 'red' },
+  { label: 'Muddatsiz', count: productUsageRows.value.filter(row => row.expiry_state === 'none').length, color: 'blue' }
+]);
+const subscriptionStatusChartMax = computed(() => Math.max(1, ...subscriptionStatusRows.value.map(row => Number(row.count || 0))));
+const supportPortfolioRows = computed(() => {
+  const grouped = new Map();
+  productUsageRows.value.forEach(row => {
+    const key = companySupportLabel(row);
+    if (!key || key === 'Biriktirilmagan') return;
+    grouped.set(key, (grouped.get(key) || 0) + 1);
+  });
+  return [...grouped.entries()]
+    .map(([label, count]) => ({ label, count }))
+    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label))
+    .slice(0, 8);
+});
+const supportPortfolioChartMax = computed(() => Math.max(1, ...supportPortfolioRows.value.map(row => Number(row.count || 0))));
 const topSupportCards = computed(() => supportPerformanceRows.value.slice(0, 5).map(row => {
   const employee = resolveEmployeeForCompany(row);
   const companies = visibleCompanyInfoRows.value.filter(company => companyMatchesEmployee(company, employee)).map(enrichCompanyUsage);
@@ -2187,6 +2318,7 @@ const groupColumns = [
   { key: 'select', label: '', slot: 'select' },
   { key: 'title', label: 'Guruh', action: 'telegram' },
   { key: 'chat_id', label: 'Chat ID', action: 'telegram' },
+  { key: 'company_name', label: 'Kompaniya', format: v => v || 'Biriktirilmagan', action: 'companyAssign' },
   { key: 'total_requests', label: 'So‘rov', action: 'requests' },
   { key: 'open_requests', label: 'Ochiq', action: 'requests' },
   { key: 'closed_requests', label: 'Yopilgan', action: 'requests' },
@@ -2414,7 +2546,12 @@ async function refresh() {
     if (activeTab.value === 'stats') await loadSupportPerformance();
     if (activeTab.value === 'productAnalytics') await loadProductAnalytics();
     if (activeTab.value === 'companyActivity') await loadCompanyInfo();
-    if (activeTab.value === 'groups') groups.value = await api.groups();
+    if (activeTab.value === 'groups') {
+      await Promise.all([
+        api.groups().then(rows => { groups.value = rows; }),
+        loadCompanyInfoOptional()
+      ]);
+    }
     if (activeTab.value === 'privates') privates.value = await api.privates();
     if (activeTab.value === 'employees') employees.value = await api.employees();
     if (activeTab.value === 'companies') await loadCompanyInfo();
@@ -2523,7 +2660,12 @@ async function setTab(key) {
     if (activeTab.value === 'stats') await loadSupportPerformance();
     if (activeTab.value === 'productAnalytics') await loadProductAnalytics();
     if (activeTab.value === 'companyActivity') await loadCompanyInfo();
-    if (activeTab.value === 'groups') groups.value = await api.groups();
+    if (activeTab.value === 'groups') {
+      await Promise.all([
+        api.groups().then(rows => { groups.value = rows; }),
+        loadCompanyInfoOptional()
+      ]);
+    }
     if (activeTab.value === 'privates') privates.value = await api.privates();
     if (activeTab.value === 'employees') employees.value = await api.employees();
     if (activeTab.value === 'companies') await loadCompanyInfo();
@@ -2699,6 +2841,10 @@ function handleTableCellAction({ action, row }) {
     loadRequests(chatRow);
     return;
   }
+  if (action === 'companyAssign') {
+    openAssignCompany(row);
+    return;
+  }
   if (action === 'employeeInfo') {
     openEmployee(tableActionEmployeeRow(row));
     return;
@@ -2774,6 +2920,39 @@ function openEmployeeCompanies(row = {}) {
     summary: companyPortfolioSummary(companies)
   };
   modal.value = 'employeeCompanies';
+}
+
+function openAssignCompany(row = {}) {
+  selectedTarget.value = row;
+  const currentName = String(row.company_name || '').trim().toLowerCase();
+  const current = currentName
+    ? companyInfoRows.value.find(company => String(company.name || '').trim().toLowerCase() === currentName)
+    : null;
+  companyAssignForm.companyKey = current ? companyAssignKey(current) : '';
+  companyAssignForm.search = '';
+  modal.value = 'assignCompany';
+}
+
+async function saveGroupCompanyAssignment() {
+  if (!selectedTarget.value?.chat_id) return showToast('Guruh tanlanmagan');
+  const company = companyAssignForm.companyKey
+    ? companyInfoRows.value.find(row => companyAssignKey(row) === companyAssignForm.companyKey)
+    : null;
+  startLoading('assignCompany');
+  try {
+    const payload = company
+      ? { chat_id: selectedTarget.value.chat_id, company }
+      : { chat_id: selectedTarget.value.chat_id, company_id: '', clear: true };
+    await api.assignChatCompany(payload);
+    groups.value = await api.groups();
+    await loadDashboard().catch(() => null);
+    showToast(company ? 'Guruh kompaniyaga biriktirildi' : 'Guruh kompaniyadan ajratildi');
+    closeModal();
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    stopLoading('assignCompany');
+  }
 }
 
 function addLogSource() {

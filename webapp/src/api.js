@@ -63,6 +63,7 @@ export const api = {
   deleteGroup: payload => request('deleteGroup', { method: 'POST', body: payload }).then(r => r.data),
   sendEmployeeMessage: payload => request('sendEmployeeMessage', { method: 'POST', body: payload }).then(r => r.data),
   sendEmployeesMessage: payload => request('sendEmployeesMessage', { method: 'POST', body: payload }).then(r => r.data),
+  assignChatCompany: payload => request('assignChatCompany', { method: 'POST', body: payload }).then(r => r.data),
   saveSettings: payload => request('settings', { method: 'POST', body: payload }).then(r => r.data),
   extractAiKnowledge: payload => request('aiKnowledgeExtract', { method: 'POST', body: payload }).then(r => r.data),
   saveAdminProfile: payload => request('adminProfile', { method: 'POST', body: payload }).then(r => r.data),

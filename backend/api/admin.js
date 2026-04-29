@@ -1487,6 +1487,54 @@ async function upsertCompany(body) {
   return rows[0];
 }
 
+function isUuid(value = '') {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || '').trim());
+}
+
+function externalCompanyMarker(company = {}) {
+  const externalId = company.external_id || company.externalCompanyId || company.uyqur_company_id || company.id;
+  return externalId !== undefined && externalId !== null && externalId !== ''
+    ? `Uyqur API ID: ${externalId}`
+    : '';
+}
+
+async function ensureAssignableCompany(body = {}) {
+  const companyId = String(body.company_id || '').trim();
+  if (isUuid(companyId)) return { id: companyId };
+
+  const source = body.company && typeof body.company === 'object' ? body.company : body;
+  const name = String(source.name || source.company_name || '').trim();
+  if (!name) throw new Error('Kompaniya nomi majburiy');
+
+  const existing = await supabase.select('companies', {
+    select: 'id,name,phone,notes,is_active',
+    name: supabase.eq(name),
+    limit: '20'
+  }).catch(() => []);
+  const marker = externalCompanyMarker(source);
+  const existingCompany = marker
+    ? existing.find(company => String(company.notes || '').includes(marker)) || existing[0]
+    : existing[0];
+  const notes = [marker, source.brand ? `Brand: ${source.brand}` : '', source.director ? `Direktor: ${source.director}` : '']
+    .filter(Boolean)
+    .join('\n') || null;
+  const values = {
+    name,
+    legal_name: source.legal_name || source.brand || null,
+    phone: source.phone || null,
+    notes,
+    is_active: source.is_active !== false
+  };
+
+  if (existingCompany) {
+    const rows = await supabase.patch('companies', { id: supabase.eq(existingCompany.id) }, values).catch(() => [existingCompany]);
+    return rows[0] || existingCompany;
+  }
+
+  const rows = await supabase.insert('companies', [values]);
+  return rows[0];
+}
+
 async function upsertEmployee(body) {
   const tgUserId = normalizeTelegramId(body.tg_user_id);
   const values = {
@@ -1623,9 +1671,17 @@ async function sendToEmployees(body) {
 }
 
 async function assignChatCompany(body) {
-  if (!body.chat_id || !body.company_id) throw new Error('chat_id va company_id majburiy');
-  const rows = await supabase.patch('tg_chats', { chat_id: supabase.eq(body.chat_id) }, { company_id: body.company_id });
-  return rows[0];
+  if (!body.chat_id) throw new Error('chat_id majburiy');
+  const chatId = normalizeTelegramId(body.chat_id);
+  if (body.company_id === null || body.company_id === '' || body.clear === true) {
+    const rows = await supabase.patch('tg_chats', { chat_id: supabase.eq(chatId) }, { company_id: null });
+    return rows[0] || { chat_id: chatId, company_id: null };
+  }
+
+  const company = await ensureAssignableCompany(body);
+  if (!company || !company.id) throw new Error('Kompaniya biriktirish uchun tayyorlanmadi');
+  const rows = await supabase.patch('tg_chats', { chat_id: supabase.eq(chatId) }, { company_id: company.id });
+  return { ...(rows[0] || { chat_id: chatId }), assigned_company: company, company_id: company.id };
 }
 
 async function notifyAiModeChange(settings = {}, enabled) {
