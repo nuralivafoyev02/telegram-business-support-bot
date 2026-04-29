@@ -808,8 +808,8 @@
                   </div>
                   <div class="actions">
                     <button class="btn primary" type="button" :disabled="loadingAction === 'saveLogSettings'"
-                      @click="saveLogSettings">{{ loadingAction === 'saveLogSettings' ? 'Saqlanmoqda...' : 'Log
-                      sozlamasini saqlash' }}</button>
+                      @click="saveLogSettings">{{ loadingAction === 'saveLogSettings' ? 'Saqlanmoqda...' :
+                        'Log sozlamasini saqlash' }}</button>
                     <button class="btn" type="button" :disabled="loadingAction === 'testLog'" @click="sendTestLog">{{
                       loadingAction === 'testLog' ? 'Yuborilmoqda...' : 'Test log yuborish' }}</button>
                   </div>
