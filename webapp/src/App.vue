@@ -1261,7 +1261,7 @@ import { api, getToken, setToken } from './api';
 
 const ACTIVE_TAB_STORAGE_KEY = 'uyqur_support_active_tab';
 const tabs = [
-  { key: 'stats', label: 'Support Samaradorligi', icon: '📊' },
+  { key: 'stats', label: 'Support Samaradorlik', icon: '📊' },
   { key: 'productAnalytics', label: 'Product Analitikasi', icon: '📈' },
   { key: 'companyActivity', label: 'Kompaniyalar faolligi', icon: '🏢' },
   { key: 'groups', label: 'Bot ulangan guruhlar', icon: '👥' },
