@@ -1122,6 +1122,63 @@ async function testEmployeesIncludeDailyWorkStats() {
   }
 }
 
+async function testCompanyInfoProxyNormalizesExternalRows() {
+  const originalFetch = global.fetch;
+  const originalAuth = process.env.UYQUR_COMPANY_INFO_AUTH;
+  const originalUrl = process.env.UYQUR_COMPANY_INFO_URL;
+  process.env.UYQUR_COMPANY_INFO_AUTH = 'test-company-auth';
+  process.env.UYQUR_COMPANY_INFO_URL = 'https://example.test/company-info';
+  const calls = [];
+
+  global.fetch = async (url, options = {}) => {
+    calls.push({ url, options });
+    return {
+      ok: true,
+      json: async () => ({
+        data: [{
+          id: 3,
+          name: 'Gagarin Avenue',
+          status: 'active',
+          created_at: 1703131871,
+          updated_at: 1776400702,
+          phone: '+998900223355',
+          brand: 'Gagarin Avenue',
+          director: 'Gagarin Admin',
+          icon: 'https://example.test/icon.webp',
+          currency_id: 1,
+          auto_refresh_currencies: 0,
+          expired: '30.04.2026',
+          uyqur_support_username: '@uyqur_nurali',
+          uyqur_support_phone: '+998908065775',
+          subscription_start_date: '21.12.2023',
+          business_status: 'ACTIVE',
+          is_real: 1,
+          status_histories: [{ id: 5, old_status: null, new_status: 'ACTIVE', company_id: 3, changed_at: 1776196774 }]
+        }]
+      })
+    };
+  };
+
+  try {
+    const result = await callAdmin('companyInfo');
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(calls[0].url, 'https://example.test/company-info');
+    assert.strictEqual(calls[0].options.headers['X-Auth'], 'test-company-auth');
+    assert.strictEqual(result.payload.data.summary.total, 1);
+    assert.strictEqual(result.payload.data.summary.active, 1);
+    assert.strictEqual(result.payload.data.summary.support_assigned, 1);
+    assert.strictEqual(result.payload.data.companies[0].name, 'Gagarin Avenue');
+    assert.strictEqual(result.payload.data.companies[0].created_at_iso, '2023-12-21T04:11:11.000Z');
+    assert.strictEqual(result.payload.data.companies[0].latest_status_change.new_status, 'ACTIVE');
+  } finally {
+    global.fetch = originalFetch;
+    if (originalAuth === undefined) delete process.env.UYQUR_COMPANY_INFO_AUTH;
+    else process.env.UYQUR_COMPANY_INFO_AUTH = originalAuth;
+    if (originalUrl === undefined) delete process.env.UYQUR_COMPANY_INFO_URL;
+    else process.env.UYQUR_COMPANY_INFO_URL = originalUrl;
+  }
+}
+
 async function run() {
   await testAiModeEnableSendsMainGroupNotice();
   await testAiModeDisableSendsMainGroupNotice();
@@ -1141,6 +1198,7 @@ async function run() {
   await testReplyRequestSendsMessageAndClosesTicket();
   await testReplyRequestFallsBackWhenBusinessPeerInvalid();
   await testEmployeesIncludeDailyWorkStats();
+  await testCompanyInfoProxyNormalizesExternalRows();
   console.log('Admin tests passed');
 }
 

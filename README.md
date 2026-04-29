@@ -78,9 +78,13 @@ ADMIN_JWT_SECRET=change-me-64-char-random-secret
 AI_MODE_DEFAULT=false
 BROADCAST_CONCURRENCY=8
 CRON_SECRET=change-me-cron-secret
+UYQUR_COMPANY_INFO_URL=https://backend.app.uyqur.uz/dev/company/info-for-bot
+UYQUR_COMPANY_INFO_AUTH=company-info-x-auth-token
 ```
 
 `SUPABASE_SERVICE_ROLE_KEY` faqat backend environmentda turishi kerak. Webappga chiqarilmagan.
+
+`UYQUR_COMPANY_INFO_AUTH` ham faqat backend environmentda turadi. Webapp `Company Activity` paneli ma’lumotni `/api/admin?action=companyInfo` orqali oladi, token browserga yuborilmaydi.
 
 `MAIN_GROUP_ID` noto‘g‘ri bo‘lsa `Telegram sendMessage: Bad Request: chat not found` chiqadi. Buni webappdagi `Sozlamalar → Bot sozlamalari → Main guruh chat ID` orqali ham sozlash mumkin. Chat ID `-100...` formatida bo‘ladi; bot shu guruhda bo‘lishi va xabar yuborish huquqiga ega bo‘lishi kerak.
 

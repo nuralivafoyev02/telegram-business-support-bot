@@ -1224,6 +1224,30 @@ body {
   border-color: var(--primary);
   box-shadow: none;
 }
+.nav-group {
+  display: grid;
+  gap: 8px;
+}
+.nav-disclosure {
+  justify-content: space-between;
+}
+.nav-disclosure em {
+  margin-left: auto;
+  color: inherit;
+  font-style: normal;
+  font-size: 18px;
+  line-height: 1;
+}
+.nav-submenu {
+  display: grid;
+  gap: 8px;
+  padding-left: 14px;
+}
+.nav-submenu button {
+  min-height: 38px;
+  padding: 9px 12px;
+  font-size: 14px;
+}
 .sidebar-summary {
   display: grid;
   gap: 12px;
@@ -1690,10 +1714,26 @@ tbody tr:hover {
   background: #fee2e2;
   border-color: #fecaca;
 }
+.status-pill.mini {
+  padding: 4px 8px;
+  font-size: 12px;
+}
+.status-pill.new {
+  color: #854d0e;
+  background: #fef3c7;
+  border-color: #fde68a;
+}
+.status-pill.muted-status {
+  color: var(--muted-strong);
+  background: var(--surface-soft);
+  border-color: var(--line);
+}
 @media (prefers-color-scheme: dark) {
   .status-pill { color: #fde68a; background: rgba(245, 158, 11, .13); border-color: rgba(245, 158, 11, .28); }
   .status-pill.ready { color: #bbf7d0; background: rgba(34, 197, 94, .16); border-color: rgba(34, 197, 94, .28); }
   .status-pill.error { color: #fecaca; background: rgba(239, 68, 68, .16); border-color: rgba(239, 68, 68, .28); }
+  .status-pill.new { color: #fde68a; background: rgba(245, 158, 11, .14); border-color: rgba(245, 158, 11, .28); }
+  .status-pill.muted-status { color: var(--muted); background: var(--surface-soft); border-color: var(--line); }
 }
 
 .login-screen {
@@ -1727,6 +1767,51 @@ tbody tr:hover {
   grid-template-columns: minmax(0, 1.35fr) minmax(320px, .65fr);
   gap: 16px;
   align-items: start;
+}
+.company-layout {
+  grid-template-columns: minmax(0, 1.55fr) minmax(300px, .65fr);
+}
+.company-identity {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 240px;
+}
+.company-identity img {
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-soft);
+  object-fit: cover;
+}
+.company-identity b,
+.company-identity small {
+  display: block;
+  max-width: 230px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.company-identity small,
+.support-owner {
+  color: var(--muted);
+  font-size: 12px;
+}
+.integration-note {
+  display: grid;
+  gap: 6px;
+  margin-top: 18px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-soft);
+  color: var(--muted);
+}
+.integration-note b {
+  color: var(--text);
+}
+.knowledge-area {
+  min-height: 340px;
 }
 .ticket-panel,
 .dialog-panel {
@@ -1813,6 +1898,9 @@ tbody tr:hover {
   }
   .nav {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .nav-group {
+    grid-column: 1 / -1;
   }
   .nav-bottom {
     margin-top: 0;

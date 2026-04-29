@@ -42,11 +42,28 @@
       </div>
 
       <nav class="nav">
-        <button v-for="item in primaryTabs" :key="item.key" :class="{ active: activeTab === item.key }"
+        <button v-for="item in mainTabs" :key="item.key" :class="{ active: activeTab === item.key }"
           @click="setTab(item.key)">
           <span>{{ item.icon }}</span>
           <b>{{ item.label }}</b>
         </button>
+        <div class="nav-group" :class="{ open: otherMenuOpen }">
+          <button class="nav-disclosure" :class="{ active: isOtherTabActive }" type="button"
+            :aria-expanded="otherMenuOpen ? 'true' : 'false'" @click="otherMenuOpen = !otherMenuOpen">
+            <span>⋯</span>
+            <b>Boshqa menyular</b>
+            <em>{{ otherMenuOpen ? '−' : '+' }}</em>
+          </button>
+          <Transition name="fade">
+            <div v-if="otherMenuOpen" class="nav-submenu">
+              <button v-for="item in otherTabs" :key="item.key" :class="{ active: activeTab === item.key }"
+                @click="setTab(item.key)">
+                <span>{{ item.icon }}</span>
+                <b>{{ item.label }}</b>
+              </button>
+            </div>
+          </Transition>
+        </div>
       </nav>
 
       <nav class="nav nav-bottom">
@@ -355,6 +372,229 @@
             </div>
           </template>
 
+          <template v-if="activeTab === 'productAnalytics'">
+            <div class="analytics-hero">
+              <div>
+                <h2>Product Analytics</h2>
+                <p>Uyqur support oqimidagi mahsulot so‘rovlari va kanal kesimlari</p>
+              </div>
+              <div class="segmented" role="group" aria-label="Analytics davri">
+                <button v-for="period in periodOptions" :key="period.key"
+                  :class="{ active: selectedStatsPeriod === period.key }" type="button"
+                  @click="selectedStatsPeriod = period.key">
+                  {{ period.label }}
+                </button>
+              </div>
+            </div>
+
+            <div class="metric-strip">
+              <article class="card metric">
+                <div class="metric-head">
+                  <div class="metric-label">Jami so‘rov</div>
+                  <span class="metric-icon">🎫</span>
+                </div>
+                <div class="metric-value">{{ fmtNumber(selectedPeriodStats.total_requests) }}</div>
+                <div class="metric-mini">{{ fmtNumber(selectedPeriodStats.unique_customers) }} ta mijozdan</div>
+              </article>
+              <article class="card metric">
+                <div class="metric-head">
+                  <div class="metric-label">Guruhdan kelgan</div>
+                  <span class="metric-icon">👥</span>
+                </div>
+                <div class="metric-value">{{ fmtNumber(selectedPeriodStats.group_requests) }}</div>
+                <div class="metric-mini">Bot ulangan guruhlar kesimi</div>
+              </article>
+              <article class="card metric">
+                <div class="metric-head">
+                  <div class="metric-label">Chatlardan kelgan</div>
+                  <span class="metric-icon">💬</span>
+                </div>
+                <div class="metric-value">{{ fmtNumber(selectedPeriodStats.private_requests + selectedPeriodStats.business_requests) }}</div>
+                <div class="metric-mini">Shaxsiy va Business xabarlar</div>
+              </article>
+              <article class="card metric">
+                <div class="metric-head">
+                  <div class="metric-label">Yopilish foizi</div>
+                  <span class="metric-icon good">✅</span>
+                </div>
+                <div class="metric-value">{{ fmtPercent(selectedPeriodStats.close_rate) }}</div>
+                <div class="metric-mini">O‘rtacha {{ fmtMinutes(selectedPeriodStats.avg_close_minutes) }}</div>
+              </article>
+            </div>
+
+            <div class="spacer"></div>
+
+            <div class="stats-charts">
+              <section class="card chart-card">
+                <div class="card-header">
+                  <div>
+                    <div class="card-title">Davrlar bo‘yicha o‘sish</div>
+                    <div class="card-note">Bugun, hafta, oy va umumiy request oqimi</div>
+                  </div>
+                </div>
+                <div class="chart-bars">
+                  <div v-for="row in periodChartRows" :key="row.period_label" class="chart-row">
+                    <div class="chart-label">{{ row.period_label }}</div>
+                    <div class="chart-track">
+                      <span class="chart-fill blue" :style="{ width: barWidth(row.total_requests, periodChartMax) }"></span>
+                    </div>
+                    <div class="chart-value">{{ fmtNumber(row.total_requests) }}</div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="card chart-card">
+                <div class="card-header">
+                  <div>
+                    <div class="card-title">Eng faol guruhlar</div>
+                    <div class="card-note">{{ selectedPeriodLabel }} ichida eng ko‘p so‘rov kelgan joylar</div>
+                  </div>
+                </div>
+                <div class="chart-bars">
+                  <div v-for="row in groupChartRows" :key="row.chat_id || row.title" class="chart-row">
+                    <div class="chart-label">{{ row.title || row.chat_id }}</div>
+                    <div class="chart-track">
+                      <span class="chart-fill orange" :style="{ width: barWidth(row.total_requests, groupChartMax) }"></span>
+                    </div>
+                    <div class="chart-value">{{ fmtNumber(row.total_requests) }}</div>
+                  </div>
+                  <div v-if="!groupChartRows.length" class="empty compact">Ma’lumot yo‘q</div>
+                </div>
+              </section>
+            </div>
+
+            <div class="spacer"></div>
+
+            <div class="stats-table-stack">
+              <section class="card">
+                <div class="card-header">
+                  <div>
+                    <div class="card-title">Davrlar kesimi</div>
+                    <div class="card-note">Manbalar va yopilish metrikalari</div>
+                  </div>
+                </div>
+                <DataTable :columns="periodColumns" :rows="periodRows" empty="Analytics ma’lumoti yo‘q">
+                  <template #periodClose="{ row }">
+                    <MetricBar :value="row.close_rate" />
+                  </template>
+                </DataTable>
+              </section>
+
+              <section class="card">
+                <div class="card-header">
+                  <div>
+                    <div class="card-title">Guruhlar product signal sifatida</div>
+                    <div class="card-note">Qaysi guruhda so‘rov, mijoz va ochiq vazifa ko‘p</div>
+                  </div>
+                </div>
+                <DataTable :columns="groupPerformanceColumns" :rows="groupPerformanceRows"
+                  empty="Bu davrda guruhlardan so‘rov tushmagan" :on-cell-action="handleTableCellAction">
+                  <template #groupClose="{ row }">
+                    <MetricBar :value="row.close_rate" />
+                  </template>
+                </DataTable>
+              </section>
+            </div>
+          </template>
+
+          <template v-if="activeTab === 'companyActivity'">
+            <Toolbar v-model="search" placeholder="Kompaniya, direktor, support yoki telefon bo‘yicha qidirish">
+              <button class="btn" :disabled="loadingAction === 'refresh'" @click="refresh">Yangilash</button>
+            </Toolbar>
+
+            <div class="metric-strip company-metrics">
+              <article class="card metric">
+                <div class="metric-head">
+                  <div class="metric-label">Kompaniyalar</div>
+                  <span class="metric-icon">🏢</span>
+                </div>
+                <div class="metric-value">{{ fmtNumber(companyActivitySummary.total) }}</div>
+                <div class="metric-mini">{{ fmtNumber(companyActivitySummary.real) }} tasi real kompaniya</div>
+              </article>
+              <article class="card metric">
+                <div class="metric-head">
+                  <div class="metric-label">Faol panel</div>
+                  <span class="metric-icon good">✅</span>
+                </div>
+                <div class="metric-value">{{ fmtNumber(companyActivitySummary.active) }}</div>
+                <div class="metric-mini">{{ fmtNumber(companyActivitySummary.passive) }} tasi passiv</div>
+              </article>
+              <article class="card metric">
+                <div class="metric-head">
+                  <div class="metric-label">Business status</div>
+                  <span class="metric-icon">📌</span>
+                </div>
+                <div class="metric-value">{{ fmtNumber(companyActivitySummary.business_active) }}</div>
+                <div class="metric-mini">{{ fmtNumber(companyActivitySummary.business_new) }} yangi, {{ fmtNumber(companyActivitySummary.business_paused) }} pauza</div>
+              </article>
+              <article class="card metric">
+                <div class="metric-head">
+                  <div class="metric-label">Support biriktirilgan</div>
+                  <span class="metric-icon">🧑‍💼</span>
+                </div>
+                <div class="metric-value">{{ fmtNumber(companyActivitySummary.support_assigned) }}</div>
+                <div class="metric-mini">{{ fmtNumber(companyActivitySummary.expiring_soon) }} ta obuna yaqin tugaydi</div>
+              </article>
+            </div>
+
+            <div class="spacer"></div>
+
+            <div class="performance-layout company-layout">
+              <section class="card">
+                <div class="card-header">
+                  <div>
+                    <div class="card-title">Kompaniya aktivligi</div>
+                    <div class="card-note">API’dan olingan holat, support va obuna ma’lumotlari</div>
+                  </div>
+                </div>
+                <DataTable :columns="companyActivityColumns" :rows="filteredCompanyInfoRows"
+                  empty="Kompaniya ma’lumoti topilmadi" :page-size="12">
+                  <template #companyIdentity="{ row }">
+                    <span class="company-identity">
+                      <img v-if="row.icon" :src="row.icon" alt="" />
+                      <span>
+                        <b>{{ row.name || 'Kompaniya' }}</b>
+                        <small>{{ row.brand || 'Brand kiritilmagan' }}</small>
+                      </span>
+                    </span>
+                  </template>
+                  <template #companyStatus="{ row }">
+                    <span class="status-pill mini" :class="companyStatusClass(row.status)">{{ companyStatusLabel(row.status) }}</span>
+                  </template>
+                  <template #businessStatus="{ row }">
+                    <span class="status-pill mini" :class="businessStatusClass(row.business_status)">{{ businessStatusLabel(row.business_status) }}</span>
+                  </template>
+                  <template #supportOwner="{ row }">
+                    <span class="support-owner">{{ companySupportLabel(row) }}</span>
+                  </template>
+                  <template #expiryStatus="{ row }">
+                    <span class="status-pill mini" :class="expiryStatusClass(row)">{{ expiryStatusLabel(row) }}</span>
+                  </template>
+                </DataTable>
+              </section>
+
+              <section class="card alert-card">
+                <div class="card-header">
+                  <div>
+                    <div class="card-title">Obuna nazorati</div>
+                    <div class="card-note">Tugagan yoki yaqin tugaydigan kompaniyalar</div>
+                  </div>
+                </div>
+                <div class="alert-list">
+                  <article v-for="row in companyAlerts" :key="row.id" class="alert-item">
+                    <div class="alert-item-head">
+                      <b>{{ row.name }}</b>
+                      <span>{{ row.expiry_state === 'expired' ? 'Tugagan' : 'Yaqin' }}</span>
+                    </div>
+                    <p>{{ expiryStatusLabel(row) }}</p>
+                    <small>Support: {{ companySupportLabel(row) }}</small>
+                  </article>
+                  <div v-if="!companyAlerts.length" class="empty compact">Obuna bo‘yicha xavfli holat yo‘q</div>
+                </div>
+              </section>
+            </div>
+          </template>
+
           <template v-if="activeTab === 'groups'">
             <Toolbar v-model="search" placeholder="Guruh nomi yoki chat ID bo‘yicha qidirish">
               <TransitionGroup name="action-pop" tag="div" class="toolbar-actions">
@@ -390,15 +630,28 @@
             </section>
           </template>
 
-          <template v-if="activeTab === 'privates'">
-            <Toolbar v-model="search" placeholder="Shaxsiy chat nomi yoki chat ID bo‘yicha qidirish" />
+          <template v-if="activeTab === 'companies'">
+            <Toolbar v-model="search" placeholder="Kompaniya nomi, telefon yoki izoh bo‘yicha qidirish" />
             <section class="card">
               <div class="card-header">
                 <div>
-                  <div class="card-title">Chatlar</div>
+                  <div class="card-title">Kompaniyalar</div>
+                  <div class="card-note">Ichki Supabase kompaniya statistikasi</div>
                 </div>
               </div>
-              <DataTable :columns="privateColumns" :rows="filteredPrivates" empty="Shaxsiy chat topilmadi"
+              <DataTable :columns="companyColumns" :rows="filteredCompanies" empty="Kompaniya topilmadi" />
+            </section>
+          </template>
+
+          <template v-if="activeTab === 'privates'">
+            <Toolbar v-model="search" placeholder="Mijoz nomi, chat ID yoki username bo‘yicha qidirish" />
+            <section class="card">
+              <div class="card-header">
+                <div>
+                  <div class="card-title">Mijozlar</div>
+                </div>
+              </div>
+              <DataTable :columns="privateColumns" :rows="filteredPrivates" empty="Mijoz chati topilmadi"
                 :on-cell-action="handleTableCellAction">
                 <template #actions="{ row }">
                   <button class="btn small" @click="openTelegramChat(row)">Telegram</button>
@@ -532,7 +785,8 @@
               <section class="card pad settings-card">
                 <div class="settings-head">
                   <div>
-                    <div class="card-title">AI integratsiya</div>
+                    <div class="card-title">Integratsiya</div>
+                    <div class="card-note">Model ulanishi va keyingi log oqimlari uchun tayyor joy</div>
                   </div>
                   <span class="status-pill" :class="{ ready: aiIntegrationReady, error: aiIntegrationHasError }">{{ aiIntegrationStatus }}</span>
                 </div>
@@ -565,17 +819,41 @@
                   <label class="label wide">Tizim ko‘rsatmasi
                     <textarea v-model="integrationForm.system_prompt" class="textarea tall"></textarea>
                   </label>
-                  <label class="label wide">Bilim bazasi
-                    <textarea v-model="integrationForm.knowledge_text" class="textarea tall"
-                      placeholder="Uyqur dasturi bo‘yicha ichki qo‘llanma va tushuntirishlar..."></textarea>
+                  <button class="btn primary"
+                    :disabled="loadingAction === 'saveIntegration' || loadingAction === 'extractKnowledge'">
+                    {{ loadingAction === 'saveIntegration' ? 'Saqlamoqda...' : 'Integratsiyani saqlash' }}
+                  </button>
+                </form>
+                <div class="integration-note">
+                  <b>Log kanallari</b>
+                  <span>Error va oddiy loglarni ajratish, kanal/guruhga yuborish bo‘limlari shu panelga qo‘shiladi.</span>
+                </div>
+              </section>
+            </div>
+          </template>
+
+          <template v-if="activeTab === 'knowledgeBase'">
+            <div class="settings-stack integration-stack">
+              <section class="card pad settings-card">
+                <div class="settings-head">
+                  <div>
+                    <div class="card-title">Bilim bazasi</div>
+                    <div class="card-note">AI o‘qitish matni va import qilinadigan hujjatlar</div>
+                  </div>
+                  <span class="status-pill" :class="{ ready: aiIntegrationReady, error: aiIntegrationHasError }">{{ aiIntegrationStatus }}</span>
+                </div>
+                <form class="form settings-form" @submit.prevent="saveIntegration">
+                  <label class="label">Bilim bazasi
+                    <textarea v-model="integrationForm.knowledge_text" class="textarea tall knowledge-area"
+                      placeholder="Uyqur dasturi bo‘yicha ichki qo‘llanma, savol-javoblar va tushuntirishlar..."></textarea>
                   </label>
-                  <label class="label wide">PDF, Word, Excel yoki matn fayl
+                  <label class="label">PDF, Word, Excel yoki matn fayl
                     <input class="input" type="file" multiple accept=".pdf,.docx,.xlsx,.txt,.md,.csv"
                       :disabled="loadingAction === 'extractKnowledge'" @change="importKnowledgeFiles" />
                   </label>
                   <button class="btn primary"
                     :disabled="loadingAction === 'saveIntegration' || loadingAction === 'extractKnowledge'">
-                    {{ loadingAction === 'saveIntegration' ? 'Saqlamoqda...' : 'Integratsiyani saqlash' }}
+                    {{ loadingAction === 'saveIntegration' ? 'Saqlamoqda...' : 'Bilim bazasini saqlash' }}
                   </button>
                 </form>
               </section>
@@ -921,15 +1199,19 @@ import { api, getToken, setToken } from './api';
 
 const ACTIVE_TAB_STORAGE_KEY = 'uyqur_support_active_tab';
 const tabs = [
-  { key: 'stats', label: 'Statistika', icon: '📊' },
-  { key: 'groups', label: 'Guruhlar', icon: '👥' },
-  { key: 'privates', label: 'Chatlar', icon: '💬' },
+  { key: 'stats', label: 'Support Performance', icon: '📊' },
+  { key: 'productAnalytics', label: 'Product Analytics', icon: '📈' },
+  { key: 'companyActivity', label: 'Company Activity', icon: '🏢' },
+  { key: 'groups', label: 'Bot ulangan guruhlar', icon: '👥' },
   { key: 'employees', label: 'Xodimlar', icon: '🧑‍💼' },
-  { key: 'integrations', label: 'Integratsiya', icon: '⚡️' },
+  { key: 'companies', label: 'Kompaniyalar', icon: '🏬' },
+  { key: 'integrations', label: 'Integratsiya', icon: '🔌' },
+  { key: 'privates', label: 'Mijozlar', icon: '💬' },
+  { key: 'knowledgeBase', label: 'Bilim bazasi', icon: '📚' },
   { key: 'settings', label: 'Sozlamalar', icon: '⚙️' }
 ];
-const supportTabKeys = ['stats', 'groups', 'privates', 'employees', 'integrations'];
-const managerTabKeys = ['stats', 'groups', 'privates', 'employees'];
+const mainTabKeys = ['stats', 'productAnalytics', 'companyActivity'];
+const otherTabKeys = ['groups', 'employees', 'companies', 'integrations', 'privates', 'knowledgeBase'];
 
 function isValidTab(key) {
   return tabs.some(tab => tab.key === key);
@@ -959,10 +1241,13 @@ const selectedSendType = ref('groups');
 const selectedStatsPeriod = ref('week');
 const selectedGroups = ref([]);
 const selectedEmployees = ref([]);
+const otherMenuOpen = ref(otherTabKeys.includes(activeTab.value));
 const dashboard = reactive({ summary: {}, employeeStats: [], chatStats: [], openRequests: [], analytics: {} });
 const groups = ref([]);
 const privates = ref([]);
 const employees = ref([]);
+const companies = ref([]);
+const companyInfo = ref({ summary: {}, companies: [], fetched_at: '', source: '' });
 const requestRows = ref([]);
 const chatDetail = ref({ chat: null, requests: [], timeline: [] });
 const employeeDrilldown = ref(null);
@@ -983,17 +1268,18 @@ let durationTimer = null;
 
 const settingsForm = reactive({ panel_mode: 'support', ai_mode: 'false', auto_reply: 'true', done_tag: '#done', main_group_id: '', request_detection: 'keyword' });
 const isManagerMode = computed(() => settingsForm.panel_mode === 'manager');
-const primaryTabs = computed(() => {
-  const keys = isManagerMode.value ? managerTabKeys : supportTabKeys;
-  return tabs.filter(tab => keys.includes(tab.key));
-});
+const mainTabs = computed(() => tabs.filter(tab => mainTabKeys.includes(tab.key)));
+const otherTabs = computed(() => tabs.filter(tab => otherTabKeys.includes(tab.key)));
+const isOtherTabActive = computed(() => otherTabKeys.includes(activeTab.value));
 const settingsTab = tabs.find(tab => tab.key === 'settings');
 watch(isManagerMode, () => {
-  if (activeTab.value === 'settings') return;
-  if (!primaryTabs.value.some(tab => tab.key === activeTab.value)) {
+  if (!isValidTab(activeTab.value)) {
     activeTab.value = 'stats';
     storeActiveTab('stats');
   }
+});
+watch(activeTab, key => {
+  if (otherTabKeys.includes(key)) otherMenuOpen.value = true;
 });
 
 const loginForm = reactive({ username: 'admin', password: '' });
@@ -1022,10 +1308,14 @@ const current = computed(() => tabs.find(t => t.key === activeTab.value) || tabs
 const currentTitle = computed(() => current.value.label);
 const currentSubtitle = computed(() => ({
   stats: 'Xodimlar faolligi, javob tezligi va ochiq so‘rovlar nazorati',
-  groups: 'Guruhlar, so‘rov oqimi va mijoz murojaatlari',
-  privates: 'Shaxsiy va biznes chatlar bilan ishlash',
+  productAnalytics: 'Mahsulot bo‘yicha so‘rovlar, manbalar va yopilish dinamikasi',
+  companyActivity: 'Kompaniyalar holati, support biriktirilishi va obuna nazorati',
+  groups: 'Bot ulangan guruhlar, so‘rov oqimi va mijoz murojaatlari',
   employees: 'Xodimlar aktivligi, javoblar va ochiq vazifalar',
-  integrations: 'AI modeli, bilim bazasi va ulanish holati',
+  companies: 'Ichki kompaniyalar, ulangan guruhlar va request statistikasi',
+  integrations: 'Tashqi ulanishlar va keyingi log oqimlari uchun boshqaruv',
+  privates: 'Mijozlar bilan shaxsiy va biznes chatlar',
+  knowledgeBase: 'AI o‘qitish matnlari, fayllar va modelga beriladigan bilim',
   settings: 'Bot, admin va Telegram ulanishi sozlamalari'
 }[activeTab.value] || 'Texnik yordam paneli'));
 const loginFeedback = computed(() => loginError.value || loginStatus.value);
@@ -1297,6 +1587,53 @@ function statusLabel(value) {
   }[String(value || '').toLowerCase()] || value || '—');
 }
 
+function companyStatusLabel(value) {
+  return ({
+    active: 'Faol',
+    passive: 'Passiv'
+  }[String(value || '').toLowerCase()] || value || '—');
+}
+
+function businessStatusLabel(value) {
+  return ({
+    ACTIVE: 'Aktiv',
+    NEW: 'Yangi',
+    PAUSED: 'Pauza'
+  }[String(value || '').toUpperCase()] || value || '—');
+}
+
+function companyStatusClass(value) {
+  const key = String(value || '').toLowerCase();
+  if (key === 'active') return 'ready';
+  if (key === 'passive') return 'muted-status';
+  return '';
+}
+
+function businessStatusClass(value) {
+  const key = String(value || '').toUpperCase();
+  if (key === 'ACTIVE') return 'ready';
+  if (key === 'NEW') return 'new';
+  if (key === 'PAUSED') return 'error';
+  return 'muted-status';
+}
+
+function expiryStatusLabel(row = {}) {
+  if (!row.expired) return 'Muddatsiz';
+  if (row.expiry_state === 'expired') return `${row.expired} tugagan`;
+  if (row.expiry_state === 'soon') return `${row.expired} yaqin`;
+  return row.expired;
+}
+
+function expiryStatusClass(row = {}) {
+  if (row.expiry_state === 'expired') return 'error';
+  if (row.expiry_state === 'soon') return 'new';
+  return 'ready';
+}
+
+function companySupportLabel(row = {}) {
+  return [row.uyqur_support_username, row.uyqur_support_phone].filter(Boolean).join(' · ') || 'Biriktirilmagan';
+}
+
 function roleLabel(value) {
   return ({
     support: 'Texnik yordam',
@@ -1316,6 +1653,14 @@ const filteredEmployeeStats = computed(() => (dashboard.employeeStats || []).fil
 const filteredEmployees = computed(() => employees.value.filter(includesSearch));
 const filteredGroups = computed(() => groups.value.filter(includesSearch));
 const filteredPrivates = computed(() => privates.value.filter(includesSearch));
+const filteredCompanies = computed(() => companies.value.filter(includesSearch));
+const companyInfoRows = computed(() => companyInfo.value.companies || []);
+const filteredCompanyInfoRows = computed(() => companyInfoRows.value.filter(includesSearch));
+const companyActivitySummary = computed(() => companyInfo.value.summary || {});
+const companyAlerts = computed(() => companyInfoRows.value
+  .filter(row => ['expired', 'soon'].includes(row.expiry_state))
+  .sort((a, b) => Number(a.days_until_expiry ?? 9999) - Number(b.days_until_expiry ?? 9999))
+  .slice(0, 6));
 const selectedRecipients = computed(() => selectedSendType.value === 'employees' ? selectedEmployees.value : selectedGroups.value);
 const selectedSendTitle = computed(() => selectedSendType.value === 'employees' ? 'Xodimlarga xabar yuborish' : 'Guruhlarga xabar yuborish');
 const chatDetailTitle = computed(() => {
@@ -1411,6 +1756,31 @@ const groupColumns = [
   { key: 'progress', label: 'Yopilish', format: (_, row) => pct(row), action: 'requests' },
   { key: 'last_message_at', label: 'Faollik', format: fmtDate, action: 'chatDetail' },
   { key: 'actions', label: 'Amal', slot: 'actions' }
+];
+
+const companyColumns = [
+  { key: 'name', label: 'Kompaniya' },
+  { key: 'legal_name', label: 'Yuridik nom', format: v => v || '—' },
+  { key: 'phone', label: 'Telefon', format: v => v || '—' },
+  { key: 'chats_count', label: 'Guruhlar', format: fmtNumber },
+  { key: 'users_count', label: 'Mijozlar', format: fmtNumber },
+  { key: 'employees_count', label: 'Xodimlar', format: fmtNumber },
+  { key: 'total_requests', label: 'So‘rov', format: fmtNumber },
+  { key: 'open_requests', label: 'Ochiq', format: fmtNumber },
+  { key: 'closed_requests', label: 'Yopilgan', format: fmtNumber },
+  { key: 'last_request_at', label: 'Oxirgi so‘rov', format: fmtDate }
+];
+
+const companyActivityColumns = [
+  { key: 'name', label: 'Kompaniya', slot: 'companyIdentity' },
+  { key: 'status', label: 'Panel holati', slot: 'companyStatus' },
+  { key: 'business_status', label: 'Biznes status', slot: 'businessStatus' },
+  { key: 'director', label: 'Direktor', format: v => v || '—' },
+  { key: 'uyqur_support_username', label: 'Biriktirilgan support', slot: 'supportOwner' },
+  { key: 'phone', label: 'Telefon', format: v => v || '—' },
+  { key: 'subscription_start_date', label: 'Start', format: v => v || '—' },
+  { key: 'expired', label: 'Obuna', slot: 'expiryStatus' },
+  { key: 'latest_status_change_at_iso', label: 'Status o‘zgargan', format: fmtDate }
 ];
 
 const privateColumns = [
@@ -1554,10 +1924,14 @@ async function refresh() {
   startLoading('refresh');
   try {
     if (activeTab.value === 'stats') await loadDashboard();
+    if (activeTab.value === 'productAnalytics') await loadDashboard();
+    if (activeTab.value === 'companyActivity') await loadCompanyInfo();
     if (activeTab.value === 'groups') groups.value = await api.groups();
     if (activeTab.value === 'privates') privates.value = await api.privates();
     if (activeTab.value === 'employees') employees.value = await api.employees();
+    if (activeTab.value === 'companies') companies.value = await api.companies();
     if (activeTab.value === 'integrations') await loadSettings();
+    if (activeTab.value === 'knowledgeBase') await loadSettings();
     if (activeTab.value === 'settings') await loadSettings();
   } catch (error) {
     showToast(error.message);
@@ -1570,6 +1944,10 @@ async function refresh() {
 async function loadDashboard() {
   const data = await api.dashboard();
   Object.assign(dashboard, data);
+}
+
+async function loadCompanyInfo() {
+  companyInfo.value = await api.companyInfo();
 }
 
 async function loadSettings() {
@@ -1621,10 +1999,14 @@ async function setTab(key) {
   startLoading('tab');
   try {
     if (activeTab.value === 'stats') await loadDashboard();
+    if (activeTab.value === 'productAnalytics') await loadDashboard();
+    if (activeTab.value === 'companyActivity') await loadCompanyInfo();
     if (activeTab.value === 'groups') groups.value = await api.groups();
     if (activeTab.value === 'privates') privates.value = await api.privates();
     if (activeTab.value === 'employees') employees.value = await api.employees();
+    if (activeTab.value === 'companies') companies.value = await api.companies();
     if (activeTab.value === 'integrations') await loadSettings();
+    if (activeTab.value === 'knowledgeBase') await loadSettings();
     if (activeTab.value === 'settings') await loadSettings();
   } catch (error) {
     showToast(error.message);
@@ -2184,7 +2566,7 @@ async function saveSettings() {
 async function saveIntegration() {
   startLoading('saveIntegration');
   try {
-    await api.saveSettings({
+    const rows = await api.saveSettings({
       settings: [
         {
           key: 'ai_integration',

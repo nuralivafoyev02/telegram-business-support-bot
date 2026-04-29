@@ -11,6 +11,7 @@ const { normalizeAiIntegration, mergeAiIntegration, sanitizeAiIntegration, isAiI
 const { testAiIntegration } = require('../lib/ai');
 const { extractTextFromUpload } = require('../lib/document-text');
 const { resolveMainStatsChatId, sendMainStatsReport } = require('../lib/report');
+const { fetchCompanyInfo } = require('../lib/company-info');
 const stats = require('../lib/stats');
 
 const TELEGRAM_ALLOWED_UPDATES = [
@@ -1622,6 +1623,7 @@ async function handleGet(action, query) {
     case 'requests': return listRequests(query);
     case 'chatDetail': return getChatDetail(query);
     case 'companies': return listCompanies(query);
+    case 'companyInfo': return fetchCompanyInfo();
     case 'employees': return listEmployees(query);
     case 'settings': return listSettings();
     case 'telegramWebhookInfo': return getTelegramWebhookStatus();
