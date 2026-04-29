@@ -67,10 +67,6 @@
       </nav>
 
       <nav class="nav nav-bottom">
-        <div class="sidebar-summary">
-          <b>Bugungi xulosa</b>
-          <span>{{ sidebarInsight }}</span>
-        </div>
         <button :class="{ active: activeTab === settingsTab.key }" @click="setTab(settingsTab.key)">
           <span>{{ settingsTab.icon }}</span>
           <b>{{ settingsTab.label }}</b>
@@ -1530,14 +1526,6 @@ const unansweredAlerts = computed(() => {
     .slice(0, 5);
 });
 const unansweredAlertTotal = computed(() => unansweredAlerts.value.reduce((sum, row) => sum + Number(row.open_requests || 0), 0));
-const sidebarInsight = computed(() => {
-  const today = analytics.value.periods?.today || emptyPeriodStats;
-  const open = Number(today.open_requests || 0);
-  const closed = Number(today.closed_requests || 0);
-  if (!Number(today.total_requests || 0)) return 'Bugun hali so‘rov tushmadi. Panel real vaqtga yaqin yangilanadi.';
-  if (open > 0) return `Bugun ${closed} ta javob bor, ${open} ta so‘rov nazoratda.`;
-  return `Bugun ${closed} ta so‘rov yopildi. Ochiq muammo yo‘q.`;
-});
 const loadingText = computed(() => ({
   login: 'Kirilmoqda...',
   refresh: 'Yangilanmoqda...',
