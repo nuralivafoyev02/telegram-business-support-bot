@@ -139,6 +139,21 @@ function currentPeriodKeys(now = new Date()) {
   };
 }
 
+function normalizeDateKey(value = '') {
+  const text = String(value || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return '';
+  return dateFromTashkentKey(text) ? text : '';
+}
+
+function normalizeCustomPeriod(query = {}) {
+  const start = normalizeDateKey(query.start_date || query.date_start || query.from || query.period_start);
+  const end = normalizeDateKey(query.end_date || query.date_end || query.to || query.period_end);
+  if (!start || !end) return null;
+  return start <= end
+    ? { start, end, label: `${shortDateLabel(start)} - ${shortDateLabel(end)}` }
+    : { start: end, end: start, label: `${shortDateLabel(end)} - ${shortDateLabel(start)}` };
+}
+
 function inCurrentPeriod(value, periodKey, keys) {
   if (periodKey === 'all') return true;
   if (!value) return false;
@@ -146,6 +161,7 @@ function inCurrentPeriod(value, periodKey, keys) {
   if (periodKey === 'today') return dateKey === keys.today;
   if (periodKey === 'week') return dateKey >= keys.weekStart && dateKey <= keys.today;
   if (periodKey === 'month') return dateKey.startsWith(keys.month);
+  if (periodKey === 'custom') return keys.customStart && keys.customEnd && dateKey >= keys.customStart && dateKey <= keys.customEnd;
   return false;
 }
 
@@ -336,6 +352,7 @@ function periodTrendDateKeys(requests, periodKey, keys) {
   if (periodKey === 'today') return [keys.today];
   if (periodKey === 'week') return dateKeyRange(keys.weekStart, keys.today, 7);
   if (periodKey === 'month') return dateKeyRange(`${keys.month}-01`, keys.today, 31);
+  if (periodKey === 'custom' && keys.customStart && keys.customEnd) return dateKeyRange(keys.customStart, keys.customEnd, 62);
 
   const dateKeys = [...new Set(requests.filter(request => request.created_at).map(request => tashkentDateKey(request.created_at)).filter(Boolean))]
     .sort((a, b) => a.localeCompare(b));
@@ -378,20 +395,18 @@ function buildTicketAnswerTrend(requests, periodKey, keys) {
     }));
 }
 
-function buildCompanyTicketPerformance({ requests, chats, companies, periodKey, keys }) {
-  const chatMap = new Map(chats.map(chat => [telegramIdKey(chat.chat_id), chat]));
+function buildCompanyTicketPerformance({ requests, companies, periodKey, keys }) {
   const companyMap = new Map(companies.map(company => [company.id, company]).filter(([id]) => id));
   const totals = new Map();
 
   requests
-    .filter(request => request.created_at && inCurrentPeriod(request.created_at, periodKey, keys))
+    .filter(request => request.company_id && request.created_at && inCurrentPeriod(request.created_at, periodKey, keys))
     .forEach(request => {
-      const chat = chatMap.get(telegramIdKey(request.chat_id)) || {};
-      const company = companyMap.get(request.company_id) || companyMap.get(chat.company_id) || null;
-      const key = company?.id || request.company_id || chat.company_id || `chat:${telegramIdKey(request.chat_id)}`;
+      const company = companyMap.get(request.company_id) || null;
+      const key = company?.id || request.company_id;
       const current = totals.get(key) || {
-        company_id: company?.id || request.company_id || chat.company_id || null,
-        name: company?.name || chat.company_name || chat.title || 'Kompaniya biriktirilmagan',
+        company_id: company?.id || request.company_id,
+        name: company?.name || 'Kompaniya',
         total_requests: 0,
         closed_requests: 0,
         open_requests: 0
@@ -411,14 +426,19 @@ function buildCompanyTicketPerformance({ requests, chats, companies, periodKey, 
     .slice(0, 8);
 }
 
-function buildDashboardAnalytics({ requests, chats, employees, companies }) {
-  const keys = currentPeriodKeys();
+function buildDashboardAnalytics({ requests, chats, employees, companies, customPeriod = null }) {
+  const keys = {
+    ...currentPeriodKeys(),
+    customStart: customPeriod?.start || '',
+    customEnd: customPeriod?.end || ''
+  };
   const periods = [
     ['today', 'Bugun'],
     ['week', 'Hafta'],
     ['month', 'Oy'],
     ['all', 'Jami']
   ];
+  if (customPeriod) periods.push(['custom', customPeriod.label || 'Ixtiyoriy']);
 
   return {
     periods: Object.fromEntries(periods.map(([key, label]) => [key, buildPeriodSummary(requests, key, label, keys)])),
@@ -427,12 +447,14 @@ function buildDashboardAnalytics({ requests, chats, employees, companies }) {
     groupPerformance: Object.fromEntries(periods.map(([key]) => [key, buildGroupPerformance({ requests, chats, periodKey: key, keys })])),
     responseTimeTrend: Object.fromEntries(periods.map(([key]) => [key, buildResponseTimeTrend(requests, key, keys)])),
     ticketAnswerTrend: Object.fromEntries(periods.map(([key]) => [key, buildTicketAnswerTrend(requests, key, keys)])),
-    companyTickets: Object.fromEntries(periods.map(([key]) => [key, buildCompanyTicketPerformance({ requests, chats, companies, periodKey: key, keys })])),
+    companyTickets: Object.fromEntries(periods.map(([key]) => [key, buildCompanyTicketPerformance({ requests, companies, periodKey: key, keys })])),
+    custom_period: customPeriod,
     generated_at: new Date().toISOString()
   };
 }
 
-async function getDashboardAnalytics() {
+async function getDashboardAnalytics(query = {}) {
+  const customPeriod = normalizeCustomPeriod(query);
   const [requests, chats, employees, companies] = await Promise.all([
     supabase.select('support_requests', {
       select: 'id,source_type,chat_id,company_id,customer_tg_id,customer_name,status,closed_by_employee_id,closed_by_tg_id,closed_by_name,created_at,closed_at',
@@ -444,7 +466,7 @@ async function getDashboardAnalytics() {
     supabase.select('companies', { select: 'id,name,is_active', limit: '1000' }).catch(() => [])
   ]);
 
-  return buildDashboardAnalytics({ requests, chats, employees, companies });
+  return buildDashboardAnalytics({ requests, chats, employees, companies, customPeriod });
 }
 
 function normalizeTelegramId(value) {
@@ -807,13 +829,13 @@ function buildChatDetail({ chat, requests, events, messages, employeesById, empl
   };
 }
 
-async function getDashboard() {
+async function getDashboard(query = {}) {
   const [employeeStats, chatStats, openInsights, today, analytics] = await Promise.all([
     stats.selectEmployeeStatistics({ select: '*', order: 'closed_requests.desc', limit: '100' }),
     stats.selectChatStatistics({ select: '*', order: 'total_requests.desc', limit: '100' }),
     getOpenRequestInsights(),
     stats.selectTodaySummary({ select: '*' }),
-    getDashboardAnalytics()
+    getDashboardAnalytics(query)
   ]);
   const allPeriod = analytics.periods?.all || {};
   return {
@@ -2124,8 +2146,8 @@ async function updateAdmin(body, currentAdmin) {
 async function handleGet(action, query) {
   switch (action) {
     case 'health': return { ok: true, service: 'admin-api' };
-    case 'dashboard': return getDashboard();
-    case 'stats': return getDashboard();
+    case 'dashboard': return getDashboard(query);
+    case 'stats': return getDashboard(query);
     case 'groups': return listGroups(query);
     case 'privates': return listPrivateChats(query);
     case 'requests': return listRequests(query);

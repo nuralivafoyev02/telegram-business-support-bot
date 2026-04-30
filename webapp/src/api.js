@@ -45,7 +45,7 @@ export const api = {
     setToken(data.token);
     return data;
   },
-  dashboard: () => request('dashboard').then(r => r.data),
+  dashboard: (query = {}) => request('dashboard', { query }).then(r => r.data),
   groups: () => request('groups', { query: { limit: 500 } }).then(r => r.data),
   privates: () => request('privates', { query: { limit: 500 } }).then(r => r.data),
   companies: () => request('companies', { query: { limit: 500 } }).then(r => r.data),

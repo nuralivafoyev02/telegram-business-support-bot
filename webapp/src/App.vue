@@ -99,7 +99,7 @@
               <button type="button" @click="runHeaderAction(openBroadcast)">Umumiy xabar</button>
               <label v-if="activeTab === 'stats'" class="theme-menu-row">
                 <span>Davr</span>
-                <select v-model="selectedStatsPeriod" class="select mini-select">
+                <select v-model="selectedStatsPeriod" class="select mini-select" @change="handleStatsPeriodChange">
                   <option v-for="period in periodOptions" :key="period.key" :value="period.key">
                     {{ period.label }}
                   </option>
@@ -957,6 +957,26 @@
     </Transition>
 
     <Transition name="modal-fade">
+      <Modal v-if="modal === 'customPeriod'" title="Ixtiyoriy davr" @close="cancelCustomPeriod">
+        <form class="form two custom-period-form" @submit.prevent="applyCustomPeriod">
+          <label class="label">Boshlanish sanasi
+            <input v-model="customPeriodForm.start" class="input" type="date" required />
+          </label>
+          <label class="label">Tugash sanasi
+            <input v-model="customPeriodForm.end" class="input" type="date" required />
+          </label>
+          <p v-if="customPeriodError" class="form-error">{{ customPeriodError }}</p>
+          <div class="form-actions">
+            <button class="btn" type="button" @click="cancelCustomPeriod">Bekor qilish</button>
+            <button class="btn primary" type="submit" :disabled="loadingAction === 'customPeriod'">
+              {{ loadingAction === 'customPeriod' ? 'Yuklanmoqda...' : 'Qo‘llash' }}
+            </button>
+          </div>
+        </form>
+      </Modal>
+    </Transition>
+
+    <Transition name="modal-fade">
       <Modal v-if="modal === 'employee'" title="Xodim" @close="closeModal">
         <form class="form two" @submit.prevent="saveEmployee">
           <label class="label">Ism
@@ -1654,6 +1674,7 @@ const selectedTarget = ref(null);
 const deletingGroupId = ref('');
 const selectedSendType = ref('groups');
 const selectedStatsPeriod = ref('week');
+const previousStatsPeriod = ref('week');
 const actionMenuOpen = ref(false);
 const actionMenuRef = ref(null);
 const themeMode = ref(getStoredThemeMode());
@@ -1718,6 +1739,8 @@ const loginForm = reactive({ username: 'admin', password: '' });
 const messageForm = reactive({ text: '' });
 const requestReplyForm = reactive({ request_id: '', chat_id: '', customer_name: '', initial_text: '', text: '' });
 const broadcastForm = reactive({ target_type: 'groups', title: 'Yangilik', text: '' });
+const customPeriodForm = reactive({ start: '', end: '', appliedStart: '', appliedEnd: '' });
+const customPeriodError = ref('');
 const companyAssignForm = reactive({ companyKey: '', search: '' });
 const employeeForm = reactive({ id: '', tg_user_id: '', full_name: '', username: '', phone: '', role: 'support', is_active: true });
 const adminForm = reactive({ username: 'admin', full_name: 'Tizim admini', new_password: '' });
@@ -1795,7 +1818,7 @@ const aiIntegrationStatus = computed(() => {
 const periodOptions = [
   { key: 'week', label: '7 kun' },
   { key: 'month', label: '1 oy' },
-  { key: 'all', label: 'Ixtiyoriy' }
+  { key: 'custom', label: 'Ixtiyoriy' }
 ];
 const emptyPeriodStats = {
   total_requests: 0,
@@ -1809,7 +1832,12 @@ const emptyPeriodStats = {
   unique_customers: 0
 };
 const analytics = computed(() => dashboard.analytics || {});
-const selectedPeriodLabel = computed(() => periodOptions.find(period => period.key === selectedStatsPeriod.value)?.label || '7 kun');
+const selectedPeriodLabel = computed(() => {
+  if (selectedStatsPeriod.value === 'custom' && customPeriodForm.appliedStart && customPeriodForm.appliedEnd) {
+    return `${dateInputLabel(customPeriodForm.appliedStart)} - ${dateInputLabel(customPeriodForm.appliedEnd)}`;
+  }
+  return periodOptions.find(period => period.key === selectedStatsPeriod.value)?.label || '7 kun';
+});
 const selectedPeriodStats = computed(() => analytics.value.periods?.[selectedStatsPeriod.value] || emptyPeriodStats);
 const topEmployeeRows = computed(() => analytics.value.employeePerformance?.[selectedStatsPeriod.value] || []);
 const chatPerformanceRows = computed(() => analytics.value.chatPerformance?.[selectedStatsPeriod.value] || []);
@@ -1866,16 +1894,15 @@ const ticketTrendMax = computed(() => Math.max(1, ...ticketTrendRows.value.map(r
   Number(row.closed_requests || 0),
   Number(row.open_requests || 0)
 ))));
-const companyTicketRows = computed(() => (analytics.value.companyTickets?.[selectedStatsPeriod.value] || [])
-  .map(row => ({
-    company_id: row.company_id || row.id || '',
-    name: row.name || row.company_name || 'Kompaniya',
-    total_requests: Number(row.total_requests || 0),
-    closed_requests: Number(row.closed_requests || 0),
-    open_requests: Number(row.open_requests || 0),
-    close_rate: Number(row.close_rate || 0)
-  }))
-  .filter(row => row.total_requests > 0));
+const companyTicketRows = computed(() => {
+  const companyRows = companyApiTicketRows();
+  const rows = companyRows.length ? companyRows : (analytics.value.companyTickets?.[selectedStatsPeriod.value] || []);
+  return rows
+    .map(normalizeCompanyTicketRow)
+    .filter(row => row.total_requests > 0)
+    .sort((a, b) => b.total_requests - a.total_requests || b.closed_requests - a.closed_requests || a.name.localeCompare(b.name))
+    .slice(0, 8);
+});
 const companyTicketMax = computed(() => Math.max(1, ...companyTicketRows.value.map(row => Number(row.total_requests || 0))));
 const supportSummaryCards = computed(() => [
   {
@@ -2161,6 +2188,16 @@ function clearLoginFeedback() {
 function fmtDate(value) {
   if (!value) return '—';
   return new Intl.DateTimeFormat('uz-UZ', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value));
+}
+
+function dateInputLabel(value = '') {
+  const [year, month, day] = String(value || '').split('-');
+  return year && month && day ? `${day}.${month}.${year}` : value || '—';
+}
+
+function dateInputValue(date = new Date()) {
+  const local = new Date(date.getTime() - (date.getTimezoneOffset() * 60000));
+  return local.toISOString().slice(0, 10);
 }
 
 function fmtNumber(value) {
@@ -2525,6 +2562,58 @@ function relatedCompanyChatStats(row = {}) {
     if (companyId && String(chat.company_id || '').trim() === companyId) return true;
     return companyName && normalizedCompanyName(chat.company_name) === companyName;
   });
+}
+
+function firstNumericValue(row = {}, keys = []) {
+  for (const key of keys) {
+    const value = Number(row[key]);
+    if (Number.isFinite(value)) return value;
+  }
+  return 0;
+}
+
+function hasCompanyTicketMetric(row = {}) {
+  const keys = [
+    'total_requests', 'requests_count', 'ticket_count', 'tickets_count', 'support_ticket_count',
+    'closed_requests', 'closed_ticket_count', 'closed_tickets',
+    'open_requests', 'open_ticket_count', 'open_tickets'
+  ];
+  return keys.some(key => row[key] !== undefined && row[key] !== null && row[key] !== '');
+}
+
+function periodScopedRows(source) {
+  if (Array.isArray(source)) return source;
+  if (!source || typeof source !== 'object') return [];
+  const scoped = source[selectedStatsPeriod.value] || source.rows || source.data || source.items;
+  return Array.isArray(scoped) ? scoped : [];
+}
+
+function companyApiTicketRows() {
+  const explicitSources = [
+    companyInfo.value.companyTickets,
+    companyInfo.value.company_tickets,
+    companyInfo.value.ticket_stats,
+    companyInfo.value.tickets
+  ];
+  for (const source of explicitSources) {
+    const rows = periodScopedRows(source);
+    if (rows.length) return rows;
+  }
+  return companyInfoRows.value.filter(hasCompanyTicketMetric);
+}
+
+function normalizeCompanyTicketRow(row = {}) {
+  const closed = firstNumericValue(row, ['closed_requests', 'closed_ticket_count', 'closed_tickets', 'resolved_requests', 'resolved_ticket_count']);
+  const open = firstNumericValue(row, ['open_requests', 'open_ticket_count', 'open_tickets', 'unresolved_requests', 'unresolved_ticket_count']);
+  const total = firstNumericValue(row, ['total_requests', 'requests_count', 'ticket_count', 'tickets_count', 'support_ticket_count']) || closed + open;
+  return {
+    company_id: row.company_id || row.id || row.external_id || row.uyqur_company_id || '',
+    name: row.name || row.company_name || row.legal_name || 'Kompaniya',
+    total_requests: total,
+    closed_requests: closed,
+    open_requests: open,
+    close_rate: Number(row.close_rate || row.sla || 0)
+  };
 }
 
 function companyActivitySessionCount(row = {}) {
@@ -3291,7 +3380,7 @@ async function refresh() {
 }
 
 async function loadDashboard() {
-  const data = await api.dashboard();
+  const data = await api.dashboard(dashboardPeriodQuery());
   Object.assign(dashboard, data);
 }
 
@@ -3387,6 +3476,71 @@ function setThemeMode(mode) {
   themeMode.value = safeMode;
   if (typeof window !== 'undefined') window.localStorage.setItem(THEME_STORAGE_KEY, safeMode);
   applyThemeMode(safeMode);
+}
+
+function defaultCustomPeriodDates() {
+  const end = new Date();
+  const start = new Date(end);
+  start.setDate(start.getDate() - 6);
+  return { start: dateInputValue(start), end: dateInputValue(end) };
+}
+
+function openCustomPeriodModal() {
+  previousStatsPeriod.value = selectedStatsPeriod.value === 'custom' ? previousStatsPeriod.value : selectedStatsPeriod.value;
+  const defaults = defaultCustomPeriodDates();
+  customPeriodForm.start = customPeriodForm.appliedStart || customPeriodForm.start || defaults.start;
+  customPeriodForm.end = customPeriodForm.appliedEnd || customPeriodForm.end || defaults.end;
+  customPeriodError.value = '';
+  selectedStatsPeriod.value = 'custom';
+  actionMenuOpen.value = false;
+  modal.value = 'customPeriod';
+}
+
+function handleStatsPeriodChange() {
+  if (selectedStatsPeriod.value === 'custom') {
+    openCustomPeriodModal();
+    return;
+  }
+  previousStatsPeriod.value = selectedStatsPeriod.value;
+}
+
+function cancelCustomPeriod() {
+  customPeriodError.value = '';
+  if (!customPeriodForm.appliedStart || !customPeriodForm.appliedEnd) {
+    selectedStatsPeriod.value = previousStatsPeriod.value || 'week';
+  }
+  modal.value = '';
+}
+
+function dashboardPeriodQuery() {
+  if (selectedStatsPeriod.value !== 'custom' || !customPeriodForm.appliedStart || !customPeriodForm.appliedEnd) return {};
+  return {
+    period: 'custom',
+    start_date: customPeriodForm.appliedStart,
+    end_date: customPeriodForm.appliedEnd
+  };
+}
+
+async function applyCustomPeriod() {
+  customPeriodError.value = '';
+  if (!customPeriodForm.start || !customPeriodForm.end) {
+    customPeriodError.value = 'Ikkala sanani ham tanlang';
+    return;
+  }
+  const start = customPeriodForm.start <= customPeriodForm.end ? customPeriodForm.start : customPeriodForm.end;
+  const end = customPeriodForm.start <= customPeriodForm.end ? customPeriodForm.end : customPeriodForm.start;
+  customPeriodForm.appliedStart = start;
+  customPeriodForm.appliedEnd = end;
+  selectedStatsPeriod.value = 'custom';
+  modal.value = '';
+  startLoading('customPeriod');
+  try {
+    await loadSupportPerformance();
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    stopLoading('customPeriod');
+  }
 }
 
 function runHeaderAction(action) {
