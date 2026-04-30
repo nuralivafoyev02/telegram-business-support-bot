@@ -80,7 +80,7 @@
           <h1>{{ currentTitle }}</h1>
           <p>{{ currentSubtitle }}</p>
         </div>
-        <div class="top-actions-menu">
+        <div class="top-actions-menu" ref="actionMenuRef">
           <button class="profile-action" type="button" :aria-expanded="actionMenuOpen"
             @click="actionMenuOpen = !actionMenuOpen">
             <span class="profile-avatar">{{ userInitials }}</span>
@@ -1041,7 +1041,110 @@
 
     <Transition name="modal-fade">
       <Modal v-if="modal === 'metricDetail'" :title="metricDetail.title" wide @close="closeModal">
-        <div class="detail-stack">
+        <div v-if="metricDetail.chatPane" class="metric-chat-workspace">
+          <section class="metric-table-panel">
+            <div v-if="metricDetail.summary?.length" class="detail-summary metric-detail-summary metric-chat-summary">
+              <div v-for="item in metricDetail.summary" :key="item.label">
+                <span>{{ item.label }}</span>
+                <b>{{ item.value }}</b>
+              </div>
+            </div>
+            <DataTable :columns="metricDetail.columns" :rows="metricDetail.rows" :empty="metricDetail.empty"
+              :page-size="metricDetail.pageSize || 12" :on-cell-action="handleMetricDetailCellAction"
+              :row-class="metricDetailRowClass" />
+          </section>
+
+          <section class="detail-section metric-chat-panel">
+            <div class="metric-chat-header">
+              <div>
+                <div class="card-title">{{ metricChatTitle }}</div>
+                <div class="card-note">
+                  {{ metricChatDetail.chat ? fmtNumber(metricChatConversation.length) + ' ta xabar' : 'Chat tanlang' }}
+                </div>
+              </div>
+              <span v-if="metricChatDetail.chat?.source_type" class="badge blue">
+                {{ sourceTypeLabel(metricChatDetail.chat.source_type) }}
+              </span>
+            </div>
+
+            <div v-if="metricChatLoading" class="metric-chat-state">
+              <span class="spinner" aria-hidden="true"></span>
+              <span>Chat yuklanmoqda...</span>
+            </div>
+            <div v-else-if="metricChatError" class="metric-chat-state error">
+              {{ metricChatError }}
+            </div>
+            <div v-else-if="metricChatDetail.chat" class="metric-chat-content">
+              <div class="metric-chat-stats">
+                <div>
+                  <span>So‘rov</span>
+                  <b>{{ fmtNumber(metricChatDetail.chat.total_requests) }}</b>
+                </div>
+                <div>
+                  <span>Ochiq</span>
+                  <b>{{ fmtNumber(metricChatDetail.chat.open_requests) }}</b>
+                </div>
+                <div>
+                  <span>Yopilgan</span>
+                  <b>{{ fmtNumber(metricChatDetail.chat.closed_requests) }}</b>
+                </div>
+              </div>
+
+              <section class="metric-request-strip">
+                <div class="metric-strip-head">
+                  <b>So‘rovlar</b>
+                  <span>{{ fmtNumber(metricChatDetail.requests?.length) }}</span>
+                </div>
+                <div v-if="metricChatDetail.requests?.length" class="metric-request-list">
+                  <article v-for="request in metricChatDetail.requests" :key="request.id" class="metric-request-card">
+                    <div class="metric-request-head">
+                      <span class="badge" :class="request.status === 'closed' ? 'green' : 'orange'">
+                        {{ statusLabel(request.status) }}
+                      </span>
+                      <time>{{ fmtDate(request.created_at) }}</time>
+                    </div>
+                    <p>{{ request.initial_text || 'So‘rov matni yo‘q' }}</p>
+                    <small v-if="request.solution_text">Javob: {{ request.solution_text }}</small>
+                    <button v-if="request.status === 'open'" class="btn small" type="button"
+                      @click.stop="openRequestReply(request)">Javob</button>
+                  </article>
+                </div>
+                <div v-else class="empty compact">Bu chatda so‘rov yo‘q</div>
+              </section>
+
+              <div v-if="metricChatConversation.length" ref="metricChatThreadRef"
+                class="telegram-thread metric-chat-thread">
+                <article v-for="message in metricChatConversation" :key="chatBubbleKey(message)" class="chat-bubble-row"
+                  :class="{ outbound: message.direction === 'outbound' }">
+                  <div class="chat-bubble">
+                    <div class="chat-bubble-author">{{ message.actor_name || (message.direction === 'outbound' ? 'Xodim'
+                      : 'Mijoz') }}</div>
+                    <div v-if="message.media" class="chat-media">
+                      <img v-if="message.media.kind === 'photo' && mediaUrl(message.media)" class="chat-media-image"
+                        :src="mediaUrl(message.media)" alt="" />
+                      <video v-else-if="isVideoMedia(message.media) && mediaUrl(message.media)" class="chat-media-video"
+                        :src="mediaUrl(message.media)" controls playsinline></video>
+                      <audio v-else-if="isAudioMedia(message.media) && mediaUrl(message.media)" class="chat-media-audio"
+                        :src="mediaUrl(message.media)" controls></audio>
+                      <div v-else class="chat-media-placeholder">
+                        {{ mediaPlaceholder(message.media) }}
+                      </div>
+                    </div>
+                    <p v-if="message.text">{{ message.text }}</p>
+                    <div class="chat-bubble-footer">
+                      <span v-if="message.request_text" class="chat-ticket">So‘rov</span>
+                      <time>{{ fmtChatTime(message.created_at) }}</time>
+                    </div>
+                  </div>
+                </article>
+              </div>
+              <div v-else class="empty compact">Dialog tarixi yo‘q</div>
+            </div>
+            <div v-else class="metric-chat-state">Chapdagi ro‘yxatdan chat tanlang</div>
+          </section>
+        </div>
+
+        <div v-else class="detail-stack">
           <div v-if="metricDetail.summary?.length" class="detail-summary metric-detail-summary">
             <div v-for="item in metricDetail.summary" :key="item.label">
               <span>{{ item.label }}</span>
@@ -1311,7 +1414,7 @@
 </template>
 
 <script setup>
-import { computed, defineComponent, h, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
+import { computed, defineComponent, h, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 import { api, getToken, setToken } from './api';
 
 const ACTIVE_TAB_STORAGE_KEY = 'uyqur_support_active_tab';
@@ -1373,6 +1476,7 @@ const deletingGroupId = ref('');
 const selectedSendType = ref('groups');
 const selectedStatsPeriod = ref('week');
 const actionMenuOpen = ref(false);
+const actionMenuRef = ref(null);
 const themeMode = ref(getStoredThemeMode());
 const selectedGroups = ref([]);
 const selectedEmployees = ref([]);
@@ -1384,6 +1488,11 @@ const employees = ref([]);
 const companyInfo = ref({ summary: {}, companies: [], fetched_at: '', source: '' });
 const requestRows = ref([]);
 const chatDetail = ref({ chat: null, requests: [], timeline: [] });
+const metricChatDetail = ref({ chat: null, requests: [], conversation: [] });
+const metricChatLoading = ref(false);
+const metricChatError = ref('');
+const metricChatSelectedId = ref('');
+const metricChatThreadRef = ref(null);
 const employeeDrilldown = ref(null);
 const employeeActivity = ref({ employee: null, summary: {}, groups: [], closed_requests: [], messages: [] });
 const employeeCompanyDetail = ref({ employee: null, summary: {}, companies: [] });
@@ -1812,6 +1921,17 @@ function stopLoading(action) {
 function showToast(text) {
   toast.value = text;
   setTimeout(() => { toast.value = ''; }, 5200);
+}
+
+function handleDocumentPointerDown(event) {
+  if (!actionMenuOpen.value) return;
+  const root = actionMenuRef.value;
+  if (root && root.contains(event.target)) return;
+  actionMenuOpen.value = false;
+}
+
+function handleDocumentKeydown(event) {
+  if (event.key === 'Escape') actionMenuOpen.value = false;
 }
 
 function clearLoginFeedback() {
@@ -2405,6 +2525,11 @@ const chatDetailTitle = computed(() => {
   return chat ? `Chat: ${chat.title || chat.chat_id}` : 'Chat tafsiloti';
 });
 const chatConversation = computed(() => chatDetail.value.conversation || []);
+const metricChatConversation = computed(() => metricChatDetail.value.conversation || []);
+const metricChatTitle = computed(() => {
+  const chat = metricChatDetail.value.chat;
+  return chat ? chat.title || chat.username || chat.chat_id || 'Chat' : 'Chat tanlanmagan';
+});
 const employeeDrilldownTitle = computed(() => employeeDrilldown.value ? `Xodim: ${employeeDrilldown.value.full_name || employeeDrilldown.value.username || '—'}` : 'Xodim tafsiloti');
 const employeeCompanyTitle = computed(() => employeeCompanyDetail.value.employee
   ? `Kompaniyalar: ${employeeCompanyDetail.value.employee.full_name || employeeCompanyDetail.value.employee.username || 'Xodim'}`
@@ -2995,6 +3120,10 @@ function tableActionChatRow(row = {}) {
   };
 }
 
+function chatIdKey(row = {}) {
+  return row?.chat_id === undefined || row?.chat_id === null ? '' : String(row.chat_id);
+}
+
 function telegramUrlFor(row = {}) {
   const username = String(row.username || row.customer_username || '').replace(/^@/, '').trim();
   if (username) return `https://t.me/${encodeURIComponent(username)}`;
@@ -3223,9 +3352,88 @@ function openRemainingRequests() {
   modal.value = 'openRequests';
 }
 
-function setMetricDetail({ title, rows, columns, empty = 'Ma’lumot topilmadi', pageSize = 12, summary = [] }) {
-  metricDetail.value = { title, rows, columns, empty, pageSize, summary };
+function resetMetricChatDetail() {
+  metricChatDetail.value = { chat: null, requests: [], conversation: [] };
+  metricChatLoading.value = false;
+  metricChatError.value = '';
+  metricChatSelectedId.value = '';
+}
+
+function setMetricDetail({ title, rows, columns, empty = 'Ma’lumot topilmadi', pageSize = 12, summary = [], chatPane = false }) {
+  resetMetricChatDetail();
+  metricDetail.value = { title, rows, columns, empty, pageSize, summary, chatPane };
   modal.value = 'metricDetail';
+}
+
+function isGroupMetricRow(row = {}) {
+  return String(row.source_type || row.chat_source_type || '').toLowerCase() === 'group';
+}
+
+function sumMetricRows(rows = [], key = 'total_requests') {
+  return rows.reduce((sum, row) => sum + Number(row[key] || 0), 0);
+}
+
+function supportMetricSummary(rows = []) {
+  const groupRows = rows.filter(isGroupMetricRow);
+  const chatRows = rows.filter(row => !isGroupMetricRow(row));
+  return [
+    { label: 'Jami so‘rov', value: fmtNumber(sumMetricRows(rows, 'total_requests')) },
+    { label: 'Javob berilgan', value: fmtNumber(sumMetricRows(rows, 'closed_requests')) },
+    { label: 'Ochiq', value: fmtNumber(sumMetricRows(rows, 'open_requests')) },
+    { label: 'Guruhdan kelgan', value: fmtNumber(sumMetricRows(groupRows, 'total_requests')) },
+    { label: 'Chatdan kelgan', value: fmtNumber(sumMetricRows(chatRows, 'total_requests')) }
+  ];
+}
+
+async function scrollMetricChatToEnd() {
+  await nextTick();
+  const thread = metricChatThreadRef.value;
+  if (thread) thread.scrollTop = thread.scrollHeight;
+}
+
+async function loadMetricChatDetail(row = {}) {
+  const chatRow = tableActionChatRow(row);
+  if (!chatRow) {
+    metricChatError.value = 'Chat tafsiloti uchun chat raqami topilmadi';
+    return;
+  }
+  const selectedKey = chatIdKey(chatRow);
+  metricChatSelectedId.value = selectedKey;
+  metricChatLoading.value = true;
+  metricChatError.value = '';
+  clearMediaUrls();
+  try {
+    const data = await api.chatDetail({ chat_id: chatRow.chat_id });
+    if (metricChatSelectedId.value !== selectedKey) return;
+    metricChatDetail.value = data;
+    await scrollMetricChatToEnd();
+    loadConversationMedia(data.conversation || [])
+      .then(scrollMetricChatToEnd)
+      .catch(error => showToast(error.message));
+  } catch (error) {
+    if (metricChatSelectedId.value !== selectedKey) return;
+    metricChatDetail.value = {
+      chat: { ...chatRow, title: chatRow.title || String(chatRow.chat_id), total_requests: 0, open_requests: 0, closed_requests: 0 },
+      requests: [],
+      conversation: []
+    };
+    metricChatError.value = error.message;
+  } finally {
+    if (metricChatSelectedId.value === selectedKey) metricChatLoading.value = false;
+  }
+}
+
+function handleMetricDetailCellAction(payload) {
+  if (metricDetail.value.chatPane) {
+    loadMetricChatDetail(payload.row);
+    return;
+  }
+  handleTableCellAction(payload);
+}
+
+function metricDetailRowClass(row = {}) {
+  const key = chatIdKey(row);
+  return metricDetail.value.chatPane && key && key === metricChatSelectedId.value ? 'selected-row' : '';
 }
 
 function openSupportMetricDetail(kind = 'requests') {
@@ -3250,13 +3458,10 @@ function openSupportMetricDetail(kind = 'requests') {
     rows,
     columns: supportMetricColumns,
     empty: 'Chat/guruh ma’lumoti topilmadi',
-    summary: [
-      { label: 'Jami so‘rov', value: fmtNumber(rows.reduce((sum, row) => sum + Number(row.total_requests || 0), 0)) },
-      { label: 'Javob berilgan', value: fmtNumber(rows.reduce((sum, row) => sum + Number(row.closed_requests || 0), 0)) },
-      { label: 'Ochiq', value: fmtNumber(rows.reduce((sum, row) => sum + Number(row.open_requests || 0), 0)) },
-      { label: 'Chat/guruh', value: fmtNumber(rows.length) }
-    ]
+    summary: supportMetricSummary(rows),
+    chatPane: true
   });
+  loadMetricChatDetail(rows[0]);
 }
 
 function productMetricRows(kind = 'total') {
@@ -3350,7 +3555,8 @@ function openAlertRequests(row = {}) {
 }
 
 function closeModal() {
-  if (modal.value === 'chatDetail') clearMediaUrls();
+  if (modal.value === 'chatDetail' || modal.value === 'metricDetail') clearMediaUrls();
+  if (modal.value === 'metricDetail') resetMetricChatDetail();
   modal.value = '';
   selectedTarget.value = null;
 }
@@ -3479,6 +3685,7 @@ async function loadRequests(row) {
 }
 
 function openRequestReply(row = {}) {
+  const previousModal = modal.value;
   Object.assign(requestReplyForm, {
     request_id: row.id || row.request_id || '',
     chat_id: row.chat_id || selectedTarget.value?.chat_id || '',
@@ -3487,6 +3694,8 @@ function openRequestReply(row = {}) {
     text: ''
   });
   if (!requestReplyForm.request_id) return showToast('So‘rov ID topilmadi');
+  if (previousModal === 'chatDetail' || previousModal === 'metricDetail') clearMediaUrls();
+  if (previousModal === 'metricDetail') resetMetricChatDetail();
   modal.value = 'requestReply';
 }
 
@@ -3754,6 +3963,10 @@ async function sendTestLog() {
 
 onMounted(async () => {
   applyThemeMode(themeMode.value);
+  if (typeof document !== 'undefined') {
+    document.addEventListener('pointerdown', handleDocumentPointerDown);
+    document.addEventListener('keydown', handleDocumentKeydown);
+  }
   durationTimer = setInterval(() => {
     nowTick.value = Date.now();
   }, 60_000);
@@ -3764,6 +3977,10 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+  if (typeof document !== 'undefined') {
+    document.removeEventListener('pointerdown', handleDocumentPointerDown);
+    document.removeEventListener('keydown', handleDocumentKeydown);
+  }
   if (durationTimer) clearInterval(durationTimer);
 });
 
@@ -3821,6 +4038,7 @@ const DataTable = defineComponent({
     rows: Array,
     empty: String,
     onCellAction: Function,
+    rowClass: Function,
     pageSize: { type: Number, default: 20 }
   },
   setup(props, { slots }) {
@@ -3886,7 +4104,9 @@ const DataTable = defineComponent({
         safeRows.value.length
           ? h('table', [
             h('thead', h('tr', props.columns.map(col => h('th', { class: col.key === 'select' ? 'select-cell' : '' }, col.label)))),
-            h('tbody', pagedRows.value.map(row => h('tr', props.columns.map(col => {
+            h('tbody', pagedRows.value.map(row => h('tr', {
+              class: typeof props.rowClass === 'function' ? props.rowClass(row) : ''
+            }, props.columns.map(col => {
               const action = resolveAction(col, row);
               const cellProps = {
                 class: [
