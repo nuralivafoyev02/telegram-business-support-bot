@@ -747,6 +747,7 @@ function buildChatDetail({ chat, requests, events, messages, employeesById, empl
         message_id: message.tg_message_id || null,
         actor_name: (employee && employee.full_name) || message.from_name || (rawSource === 'admin_send' ? 'Admin' : 'Xodim'),
         actor_username: (employee && employee.username) || message.from_username || '',
+        actor_tg_user_id: message.from_tg_user_id || null,
         employee_id: (employee && employee.id) || message.employee_id || null,
         text: message.text || '',
         request_text: request ? request.initial_text || '' : '',
@@ -773,6 +774,7 @@ function buildChatDetail({ chat, requests, events, messages, employeesById, empl
         actor_type: direction === 'outbound' ? 'employee' : 'customer',
         actor_name: (employee && employee.full_name) || message.from_name || (rawSource === 'admin_send' ? 'Admin' : 'Mijoz'),
         actor_username: (employee && employee.username) || message.from_username || '',
+        actor_tg_user_id: message.from_tg_user_id || null,
         employee_id: (employee && employee.id) || message.employee_id || null,
         text: message.text || '',
         media: extractMessageMedia(message.raw),
@@ -1140,13 +1142,25 @@ async function getEmployeeActivity(query = {}) {
     ...closedRequests.map(request => request.chat_id),
     ...messages.map(message => message.chat_id)
   ].filter(value => value !== undefined && value !== null))];
-  const chats = chatIds.length
-    ? await supabase.select('tg_chats', {
-      select: 'chat_id,title,username,source_type,last_message_at',
-      chat_id: supabase.inList(chatIds),
-      limit: '1000'
-    }).catch(() => [])
-    : [];
+  const [chats, allChatMessages, allEmployees] = chatIds.length
+    ? await Promise.all([
+      supabase.select('tg_chats', {
+        select: 'chat_id,title,username,source_type,last_message_at',
+        chat_id: supabase.inList(chatIds),
+        limit: '1000'
+      }).catch(() => []),
+      supabase.select('messages', {
+        select: 'id,tg_message_id,chat_id,from_tg_user_id,from_name,from_username,employee_id,source_type,classification,text,created_at',
+        chat_id: supabase.inList(chatIds),
+        order: supabase.order('created_at', false),
+        limit: '5000'
+      }).catch(() => []),
+      supabase.select('employees', {
+        select: 'id,tg_user_id,full_name,username,role,is_active',
+        limit: '1000'
+      }).catch(() => [])
+    ])
+    : [[], [], []];
   const openRequests = chatIds.length
     ? await supabase.select('support_requests', {
       select: requestSelect,
@@ -1156,8 +1170,25 @@ async function getEmployeeActivity(query = {}) {
       limit: '1000'
     }).catch(() => [])
     : [];
-  const periodOpenRequests = openRequests.filter(request => inCurrentPeriod(request.created_at, periodKey, keys));
   const chatMap = new Map(chats.map(chat => [telegramIdKey(chat.chat_id), chat]));
+  const messagesByChat = new Map();
+  allChatMessages.forEach(message => {
+    const key = telegramIdKey(message.chat_id);
+    if (!messagesByChat.has(key)) messagesByChat.set(key, []);
+    messagesByChat.get(key).push(message);
+  });
+  const employeeMaps = buildEmployeeMaps(allEmployees.length ? allEmployees : [employee]);
+  const selectedEmployeeId = String(employee.id || '').trim();
+  const selectedTgUserId = telegramIdKey(employee.tg_user_id);
+  function requestResponsibleMatchesEmployee(request = {}) {
+    const responsible = resolveRequestResponsibleEmployee(request, messagesByChat.get(telegramIdKey(request.chat_id)) || [], employeeMaps);
+    if (!responsible) return false;
+    if (selectedEmployeeId && String(responsible.employee_id || '') === selectedEmployeeId) return true;
+    return Boolean(selectedTgUserId && telegramIdKey(responsible.tg_user_id) === selectedTgUserId);
+  }
+  const periodOpenRequests = openRequests
+    .filter(request => request.status === 'open' && inCurrentPeriod(request.created_at, periodKey, keys))
+    .filter(requestResponsibleMatchesEmployee);
   const chatTitle = chatId => displayChatTitle(chatMap.get(telegramIdKey(chatId)) || { chat_id: chatId });
   const requestSummary = request => ({
     id: request.id,
@@ -1168,6 +1199,9 @@ async function getEmployeeActivity(query = {}) {
     customer_username: request.customer_username || '',
     initial_text: request.initial_text || '',
     status: request.status,
+    closed_by_employee_id: request.closed_by_employee_id || null,
+    closed_by_tg_id: request.closed_by_tg_id || null,
+    closed_by_name: request.closed_by_name || '',
     created_at: request.created_at || null,
     closed_at: request.closed_at || null
   });
@@ -1176,6 +1210,10 @@ async function getEmployeeActivity(query = {}) {
     message_id: message.tg_message_id || null,
     chat_id: message.chat_id,
     chat_title: chatTitle(message.chat_id),
+    from_tg_user_id: message.from_tg_user_id || null,
+    from_name: message.from_name || '',
+    from_username: message.from_username || '',
+    employee_id: message.employee_id || null,
     text: message.text || '',
     classification: message.classification || '',
     created_at: message.created_at || null

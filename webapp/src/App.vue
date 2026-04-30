@@ -2853,7 +2853,7 @@ const employeeProfileConversation = computed(() => {
   const conversation = Array.isArray(employeeProfileChatDetail.value.conversation) ? employeeProfileChatDetail.value.conversation : [];
   const filtered = conversation.filter(message => {
     if (messageBelongsToEmployee(message, employee)) return true;
-    if (message.request_id && requestIds.has(String(message.request_id))) return true;
+    if (message.request_id && requestIds.has(String(message.request_id)) && message.direction !== 'outbound') return true;
     return false;
   });
   if (filtered.length) return filtered;
@@ -2863,6 +2863,7 @@ const employeeProfileConversation = computed(() => {
     direction: 'outbound',
     actor_name: employee.full_name || employee.username || 'Xodim',
     actor_username: employee.username || '',
+    actor_tg_user_id: employee.tg_user_id || null,
     employee_id: employee.id || employee.employee_id || null,
     text: message.text || '',
     created_at: message.created_at || null,
@@ -3604,12 +3605,16 @@ function messageBelongsToEmployee(message = {}, employee = {}) {
   const employeeId = String(employee.id || employee.employee_id || '').trim();
   const messageEmployeeId = String(message.employee_id || '').trim();
   if (employeeId && messageEmployeeId && employeeId === messageEmployeeId) return true;
+  const employeeTgUserId = String(employee.tg_user_id || '').trim();
+  const messageTgUserId = String(message.actor_tg_user_id || message.from_tg_user_id || '').trim();
+  if (employeeTgUserId && messageTgUserId && employeeTgUserId === messageTgUserId) return true;
   const employeeUsername = normalizeSupportUsername(employee.username);
   const messageUsername = normalizeSupportUsername(message.actor_username || message.from_username || '');
   if (employeeUsername && messageUsername && employeeUsername === messageUsername) return true;
   const employeeName = String(employee.full_name || '').trim().toLowerCase();
   const actorName = String(message.actor_name || message.from_name || '').trim().toLowerCase();
-  return Boolean(employeeName && actorName && employeeName === actorName);
+  const outboundEmployeeMessage = message.direction === 'outbound' || message.actor_type === 'employee';
+  return Boolean(outboundEmployeeMessage && employeeName && actorName && employeeName === actorName);
 }
 
 function resetEmployeeProfileChat() {
@@ -3639,7 +3644,8 @@ async function selectEmployeeProfileChat(row = {}) {
     const data = await api.chatDetail({ chat_id: row.chat_id });
     if (token !== employeeProfileChatToken || employeeProfileSelectedChatKey.value !== key) return;
     employeeProfileChatDetail.value = data;
-    loadConversationMedia(data.conversation || []).catch(error => showToast(error.message));
+    await nextTick();
+    loadConversationMedia(employeeProfileConversation.value).catch(error => showToast(error.message));
   } catch (error) {
     if (token !== employeeProfileChatToken || employeeProfileSelectedChatKey.value !== key) return;
     employeeProfileChatDetail.value = { chat: null, requests: [], conversation: [] };
