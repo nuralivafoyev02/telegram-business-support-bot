@@ -206,7 +206,8 @@
                   </span>
                 </template>
                 <template #openRequests="{ row }">
-                  <span class="open-count" :class="{ warn: Number(row.open_requests || 0) >= 5, danger: Number(row.open_requests || 0) >= 8 }">
+                  <span class="open-count"
+                    :class="{ warn: Number(row.open_requests || 0) >= 5, danger: Number(row.open_requests || 0) >= 8 }">
                     {{ fmtNumber(row.open_requests) }}
                   </span>
                 </template>
@@ -232,9 +233,12 @@
                 <div v-if="ticketTrendRows.length" class="ticket-trend-chart">
                   <article v-for="row in ticketTrendRows" :key="row.date_key" class="ticket-trend-day">
                     <div class="ticket-trend-bars" :title="ticketTrendTooltip(row)">
-                      <span class="ticket-bar total" :style="{ height: chartBarHeight(row.total_requests, ticketTrendMax) }"></span>
-                      <span class="ticket-bar closed" :style="{ height: chartBarHeight(row.closed_requests, ticketTrendMax) }"></span>
-                      <span class="ticket-bar open" :style="{ height: chartBarHeight(row.open_requests, ticketTrendMax) }"></span>
+                      <span class="ticket-bar total"
+                        :style="{ height: chartBarHeight(row.total_requests, ticketTrendMax) }"></span>
+                      <span class="ticket-bar closed"
+                        :style="{ height: chartBarHeight(row.closed_requests, ticketTrendMax) }"></span>
+                      <span class="ticket-bar open"
+                        :style="{ height: chartBarHeight(row.open_requests, ticketTrendMax) }"></span>
                     </div>
                     <b>{{ row.weekday_label }}</b>
                     <span>{{ row.date_label }}</span>
@@ -252,11 +256,14 @@
                   </div>
                 </div>
                 <div v-if="companyTicketRows.length" class="company-ticket-bars">
-                  <article v-for="row in companyTicketRows" :key="row.company_id || row.name" class="company-ticket-row">
+                  <article v-for="row in companyTicketRows" :key="row.company_id || row.name"
+                    class="company-ticket-row">
                     <b>{{ row.name }}</b>
                     <div class="company-ticket-track">
-                      <span class="company-ticket-fill closed" :style="{ width: companyTicketWidth(row.closed_requests) }"></span>
-                      <span class="company-ticket-fill open" :style="{ left: companyTicketWidth(row.closed_requests), width: companyTicketWidth(row.open_requests) }"></span>
+                      <span class="company-ticket-fill closed"
+                        :style="{ width: companyTicketWidth(row.closed_requests) }"></span>
+                      <span class="company-ticket-fill open"
+                        :style="{ left: companyTicketWidth(row.closed_requests), width: companyTicketWidth(row.open_requests) }"></span>
                     </div>
                     <strong>
                       <span class="closed-text">{{ fmtNumber(row.closed_requests) }}</span>
@@ -283,8 +290,9 @@
             <div class="spacer"></div>
 
             <div class="metric-strip">
-              <article class="card metric clickable-metric" role="button" tabindex="0" title="Kuzatuvdagi kompaniyalarni ko‘rish"
-                @click="openProductMetricDetail('total')" @keydown.enter.prevent="openProductMetricDetail('total')"
+              <article class="card metric clickable-metric" role="button" tabindex="0"
+                title="Kuzatuvdagi kompaniyalarni ko‘rish" @click="openProductMetricDetail('total')"
+                @keydown.enter.prevent="openProductMetricDetail('total')"
                 @keydown.space.prevent="openProductMetricDetail('total')">
                 <div class="metric-head">
                   <div class="metric-label">Kuzatuvdagi kompaniya</div>
@@ -293,8 +301,9 @@
                 <div class="metric-value">{{ fmtNumber(productUsageSummary.total) }}</div>
                 <div class="metric-mini">Texnik yordam biriktirilgan kompaniyalar</div>
               </article>
-              <article class="card metric clickable-metric" role="button" tabindex="0" title="Aktiv kompaniyalarni ko‘rish"
-                @click="openProductMetricDetail('active')" @keydown.enter.prevent="openProductMetricDetail('active')"
+              <article class="card metric clickable-metric" role="button" tabindex="0"
+                title="Aktiv kompaniyalarni ko‘rish" @click="openProductMetricDetail('active')"
+                @keydown.enter.prevent="openProductMetricDetail('active')"
                 @keydown.space.prevent="openProductMetricDetail('active')">
                 <div class="metric-head">
                   <div class="metric-label">Aktiv foydalanish</div>
@@ -303,8 +312,9 @@
                 <div class="metric-value">{{ fmtNumber(productUsageSummary.active) }}</div>
                 <div class="metric-mini">{{ fmtPercent(productUsageSummary.active_rate) }} biznes aktiv</div>
               </article>
-              <article class="card metric clickable-metric" role="button" tabindex="0" title="Yuqori foydalanishdagi kompaniyalarni ko‘rish"
-                @click="openProductMetricDetail('highUsage')" @keydown.enter.prevent="openProductMetricDetail('highUsage')"
+              <article class="card metric clickable-metric" role="button" tabindex="0"
+                title="Yuqori foydalanishdagi kompaniyalarni ko‘rish" @click="openProductMetricDetail('highUsage')"
+                @keydown.enter.prevent="openProductMetricDetail('highUsage')"
                 @keydown.space.prevent="openProductMetricDetail('highUsage')">
                 <div class="metric-head">
                   <div class="metric-label">O‘rtacha foydalanish</div>
@@ -313,8 +323,9 @@
                 <div class="metric-value">{{ fmtNumber(productUsageSummary.average_score) }}%</div>
                 <div class="metric-mini">{{ fmtNumber(productUsageSummary.high_usage) }} ta yuqori foydalanmoqda</div>
               </article>
-              <article class="card metric clickable-metric" role="button" tabindex="0" title="Riskdagi kompaniyalarni ko‘rish"
-                @click="openProductMetricDetail('risk')" @keydown.enter.prevent="openProductMetricDetail('risk')"
+              <article class="card metric clickable-metric" role="button" tabindex="0"
+                title="Riskdagi kompaniyalarni ko‘rish" @click="openProductMetricDetail('risk')"
+                @keydown.enter.prevent="openProductMetricDetail('risk')"
                 @keydown.space.prevent="openProductMetricDetail('risk')">
                 <div class="metric-head">
                   <div class="metric-label">Risk va churn</div>
@@ -389,8 +400,8 @@
                     </article>
                   </div>
                   <div class="subscription-timeline">
-                    <article v-for="row in subscriptionTimelineRows" :key="row.id || row.name" class="timeline-company-row"
-                      role="button" tabindex="0" title="Kompaniya tafsilotini ko‘rish"
+                    <article v-for="row in subscriptionTimelineRows" :key="row.id || row.name"
+                      class="timeline-company-row" role="button" tabindex="0" title="Kompaniya tafsilotini ko‘rish"
                       @click="openCompanyTimelineDetail(row)" @keydown.enter.prevent="openCompanyTimelineDetail(row)"
                       @keydown.space.prevent="openCompanyTimelineDetail(row)">
                       <div class="timeline-company-meta">
@@ -410,7 +421,8 @@
                         </div>
                       </div>
                       <div class="timeline-status">
-                        <span class="status-pill mini" :class="expiryStatusClass(row)">{{ expiryStatusLabel(row) }}</span>
+                        <span class="status-pill mini" :class="expiryStatusClass(row)">{{ expiryStatusLabel(row)
+                        }}</span>
                         <small>{{ businessStatusLabel(row.business_status) }}</small>
                       </div>
                     </article>
@@ -425,8 +437,9 @@
             <Toolbar v-model="search" placeholder="Kompaniya, direktor, support yoki telefon bo‘yicha qidirish" />
 
             <div class="metric-strip company-metrics">
-              <article class="card metric clickable-metric" role="button" tabindex="0" title="Kompaniyalar ro‘yxatini ko‘rish"
-                @click="openCompanyMetricDetail('total')" @keydown.enter.prevent="openCompanyMetricDetail('total')"
+              <article class="card metric clickable-metric" role="button" tabindex="0"
+                title="Kompaniyalar ro‘yxatini ko‘rish" @click="openCompanyMetricDetail('total')"
+                @keydown.enter.prevent="openCompanyMetricDetail('total')"
                 @keydown.space.prevent="openCompanyMetricDetail('total')">
                 <div class="metric-head">
                   <div class="metric-label">Kompaniyalar</div>
@@ -435,8 +448,9 @@
                 <div class="metric-value">{{ fmtNumber(companyActivitySummary.total) }}</div>
                 <div class="metric-mini">{{ fmtNumber(companyActivitySummary.real) }} tasi real kompaniya</div>
               </article>
-              <article class="card metric clickable-metric" role="button" tabindex="0" title="Biznes aktiv kompaniyalarni ko‘rish"
-                @click="openCompanyMetricDetail('active')" @keydown.enter.prevent="openCompanyMetricDetail('active')"
+              <article class="card metric clickable-metric" role="button" tabindex="0"
+                title="Biznes aktiv kompaniyalarni ko‘rish" @click="openCompanyMetricDetail('active')"
+                @keydown.enter.prevent="openCompanyMetricDetail('active')"
                 @keydown.space.prevent="openCompanyMetricDetail('active')">
                 <div class="metric-head">
                   <div class="metric-label">Biznes aktiv</div>
@@ -445,8 +459,9 @@
                 <div class="metric-value">{{ fmtNumber(companyActivitySummary.business_active) }}</div>
                 <div class="metric-mini">{{ fmtNumber(companyActivitySummary.business_new) }} ta yangi kompaniya</div>
               </article>
-              <article class="card metric clickable-metric" role="button" tabindex="0" title="Churn yoki pauzadagi kompaniyalarni ko‘rish"
-                @click="openCompanyMetricDetail('paused')" @keydown.enter.prevent="openCompanyMetricDetail('paused')"
+              <article class="card metric clickable-metric" role="button" tabindex="0"
+                title="Churn yoki pauzadagi kompaniyalarni ko‘rish" @click="openCompanyMetricDetail('paused')"
+                @keydown.enter.prevent="openCompanyMetricDetail('paused')"
                 @keydown.space.prevent="openCompanyMetricDetail('paused')">
                 <div class="metric-head">
                   <div class="metric-label">Churn/Pauza</div>
@@ -455,8 +470,9 @@
                 <div class="metric-value">{{ fmtNumber(companyActivitySummary.business_paused) }}</div>
                 <div class="metric-mini">Biznes holati pauzada</div>
               </article>
-              <article class="card metric clickable-metric" role="button" tabindex="0" title="Obunasi yaqin yoki tugagan kompaniyalarni ko‘rish"
-                @click="openCompanyMetricDetail('expiry')" @keydown.enter.prevent="openCompanyMetricDetail('expiry')"
+              <article class="card metric clickable-metric" role="button" tabindex="0"
+                title="Obunasi yaqin yoki tugagan kompaniyalarni ko‘rish" @click="openCompanyMetricDetail('expiry')"
+                @keydown.enter.prevent="openCompanyMetricDetail('expiry')"
                 @keydown.space.prevent="openCompanyMetricDetail('expiry')">
                 <div class="metric-head">
                   <div class="metric-label">Obuna yaqin</div>
@@ -486,10 +502,10 @@
                         :x2="bar.x" y1="36" y2="198" />
                     </g>
                     <g class="trend-axis">
-                      <text v-for="tick in activeCompanyYTicks" :key="`company-yt-${tick.value}`" x="40"
-                        :y="tick.y + 5" text-anchor="end">{{ fmtNumber(tick.value) }}</text>
-                      <text v-for="bar in activeCompanyChartBars" :key="`company-label-${bar.label}`" :x="bar.x"
-                        y="235" text-anchor="middle">{{ bar.short_label }}</text>
+                      <text v-for="tick in activeCompanyYTicks" :key="`company-yt-${tick.value}`" x="40" :y="tick.y + 5"
+                        text-anchor="end">{{ fmtNumber(tick.value) }}</text>
+                      <text v-for="bar in activeCompanyChartBars" :key="`company-label-${bar.label}`" :x="bar.x" y="235"
+                        text-anchor="middle">{{ bar.short_label }}</text>
                     </g>
                     <g>
                       <rect v-for="bar in activeCompanyChartBars" :key="`company-bar-${bar.label}`" class="company-bar"
@@ -1245,7 +1261,8 @@
             <span class="employee-profile-avatar-wrap">
               <img v-if="employeeAvatarUrl(employeeProfile.employee)" class="employee-profile-avatar"
                 :src="employeeAvatarUrl(employeeProfile.employee)" alt="" />
-              <span v-else class="employee-profile-avatar fallback">{{ employeeInitials(employeeProfile.employee) }}</span>
+              <span v-else class="employee-profile-avatar fallback">{{ employeeInitials(employeeProfile.employee)
+              }}</span>
             </span>
             <div class="employee-profile-title">
               <h2>{{ employeeProfile.employee?.full_name || employeeProfile.employee?.username || 'Xodim' }}</h2>
@@ -1254,7 +1271,8 @@
             </div>
             <div class="employee-profile-pills">
               <span class="profile-pill">🛡️ SLA <b>{{ fmtPercent(employeeProfile.summary?.sla) }}</b></span>
-              <span class="profile-pill">✅ Yopish foizi <b>{{ fmtPercent(employeeProfile.summary?.close_rate) }}</b></span>
+              <span class="profile-pill">✅ Yopish foizi <b>{{ fmtPercent(employeeProfile.summary?.close_rate)
+              }}</b></span>
               <span class="profile-pill">⭐ Reyting <b>#{{ employeeProfile.rank || '—' }}</b></span>
             </div>
           </header>
@@ -1303,8 +1321,9 @@
                   <span>
                     <b>{{ chat.title || chat.chat_id }}</b>
                     <small>{{ chatPreview(chat) }}</small>
-                    <em>{{ fmtNumber(chat.total_requests) }} ta ticket · {{ fmtNumber(chat.closed_count) }} yopilgan · {{
-                      fmtNumber(chat.open_count) }} ochiq</em>
+                    <em>{{ fmtNumber(chat.total_requests) }} ta ticket · {{ fmtNumber(chat.closed_count) }} yopilgan ·
+                      {{
+                        fmtNumber(chat.open_count) }} ochiq</em>
                   </span>
                   <strong v-if="chat.open_count">{{ fmtNumber(chat.open_count) }}</strong>
                 </button>
@@ -1319,9 +1338,10 @@
                     <b>{{ selectedEmployeeProfileChat.title || selectedEmployeeProfileChat.chat_id }}</b>
                     <span>{{ fmtNumber(selectedEmployeeProfileChat.total_requests) }} ticket · {{
                       fmtNumber(selectedEmployeeProfileChat.open_count) }} ochiq · {{
-                      fmtNumber(selectedEmployeeProfileChat.closed_count) }} yopilgan</span>
+                        fmtNumber(selectedEmployeeProfileChat.closed_count) }} yopilgan</span>
                   </div>
-                  <button class="btn small" type="button" @click="loadChatDetail(selectedEmployeeProfileChat)">Chat tafsiloti</button>
+                  <button class="btn small" type="button" @click="loadChatDetail(selectedEmployeeProfileChat)">Chat
+                    tafsiloti</button>
                 </div>
 
                 <div v-if="employeeProfileChatRequests.length" class="employee-ticket-strip">
@@ -1338,7 +1358,8 @@
                 </div>
 
                 <div v-if="employeeProfileChatLoading" class="metric-chat-state">Chat yuklanmoqda...</div>
-                <div v-else-if="employeeProfileChatError" class="metric-chat-state error">{{ employeeProfileChatError }}</div>
+                <div v-else-if="employeeProfileChatError" class="metric-chat-state error">{{ employeeProfileChatError }}
+                </div>
                 <div v-else-if="employeeProfileConversation.length" class="telegram-thread employee-profile-thread">
                   <article v-for="message in employeeProfileConversation" :key="chatBubbleKey(message)"
                     class="chat-bubble-row" :class="{ outbound: message.direction === 'outbound' }">
@@ -1348,10 +1369,10 @@
                       <div v-if="message.media" class="chat-media">
                         <img v-if="message.media.kind === 'photo' && mediaUrl(message.media)" class="chat-media-image"
                           :src="mediaUrl(message.media)" alt="" />
-                        <video v-else-if="isVideoMedia(message.media) && mediaUrl(message.media)" class="chat-media-video"
-                          :src="mediaUrl(message.media)" controls playsinline></video>
-                        <audio v-else-if="isAudioMedia(message.media) && mediaUrl(message.media)" class="chat-media-audio"
-                          :src="mediaUrl(message.media)" controls></audio>
+                        <video v-else-if="isVideoMedia(message.media) && mediaUrl(message.media)"
+                          class="chat-media-video" :src="mediaUrl(message.media)" controls playsinline></video>
+                        <audio v-else-if="isAudioMedia(message.media) && mediaUrl(message.media)"
+                          class="chat-media-audio" :src="mediaUrl(message.media)" controls></audio>
                         <div v-else class="chat-media-placeholder">
                           {{ mediaPlaceholder(message.media) }}
                         </div>
@@ -1573,9 +1594,9 @@ import { api, getToken, setToken } from './api';
 const ACTIVE_TAB_STORAGE_KEY = 'uyqur_support_active_tab';
 const THEME_STORAGE_KEY = 'uyqur_support_theme';
 const tabs = [
-  { key: 'stats', label: 'Texnik yordam samaradorligi', icon: '📊' },
-  { key: 'productAnalytics', label: 'Mahsulot analitikasi', icon: '📈' },
-  { key: 'companyActivity', label: 'Kompaniyalar faolligi', icon: '🏢' },
+  { key: 'stats', label: 'Support performance', icon: '📊' },
+  { key: 'productAnalytics', label: 'Product analytics', icon: '📈' },
+  { key: 'companyActivity', label: 'Company activity', icon: '🏢' },
   { key: 'groups', label: 'Bot ulangan guruhlar', icon: '👥' },
   { key: 'employees', label: 'Xodimlar', icon: '🧑‍💼' },
   { key: 'companies', label: 'Kompaniyalar', icon: '🏬' },
@@ -2906,6 +2927,17 @@ const supportPerformanceColumns = [
   { key: 'sla', label: 'SLA ⓘ', slot: 'sla', action: 'employeeCompanies' }
 ];
 
+const supportSummaryEmployeeColumns = [
+  { key: 'rank', label: 'O‘rin', format: value => value ? `#${fmtNumber(value)}` : '—', action: 'employeeCompanies' },
+  { key: 'full_name', label: 'Xodim', format: (_, row) => row.full_name || row.username || 'Xodim', action: 'employeeCompanies' },
+  { key: 'total_requests', label: 'So‘rov', format: fmtNumber, action: 'employeeCompanies' },
+  { key: 'handled_chats', label: 'Guruh/chat', format: fmtNumber, action: 'employeeCompanies' },
+  { key: 'closed_requests', label: 'Yopilgan', format: fmtNumber, action: 'employeeCompanies' },
+  { key: 'open_requests', label: 'Ochiq', format: fmtNumber, action: 'employeeCompanies' },
+  { key: 'avg_close_minutes', label: 'O‘rtacha javob', format: fmtMinutes, action: 'employeeCompanies' },
+  { key: 'sla', label: 'SLA', format: fmtPercent, action: 'employeeCompanies' }
+];
+
 const employeeColumns = [
   { key: 'select', label: '', slot: 'select' },
   { key: 'full_name', label: 'Xodim', action: 'employeeInfo' },
@@ -3921,6 +3953,113 @@ function openSupportMetricDetail(kind = 'requests') {
   loadMetricChatDetail(rows[0]);
 }
 
+function employeeSummaryKey(row = {}) {
+  const username = normalizeSupportUsername(row.username || row.responsible_employee_username || '');
+  if (username) return `u:${username}`;
+  const id = String(row.employee_id || row.id || row.responsible_employee_id || '').trim();
+  if (id) return `id:${id}`;
+  const tgUserId = String(row.tg_user_id || '').trim();
+  if (tgUserId) return `tg:${tgUserId}`;
+  return String(row.full_name || row.responsible_employee_name || '').trim().toLowerCase();
+}
+
+function employeeOpenRequestSummaryMap() {
+  const map = new Map();
+  (dashboard.openRequests || []).forEach(request => {
+    const key = employeeSummaryKey(request);
+    if (!key) return;
+    const current = map.get(key) || {
+      key,
+      employee_id: request.responsible_employee_id || '',
+      username: request.responsible_employee_username || '',
+      full_name: request.responsible_employee_name || 'Xodim biriktirilmagan',
+      open_requests: 0,
+      chat_keys: new Set()
+    };
+    current.open_requests += 1;
+    if (request.chat_id) current.chat_keys.add(String(request.chat_id));
+    map.set(key, current);
+  });
+  return map;
+}
+
+function employeeSummaryRows(kind = 'requests') {
+  const openMap = employeeOpenRequestSummaryMap();
+  const rowMap = new Map();
+  topSupportCards.value.forEach(row => {
+    const key = employeeSummaryKey(row);
+    const openSummary = key ? openMap.get(key) : null;
+    const openRequests = openSummary ? Number(openSummary.open_requests || 0) : Number(row.open_requests || 0);
+    rowMap.set(key || row.key || row.full_name, {
+      ...row,
+      total_requests: Number(row.closed_requests || 0) + openRequests,
+      open_requests: openRequests,
+      handled_chats: Math.max(Number(row.handled_chats || 0), openSummary?.chat_keys?.size || 0)
+    });
+    if (key) openMap.delete(key);
+  });
+  openMap.forEach(row => {
+    rowMap.set(row.key, {
+      ...row,
+      rank: '',
+      closed_requests: 0,
+      total_requests: Number(row.open_requests || 0),
+      handled_chats: row.chat_keys.size,
+      avg_close_minutes: 0,
+      sla: 0,
+      close_rate: 0
+    });
+  });
+  const rows = [...rowMap.values()];
+  if (kind === 'closed') {
+    return rows
+      .filter(row => Number(row.closed_requests || 0) > 0)
+      .sort((a, b) => Number(b.closed_requests || 0) - Number(a.closed_requests || 0));
+  }
+  if (kind === 'open') {
+    return rows
+      .filter(row => Number(row.open_requests || 0) > 0)
+      .sort((a, b) => Number(b.open_requests || 0) - Number(a.open_requests || 0));
+  }
+  if (kind === 'avg') {
+    return rows
+      .filter(row => Number(row.avg_close_minutes || 0) > 0)
+      .sort((a, b) => Number(b.avg_close_minutes || 0) - Number(a.avg_close_minutes || 0));
+  }
+  return rows
+    .filter(row => Number(row.total_requests || 0) > 0)
+    .sort((a, b) => Number(b.total_requests || 0) - Number(a.total_requests || 0));
+}
+
+function supportSummaryEmployeeSummary(rows = []) {
+  return [
+    { label: 'Xodimlar', value: fmtNumber(rows.length) },
+    { label: 'Jami so‘rov', value: fmtNumber(sumMetricRows(rows, 'total_requests')) },
+    { label: 'Yopilgan', value: fmtNumber(sumMetricRows(rows, 'closed_requests')) },
+    { label: 'Ochiq', value: fmtNumber(sumMetricRows(rows, 'open_requests')) },
+    { label: 'Guruh/chat', value: fmtNumber(sumMetricRows(rows, 'handled_chats')) }
+  ];
+}
+
+function openSupportEmployeeSummary(kind = 'requests') {
+  const titleMap = {
+    requests: `${selectedPeriodLabel.value}: xodimlar bo‘yicha so‘rovlar`,
+    closed: `${selectedPeriodLabel.value}: javob berilgan so‘rovlar`,
+    open: `${selectedPeriodLabel.value}: javobsiz so‘rovlar`,
+    avg: `${selectedPeriodLabel.value}: o‘rtacha javob vaqti`
+  };
+  const rows = employeeSummaryRows(kind);
+  if (!rows.length) return showToast('Bu davr uchun xodimlar kesimida ma’lumot yo‘q');
+  setMetricDetail({
+    title: titleMap[kind] || titleMap.requests,
+    rows,
+    columns: supportSummaryEmployeeColumns,
+    empty: 'Xodimlar bo‘yicha ma’lumot topilmadi',
+    summary: supportSummaryEmployeeSummary(rows),
+    pageSize: 12
+  });
+}
+
 function productMetricRows(kind = 'total') {
   const rows = productUsageRows.value.map(enrichCompanyTimeline);
   if (kind === 'active') return rows.filter(row => row.business_status === 'ACTIVE');
@@ -3984,11 +4123,7 @@ function openCompanyMetricDetail(kind = 'total') {
 }
 
 function openSupportSummaryCard(action = 'requests') {
-  if (action === 'open') {
-    openRemainingRequests();
-    return;
-  }
-  openSupportMetricDetail(action);
+  openSupportEmployeeSummary(action);
 }
 
 function openCompanyTimelineDetail(row = {}) {

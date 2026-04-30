@@ -3395,7 +3395,11 @@ tbody tr:hover {
 
 .employee-support-modal {
   display: grid;
+  grid-template-rows: auto auto auto minmax(0, 1fr);
   gap: 18px;
+  max-height: calc(100dvh - 148px);
+  min-height: 0;
+  overflow: hidden;
 }
 
 .employee-support-head {
@@ -3549,14 +3553,19 @@ tbody tr:hover {
 .employee-chat-layout {
   display: grid;
   grid-template-columns: minmax(320px, .42fr) minmax(0, 1fr);
-  min-height: min(560px, 62vh);
+  height: min(560px, 62vh);
+  min-height: 0;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   overflow: hidden;
 }
 
 .employee-chat-list-panel {
+  display: flex;
+  flex-direction: column;
   min-width: 0;
+  min-height: 0;
+  overflow: hidden;
   border-right: 1px solid var(--line);
   background: var(--surface);
 }
@@ -3581,8 +3590,10 @@ tbody tr:hover {
 
 .employee-chat-list {
   display: grid;
-  max-height: min(510px, 56vh);
-  overflow: auto;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .employee-chat-list button {
@@ -3662,7 +3673,9 @@ tbody tr:hover {
 .employee-chat-pane {
   display: flex;
   min-width: 0;
+  min-height: 0;
   flex-direction: column;
+  overflow: hidden;
   background: var(--surface);
 }
 
@@ -3695,8 +3708,10 @@ tbody tr:hover {
 .employee-ticket-strip {
   display: grid;
   gap: 10px;
+  flex: 0 0 auto;
   max-height: 190px;
-  overflow: auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 14px 20px;
   border-bottom: 1px solid var(--line);
   background: var(--surface-soft);
@@ -3747,8 +3762,10 @@ tbody tr:hover {
 
 .employee-profile-thread {
   flex: 1;
-  min-height: 320px;
+  min-height: 0;
   max-height: none;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 tbody tr.selected-row,
@@ -4239,6 +4256,11 @@ tbody tr.selected-row .cell-action {
   .employee-chat-layout,
   .subscription-diagram {
     grid-template-columns: 1fr;
+  }
+
+  .employee-chat-layout {
+    grid-template-rows: minmax(180px, .42fr) minmax(0, 1fr);
+    height: min(680px, 72vh);
   }
 
   .employee-chat-list-panel {
