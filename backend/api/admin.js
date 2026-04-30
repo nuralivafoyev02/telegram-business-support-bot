@@ -4,7 +4,7 @@ const { Readable } = require('stream');
 const supabase = require('../lib/supabase');
 const { allowCors, sendJson, readBody, getQuery } = require('../lib/http');
 const { login, requireAdmin, hashPassword } = require('../lib/auth');
-const { sendMessage, sendBusinessMessage, getWebhookInfo, setWebhook, getFile, downloadFile } = require('../lib/telegram');
+const { sendMessage, sendBusinessMessage, getWebhookInfo, setWebhook, getFile, getUserProfilePhotos, downloadFile } = require('../lib/telegram');
 const { optionalEnv } = require('../lib/env');
 const { normalizeSettings, clearBotSettingsCache } = require('../lib/bot-settings');
 const { normalizeAiIntegration, mergeAiIntegration, sanitizeAiIntegration, isAiIntegrationReady, isAiIntegrationConfigured, aiIntegrationSignature } = require('../lib/ai-config');
@@ -92,18 +92,49 @@ function tashkentDateKey(value = new Date()) {
   return `${parts.year}-${parts.month}-${parts.day}`;
 }
 
+function dateFromTashkentKey(dateKey) {
+  const [year, month, day] = String(dateKey || '').split('-').map(value => Number.parseInt(value, 10));
+  if (!year || !month || !day) return null;
+  return new Date(Date.UTC(year, month - 1, day, 12));
+}
+
+function addDaysToDateKey(dateKey, days) {
+  const date = dateFromTashkentKey(dateKey);
+  if (!date) return dateKey;
+  date.setUTCDate(date.getUTCDate() + days);
+  return tashkentDateKey(date);
+}
+
+function dateKeyRange(startKey, endKey, maxDays = 45) {
+  const keys = [];
+  let cursor = startKey;
+  let guard = 0;
+  while (cursor && cursor <= endKey && guard < maxDays) {
+    keys.push(cursor);
+    cursor = addDaysToDateKey(cursor, 1);
+    guard += 1;
+  }
+  return keys;
+}
+
+function shortDateLabel(dateKey) {
+  const [, month, day] = String(dateKey || '').split('-');
+  return day && month ? `${day}.${month}.${String(dateKey).slice(0, 4)}` : dateKey || '';
+}
+
+function weekdayLabel(dateKey) {
+  const date = dateFromTashkentKey(dateKey);
+  if (!date) return '—';
+  return ['Ya', 'Du', 'Se', 'Ch', 'Pa', 'Ju', 'Sh'][date.getUTCDay()] || '—';
+}
+
 function currentPeriodKeys(now = new Date()) {
   const today = tashkentDateKey(now);
   const { year, month, day } = tashkentDateParts(now);
-  const localMidday = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day), 12));
-  const weekday = localMidday.getUTCDay();
-  const daysSinceMonday = (weekday + 6) % 7;
-  localMidday.setUTCDate(localMidday.getUTCDate() - daysSinceMonday);
-  const weekStart = tashkentDateKey(localMidday);
 
   return {
     today,
-    weekStart,
+    weekStart: addDaysToDateKey(today, -6),
     month: `${year}-${month}`
   };
 }
@@ -301,7 +332,86 @@ function buildResponseTimeTrend(requests, periodKey, keys) {
     }));
 }
 
-function buildDashboardAnalytics({ requests, chats, employees }) {
+function periodTrendDateKeys(requests, periodKey, keys) {
+  if (periodKey === 'today') return [keys.today];
+  if (periodKey === 'week') return dateKeyRange(keys.weekStart, keys.today, 7);
+  if (periodKey === 'month') return dateKeyRange(`${keys.month}-01`, keys.today, 31);
+
+  const dateKeys = [...new Set(requests.filter(request => request.created_at).map(request => tashkentDateKey(request.created_at)).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b));
+  return dateKeys.slice(-14);
+}
+
+function buildTicketAnswerTrend(requests, periodKey, keys) {
+  const buckets = new Map(periodTrendDateKeys(requests, periodKey, keys).map(dateKey => [dateKey, {
+    date_key: dateKey,
+    date_label: shortDateLabel(dateKey),
+    weekday_label: weekdayLabel(dateKey),
+    total_requests: 0,
+    closed_requests: 0,
+    open_requests: 0
+  }]));
+
+  requests
+    .filter(request => request.created_at && inCurrentPeriod(request.created_at, periodKey, keys))
+    .forEach(request => {
+      const dateKey = tashkentDateKey(request.created_at);
+      const current = buckets.get(dateKey) || {
+        date_key: dateKey,
+        date_label: shortDateLabel(dateKey),
+        weekday_label: weekdayLabel(dateKey),
+        total_requests: 0,
+        closed_requests: 0,
+        open_requests: 0
+      };
+      current.total_requests += 1;
+      if (request.status === 'closed') current.closed_requests += 1;
+      if (request.status === 'open') current.open_requests += 1;
+      buckets.set(dateKey, current);
+    });
+
+  return [...buckets.values()]
+    .sort((a, b) => a.date_key.localeCompare(b.date_key))
+    .map(row => ({
+      ...row,
+      sla: percent(row.closed_requests, row.total_requests)
+    }));
+}
+
+function buildCompanyTicketPerformance({ requests, chats, companies, periodKey, keys }) {
+  const chatMap = new Map(chats.map(chat => [telegramIdKey(chat.chat_id), chat]));
+  const companyMap = new Map(companies.map(company => [company.id, company]).filter(([id]) => id));
+  const totals = new Map();
+
+  requests
+    .filter(request => request.created_at && inCurrentPeriod(request.created_at, periodKey, keys))
+    .forEach(request => {
+      const chat = chatMap.get(telegramIdKey(request.chat_id)) || {};
+      const company = companyMap.get(request.company_id) || companyMap.get(chat.company_id) || null;
+      const key = company?.id || request.company_id || chat.company_id || `chat:${telegramIdKey(request.chat_id)}`;
+      const current = totals.get(key) || {
+        company_id: company?.id || request.company_id || chat.company_id || null,
+        name: company?.name || chat.company_name || chat.title || 'Kompaniya biriktirilmagan',
+        total_requests: 0,
+        closed_requests: 0,
+        open_requests: 0
+      };
+      current.total_requests += 1;
+      if (request.status === 'closed') current.closed_requests += 1;
+      if (request.status === 'open') current.open_requests += 1;
+      totals.set(key, current);
+    });
+
+  return [...totals.values()]
+    .map(row => ({
+      ...row,
+      close_rate: percent(row.closed_requests, row.total_requests)
+    }))
+    .sort((a, b) => b.total_requests - a.total_requests || b.closed_requests - a.closed_requests || a.name.localeCompare(b.name))
+    .slice(0, 8);
+}
+
+function buildDashboardAnalytics({ requests, chats, employees, companies }) {
   const keys = currentPeriodKeys();
   const periods = [
     ['today', 'Bugun'],
@@ -316,22 +426,25 @@ function buildDashboardAnalytics({ requests, chats, employees }) {
     chatPerformance: Object.fromEntries(periods.map(([key]) => [key, buildChatPerformance({ requests, chats, periodKey: key, keys })])),
     groupPerformance: Object.fromEntries(periods.map(([key]) => [key, buildGroupPerformance({ requests, chats, periodKey: key, keys })])),
     responseTimeTrend: Object.fromEntries(periods.map(([key]) => [key, buildResponseTimeTrend(requests, key, keys)])),
+    ticketAnswerTrend: Object.fromEntries(periods.map(([key]) => [key, buildTicketAnswerTrend(requests, key, keys)])),
+    companyTickets: Object.fromEntries(periods.map(([key]) => [key, buildCompanyTicketPerformance({ requests, chats, companies, periodKey: key, keys })])),
     generated_at: new Date().toISOString()
   };
 }
 
 async function getDashboardAnalytics() {
-  const [requests, chats, employees] = await Promise.all([
+  const [requests, chats, employees, companies] = await Promise.all([
     supabase.select('support_requests', {
       select: 'id,source_type,chat_id,company_id,customer_tg_id,customer_name,status,closed_by_employee_id,closed_by_tg_id,closed_by_name,created_at,closed_at',
       order: supabase.order('created_at', false),
       limit: '10000'
     }).catch(() => []),
     stats.selectChatStatistics({ select: '*', is_active: 'eq.true', limit: '1000' }).catch(() => []),
-    supabase.select('employees', { select: 'id,tg_user_id,full_name,username,role,is_active', limit: '1000' }).catch(() => [])
+    supabase.select('employees', { select: 'id,tg_user_id,full_name,username,role,is_active', limit: '1000' }).catch(() => []),
+    supabase.select('companies', { select: 'id,name,is_active', limit: '1000' }).catch(() => [])
   ]);
 
-  return buildDashboardAnalytics({ requests, chats, employees });
+  return buildDashboardAnalytics({ requests, chats, employees, companies });
 }
 
 function normalizeTelegramId(value) {
@@ -1034,10 +1147,21 @@ async function getEmployeeActivity(query = {}) {
       limit: '1000'
     }).catch(() => [])
     : [];
+  const openRequests = chatIds.length
+    ? await supabase.select('support_requests', {
+      select: requestSelect,
+      chat_id: supabase.inList(chatIds),
+      status: supabase.eq('open'),
+      order: supabase.order('created_at', false),
+      limit: '1000'
+    }).catch(() => [])
+    : [];
+  const periodOpenRequests = openRequests.filter(request => inCurrentPeriod(request.created_at, periodKey, keys));
   const chatMap = new Map(chats.map(chat => [telegramIdKey(chat.chat_id), chat]));
   const chatTitle = chatId => displayChatTitle(chatMap.get(telegramIdKey(chatId)) || { chat_id: chatId });
   const requestSummary = request => ({
     id: request.id,
+    source_type: request.source_type || chatMap.get(telegramIdKey(request.chat_id))?.source_type || '',
     chat_id: request.chat_id,
     chat_title: chatTitle(request.chat_id),
     customer_name: request.customer_name || telegramIdKey(request.customer_tg_id) || 'Mijoz',
@@ -1060,14 +1184,20 @@ async function getEmployeeActivity(query = {}) {
   const grouped = new Map();
   const ensureGroup = chatId => {
     const key = telegramIdKey(chatId);
+    const chat = chatMap.get(key) || {};
     const current = grouped.get(key) || {
       chat_id: chatId,
       title: chatTitle(chatId),
+      source_type: chat.source_type || 'private',
+      username: chat.username || '',
+      last_message_at: chat.last_message_at || null,
       message_count: 0,
       closed_count: 0,
+      open_count: 0,
       customers: new Set(),
       messages: [],
-      closed_requests: []
+      closed_requests: [],
+      open_requests: []
     };
     grouped.set(key, current);
     return current;
@@ -1084,6 +1214,12 @@ async function getEmployeeActivity(query = {}) {
     group.message_count += 1;
     group.messages.push(messageSummary(message));
   });
+  periodOpenRequests.forEach(request => {
+    const group = ensureGroup(request.chat_id);
+    group.open_count += 1;
+    if (request.customer_name || request.customer_tg_id) group.customers.add(request.customer_name || telegramIdKey(request.customer_tg_id));
+    group.open_requests.push(requestSummary(request));
+  });
 
   const groups = [...grouped.values()]
     .map(group => ({
@@ -1091,9 +1227,10 @@ async function getEmployeeActivity(query = {}) {
       customers: [...group.customers],
       customer_count: group.customers.size,
       messages: group.messages.sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || ''))).slice(0, 30),
-      closed_requests: group.closed_requests.sort((a, b) => String(b.closed_at || '').localeCompare(String(a.closed_at || ''))).slice(0, 30)
+      closed_requests: group.closed_requests.sort((a, b) => String(b.closed_at || '').localeCompare(String(a.closed_at || ''))).slice(0, 30),
+      open_requests: group.open_requests.sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || ''))).slice(0, 30)
     }))
-    .sort((a, b) => (b.closed_count + b.message_count) - (a.closed_count + a.message_count));
+    .sort((a, b) => (b.closed_count + b.open_count + b.message_count) - (a.closed_count + a.open_count + a.message_count));
 
   return {
     employee,
@@ -1102,10 +1239,12 @@ async function getEmployeeActivity(query = {}) {
       handled_chats: groups.length,
       message_count: messages.length,
       closed_requests: closedRequests.length,
-      customer_count: new Set(closedRequests.map(request => request.customer_tg_id || request.customer_name).filter(Boolean)).size
+      open_requests: periodOpenRequests.length,
+      customer_count: new Set([...closedRequests, ...periodOpenRequests].map(request => request.customer_tg_id || request.customer_name).filter(Boolean)).size
     },
     groups,
     closed_requests: closedRequests.map(requestSummary),
+    open_requests: periodOpenRequests.map(requestSummary),
     messages: messages.map(messageSummary)
   };
 }
@@ -1264,6 +1403,15 @@ async function sendTelegramFile(query, res) {
   const buffer = Buffer.from(await response.arrayBuffer());
   res.setHeader('Content-Length', String(buffer.length));
   res.end(buffer);
+}
+
+async function sendTelegramProfilePhoto(query, res) {
+  const tgUserId = normalizeTelegramId(query.tg_user_id || query.user_id);
+  if (!tgUserId) throw new Error('tg_user_id majburiy');
+  const profile = await getUserProfilePhotos(tgUserId, { limit: 1 });
+  const photo = bestPhotoSize(profile?.photos?.[0] || []);
+  if (!photo?.file_id) throw new Error('Telegram profil rasmi topilmadi');
+  await sendTelegramFile({ file_id: photo.file_id }, res);
 }
 
 async function getTelegramWebhookStatus() {
@@ -1985,6 +2133,10 @@ async function handler(req, res) {
     if (req.method === 'GET') {
       if (action === 'telegramFile') {
         await sendTelegramFile(query, res);
+        return;
+      }
+      if (action === 'telegramProfilePhoto') {
+        await sendTelegramProfilePhoto(query, res);
         return;
       }
       const data = await handleGet(action, query);

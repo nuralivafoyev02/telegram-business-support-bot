@@ -115,14 +115,15 @@
         <div class="page-body" :key="activeTab">
           <template v-if="activeTab === 'stats'">
             <div class="section-toolbar">
-              <label class="period-control">
+              <div class="period-control" role="group" aria-label="Statistika davri">
                 <span>Davr</span>
-                <select v-model="selectedStatsPeriod" class="select period-select">
-                  <option v-for="period in periodOptions" :key="period.key" :value="period.key">
+                <div class="period-tabs">
+                  <button v-for="period in periodOptions" :key="period.key" type="button"
+                    :class="{ active: selectedStatsPeriod === period.key }" @click="selectedStatsPeriod = period.key">
                     {{ period.label }}
-                  </option>
-                </select>
-              </label>
+                  </button>
+                </div>
+              </div>
             </div>
 
             <div class="support-summary-grid">
@@ -188,54 +189,104 @@
             <section class="card top-support-card">
               <div class="card-header performance-head">
                 <div>
-                  <div class="card-title">Texnik yordam xodimlari statistikasi</div>
-                  <div class="card-note">{{ selectedPeriodLabel }} kesimida barcha xodimlar, javoblar va biriktirilgan kompaniyalar</div>
+                  <div class="card-title">Hodimlar reytingi</div>
+                  <div class="card-note">Ticketlarni yopish, ochiq qoldiqlar va SLA bo‘yicha support natijasi</div>
                 </div>
-                <span v-if="topPerformerName" class="success-pill">Eng faol xodim: {{ topPerformerName }}</span>
+                <div class="ranking-actions">
+                  <span v-if="topPerformerName" class="success-pill">🏆 Top hodim: {{ topPerformerName }}</span>
+                  <button class="btn small icon-btn" type="button" aria-label="Qo‘shimcha amallar">•••</button>
+                </div>
               </div>
               <DataTable :columns="supportPerformanceColumns" :rows="topSupportCards"
                 empty="Hozircha natija ma’lumoti yo‘q" :on-cell-action="handleTableCellAction" :page-size="12">
                 <template #rank="{ row }">
-                  <span class="rank-pill" :class="{ gold: row.rank === 1, silver: row.rank === 2 }">{{ row.rank }}-o‘rin</span>
+                  <span class="rank-number">{{ row.rank }}</span>
                 </template>
-                <template #grade="{ row }">
-                  <span class="grade-pill" :class="performanceGradeClass(row.grade)">{{ row.grade }}</span>
+                <template #employeeIdentity="{ row }">
+                  <span class="employee-cell">
+                    <img v-if="employeeAvatarUrl(row)" class="employee-avatar" :src="employeeAvatarUrl(row)" alt="" />
+                    <span v-else class="employee-avatar fallback">{{ employeeInitials(row) }}</span>
+                    <b>{{ row.full_name || 'Xodim' }}</b>
+                  </span>
+                </template>
+                <template #openRequests="{ row }">
+                  <span class="open-count" :class="{ warn: Number(row.open_requests || 0) >= 5, danger: Number(row.open_requests || 0) >= 8 }">
+                    {{ fmtNumber(row.open_requests) }}
+                  </span>
+                </template>
+                <template #closeRate="{ row }">
+                  <b class="table-strong">{{ fmtPercent(row.close_rate) }}</b>
+                </template>
+                <template #sla="{ row }">
+                  <span class="sla-badge" :class="slaToneClass(row.sla)">{{ fmtPercent(row.sla) }}</span>
                 </template>
               </DataTable>
             </section>
 
             <div class="spacer"></div>
 
-            <div class="stats-charts single">
-              <section class="card chart-card line-chart-card">
-                <div class="card-header">
+            <div class="stats-charts support-analytics-grid">
+              <section class="card chart-card ticket-trend-card">
+                <div class="card-header chart-card-head">
                   <div>
-                    <div class="card-title">Javob vaqti trendlari</div>
-                    <div class="card-note">Soatlar bo‘yicha o‘rtacha javob vaqti</div>
+                    <div class="card-title">Ticket va javoblar trendi</div>
+                    <div class="card-note">{{ selectedPeriodLabel }} bo‘yicha kunlik solishtirish</div>
+                  </div>
+                  <div class="period-tabs compact" aria-label="Trend davri">
+                    <button v-for="period in periodOptions" :key="`trend-${period.key}`" type="button"
+                      :class="{ active: selectedStatsPeriod === period.key }" @click="selectedStatsPeriod = period.key">
+                      {{ period.label }}
+                    </button>
                   </div>
                 </div>
-                <div class="trend-chart">
-                  <svg viewBox="0 0 760 230" role="img" aria-label="Javob vaqti trendlari">
-                    <g class="trend-grid">
-                      <line v-for="tick in responseTrendYTicks" :key="`y-${tick.value}`" x1="50" x2="720"
-                        :y1="tick.y" :y2="tick.y" />
-                      <line v-for="point in responseTrendPoints" :key="`x-${point.label}`" :x1="point.x" :x2="point.x"
-                        y1="24" y2="176" />
-                    </g>
-                    <g class="trend-axis">
-                      <text v-for="tick in responseTrendYTicks" :key="`yt-${tick.value}`" x="40" :y="tick.y + 5"
-                        text-anchor="end">{{ fmtNumber(tick.value) }}</text>
-                      <text v-for="point in responseTrendPoints" :key="`xt-${point.label}`" :x="point.x" y="210"
-                        text-anchor="middle">{{ point.label }}</text>
-                    </g>
-                    <polyline class="trend-line" :points="responseTrendPolyline" fill="none" />
-                    <g>
-                      <circle v-for="point in responseTrendPoints" :key="`dot-${point.label}`" class="trend-dot"
-                        :cx="point.x" :cy="point.y" r="4">
-                        <title>{{ responseTrendTooltip(point) }}</title>
-                      </circle>
-                    </g>
-                  </svg>
+                <div v-if="ticketTrendRows.length" class="ticket-trend-chart">
+                  <article v-for="row in ticketTrendRows" :key="row.date_key" class="ticket-trend-day">
+                    <div class="ticket-trend-bars" :title="ticketTrendTooltip(row)">
+                      <span class="ticket-bar total" :style="{ height: chartBarHeight(row.total_requests, ticketTrendMax) }"></span>
+                      <span class="ticket-bar closed" :style="{ height: chartBarHeight(row.closed_requests, ticketTrendMax) }"></span>
+                      <span class="ticket-bar open" :style="{ height: chartBarHeight(row.open_requests, ticketTrendMax) }"></span>
+                    </div>
+                    <b>{{ row.weekday_label }}</b>
+                    <span>{{ row.date_label }}</span>
+                    <em class="sla-chip" :class="slaToneClass(row.sla)">SLA {{ fmtPercent(row.sla) }}</em>
+                  </article>
+                </div>
+                <div v-else class="empty compact">Bu davr uchun trend ma’lumoti yo‘q</div>
+              </section>
+
+              <section class="card chart-card company-ticket-card">
+                <div class="card-header chart-card-head">
+                  <div>
+                    <div class="card-title">Kompaniyalar bo‘yicha ticketlar</div>
+                    <div class="card-note">Kompaniyalar kesimida yopilgan va ochiq qolgan ticketlar</div>
+                  </div>
+                  <div class="period-tabs compact" aria-label="Kompaniya statistikasi davri">
+                    <button v-for="period in periodOptions" :key="`company-${period.key}`" type="button"
+                      :class="{ active: selectedStatsPeriod === period.key }" @click="selectedStatsPeriod = period.key">
+                      {{ period.key === 'all' ? 'Maxsus' : period.label }}
+                    </button>
+                  </div>
+                </div>
+                <div v-if="companyTicketRows.length" class="company-ticket-bars">
+                  <article v-for="row in companyTicketRows" :key="row.company_id || row.name" class="company-ticket-row">
+                    <b>{{ row.name }}</b>
+                    <div class="company-ticket-track">
+                      <span class="company-ticket-fill closed" :style="{ width: companyTicketWidth(row.closed_requests) }"></span>
+                      <span class="company-ticket-fill open" :style="{ left: companyTicketWidth(row.closed_requests), width: companyTicketWidth(row.open_requests) }"></span>
+                    </div>
+                    <strong>
+                      <span class="closed-text">{{ fmtNumber(row.closed_requests) }}</span>
+                      <span>/</span>
+                      <span class="open-text">{{ fmtNumber(row.open_requests) }}</span>
+                      <small>({{ fmtNumber(row.total_requests) }})</small>
+                    </strong>
+                  </article>
+                </div>
+                <div v-else class="empty compact">Bu davr uchun kompaniya statistikasi yo‘q</div>
+                <div class="company-ticket-legend">
+                  <span><i class="legend-square closed"></i>Yopilgan ticket</span>
+                  <span><i class="legend-square open"></i>Ochiq ticket</span>
+                  <span>Bar uzunligi = jami ticket soni</span>
                 </div>
               </section>
             </div>
@@ -1204,18 +1255,136 @@
     </Transition>
 
     <Transition name="modal-fade">
-      <Modal v-if="modal === 'employeeCompanies'" :title="employeeCompanyTitle" wide @close="closeModal">
-        <div class="detail-stack">
-          <div v-if="employeeCompanyDetail.companies?.length" class="company-status-grid">
-            <article v-for="company in employeeCompanyDetail.companies" :key="company.id || company.name"
-              class="company-status-card">
-              <b>{{ company.name || 'Kompaniya' }}</b>
-              <span class="status-pill mini" :class="businessStatusClass(company.business_status)">
-                {{ businessStatusLabel(company.business_status) }}
-              </span>
+      <Modal v-if="modal === 'employeeCompanies'" :title="employeeSupportTitle" wide @close="closeModal">
+        <div class="employee-support-modal">
+          <header class="employee-support-head">
+            <span class="employee-profile-avatar-wrap">
+              <img v-if="employeeAvatarUrl(employeeProfile.employee)" class="employee-profile-avatar"
+                :src="employeeAvatarUrl(employeeProfile.employee)" alt="" />
+              <span v-else class="employee-profile-avatar fallback">{{ employeeInitials(employeeProfile.employee) }}</span>
+            </span>
+            <div class="employee-profile-title">
+              <h2>{{ employeeProfile.employee?.full_name || employeeProfile.employee?.username || 'Xodim' }}</h2>
+              <p>Support yozishmalari</p>
+              <span>Davr: {{ selectedPeriodLabel }}</span>
+            </div>
+            <div class="employee-profile-pills">
+              <span class="profile-pill">🛡️ SLA <b>{{ fmtPercent(employeeProfile.summary?.sla) }}</b></span>
+              <span class="profile-pill">✅ Yopish foizi <b>{{ fmtPercent(employeeProfile.summary?.close_rate) }}</b></span>
+              <span class="profile-pill">⭐ Reyting <b>#{{ employeeProfile.rank || '—' }}</b></span>
+            </div>
+          </header>
+
+          <section class="employee-kpi-grid">
+            <article>
+              <span>✅ Yopilgan</span>
+              <b>{{ fmtNumber(employeeProfile.summary?.closed_requests) }}</b>
             </article>
+            <article>
+              <span>🕘 Ochiq qolgan</span>
+              <b>{{ fmtNumber(employeeProfile.summary?.open_requests) }}</b>
+            </article>
+            <article>
+              <span>🏢 Kompaniyalar</span>
+              <b>{{ fmtNumber(employeeProfile.summary?.company_total) }}</b>
+            </article>
+            <article>
+              <span>⏱️ O‘rtacha vaqt</span>
+              <b>{{ fmtMinutes(employeeProfile.summary?.avg_close_minutes) }}</b>
+            </article>
+          </section>
+
+          <div class="employee-chat-tabs">
+            <button type="button" :class="{ active: employeeProfileTab === 'private' }"
+              @click="setEmployeeProfileTab('private')">
+              Lichka <span>{{ fmtNumber(employeeProfilePrivateChats.length) }}</span>
+            </button>
+            <button type="button" :class="{ active: employeeProfileTab === 'group' }"
+              @click="setEmployeeProfileTab('group')">
+              Guruhlar <span>{{ fmtNumber(employeeProfileGroupChats.length) }}</span>
+            </button>
           </div>
-          <div v-else class="empty compact">Bu xodimga kompaniya biriktirilmagan</div>
+
+          <div class="employee-chat-layout">
+            <aside class="employee-chat-list-panel">
+              <div class="employee-chat-list-head">
+                <b>{{ employeeProfileTab === 'group' ? 'Guruh yozishmalari' : 'Shaxsiy yozishmalar' }}</b>
+                <span>{{ selectedPeriodLabel }}dagi xodimga tegishli ticketlar</span>
+              </div>
+              <div v-if="employeeProfileVisibleChats.length" class="employee-chat-list">
+                <button v-for="chat in employeeProfileVisibleChats" :key="employeeProfileChatKey(chat)" type="button"
+                  :class="{ active: employeeProfileChatKey(chat) === employeeProfileSelectedChatKey }"
+                  @click="selectEmployeeProfileChat(chat)">
+                  <span class="employee-chat-mini-avatar">{{ chatInitials(chat) }}</span>
+                  <span>
+                    <b>{{ chat.title || chat.chat_id }}</b>
+                    <small>{{ chatPreview(chat) }}</small>
+                    <em>{{ fmtNumber(chat.total_requests) }} ta ticket · {{ fmtNumber(chat.closed_count) }} yopilgan · {{
+                      fmtNumber(chat.open_count) }} ochiq</em>
+                  </span>
+                  <strong v-if="chat.open_count">{{ fmtNumber(chat.open_count) }}</strong>
+                </button>
+              </div>
+              <div v-else class="empty compact">Bu davrda yozishma topilmadi</div>
+            </aside>
+
+            <section class="employee-chat-pane">
+              <template v-if="selectedEmployeeProfileChat">
+                <div class="employee-chat-pane-head">
+                  <div>
+                    <b>{{ selectedEmployeeProfileChat.title || selectedEmployeeProfileChat.chat_id }}</b>
+                    <span>{{ fmtNumber(selectedEmployeeProfileChat.total_requests) }} ticket · {{
+                      fmtNumber(selectedEmployeeProfileChat.open_count) }} ochiq · {{
+                      fmtNumber(selectedEmployeeProfileChat.closed_count) }} yopilgan</span>
+                  </div>
+                  <button class="btn small" type="button" @click="loadChatDetail(selectedEmployeeProfileChat)">Chat tafsiloti</button>
+                </div>
+
+                <div v-if="employeeProfileChatRequests.length" class="employee-ticket-strip">
+                  <article v-for="request in employeeProfileChatRequests" :key="request.id"
+                    :class="{ open: request.status === 'open' }">
+                    <div>
+                      <b>Ticket #{{ shortId(request.id) }}</b>
+                      <span>{{ statusLabel(request.status) }}</span>
+                    </div>
+                    <p>{{ request.initial_text || 'So‘rov matni yo‘q' }}</p>
+                    <button v-if="request.status === 'open'" class="btn small" type="button"
+                      @click.stop="openRequestReply(request)">Reply</button>
+                  </article>
+                </div>
+
+                <div v-if="employeeProfileChatLoading" class="metric-chat-state">Chat yuklanmoqda...</div>
+                <div v-else-if="employeeProfileChatError" class="metric-chat-state error">{{ employeeProfileChatError }}</div>
+                <div v-else-if="employeeProfileConversation.length" class="telegram-thread employee-profile-thread">
+                  <article v-for="message in employeeProfileConversation" :key="chatBubbleKey(message)"
+                    class="chat-bubble-row" :class="{ outbound: message.direction === 'outbound' }">
+                    <div class="chat-bubble">
+                      <div class="chat-bubble-author">{{ message.actor_name || (message.direction === 'outbound' ?
+                        employeeProfile.employee?.full_name || 'Xodim' : 'Mijoz') }}</div>
+                      <div v-if="message.media" class="chat-media">
+                        <img v-if="message.media.kind === 'photo' && mediaUrl(message.media)" class="chat-media-image"
+                          :src="mediaUrl(message.media)" alt="" />
+                        <video v-else-if="isVideoMedia(message.media) && mediaUrl(message.media)" class="chat-media-video"
+                          :src="mediaUrl(message.media)" controls playsinline></video>
+                        <audio v-else-if="isAudioMedia(message.media) && mediaUrl(message.media)" class="chat-media-audio"
+                          :src="mediaUrl(message.media)" controls></audio>
+                        <div v-else class="chat-media-placeholder">
+                          {{ mediaPlaceholder(message.media) }}
+                        </div>
+                      </div>
+                      <p v-if="message.text">{{ message.text }}</p>
+                      <div class="chat-bubble-footer">
+                        <span v-if="message.request_text" class="chat-ticket">So‘rov</span>
+                        <time>{{ fmtChatTime(message.created_at) }}</time>
+                      </div>
+                    </div>
+                  </article>
+                </div>
+                <div v-else class="empty compact">Bu chatda xodimga tegishli dialog topilmadi</div>
+              </template>
+              <div v-else class="metric-chat-state">Chapdagi ro‘yxatdan chat tanlang</div>
+            </section>
+          </div>
         </div>
       </Modal>
     </Transition>
@@ -1496,13 +1665,23 @@ const metricChatThreadRef = ref(null);
 const employeeDrilldown = ref(null);
 const employeeActivity = ref({ employee: null, summary: {}, groups: [], closed_requests: [], messages: [] });
 const employeeCompanyDetail = ref({ employee: null, summary: {}, companies: [] });
+const employeeProfile = ref({ employee: null, rank: null, summary: {}, groups: [], companies: [] });
+const employeeProfileTab = ref('private');
+const employeeProfileSelectedChatKey = ref('');
+const employeeProfileChatDetail = ref({ chat: null, requests: [], conversation: [] });
+const employeeProfileChatLoading = ref(false);
+const employeeProfileChatError = ref('');
 const metricDetail = ref({ title: '', columns: [], rows: [], empty: 'Ma’lumot yo‘q', pageSize: 12, summary: [] });
 const employeeGroupActivity = ref([]);
 const employeeOpenRequests = ref([]);
+const employeeAvatarUrls = ref({});
+const employeeAvatarLoading = ref({});
 const mediaUrls = ref({});
 const mediaLoading = ref({});
 const mediaErrors = ref({});
 let mediaLoadToken = 0;
+let employeeProfileLoadToken = 0;
+let employeeProfileChatToken = 0;
 const settingsRaw = ref({ settings: [], admins: [] });
 const webhookStatus = ref(null);
 const showLoginPassword = ref(false);
@@ -1602,10 +1781,9 @@ const aiIntegrationStatus = computed(() => {
   return 'Tekshirilmagan';
 });
 const periodOptions = [
-  { key: 'today', label: 'Bugun' },
-  { key: 'week', label: 'Hafta' },
-  { key: 'month', label: 'Oy' },
-  { key: 'all', label: 'Jami' }
+  { key: 'week', label: '7 kun' },
+  { key: 'month', label: '1 oy' },
+  { key: 'all', label: 'Ixtiyoriy' }
 ];
 const emptyPeriodStats = {
   total_requests: 0,
@@ -1619,7 +1797,7 @@ const emptyPeriodStats = {
   unique_customers: 0
 };
 const analytics = computed(() => dashboard.analytics || {});
-const selectedPeriodLabel = computed(() => periodOptions.find(period => period.key === selectedStatsPeriod.value)?.label || 'Hafta');
+const selectedPeriodLabel = computed(() => periodOptions.find(period => period.key === selectedStatsPeriod.value)?.label || '7 kun');
 const selectedPeriodStats = computed(() => analytics.value.periods?.[selectedStatsPeriod.value] || emptyPeriodStats);
 const topEmployeeRows = computed(() => analytics.value.employeePerformance?.[selectedStatsPeriod.value] || []);
 const chatPerformanceRows = computed(() => analytics.value.chatPerformance?.[selectedStatsPeriod.value] || []);
@@ -1660,6 +1838,33 @@ const responseTrendYTicks = computed(() => chartYTicks(responseTrendMax.value, {
   top: 24,
   bottom: 176
 }));
+const ticketTrendRows = computed(() => (analytics.value.ticketAnswerTrend?.[selectedStatsPeriod.value] || [])
+  .map(row => ({
+    date_key: row.date_key || row.date || row.label,
+    date_label: row.date_label || row.date || '—',
+    weekday_label: row.weekday_label || row.weekday || '—',
+    total_requests: Number(row.total_requests || 0),
+    closed_requests: Number(row.closed_requests || 0),
+    open_requests: Number(row.open_requests || 0),
+    sla: Number(row.sla || row.close_rate || 0)
+  }))
+  .filter(row => row.date_key || row.total_requests || row.closed_requests || row.open_requests));
+const ticketTrendMax = computed(() => Math.max(1, ...ticketTrendRows.value.map(row => Math.max(
+  Number(row.total_requests || 0),
+  Number(row.closed_requests || 0),
+  Number(row.open_requests || 0)
+))));
+const companyTicketRows = computed(() => (analytics.value.companyTickets?.[selectedStatsPeriod.value] || [])
+  .map(row => ({
+    company_id: row.company_id || row.id || '',
+    name: row.name || row.company_name || 'Kompaniya',
+    total_requests: Number(row.total_requests || 0),
+    closed_requests: Number(row.closed_requests || 0),
+    open_requests: Number(row.open_requests || 0),
+    close_rate: Number(row.close_rate || 0)
+  }))
+  .filter(row => row.total_requests > 0));
+const companyTicketMax = computed(() => Math.max(1, ...companyTicketRows.value.map(row => Number(row.total_requests || 0))));
 const supportSummaryCards = computed(() => [
   {
     key: 'requests',
@@ -1840,6 +2045,7 @@ const supportPerformanceRows = computed(() => {
       open_requests: open,
       assigned_company_count: assignedCompanyCount,
       avg_close_minutes: avg,
+      close_rate: sla,
       sla,
       grade
     };
@@ -1951,6 +2157,70 @@ function fmtNumber(value) {
 
 function fmtPercent(value) {
   return `${fmtNumber(value)}%`;
+}
+
+function initialsFromText(value = '') {
+  return String(value || '')
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map(part => part[0]?.toUpperCase())
+    .join('') || 'U';
+}
+
+function employeeAvatarKey(row = {}) {
+  row = row || {};
+  return String(row.tg_user_id || row.employee_id || row.id || normalizeSupportUsername(row.username) || row.full_name || '').trim();
+}
+
+function employeeAvatarUrl(row = {}) {
+  row = row || {};
+  const key = employeeAvatarKey(row);
+  return key ? employeeAvatarUrls.value[key] || '' : '';
+}
+
+function employeeInitials(row = {}) {
+  row = row || {};
+  return initialsFromText(row.full_name || row.username || row.phone || 'Xodim');
+}
+
+async function loadEmployeeAvatar(row = {}) {
+  row = row || {};
+  const key = employeeAvatarKey(row);
+  const tgUserId = row.tg_user_id;
+  if (!key || !tgUserId || employeeAvatarUrls.value[key] || employeeAvatarLoading.value[key]) return;
+  employeeAvatarLoading.value = { ...employeeAvatarLoading.value, [key]: true };
+  try {
+    const blob = await api.telegramProfilePhoto(tgUserId);
+    const url = URL.createObjectURL(blob);
+    employeeAvatarUrls.value = { ...employeeAvatarUrls.value, [key]: url };
+  } catch (_) {
+    employeeAvatarUrls.value = { ...employeeAvatarUrls.value, [key]: '' };
+  } finally {
+    employeeAvatarLoading.value = { ...employeeAvatarLoading.value, [key]: false };
+  }
+}
+
+function chartBarHeight(value, max) {
+  const numeric = Number(value || 0);
+  const maximum = Math.max(1, Number(max || 1));
+  if (!numeric) return '0px';
+  return `${Math.max(20, Math.round((numeric / maximum) * 316))}px`;
+}
+
+function companyTicketWidth(value) {
+  return barWidth(value, companyTicketMax.value);
+}
+
+function slaToneClass(value = 0) {
+  const numeric = Number(value || 0);
+  if (numeric >= 85) return 'good';
+  if (numeric >= 75) return 'warn';
+  return 'bad';
+}
+
+function ticketTrendTooltip(row = {}) {
+  return `${row.date_label}: ${fmtNumber(row.total_requests)} ticket, ${fmtNumber(row.closed_requests)} javob, ${fmtNumber(row.open_requests)} ochiq`;
 }
 
 function barWidth(value, max) {
@@ -2518,6 +2788,9 @@ const topSupportCards = computed(() => supportPerformanceRows.value.map((row, in
     company_expiring_soon: companySummary.expiring_soon
   };
 }));
+watch(topSupportCards, rows => {
+  rows.slice(0, 20).forEach(row => loadEmployeeAvatar(row));
+}, { immediate: true });
 const selectedRecipients = computed(() => selectedSendType.value === 'employees' ? selectedEmployees.value : selectedGroups.value);
 const selectedSendTitle = computed(() => selectedSendType.value === 'employees' ? 'Xodimlarga xabar yuborish' : 'Guruhlarga xabar yuborish');
 const chatDetailTitle = computed(() => {
@@ -2534,6 +2807,68 @@ const employeeDrilldownTitle = computed(() => employeeDrilldown.value ? `Xodim: 
 const employeeCompanyTitle = computed(() => employeeCompanyDetail.value.employee
   ? `Kompaniyalar: ${employeeCompanyDetail.value.employee.full_name || employeeCompanyDetail.value.employee.username || 'Xodim'}`
   : 'Biriktirilgan kompaniyalar');
+const employeeSupportTitle = computed(() => {
+  const employee = employeeProfile.value.employee || {};
+  return employee.full_name || employee.username ? `Xodim: ${employee.full_name || employee.username}` : 'Xodim tafsiloti';
+});
+const employeeProfileChatRows = computed(() => (employeeProfile.value.groups || []).map(group => {
+  const closedRequests = Array.isArray(group.closed_requests) ? group.closed_requests : [];
+  const openRequests = Array.isArray(group.open_requests) ? group.open_requests : [];
+  const messages = Array.isArray(group.messages) ? group.messages : [];
+  return {
+    ...group,
+    source_type: group.source_type || 'private',
+    closed_count: Number(group.closed_count ?? closedRequests.length),
+    open_count: Number(group.open_count ?? openRequests.length),
+    message_count: Number(group.message_count ?? messages.length),
+    closed_requests: closedRequests,
+    open_requests: openRequests,
+    messages,
+    total_requests: Number(group.total_requests ?? (closedRequests.length + openRequests.length))
+  };
+}));
+const employeeProfilePrivateChats = computed(() => employeeProfileChatRows.value.filter(row => row.source_type !== 'group'));
+const employeeProfileGroupChats = computed(() => employeeProfileChatRows.value.filter(row => row.source_type === 'group'));
+const employeeProfileVisibleChats = computed(() => employeeProfileTab.value === 'group'
+  ? employeeProfileGroupChats.value
+  : employeeProfilePrivateChats.value);
+const selectedEmployeeProfileChat = computed(() => {
+  const rows = employeeProfileVisibleChats.value;
+  if (!rows.length) return null;
+  return rows.find(row => employeeProfileChatKey(row) === employeeProfileSelectedChatKey.value) || rows[0];
+});
+const employeeProfileChatRequests = computed(() => {
+  const chat = selectedEmployeeProfileChat.value;
+  if (!chat) return [];
+  return [
+    ...(chat.open_requests || []).map(request => ({ ...request, status: request.status || 'open' })),
+    ...(chat.closed_requests || []).map(request => ({ ...request, status: request.status || 'closed' }))
+  ].slice(0, 8);
+});
+const employeeProfileConversation = computed(() => {
+  const chat = selectedEmployeeProfileChat.value;
+  if (!chat) return [];
+  const employee = employeeProfile.value.employee || {};
+  const requestIds = new Set(employeeProfileChatRequests.value.map(request => String(request.id || request.request_id || '')).filter(Boolean));
+  const conversation = Array.isArray(employeeProfileChatDetail.value.conversation) ? employeeProfileChatDetail.value.conversation : [];
+  const filtered = conversation.filter(message => {
+    if (messageBelongsToEmployee(message, employee)) return true;
+    if (message.request_id && requestIds.has(String(message.request_id))) return true;
+    return false;
+  });
+  if (filtered.length) return filtered;
+  return (chat.messages || []).map(message => ({
+    id: message.id || `${chat.chat_id}-${message.message_id || message.created_at}`,
+    message_id: message.message_id,
+    direction: 'outbound',
+    actor_name: employee.full_name || employee.username || 'Xodim',
+    actor_username: employee.username || '',
+    employee_id: employee.id || employee.employee_id || null,
+    text: message.text || '',
+    created_at: message.created_at || null,
+    classification: message.classification || ''
+  }));
+});
 
 const employeeStatColumns = [
   { key: 'full_name', label: 'Xodim', action: 'employeeInfo' },
@@ -2577,15 +2912,13 @@ const groupPerformanceColumns = [
 
 const supportPerformanceColumns = [
   { key: 'rank', label: 'O‘rin', slot: 'rank', action: 'employeeCompanies' },
-  { key: 'full_name', label: 'Xodim', action: 'employeeCompanies' },
-  { key: 'username', label: 'Foydalanuvchi', format: v => v ? `@${v}` : '—', action: 'employeeCompanies' },
-  { key: 'closed_requests', label: 'Javob', format: fmtNumber, action: 'employeeCompanies' },
-  { key: 'handled_chats', label: 'Chatlar', format: fmtNumber, action: 'employeeCompanies' },
+  { key: 'full_name', label: 'Hodim', slot: 'employeeIdentity', action: 'employeeCompanies' },
   { key: 'company_total', label: 'Kompaniya', format: fmtNumber, action: 'employeeCompanies' },
-  { key: 'company_active', label: 'Aktiv', format: fmtNumber, action: 'employeeCompanies' },
-  { key: 'company_churn', label: 'Churn', format: fmtNumber, action: 'employeeCompanies' },
-  { key: 'avg_close_minutes', label: 'O‘rt. javob', format: fmtMinutes, action: 'employeeCompanies' },
-  { key: 'grade', label: 'Bahosi', slot: 'grade', action: 'employeeCompanies' }
+  { key: 'closed_requests', label: 'Yopilgan', format: fmtNumber, action: 'employeeCompanies' },
+  { key: 'open_requests', label: 'Ochiq qolgan', slot: 'openRequests', action: 'employeeCompanies' },
+  { key: 'close_rate', label: 'Yopish foizi', slot: 'closeRate', action: 'employeeCompanies' },
+  { key: 'avg_close_minutes', label: 'O‘rtacha vaqt', format: fmtMinutes, action: 'employeeCompanies' },
+  { key: 'sla', label: 'SLA ⓘ', slot: 'sla', action: 'employeeCompanies' }
 ];
 
 const employeeColumns = [
@@ -3247,7 +3580,78 @@ function openEmployeeGroups(row = {}) {
   modal.value = 'employeeGroups';
 }
 
-function openEmployeeCompanies(row = {}) {
+function employeeProfileChatKey(row = {}) {
+  return String(row.chat_id || row.key || row.title || '').trim();
+}
+
+function chatInitials(row = {}) {
+  return initialsFromText(row.title || row.customer_name || row.chat_id || 'Chat');
+}
+
+function chatPreview(row = {}) {
+  const openRequest = Array.isArray(row.open_requests) ? row.open_requests[0] : null;
+  const closedRequest = Array.isArray(row.closed_requests) ? row.closed_requests[0] : null;
+  const message = Array.isArray(row.messages) ? row.messages[0] : null;
+  return openRequest?.initial_text || closedRequest?.initial_text || message?.text || 'Yozishma tarixi';
+}
+
+function shortId(value = '') {
+  const text = String(value || '').replace(/-/g, '');
+  return text ? text.slice(0, 6).toUpperCase() : '—';
+}
+
+function messageBelongsToEmployee(message = {}, employee = {}) {
+  const employeeId = String(employee.id || employee.employee_id || '').trim();
+  const messageEmployeeId = String(message.employee_id || '').trim();
+  if (employeeId && messageEmployeeId && employeeId === messageEmployeeId) return true;
+  const employeeUsername = normalizeSupportUsername(employee.username);
+  const messageUsername = normalizeSupportUsername(message.actor_username || message.from_username || '');
+  if (employeeUsername && messageUsername && employeeUsername === messageUsername) return true;
+  const employeeName = String(employee.full_name || '').trim().toLowerCase();
+  const actorName = String(message.actor_name || message.from_name || '').trim().toLowerCase();
+  return Boolean(employeeName && actorName && employeeName === actorName);
+}
+
+function resetEmployeeProfileChat() {
+  employeeProfileSelectedChatKey.value = '';
+  employeeProfileChatDetail.value = { chat: null, requests: [], conversation: [] };
+  employeeProfileChatLoading.value = false;
+  employeeProfileChatError.value = '';
+  employeeProfileChatToken += 1;
+}
+
+function setEmployeeProfileTab(tab) {
+  employeeProfileTab.value = tab === 'group' ? 'group' : 'private';
+  const first = employeeProfileVisibleChats.value[0];
+  if (first) selectEmployeeProfileChat(first);
+  else resetEmployeeProfileChat();
+}
+
+async function selectEmployeeProfileChat(row = {}) {
+  const key = employeeProfileChatKey(row);
+  employeeProfileSelectedChatKey.value = key;
+  if (!row.chat_id) return;
+  const token = ++employeeProfileChatToken;
+  employeeProfileChatLoading.value = true;
+  employeeProfileChatError.value = '';
+  clearMediaUrls();
+  try {
+    const data = await api.chatDetail({ chat_id: row.chat_id });
+    if (token !== employeeProfileChatToken || employeeProfileSelectedChatKey.value !== key) return;
+    employeeProfileChatDetail.value = data;
+    loadConversationMedia(data.conversation || []).catch(error => showToast(error.message));
+  } catch (error) {
+    if (token !== employeeProfileChatToken || employeeProfileSelectedChatKey.value !== key) return;
+    employeeProfileChatDetail.value = { chat: null, requests: [], conversation: [] };
+    employeeProfileChatError.value = error.message;
+  } finally {
+    if (token === employeeProfileChatToken && employeeProfileSelectedChatKey.value === key) {
+      employeeProfileChatLoading.value = false;
+    }
+  }
+}
+
+async function openEmployeeCompanies(row = {}) {
   const employee = resolveEmployeeForCompany(row);
   const companies = (row.assigned_companies || visibleCompanyInfoRows.value
     .filter(company => companyMatchesEmployee(company, employee))
@@ -3257,7 +3661,70 @@ function openEmployeeCompanies(row = {}) {
     companies,
     summary: companyPortfolioSummary(companies)
   };
+  employeeProfileLoadToken += 1;
+  const loadToken = employeeProfileLoadToken;
+  resetEmployeeProfileChat();
+  employeeProfileTab.value = 'private';
+  employeeProfile.value = {
+    employee,
+    rank: row.rank || null,
+    companies,
+    summary: {
+      closed_requests: Number(row.closed_requests || 0),
+      open_requests: Number(row.open_requests || 0),
+      company_total: companies.length || Number(row.company_total || row.assigned_company_count || 0),
+      avg_close_minutes: Number(row.avg_close_minutes || 0),
+      close_rate: Number(row.close_rate || row.sla || 0),
+      sla: Number(row.sla || row.close_rate || 0)
+    },
+    groups: []
+  };
   modal.value = 'employeeCompanies';
+  loadEmployeeAvatar(employee);
+  const employeeId = employee.id || employee.employee_id || '';
+  const tgUserId = employee.tg_user_id || '';
+  if (!employeeId && !tgUserId) {
+    showToast('Xodim ID topilmadi, faqat kompaniya portfeli ko‘rsatildi');
+    return;
+  }
+  startLoading('employeeActivity');
+  try {
+    const data = await api.employeeActivity({
+      employee_id: employeeId,
+      tg_user_id: tgUserId,
+      period: selectedStatsPeriod.value
+    });
+    if (loadToken !== employeeProfileLoadToken) return;
+    const summary = data.summary || {};
+    employeeProfile.value = {
+      employee: data.employee || employee,
+      rank: row.rank || null,
+      companies,
+      summary: {
+        closed_requests: Number(summary.closed_requests ?? row.closed_requests ?? 0),
+        open_requests: Number(summary.open_requests ?? row.open_requests ?? 0),
+        company_total: companies.length || Number(row.company_total || row.assigned_company_count || 0),
+        avg_close_minutes: Number(row.avg_close_minutes || 0),
+        close_rate: Number(row.close_rate || row.sla || 0),
+        sla: Number(row.sla || row.close_rate || 0),
+        handled_chats: Number(summary.handled_chats || row.handled_chats || 0),
+        message_count: Number(summary.message_count || 0),
+        customer_count: Number(summary.customer_count || 0)
+      },
+      groups: data.groups || []
+    };
+    loadEmployeeAvatar(employeeProfile.value.employee);
+    await nextTick();
+    const first = employeeProfileVisibleChats.value[0] || employeeProfileGroupChats.value[0];
+    if (first) {
+      if (!employeeProfileVisibleChats.value.length && employeeProfileGroupChats.value.length) employeeProfileTab.value = 'group';
+      selectEmployeeProfileChat(first);
+    }
+  } catch (error) {
+    if (loadToken === employeeProfileLoadToken) showToast(error.message);
+  } finally {
+    if (loadToken === employeeProfileLoadToken) stopLoading('employeeActivity');
+  }
 }
 
 function openAssignCompany(row = {}) {
@@ -3555,8 +4022,9 @@ function openAlertRequests(row = {}) {
 }
 
 function closeModal() {
-  if (modal.value === 'chatDetail' || modal.value === 'metricDetail') clearMediaUrls();
+  if (modal.value === 'chatDetail' || modal.value === 'metricDetail' || modal.value === 'employeeCompanies') clearMediaUrls();
   if (modal.value === 'metricDetail') resetMetricChatDetail();
+  if (modal.value === 'employeeCompanies') resetEmployeeProfileChat();
   modal.value = '';
   selectedTarget.value = null;
 }
@@ -3694,8 +4162,9 @@ function openRequestReply(row = {}) {
     text: ''
   });
   if (!requestReplyForm.request_id) return showToast('So‘rov ID topilmadi');
-  if (previousModal === 'chatDetail' || previousModal === 'metricDetail') clearMediaUrls();
+  if (previousModal === 'chatDetail' || previousModal === 'metricDetail' || previousModal === 'employeeCompanies') clearMediaUrls();
   if (previousModal === 'metricDetail') resetMetricChatDetail();
+  if (previousModal === 'employeeCompanies') resetEmployeeProfileChat();
   modal.value = 'requestReply';
 }
 
@@ -3982,6 +4451,7 @@ onUnmounted(() => {
     document.removeEventListener('keydown', handleDocumentKeydown);
   }
   if (durationTimer) clearInterval(durationTimer);
+  Object.values(employeeAvatarUrls.value).filter(Boolean).forEach(url => URL.revokeObjectURL(url));
 });
 
 const Toolbar = defineComponent({

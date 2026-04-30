@@ -92,6 +92,14 @@ async function getFile(fileId) {
   return telegram('getFile', { file_id: fileId });
 }
 
+async function getUserProfilePhotos(userId, options = {}) {
+  return telegram('getUserProfilePhotos', {
+    user_id: userId,
+    offset: options.offset || 0,
+    limit: options.limit || 1
+  });
+}
+
 async function downloadFile(filePath) {
   const response = await fetch(fileApiUrl(filePath));
   if (!response.ok) {
@@ -112,4 +120,4 @@ function escapeHtml(str = '') {
     .replaceAll('"', '&quot;');
 }
 
-module.exports = { telegram, sendMessage, deleteMessage, reactToMessage, sendBusinessMessage, answerCallbackQuery, editMessageReplyMarkup, getWebhookInfo, setWebhook, getFile, downloadFile, tgUserName, escapeHtml };
+module.exports = { telegram, sendMessage, deleteMessage, reactToMessage, sendBusinessMessage, answerCallbackQuery, editMessageReplyMarkup, getWebhookInfo, setWebhook, getFile, getUserProfilePhotos, downloadFile, tgUserName, escapeHtml };
