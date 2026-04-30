@@ -1179,6 +1179,65 @@ async function testEmployeeActivityReturnsGroupsAndCustomers() {
   }
 }
 
+async function testEmployeeActivityIsolatesSelectedEmployeeChats() {
+  const originalSelect = supabase.select;
+  const today = new Date('2026-04-30T08:00:00.000Z').toISOString();
+  const employees = [
+    { id: 'emp-1', tg_user_id: 777, full_name: 'Mirshod', username: 'mirshod', is_active: true },
+    { id: 'emp-2', tg_user_id: 888, full_name: 'Ozodbek', username: 'ozodbek', is_active: true }
+  ];
+  const requests = [
+    { id: 'r1', source_type: 'group', chat_id: -1001, customer_name: 'Mijoz A', initial_text: 'Emp1 ticket', status: 'closed', closed_by_employee_id: 'emp-1', created_at: today, closed_at: today },
+    { id: 'r2', source_type: 'group', chat_id: -1001, customer_name: 'Mijoz B', initial_text: 'Emp2 ticket', status: 'closed', closed_by_employee_id: 'emp-2', created_at: today, closed_at: today },
+    { id: 'r3', source_type: 'private', chat_id: 888, customer_name: 'Ozodbek', initial_text: 'Employee private', status: 'closed', closed_by_employee_id: 'emp-1', created_at: today, closed_at: today },
+    { id: 'r4', source_type: 'group', chat_id: -1001, customer_name: 'Mijoz C', initial_text: 'Open for emp2', status: 'open', closed_by_employee_id: null, created_at: '2026-04-30T09:00:00.000Z', closed_at: null },
+    { id: 'r5', source_type: 'group', chat_id: -1002, customer_name: 'Mijoz D', initial_text: 'Open for emp1', status: 'open', closed_by_employee_id: null, created_at: '2026-04-30T10:00:00.000Z', closed_at: null }
+  ];
+  const messages = [
+    { id: 'm1', chat_id: -1001, from_tg_user_id: 777, from_name: 'Mirshod', from_username: 'mirshod', employee_id: 'emp-1', source_type: 'group', text: 'Emp1 answer', created_at: '2026-04-30T08:05:00.000Z' },
+    { id: 'm2', chat_id: -1001, from_tg_user_id: 888, from_name: 'Ozodbek', from_username: 'ozodbek', employee_id: 'emp-2', source_type: 'group', text: 'Emp2 answer', created_at: '2026-04-30T08:06:00.000Z' },
+    { id: 'm3', chat_id: 888, from_tg_user_id: 777, from_name: 'Mirshod', from_username: 'mirshod', employee_id: 'emp-1', source_type: 'private', text: 'Employee private answer', created_at: '2026-04-30T08:10:00.000Z' },
+    { id: 'm4', chat_id: -1001, from_tg_user_id: 888, from_name: 'Ozodbek', from_username: 'ozodbek', employee_id: 'emp-2', source_type: 'group', text: 'Emp2 owns open', created_at: '2026-04-30T09:01:00.000Z' },
+    { id: 'm5', chat_id: -1002, from_tg_user_id: 777, from_name: 'Mirshod', from_username: 'mirshod', employee_id: 'emp-1', source_type: 'group', text: 'Emp1 owns open', created_at: '2026-04-30T10:01:00.000Z' }
+  ];
+
+  supabase.select = async (table, params = {}) => {
+    if (table === 'employees') return employees;
+    if (table === 'tg_chats') {
+      return [
+        { chat_id: -1001, title: 'Umumiy guruh', source_type: 'group' },
+        { chat_id: -1002, title: 'Emp1 guruhi', source_type: 'group' },
+        { chat_id: 888, title: 'Ozodbek', source_type: 'private' }
+      ];
+    }
+    if (table === 'support_requests') {
+      if (params.status === 'eq.open') return requests.filter(row => row.status === 'open');
+      if (params.closed_by_employee_id === 'eq.emp-1') return requests.filter(row => row.closed_by_employee_id === 'emp-1');
+      if (params.closed_by_tg_id === 'eq.777') return [];
+      return requests;
+    }
+    if (table === 'messages') {
+      if (params.employee_id === 'eq.emp-1') return messages.filter(row => row.employee_id === 'emp-1');
+      if (params.from_tg_user_id === 'eq.777') return messages.filter(row => row.from_tg_user_id === 777);
+      return messages;
+    }
+    return [];
+  };
+
+  try {
+    const result = await callAdmin('employeeActivity', { query: { employee_id: 'emp-1', period: 'all' } });
+    assert.strictEqual(result.status, 200);
+    const chatIds = result.payload.data.groups.map(group => String(group.chat_id));
+    assert.strictEqual(chatIds.includes('888'), false);
+    assert.strictEqual(result.payload.data.open_requests.some(request => request.id === 'r4'), false);
+    assert.strictEqual(result.payload.data.open_requests.some(request => request.id === 'r5'), true);
+    assert.strictEqual(result.payload.data.closed_requests.some(request => request.id === 'r2'), false);
+    assert.strictEqual(result.payload.data.messages.some(message => message.text === 'Emp2 answer'), false);
+  } finally {
+    supabase.select = originalSelect;
+  }
+}
+
 async function testLogNotificationsCanSendSelectedLevels() {
   const originalSelect = supabase.select;
   const originalInsert = supabase.insert;
@@ -1396,6 +1455,7 @@ async function run() {
   await testReplyRequestFallsBackWhenBusinessPeerInvalid();
   await testEmployeesIncludeDailyWorkStats();
   await testEmployeeActivityReturnsGroupsAndCustomers();
+  await testEmployeeActivityIsolatesSelectedEmployeeChats();
   await testLogNotificationsCanSendSelectedLevels();
   await testCompanyInfoProxyNormalizesExternalRows();
   await testAssignGroupToExternalCompanyCreatesLocalCompany();

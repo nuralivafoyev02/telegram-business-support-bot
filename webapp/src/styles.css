@@ -1596,7 +1596,7 @@ tbody tr:hover {
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme]) {
     --bg: #111827;
     --surface: #172033;
     --surface-soft: #202b3f;
@@ -1660,6 +1660,29 @@ tbody tr:hover {
   --warning-line: #5e3138;
   --shadow: 0 1px 2px rgba(0, 0, 0, .22), 0 14px 32px rgba(0, 0, 0, .16);
   --shadow-soft: 0 1px 2px rgba(0, 0, 0, .18);
+}
+
+:root[data-theme="light"] .cell-action:hover,
+:root[data-theme="light"] .cell-action:focus {
+  color: var(--text);
+  background: #eef6ff;
+}
+
+:root[data-theme="light"] .actions-dropdown button:hover,
+:root[data-theme="light"] .theme-menu-row:hover,
+:root[data-theme="light"] .employee-chat-list button:hover,
+:root[data-theme="light"] .employee-chat-list button.active {
+  color: var(--text);
+}
+
+:root[data-theme="light"] .employee-chat-list button:hover b,
+:root[data-theme="light"] .employee-chat-list button.active b {
+  color: var(--text);
+}
+
+:root[data-theme="light"] .employee-chat-list button:hover small,
+:root[data-theme="light"] .employee-chat-list button.active small {
+  color: var(--muted-strong);
 }
 
 body {
@@ -2361,7 +2384,7 @@ body {
 }
 
 @media (prefers-color-scheme: dark) {
-  .success-pill {
+  :root:not([data-theme]) .success-pill {
     color: #bbf7d0;
     background: rgba(34, 197, 94, .18);
   }
@@ -2556,19 +2579,19 @@ body {
 }
 
 @media (prefers-color-scheme: dark) {
-  .grade-pill.top {
+  :root:not([data-theme]) .grade-pill.top {
     color: #bbf7d0;
     background: rgba(34, 197, 94, .16);
     border-color: rgba(34, 197, 94, .28);
   }
 
-  .grade-pill.mid {
+  :root:not([data-theme]) .grade-pill.mid {
     color: #bae6fd;
     background: rgba(14, 165, 233, .14);
     border-color: rgba(14, 165, 233, .26);
   }
 
-  .grade-pill.low {
+  :root:not([data-theme]) .grade-pill.low {
     color: #fecaca;
     background: rgba(239, 68, 68, .14);
     border-color: rgba(239, 68, 68, .26);
@@ -2762,13 +2785,45 @@ td,
   gap: 10px;
   min-height: 320px;
   width: 100%;
+  overflow: visible;
 }
 
 .ticket-bar {
   display: block;
+  position: relative;
   width: 28px;
   border-radius: var(--radius) var(--radius) 0 0;
   transition: height .18s ease;
+}
+
+.ticket-bar::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 10px);
+  z-index: 4;
+  min-width: max-content;
+  max-width: 220px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  color: var(--text);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1.25;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 4px);
+  transition: opacity .14s ease, transform .14s ease;
+  white-space: nowrap;
+}
+
+.ticket-bar:hover::after,
+.ticket-bar:focus-visible::after {
+  opacity: 1;
+  transform: translate(-50%, 0);
 }
 
 .ticket-bar.total {
@@ -2954,17 +3009,17 @@ tbody tr:hover {
 }
 
 @media (prefers-color-scheme: dark) {
-  .badge.green {
+  :root:not([data-theme]) .badge.green {
     color: #bbf7d0;
     background: rgba(34, 197, 94, .16);
   }
 
-  .badge.orange {
+  :root:not([data-theme]) .badge.orange {
     color: #fed7aa;
     background: rgba(249, 115, 22, .15);
   }
 
-  .badge.blue {
+  :root:not([data-theme]) .badge.blue {
     color: #bfdbfe;
     background: rgba(59, 130, 246, .16);
   }
@@ -3055,31 +3110,31 @@ tbody tr:hover {
 }
 
 @media (prefers-color-scheme: dark) {
-  .status-pill {
+  :root:not([data-theme]) .status-pill {
     color: #fde68a;
     background: rgba(245, 158, 11, .13);
     border-color: rgba(245, 158, 11, .28);
   }
 
-  .status-pill.ready {
+  :root:not([data-theme]) .status-pill.ready {
     color: #bbf7d0;
     background: rgba(34, 197, 94, .16);
     border-color: rgba(34, 197, 94, .28);
   }
 
-  .status-pill.error {
+  :root:not([data-theme]) .status-pill.error {
     color: #fecaca;
     background: rgba(239, 68, 68, .16);
     border-color: rgba(239, 68, 68, .28);
   }
 
-  .status-pill.new {
+  :root:not([data-theme]) .status-pill.new {
     color: #fde68a;
     background: rgba(245, 158, 11, .14);
     border-color: rgba(245, 158, 11, .28);
   }
 
-  .status-pill.muted-status {
+  :root:not([data-theme]) .status-pill.muted-status {
     color: var(--muted);
     background: var(--surface-soft);
     border-color: var(--line);
@@ -3602,13 +3657,15 @@ tbody tr:hover {
   align-items: center;
   gap: 12px;
   width: 100%;
-  min-height: 90px;
+  height: 112px;
+  min-height: 112px;
   border: 0;
   border-bottom: 1px solid var(--line);
   border-radius: var(--radius);
   color: var(--text);
   background: transparent;
   padding: 12px 18px;
+  overflow: hidden;
   text-align: left;
 }
 
@@ -3637,6 +3694,11 @@ tbody tr:hover {
   text-overflow: ellipsis;
 }
 
+.employee-chat-list button>span:nth-child(2) {
+  min-width: 0;
+  overflow: hidden;
+}
+
 .employee-chat-list b {
   color: var(--text);
   font-size: 16px;
@@ -3647,8 +3709,15 @@ tbody tr:hover {
 .employee-chat-list small {
   margin-top: 6px;
   color: var(--muted-strong);
-  white-space: normal;
+  display: -webkit-box;
   line-height: 1.35;
+  max-height: 38px;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  overflow: hidden;
 }
 
 .employee-chat-list em {
@@ -3688,21 +3757,32 @@ tbody tr:hover {
   border-bottom: 1px solid var(--line);
 }
 
+.employee-chat-pane-head>div {
+  min-width: 0;
+}
+
 .employee-chat-pane-head b,
 .employee-chat-pane-head span {
   display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .employee-chat-pane-head b {
   color: var(--text);
   font-size: 17px;
   font-weight: 900;
+  white-space: nowrap;
 }
 
 .employee-chat-pane-head span {
   margin-top: 5px;
   color: var(--muted);
   font-size: 13px;
+}
+
+.employee-chat-pane-head .btn {
+  flex: 0 0 auto;
 }
 
 .employee-ticket-strip {
@@ -4218,7 +4298,7 @@ tbody tr.selected-row .cell-action {
 }
 
 @media (prefers-color-scheme: dark) {
-  .chat-bubble-row.outbound .chat-bubble {
+  :root:not([data-theme]) .chat-bubble-row.outbound .chat-bubble {
     background: #153526;
   }
 }

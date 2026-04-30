@@ -495,7 +495,8 @@ function displayChatTitle(chat = {}) {
 function buildEmployeeMaps(employees = []) {
   return {
     byId: new Map(employees.map(employee => [employee.id, employee]).filter(([id]) => id)),
-    byTgId: new Map(employees.map(employee => [telegramIdKey(employee.tg_user_id), employee]).filter(([id]) => id))
+    byTgId: new Map(employees.map(employee => [telegramIdKey(employee.tg_user_id), employee]).filter(([id]) => id)),
+    tgIds: new Set(employees.map(employee => telegramIdKey(employee.tg_user_id)).filter(Boolean))
   };
 }
 
@@ -1105,7 +1106,7 @@ async function getEmployeeActivity(query = {}) {
 
   const keys = currentPeriodKeys();
   const requestSelect = 'id,source_type,chat_id,customer_tg_id,customer_name,customer_username,initial_text,status,closed_at,closed_by_employee_id,closed_by_tg_id,closed_by_name,created_at';
-  const [requestsByEmployeeId, requestsByTgId, employeeMessagesById, employeeMessagesByTg] = await Promise.all([
+  const [requestsByEmployeeId, requestsByTgId, employeeMessagesById, employeeMessagesByTg, openRequestCandidates] = await Promise.all([
     supabase.select('support_requests', {
       select: requestSelect,
       closed_by_employee_id: supabase.eq(employee.id),
@@ -1129,7 +1130,13 @@ async function getEmployeeActivity(query = {}) {
       from_tg_user_id: supabase.eq(employee.tg_user_id),
       order: supabase.order('created_at', false),
       limit: '5000'
-    }).catch(() => []) : Promise.resolve([])
+    }).catch(() => []) : Promise.resolve([]),
+    supabase.select('support_requests', {
+      select: requestSelect,
+      status: supabase.eq('open'),
+      order: supabase.order('created_at', false),
+      limit: '5000'
+    }).catch(() => [])
   ]);
 
   const requests = uniqueRowsBy([...requestsByEmployeeId, ...requestsByTgId], row => row.id || `${row.chat_id}:${row.initial_message_id || row.closed_at}`);
@@ -1140,7 +1147,10 @@ async function getEmployeeActivity(query = {}) {
     .filter(message => inCurrentPeriod(message.created_at, periodKey, keys));
   const chatIds = [...new Set([
     ...closedRequests.map(request => request.chat_id),
-    ...messages.map(message => message.chat_id)
+    ...messages.map(message => message.chat_id),
+    ...openRequestCandidates
+      .filter(request => request.status === 'open' && inCurrentPeriod(request.created_at, periodKey, keys))
+      .map(request => request.chat_id)
   ].filter(value => value !== undefined && value !== null))];
   const [chats, allChatMessages, allEmployees] = chatIds.length
     ? await Promise.all([
@@ -1161,15 +1171,6 @@ async function getEmployeeActivity(query = {}) {
       }).catch(() => [])
     ])
     : [[], [], []];
-  const openRequests = chatIds.length
-    ? await supabase.select('support_requests', {
-      select: requestSelect,
-      chat_id: supabase.inList(chatIds),
-      status: supabase.eq('open'),
-      order: supabase.order('created_at', false),
-      limit: '1000'
-    }).catch(() => [])
-    : [];
   const chatMap = new Map(chats.map(chat => [telegramIdKey(chat.chat_id), chat]));
   const messagesByChat = new Map();
   allChatMessages.forEach(message => {
@@ -1180,15 +1181,23 @@ async function getEmployeeActivity(query = {}) {
   const employeeMaps = buildEmployeeMaps(allEmployees.length ? allEmployees : [employee]);
   const selectedEmployeeId = String(employee.id || '').trim();
   const selectedTgUserId = telegramIdKey(employee.tg_user_id);
+  const isEmployeePrivateChatId = chatId => {
+    const key = telegramIdKey(chatId);
+    const chat = chatMap.get(key) || {};
+    return employeeMaps.tgIds.has(key) && isPrivateLikeChat({ source_type: chat.source_type || 'private' });
+  };
   function requestResponsibleMatchesEmployee(request = {}) {
     const responsible = resolveRequestResponsibleEmployee(request, messagesByChat.get(telegramIdKey(request.chat_id)) || [], employeeMaps);
     if (!responsible) return false;
     if (selectedEmployeeId && String(responsible.employee_id || '') === selectedEmployeeId) return true;
     return Boolean(selectedTgUserId && telegramIdKey(responsible.tg_user_id) === selectedTgUserId);
   }
-  const periodOpenRequests = openRequests
+  const periodOpenRequests = openRequestCandidates
     .filter(request => request.status === 'open' && inCurrentPeriod(request.created_at, periodKey, keys))
     .filter(requestResponsibleMatchesEmployee);
+  const visibleClosedRequests = closedRequests.filter(request => !isEmployeePrivateChatId(request.chat_id));
+  const visibleMessages = messages.filter(message => !isEmployeePrivateChatId(message.chat_id));
+  const visibleOpenRequests = periodOpenRequests.filter(request => !isEmployeePrivateChatId(request.chat_id));
   const chatTitle = chatId => displayChatTitle(chatMap.get(telegramIdKey(chatId)) || { chat_id: chatId });
   const requestSummary = request => ({
     id: request.id,
@@ -1241,18 +1250,18 @@ async function getEmployeeActivity(query = {}) {
     return current;
   };
 
-  closedRequests.forEach(request => {
+  visibleClosedRequests.forEach(request => {
     const group = ensureGroup(request.chat_id);
     group.closed_count += 1;
     if (request.customer_name || request.customer_tg_id) group.customers.add(request.customer_name || telegramIdKey(request.customer_tg_id));
     group.closed_requests.push(requestSummary(request));
   });
-  messages.forEach(message => {
+  visibleMessages.forEach(message => {
     const group = ensureGroup(message.chat_id);
     group.message_count += 1;
     group.messages.push(messageSummary(message));
   });
-  periodOpenRequests.forEach(request => {
+  visibleOpenRequests.forEach(request => {
     const group = ensureGroup(request.chat_id);
     group.open_count += 1;
     if (request.customer_name || request.customer_tg_id) group.customers.add(request.customer_name || telegramIdKey(request.customer_tg_id));
@@ -1275,15 +1284,15 @@ async function getEmployeeActivity(query = {}) {
     period: periodKey,
     summary: {
       handled_chats: groups.length,
-      message_count: messages.length,
-      closed_requests: closedRequests.length,
-      open_requests: periodOpenRequests.length,
-      customer_count: new Set([...closedRequests, ...periodOpenRequests].map(request => request.customer_tg_id || request.customer_name).filter(Boolean)).size
+      message_count: visibleMessages.length,
+      closed_requests: visibleClosedRequests.length,
+      open_requests: visibleOpenRequests.length,
+      customer_count: new Set([...visibleClosedRequests, ...visibleOpenRequests].map(request => request.customer_tg_id || request.customer_name).filter(Boolean)).size
     },
     groups,
-    closed_requests: closedRequests.map(requestSummary),
-    open_requests: periodOpenRequests.map(requestSummary),
-    messages: messages.map(messageSummary)
+    closed_requests: visibleClosedRequests.map(requestSummary),
+    open_requests: visibleOpenRequests.map(requestSummary),
+    messages: visibleMessages.map(messageSummary)
   };
 }
 

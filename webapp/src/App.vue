@@ -232,12 +232,15 @@
                 </div>
                 <div v-if="ticketTrendRows.length" class="ticket-trend-chart">
                   <article v-for="row in ticketTrendRows" :key="row.date_key" class="ticket-trend-day">
-                    <div class="ticket-trend-bars" :title="ticketTrendTooltip(row)">
+                    <div class="ticket-trend-bars" :aria-label="ticketTrendTooltip(row)">
                       <span class="ticket-bar total"
+                        :data-tooltip="ticketTrendMetricTooltip(row, 'total')" tabindex="0"
                         :style="{ height: chartBarHeight(row.total_requests, ticketTrendMax) }"></span>
                       <span class="ticket-bar closed"
+                        :data-tooltip="ticketTrendMetricTooltip(row, 'closed')" tabindex="0"
                         :style="{ height: chartBarHeight(row.closed_requests, ticketTrendMax) }"></span>
                       <span class="ticket-bar open"
+                        :data-tooltip="ticketTrendMetricTooltip(row, 'open')" tabindex="0"
                         :style="{ height: chartBarHeight(row.open_requests, ticketTrendMax) }"></span>
                     </div>
                     <b>{{ row.weekday_label }}</b>
@@ -1340,11 +1343,13 @@
                       fmtNumber(selectedEmployeeProfileChat.open_count) }} ochiq · {{
                         fmtNumber(selectedEmployeeProfileChat.closed_count) }} yopilgan</span>
                   </div>
-                  <button class="btn small" type="button" @click="loadChatDetail(selectedEmployeeProfileChat)">Chat
-                    tafsiloti</button>
+                  <button class="btn small" type="button" :disabled="!employeeProfileChatRequests.length"
+                    @click="employeeProfileTicketsOpen = !employeeProfileTicketsOpen">
+                    {{ employeeProfileTicketsOpen ? 'Tiketlarni yopish' : `Tiketlarni ochish (${fmtNumber(employeeProfileChatRequests.length)})` }}
+                  </button>
                 </div>
 
-                <div v-if="employeeProfileChatRequests.length" class="employee-ticket-strip">
+                <div v-if="employeeProfileTicketsOpen && employeeProfileChatRequests.length" class="employee-ticket-strip">
                   <article v-for="request in employeeProfileChatRequests" :key="request.id"
                     :class="{ open: request.status === 'open' }">
                     <div>
@@ -1624,9 +1629,9 @@ function storeActiveTab(key) {
 }
 
 function getStoredThemeMode() {
-  if (typeof window === 'undefined') return 'system';
+  if (typeof window === 'undefined') return 'light';
   const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
-  return ['system', 'light', 'dark'].includes(stored) ? stored : 'system';
+  return ['system', 'light', 'dark'].includes(stored) ? stored : 'light';
 }
 
 function applyThemeMode(mode) {
@@ -1652,6 +1657,7 @@ const selectedStatsPeriod = ref('week');
 const actionMenuOpen = ref(false);
 const actionMenuRef = ref(null);
 const themeMode = ref(getStoredThemeMode());
+applyThemeMode(themeMode.value);
 const selectedGroups = ref([]);
 const selectedEmployees = ref([]);
 const otherMenuOpen = ref(otherTabKeys.includes(activeTab.value));
@@ -1676,6 +1682,7 @@ const employeeProfileSelectedChatKey = ref('');
 const employeeProfileChatDetail = ref({ chat: null, requests: [], conversation: [] });
 const employeeProfileChatLoading = ref(false);
 const employeeProfileChatError = ref('');
+const employeeProfileTicketsOpen = ref(false);
 const metricDetail = ref({ title: '', columns: [], rows: [], empty: 'Ma’lumot yo‘q', pageSize: 12, summary: [] });
 const employeeGroupActivity = ref([]);
 const employeeOpenRequests = ref([]);
@@ -2226,6 +2233,20 @@ function slaToneClass(value = 0) {
 
 function ticketTrendTooltip(row = {}) {
   return `${row.date_label}: ${fmtNumber(row.total_requests)} ticket, ${fmtNumber(row.closed_requests)} javob, ${fmtNumber(row.open_requests)} ochiq`;
+}
+
+function ticketTrendMetricTooltip(row = {}, metric = 'total') {
+  const labels = {
+    total: 'So‘rovlar',
+    closed: 'Javob berilgan',
+    open: 'Ochiq qolgan'
+  };
+  const values = {
+    total: row.total_requests,
+    closed: row.closed_requests,
+    open: row.open_requests
+  };
+  return `${row.date_label}: ${labels[metric] || labels.total}: ${fmtNumber(values[metric])}`;
 }
 
 function barWidth(value, max) {
@@ -2848,32 +2869,75 @@ const employeeProfileChatRequests = computed(() => {
   return [
     ...(chat.open_requests || []).map(request => ({ ...request, status: request.status || 'open' })),
     ...(chat.closed_requests || []).map(request => ({ ...request, status: request.status || 'closed' }))
-  ].slice(0, 8);
+  ];
 });
+
+function employeeRequestConversationItem(request = {}) {
+  return {
+    id: `request-${request.id || request.chat_id || request.created_at}`,
+    type: 'ticket',
+    request_id: request.id || null,
+    message_id: request.initial_message_id || null,
+    direction: 'inbound',
+    actor_type: 'customer',
+    actor_name: request.customer_name || 'Mijoz',
+    actor_username: request.customer_username || '',
+    actor_tg_user_id: request.customer_tg_id || null,
+    employee_id: null,
+    text: request.initial_text || '',
+    request_text: request.initial_text || '',
+    status: request.status || 'open',
+    created_at: request.created_at || request.closed_at || null
+  };
+}
+
+function employeeMessageConversationItem(message = {}, employee = {}) {
+  return {
+    id: message.id || `message-${message.chat_id || ''}-${message.message_id || message.created_at || ''}`,
+    type: 'employee_reply',
+    request_id: message.request_id || null,
+    message_id: message.message_id || message.tg_message_id || null,
+    direction: 'outbound',
+    actor_type: 'employee',
+    actor_name: message.from_name || message.actor_name || 'Xodim',
+    actor_username: message.from_username || message.actor_username || '',
+    actor_tg_user_id: message.from_tg_user_id || message.actor_tg_user_id || null,
+    employee_id: message.employee_id || null,
+    text: message.text || '',
+    media: message.media || null,
+    request_text: message.request_text || '',
+    classification: message.classification || '',
+    created_at: message.created_at || null
+  };
+}
+
+function employeeScopedConversation(row = {}, employee = {}) {
+  const requests = [
+    ...(Array.isArray(row.open_requests) ? row.open_requests : []).map(request => ({ ...request, status: request.status || 'open' })),
+    ...(Array.isArray(row.closed_requests) ? row.closed_requests : []).map(request => ({ ...request, status: request.status || 'closed' }))
+  ].map(employeeRequestConversationItem);
+  const messages = (Array.isArray(row.messages) ? row.messages : [])
+    .map(message => employeeMessageConversationItem(message, employee))
+    .filter(message => messageBelongsToEmployee(message, employee));
+  const seen = new Set();
+  return [...requests, ...messages]
+    .filter(item => item.text || item.media || item.created_at)
+    .filter(item => {
+      const key = `${item.direction}:${item.request_id || item.message_id || item.id || item.created_at}:${item.text || ''}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')));
+}
+
 const employeeProfileConversation = computed(() => {
   const chat = selectedEmployeeProfileChat.value;
   if (!chat) return [];
   const employee = employeeProfile.value.employee || {};
-  const requestIds = new Set(employeeProfileChatRequests.value.map(request => String(request.id || request.request_id || '')).filter(Boolean));
   const conversation = Array.isArray(employeeProfileChatDetail.value.conversation) ? employeeProfileChatDetail.value.conversation : [];
-  const filtered = conversation.filter(message => {
-    if (messageBelongsToEmployee(message, employee)) return true;
-    if (message.request_id && requestIds.has(String(message.request_id)) && message.direction !== 'outbound') return true;
-    return false;
-  });
-  if (filtered.length) return filtered;
-  return (chat.messages || []).map(message => ({
-    id: message.id || `${chat.chat_id}-${message.message_id || message.created_at}`,
-    message_id: message.message_id,
-    direction: 'outbound',
-    actor_name: employee.full_name || employee.username || 'Xodim',
-    actor_username: employee.username || '',
-    actor_tg_user_id: employee.tg_user_id || null,
-    employee_id: employee.id || employee.employee_id || null,
-    text: message.text || '',
-    created_at: message.created_at || null,
-    classification: message.classification || ''
-  }));
+  return (conversation.length ? conversation : employeeScopedConversation(chat, employee))
+    .filter(message => message.direction === 'inbound' || messageBelongsToEmployee(message, employee));
 });
 
 const employeeStatColumns = [
@@ -3638,6 +3702,7 @@ function resetEmployeeProfileChat() {
   employeeProfileChatDetail.value = { chat: null, requests: [], conversation: [] };
   employeeProfileChatLoading.value = false;
   employeeProfileChatError.value = '';
+  employeeProfileTicketsOpen.value = false;
   employeeProfileChatToken += 1;
 }
 
@@ -3651,15 +3716,20 @@ function setEmployeeProfileTab(tab) {
 async function selectEmployeeProfileChat(row = {}) {
   const key = employeeProfileChatKey(row);
   employeeProfileSelectedChatKey.value = key;
+  employeeProfileTicketsOpen.value = false;
   if (!row.chat_id) return;
   const token = ++employeeProfileChatToken;
   employeeProfileChatLoading.value = true;
   employeeProfileChatError.value = '';
   clearMediaUrls();
   try {
-    const data = await api.chatDetail({ chat_id: row.chat_id });
     if (token !== employeeProfileChatToken || employeeProfileSelectedChatKey.value !== key) return;
-    employeeProfileChatDetail.value = data;
+    const employee = employeeProfile.value.employee || {};
+    employeeProfileChatDetail.value = {
+      chat: row,
+      requests: employeeProfileChatRequests.value,
+      conversation: employeeScopedConversation(row, employee)
+    };
     await nextTick();
     loadConversationMedia(employeeProfileConversation.value).catch(error => showToast(error.message));
   } catch (error) {
