@@ -97,6 +97,14 @@
                 {{ loadingAction === 'mainStats' ? 'Yuborilmoqda...' : 'Statistika yuborish' }}
               </button>
               <button type="button" @click="runHeaderAction(openBroadcast)">Umumiy xabar</button>
+              <label v-if="activeTab === 'stats'" class="theme-menu-row">
+                <span>Davr</span>
+                <select v-model="selectedStatsPeriod" class="select mini-select">
+                  <option v-for="period in periodOptions" :key="period.key" :value="period.key">
+                    {{ period.label }}
+                  </option>
+                </select>
+              </label>
               <label class="theme-menu-row">
                 <span>Mavzu</span>
                 <select v-model="themeMode" class="select mini-select" @change="setThemeMode(themeMode)">
@@ -114,18 +122,6 @@
       <Transition name="page-shift" mode="out-in">
         <div class="page-body" :key="activeTab">
           <template v-if="activeTab === 'stats'">
-            <div class="section-toolbar">
-              <div class="period-control" role="group" aria-label="Statistika davri">
-                <span>Davr</span>
-                <div class="period-tabs">
-                  <button v-for="period in periodOptions" :key="period.key" type="button"
-                    :class="{ active: selectedStatsPeriod === period.key }" @click="selectedStatsPeriod = period.key">
-                    {{ period.label }}
-                  </button>
-                </div>
-              </div>
-            </div>
-
             <div class="support-summary-grid">
               <article v-for="card in supportSummaryCards" :key="card.key" class="card support-summary-card"
                 :class="{ alert: card.tone === 'danger' }" role="button" tabindex="0" :title="card.title"
@@ -232,12 +228,6 @@
                     <div class="card-title">Ticket va javoblar trendi</div>
                     <div class="card-note">{{ selectedPeriodLabel }} bo‘yicha kunlik solishtirish</div>
                   </div>
-                  <div class="period-tabs compact" aria-label="Trend davri">
-                    <button v-for="period in periodOptions" :key="`trend-${period.key}`" type="button"
-                      :class="{ active: selectedStatsPeriod === period.key }" @click="selectedStatsPeriod = period.key">
-                      {{ period.label }}
-                    </button>
-                  </div>
                 </div>
                 <div v-if="ticketTrendRows.length" class="ticket-trend-chart">
                   <article v-for="row in ticketTrendRows" :key="row.date_key" class="ticket-trend-day">
@@ -259,12 +249,6 @@
                   <div>
                     <div class="card-title">Kompaniyalar bo‘yicha ticketlar</div>
                     <div class="card-note">Kompaniyalar kesimida yopilgan va ochiq qolgan ticketlar</div>
-                  </div>
-                  <div class="period-tabs compact" aria-label="Kompaniya statistikasi davri">
-                    <button v-for="period in periodOptions" :key="`company-${period.key}`" type="button"
-                      :class="{ active: selectedStatsPeriod === period.key }" @click="selectedStatsPeriod = period.key">
-                      {{ period.key === 'all' ? 'Maxsus' : period.label }}
-                    </button>
                   </div>
                 </div>
                 <div v-if="companyTicketRows.length" class="company-ticket-bars">
