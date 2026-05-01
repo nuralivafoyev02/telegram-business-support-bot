@@ -1875,16 +1875,38 @@ async function deliverTelegramText({ businessConnectionId, chatId, text, options
 }
 
 function sanitizeWebhookInfo(info = {}) {
+  const allowedUpdates = Array.isArray(info.allowed_updates) ? info.allowed_updates : [];
+  const missingAllowedUpdates = allowedUpdates.length
+    ? TELEGRAM_ALLOWED_UPDATES.filter(update => !allowedUpdates.includes(update))
+    : [];
+  const diagnostics = [];
+  if (!info.url) diagnostics.push('Webhook URL ulanmagan.');
+  if (missingAllowedUpdates.includes('message')) {
+    diagnostics.push('allowed_updates ichida message yo‘q: guruhdagi oddiy xabarlar botga kelmaydi.');
+  }
+  if (missingAllowedUpdates.includes('edited_message')) {
+    diagnostics.push('allowed_updates ichida edited_message yo‘q: tahrirlangan guruh xabarlari kelmaydi.');
+  }
+  if (info.last_error_message) diagnostics.push(`Telegram oxirgi xatosi: ${info.last_error_message}`);
   return {
     ...info,
     url: maskWebhookUrl(info.url || ''),
     has_custom_certificate: !!info.has_custom_certificate,
-    allowed_updates: info.allowed_updates || []
+    allowed_updates: allowedUpdates,
+    diagnostics: {
+      receives_group_messages: !allowedUpdates.length || allowedUpdates.includes('message'),
+      missing_allowed_updates: missingAllowedUpdates,
+      notes: diagnostics
+    }
   };
 }
 
 function getAppUrl(body = {}) {
-  const url = body.app_url || optionalEnv('WEBAPP_URL', '');
+  const vercelUrl = optionalEnv('VERCEL_URL', '');
+  const url = body.app_url
+    || optionalEnv('WEBAPP_URL', '')
+    || optionalEnv('APP_URL', '')
+    || (vercelUrl ? `https://${vercelUrl}` : '');
   return String(url || '').trim().replace(/\/$/, '');
 }
 

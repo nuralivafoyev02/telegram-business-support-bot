@@ -4977,11 +4977,13 @@ async function sendMainStats() {
 const webhookStatusText = computed(() => {
   if (!webhookStatus.value) return '';
   const info = webhookStatus.value.webhook || webhookStatus.value;
+  const notes = info.diagnostics?.notes || [];
   return [
     `Manzil: ${info.url || '—'}`,
     `Kutilayotgan yangilanishlar: ${info.pending_update_count ?? 0}`,
     `Ruxsat etilgan yangilanishlar: ${(info.allowed_updates || []).join(', ') || '—'}`,
-    `Oxirgi xato: ${info.last_error_message || '—'}`
+    `Oxirgi xato: ${info.last_error_message || '—'}`,
+    notes.length ? `Tekshiruv: ${notes.join(' ')}` : 'Tekshiruv: guruh xabarlari uchun webhook sozlamasi to‘g‘ri ko‘rinmoqda'
   ].join('\n');
 });
 

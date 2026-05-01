@@ -65,8 +65,14 @@ async function ensureEmployee(user = {}) {
 
 async function upsertChat(chat = {}, sourceType = 'group', extra = {}, options = {}) {
   if (!chat || chat.id === undefined || chat.id === null) return null;
+  const existingRows = await supabase.select('tg_chats', {
+    select: 'chat_id,company_id,business_connection_id',
+    chat_id: supabase.eq(chat.id),
+    limit: '1'
+  }).catch(() => []);
+  const existing = existingRows[0] || {};
   const title = chatTitle(chat);
-  const rows = await supabase.insert('tg_chats', [{
+  const row = {
     chat_id: chat.id,
     type: chat.type || sourceType,
     source_type: sourceType,
@@ -76,8 +82,17 @@ async function upsertChat(chat = {}, sourceType = 'group', extra = {}, options =
     last_message_at: nowIso(),
     raw: chat,
     ...extra
+  };
+  if (!Object.prototype.hasOwnProperty.call(row, 'company_id') && existing.company_id) {
+    row.company_id = existing.company_id;
+  }
+  if (!Object.prototype.hasOwnProperty.call(row, 'business_connection_id') && existing.business_connection_id) {
+    row.business_connection_id = existing.business_connection_id;
+  }
+  const rows = await supabase.insert('tg_chats', [{
+    ...row
   }], { upsert: true, onConflict: 'chat_id', prefer: options.prefer || 'return=representation' });
-  return Array.isArray(rows) ? rows[0] : null;
+  return Array.isArray(rows) && rows[0] ? rows[0] : { ...existing, ...row };
 }
 
 async function saveBusinessConnection(connection = {}) {

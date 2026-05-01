@@ -1248,6 +1248,35 @@ async function testRequestsListShowsResponsibleEmployeeFromTicketMessages() {
   }
 }
 
+async function testWebhookInfoWarnsWhenMessageUpdatesMissing() {
+  const originalFetch = global.fetch;
+  global.fetch = async (url) => {
+    assert.match(url, /getWebhookInfo$/);
+    return {
+      ok: true,
+      json: async () => ({
+        ok: true,
+        result: {
+          url: 'https://example.app/api/bot?secret=hidden',
+          pending_update_count: 0,
+          allowed_updates: ['callback_query']
+        }
+      })
+    };
+  };
+
+  try {
+    const result = await callAdmin('telegramWebhookInfo');
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.data.diagnostics.receives_group_messages, false);
+    assert.strictEqual(result.payload.data.diagnostics.missing_allowed_updates.includes('message'), true);
+    assert.match(result.payload.data.diagnostics.notes.join(' '), /message yo‘q/);
+    assert.match(result.payload.data.url, /secret=\*\*\*/);
+  } finally {
+    global.fetch = originalFetch;
+  }
+}
+
 async function testSendToChatStoresOutgoingAdminMessage() {
   const originalSelect = supabase.select;
   const originalInsert = supabase.insert;
@@ -1850,6 +1879,7 @@ async function run() {
   await testDashboardCompanyTicketsUseRegisteredGroupCompany();
   await testRequestsListEnrichesCompanyFromRegisteredGroup();
   await testRequestsListShowsResponsibleEmployeeFromTicketMessages();
+  await testWebhookInfoWarnsWhenMessageUpdatesMissing();
   await testSendToChatStoresOutgoingAdminMessage();
   await testReplyRequestSendsMessageAndClosesTicket();
   await testReplyRequestFallsBackWhenBusinessPeerInvalid();

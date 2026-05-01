@@ -183,9 +183,10 @@ function isMainStatsTrigger(text = '') {
   return MAIN_STATS_TRIGGER_RE.test(text);
 }
 
-async function isMainStatsGroup(chat = {}, settings = null) {
+async function isMainStatsGroup(chat = {}, settings = null, options = {}) {
   const configured = configuredMainGroupId(settings);
   if (configured) return sameChatId(configured, chat.id);
+  if (options.resolveFallback === false) return false;
 
   const target = await resolveMainStatsChatId().catch(error => {
     logBackgroundError('resolve-main-stats-group', error);
@@ -934,7 +935,7 @@ async function maybeAnswerMainGroupQuestion({ updateKind, message, sourceType, t
   const chat = message.chat || {};
   if (!isGroupChat(chat)) return false;
   if (message.reply_to_message) return false;
-  if (!await isMainStatsGroup(chat, settings)) return false;
+  if (!await isMainStatsGroup(chat, settings, { resolveFallback: false })) return false;
   if (await maybeSendMainStatsQuestionReply({ message, sourceType, text, settings })) return true;
   if (!isQuestionLike(text)) return false;
   if (!classifyAsCustomerRequest({ updateKind, message, text, settings })) return false;

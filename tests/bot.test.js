@@ -231,6 +231,113 @@ async function testGroupRegisterDbFailureStillDeletesCommand() {
   }
 }
 
+async function testCompanyGroupPlainMessageIsStoredAndKeepsCompanyLink() {
+  const originalInsert = supabase.insert;
+  const originalSelect = supabase.select;
+  const originalFetch = global.fetch;
+  const inserted = [];
+  const chatId = -100456;
+  const companyId = 'company-plain';
+  clearBotSettingsCache();
+
+  supabase.select = async (table) => {
+    if (table === 'bot_settings') return [
+      { key: 'auto_reply', value: { enabled: false } },
+      { key: 'main_group', value: { chat_id: '-100999' } }
+    ];
+    if (table === 'tg_chats') return [{ chat_id: chatId, company_id: companyId, business_connection_id: null }];
+    if (table === 'employees') return [];
+    if (table === 'support_requests') return [];
+    return [];
+  };
+  supabase.insert = async (table, rows, options = {}) => {
+    inserted.push({ table, rows, options });
+    return rows.map(row => ({ id: `${table}-row`, ...row }));
+  };
+  global.fetch = async () => {
+    throw new Error('plain group message should not call Telegram');
+  };
+
+  try {
+    const result = await callHandler({
+      update_id: 31,
+      message: {
+        message_id: 131,
+        date: 1777100000,
+        text: 'Bugun yig‘ilish vaqti 16:00',
+        chat: { id: chatId, type: 'supergroup', title: 'Company support group' },
+        from: { id: 701, first_name: 'Mijoz', is_bot: false }
+      }
+    });
+
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.handled, 'message');
+    const chatInsert = inserted.find(item => item.table === 'tg_chats');
+    assert.ok(chatInsert);
+    assert.strictEqual(chatInsert.rows[0].company_id, companyId);
+    assert.strictEqual(inserted.some(item => item.table === 'messages' && item.rows[0].text === 'Bugun yig‘ilish vaqti 16:00'), true);
+    assert.strictEqual(inserted.some(item => item.table === 'support_requests'), false);
+  } finally {
+    supabase.insert = originalInsert;
+    supabase.select = originalSelect;
+    global.fetch = originalFetch;
+    clearBotSettingsCache();
+  }
+}
+
+async function testCompanyGroupRequestUsesRegisteredChatCompany() {
+  const originalInsert = supabase.insert;
+  const originalSelect = supabase.select;
+  const originalFetch = global.fetch;
+  const inserted = [];
+  const chatId = -100457;
+  const companyId = 'company-request';
+  clearBotSettingsCache();
+
+  supabase.select = async (table) => {
+    if (table === 'bot_settings') return [
+      { key: 'auto_reply', value: { enabled: false } },
+      { key: 'main_group', value: { chat_id: '-100999' } }
+    ];
+    if (table === 'tg_chats') return [{ chat_id: chatId, company_id: companyId, business_connection_id: null }];
+    if (table === 'employees') return [];
+    if (table === 'support_requests') return [];
+    return [];
+  };
+  supabase.insert = async (table, rows, options = {}) => {
+    inserted.push({ table, rows, options });
+    return rows.map(row => ({ id: `${table}-row`, ...row }));
+  };
+  global.fetch = async () => {
+    throw new Error('auto reply is disabled');
+  };
+
+  try {
+    const result = await callHandler({
+      update_id: 32,
+      message: {
+        message_id: 132,
+        date: 1777100000,
+        text: 'Login qilolmayapman, xato chiqyapti',
+        chat: { id: chatId, type: 'supergroup', title: 'Company support group' },
+        from: { id: 702, first_name: 'Mijoz', is_bot: false }
+      }
+    });
+
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.handled, 'message');
+    const requestInsert = inserted.find(item => item.table === 'support_requests');
+    assert.ok(requestInsert);
+    assert.strictEqual(requestInsert.rows[0].company_id, companyId);
+    assert.strictEqual(inserted.some(item => item.table === 'messages' && item.rows[0].classification === 'request'), true);
+  } finally {
+    supabase.insert = originalInsert;
+    supabase.select = originalSelect;
+    global.fetch = originalFetch;
+    clearBotSettingsCache();
+  }
+}
+
 async function testGroupDoneDoesNotReplyToGroup() {
   const originalInsert = supabase.insert;
   const originalSelect = supabase.select;
@@ -2330,6 +2437,8 @@ async function testConfiguredLogChannelSummarizesLaravelError() {
   await testChatMemberUpdateRegistersGroup();
   await testGroupStartRegistersGroupAndDeletesCommand();
   await testGroupRegisterDbFailureStillDeletesCommand();
+  await testCompanyGroupPlainMessageIsStoredAndKeepsCompanyLink();
+  await testCompanyGroupRequestUsesRegisteredChatCompany();
   await testGroupDoneDoesNotReplyToGroup();
   await testRequestMessageAppendsToExistingOpenRequest();
   await testPrivateGreetingRepliesWithGreeting();
