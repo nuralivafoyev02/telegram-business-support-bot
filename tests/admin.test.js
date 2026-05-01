@@ -1398,6 +1398,53 @@ async function testSetWebhookPrefersConfiguredAppUrl() {
   }
 }
 
+async function testSyncTelegramUpdatesDeletesActiveWebhookThenProcessesUpdates() {
+  const originalSelect = supabase.select;
+  const originalInsert = supabase.insert;
+  const originalFetch = global.fetch;
+  const calls = [];
+  const inserts = [];
+
+  supabase.select = async () => [];
+  supabase.insert = async (table, rows, options = {}) => {
+    inserts.push({ table, rows, options });
+    return rows;
+  };
+  global.fetch = async (url, options = {}) => {
+    const body = JSON.parse(options.body || '{}');
+    calls.push({ url, body });
+    if (/getUpdates$/.test(url) && calls.filter(call => /getUpdates$/.test(call.url)).length === 1) {
+      return {
+        ok: false,
+        json: async () => ({ ok: false, error_code: 409, description: "Conflict: can't use getUpdates method while webhook is active; use deleteWebhook to delete the webhook first" })
+      };
+    }
+    if (/deleteWebhook$/.test(url)) {
+      return { ok: true, json: async () => ({ ok: true, result: true }) };
+    }
+    if (/getUpdates$/.test(url)) {
+      return { ok: true, json: async () => ({ ok: true, result: [] }) };
+    }
+    throw new Error(`Unexpected URL: ${url}`);
+  };
+
+  try {
+    const result = await callAdmin('syncTelegramUpdates', {
+      method: 'POST',
+      body: { limit: 10 }
+    });
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.data.webhook_deleted, true);
+    assert.strictEqual(result.payload.data.fetched, 0);
+    assert.strictEqual(calls.some(call => /deleteWebhook$/.test(call.url) && call.body.drop_pending_updates === false), true);
+    assert.strictEqual(inserts.length, 0);
+  } finally {
+    supabase.select = originalSelect;
+    supabase.insert = originalInsert;
+    global.fetch = originalFetch;
+  }
+}
+
 async function testSendToChatStoresOutgoingAdminMessage() {
   const originalSelect = supabase.select;
   const originalInsert = supabase.insert;
@@ -2003,6 +2050,7 @@ async function run() {
   await testRequestsListShowsResponsibleEmployeeFromTicketMessages();
   await testWebhookInfoWarnsWhenMessageUpdatesMissing();
   await testSetWebhookPrefersConfiguredAppUrl();
+  await testSyncTelegramUpdatesDeletesActiveWebhookThenProcessesUpdates();
   await testSendToChatStoresOutgoingAdminMessage();
   await testReplyRequestSendsMessageAndClosesTicket();
   await testReplyRequestFallsBackWhenBusinessPeerInvalid();

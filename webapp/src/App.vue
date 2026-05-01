@@ -5103,7 +5103,8 @@ async function syncTelegramUpdates() {
   try {
     const result = await api.syncTelegramUpdates({ limit: 100 });
     await refresh();
-    showToast(`Telegramdan olindi: ${fmtNumber(result.processed || 0)}/${fmtNumber(result.fetched || 0)} update`);
+    const prefix = result.webhook_deleted ? 'Webhook o‘chirildi, ' : '';
+    showToast(`${prefix}Telegramdan olindi: ${fmtNumber(result.processed || 0)}/${fmtNumber(result.fetched || 0)} update`);
   } catch (error) {
     showToast(error.message);
   } finally {

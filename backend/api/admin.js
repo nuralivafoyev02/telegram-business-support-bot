@@ -4,7 +4,7 @@ const { Readable } = require('stream');
 const supabase = require('../lib/supabase');
 const { allowCors, sendJson, readBody, getQuery } = require('../lib/http');
 const { login, requireAdmin, hashPassword } = require('../lib/auth');
-const { sendMessage, sendBusinessMessage, getWebhookInfo, setWebhook, getUpdates, getFile, getUserProfilePhotos, downloadFile } = require('../lib/telegram');
+const { sendMessage, sendBusinessMessage, getWebhookInfo, setWebhook, deleteWebhook, getUpdates, getFile, getUserProfilePhotos, downloadFile } = require('../lib/telegram');
 const { optionalEnv } = require('../lib/env');
 const { normalizeSettings, clearBotSettingsCache } = require('../lib/bot-settings');
 const { normalizeAiIntegration, mergeAiIntegration, sanitizeAiIntegration, isAiIntegrationReady, isAiIntegrationConfigured, aiIntegrationSignature } = require('../lib/ai-config');
@@ -2040,6 +2040,11 @@ async function connectTelegramWebhook(body = {}) {
   };
 }
 
+function isGetUpdatesWebhookConflict(error = {}) {
+  const message = String(error.telegram?.description || error.message || '');
+  return /can't use getUpdates method while webhook is active|deleteWebhook/i.test(message);
+}
+
 function telegramUpdateOffsetValue(row = {}) {
   const value = row && row.value && typeof row.value === 'object' ? row.value : {};
   const offset = Number.parseInt(value.offset, 10);
@@ -2077,7 +2082,16 @@ async function syncTelegramUpdates(body = {}) {
   };
   if (currentOffset) payload.offset = currentOffset;
 
-  const updates = await getUpdates(payload);
+  let webhookDeleted = false;
+  let updates;
+  try {
+    updates = await getUpdates(payload);
+  } catch (error) {
+    if (!isGetUpdatesWebhookConflict(error)) throw error;
+    await deleteWebhook({ drop_pending_updates: false });
+    webhookDeleted = true;
+    updates = await getUpdates(payload);
+  }
   let nextOffset = currentOffset;
   let processed = 0;
   const handled = {};
@@ -2111,6 +2125,7 @@ async function syncTelegramUpdates(body = {}) {
     fetched: updates.length,
     processed,
     offset: nextOffset,
+    webhook_deleted: webhookDeleted,
     handled,
     errors
   };
