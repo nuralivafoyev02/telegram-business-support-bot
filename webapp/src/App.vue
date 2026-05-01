@@ -260,7 +260,10 @@
                 </div>
                 <div v-if="companyTicketRows.length" class="company-ticket-bars">
                   <article v-for="row in companyTicketRows" :key="row.company_id || row.name"
-                    class="company-ticket-row">
+                    class="company-ticket-row clickable-company-ticket" role="button" tabindex="0"
+                    title="Kompaniya guruhlaridagi barcha xabar va ticketlarni ko‘rish"
+                    @click="openCompanyGroupActivity(row)" @keydown.enter.prevent="openCompanyGroupActivity(row)"
+                    @keydown.space.prevent="openCompanyGroupActivity(row)">
                     <b>{{ row.name }}</b>
                     <div class="company-ticket-track">
                       <span class="company-ticket-fill closed"
@@ -529,7 +532,7 @@
                   </div>
                 </div>
                 <DataTable :columns="companyActivityColumns" :rows="filteredCompanyInfoRows"
-                  empty="Kompaniya ma’lumoti topilmadi" :page-size="12">
+                  empty="Kompaniya ma’lumoti topilmadi" :page-size="12" :on-cell-action="handleTableCellAction">
                   <template #companyIdentity="{ row }">
                     <span class="company-identity">
                       <img v-if="row.icon" :src="row.icon" alt="" />
@@ -1232,6 +1235,121 @@
     </Transition>
 
     <Transition name="modal-fade">
+      <Modal v-if="modal === 'companyGroupActivity'" :title="companyGroupTitle" wide @close="closeModal">
+        <div class="detail-stack company-group-modal">
+          <section class="detail-summary">
+            <div>
+              <span>Guruhlar</span>
+              <b>{{ fmtNumber(companyGroupDetail.company?.group_count || companyGroupRows.length) }}</b>
+            </div>
+            <div>
+              <span>Xabarlar</span>
+              <b>{{ fmtNumber(companyGroupDetail.company?.total_messages || companyGroupDetail.summary?.total_messages) }}</b>
+            </div>
+            <div>
+              <span>Ticketlar</span>
+              <b>{{ fmtNumber(companyGroupDetail.company?.total_requests || companyGroupDetail.summary?.total_requests) }}</b>
+            </div>
+            <div>
+              <span>Ochiq</span>
+              <b>{{ fmtNumber(companyGroupDetail.company?.open_requests || companyGroupDetail.summary?.open_requests) }}</b>
+            </div>
+          </section>
+
+          <div class="employee-chat-layout company-group-layout">
+            <aside class="employee-chat-list-panel">
+              <div class="employee-chat-list-head">
+                <b>Ulangan guruhlar</b>
+                <span>{{ selectedPeriodLabel }} bo‘yicha kompaniya chatlari</span>
+              </div>
+              <div v-if="companyGroupRows.length" class="employee-chat-list">
+                <button v-for="group in companyGroupRows" :key="companyGroupChatKey(group)" type="button"
+                  :class="{ active: companyGroupChatKey(group) === companyGroupSelectedChatKey }"
+                  @click="selectCompanyGroup(group)">
+                  <span class="employee-chat-mini-avatar">{{ chatInitials(group) }}</span>
+                  <span>
+                    <b>{{ group.title || group.chat_id }}</b>
+                    <small>{{ group.conversation?.[0]?.text || group.requests?.[0]?.initial_text || 'Yozishma tarixi' }}</small>
+                    <em>{{ fmtNumber(group.total_messages) }} xabar · {{ fmtNumber(group.total_requests) }} ticket · {{
+                      fmtNumber(group.open_requests) }} ochiq</em>
+                  </span>
+                  <strong v-if="group.open_requests">{{ fmtNumber(group.open_requests) }}</strong>
+                </button>
+              </div>
+              <div v-else class="empty compact">Ulangan guruhda yozishma topilmadi</div>
+            </aside>
+
+            <section class="employee-chat-pane">
+              <template v-if="selectedCompanyGroup">
+                <div class="employee-chat-pane-head">
+                  <div>
+                    <b>{{ selectedCompanyGroup.title || selectedCompanyGroup.chat_id }}</b>
+                    <span>{{ fmtNumber(selectedCompanyGroup.total_messages) }} xabar · {{
+                      fmtNumber(selectedCompanyGroup.total_requests) }} ticket · {{
+                        fmtNumber(selectedCompanyGroup.closed_requests) }} yopilgan</span>
+                  </div>
+                  <button class="btn small" type="button" @click="loadChatDetail(selectedCompanyGroup)">
+                    Chat tafsiloti
+                  </button>
+                </div>
+
+                <section class="metric-request-strip company-request-strip">
+                  <div class="metric-strip-head">
+                    <b>Ticketlar</b>
+                    <span>{{ fmtNumber(companyGroupRequests.length) }}</span>
+                  </div>
+                  <div v-if="companyGroupRequests.length" class="metric-request-list">
+                    <article v-for="request in companyGroupRequests" :key="request.id" class="metric-request-card">
+                      <div class="metric-request-head">
+                        <span class="badge" :class="request.status === 'closed' ? 'green' : 'orange'">
+                          {{ statusLabel(request.status) }}
+                        </span>
+                        <time>{{ fmtDate(request.created_at) }}</time>
+                      </div>
+                      <p>{{ request.initial_text || 'So‘rov matni yo‘q' }}</p>
+                      <small v-if="request.solution_text">Javob: {{ request.solution_text }}</small>
+                      <button v-if="request.status === 'open'" class="btn small" type="button"
+                        @click.stop="openRequestReply(request)">Javob</button>
+                    </article>
+                  </div>
+                  <div v-else class="empty compact">Bu guruhda ticket yo‘q</div>
+                </section>
+
+                <div v-if="companyGroupConversation.length" class="telegram-thread employee-profile-thread">
+                  <article v-for="message in companyGroupConversation" :key="chatBubbleKey(message)"
+                    class="chat-bubble-row" :class="{ outbound: message.direction === 'outbound' }">
+                    <div class="chat-bubble">
+                      <div class="chat-bubble-author">{{ message.actor_name || (message.direction === 'outbound' ?
+                        'Xodim' : 'Mijoz') }}</div>
+                      <div v-if="message.media" class="chat-media">
+                        <img v-if="message.media.kind === 'photo' && mediaUrl(message.media)" class="chat-media-image"
+                          :src="mediaUrl(message.media)" alt="" />
+                        <video v-else-if="isVideoMedia(message.media) && mediaUrl(message.media)"
+                          class="chat-media-video" :src="mediaUrl(message.media)" controls playsinline></video>
+                        <audio v-else-if="isAudioMedia(message.media) && mediaUrl(message.media)"
+                          class="chat-media-audio" :src="mediaUrl(message.media)" controls></audio>
+                        <div v-else class="chat-media-placeholder">
+                          {{ mediaPlaceholder(message.media) }}
+                        </div>
+                      </div>
+                      <p v-if="message.text">{{ message.text }}</p>
+                      <div class="chat-bubble-footer">
+                        <span v-if="message.request_text" class="chat-ticket">Ticket</span>
+                        <time>{{ fmtChatTime(message.created_at) }}</time>
+                      </div>
+                    </div>
+                  </article>
+                </div>
+                <div v-else class="empty compact">Bu guruhda xabar yo‘q</div>
+              </template>
+              <div v-else class="metric-chat-state">Chapdagi ro‘yxatdan guruh tanlang</div>
+            </section>
+          </div>
+        </div>
+      </Modal>
+    </Transition>
+
+    <Transition name="modal-fade">
       <Modal v-if="modal === 'employeeGroups'" :title="employeeDrilldownTitle" wide @close="closeModal">
         <div v-if="employeeGroupActivity.length" class="drilldown-stack">
           <section v-for="group in employeeGroupActivity" :key="group.chat_id" class="drilldown-group">
@@ -1707,6 +1825,8 @@ const employeeProfileTicketsOpen = ref(false);
 const metricDetail = ref({ title: '', columns: [], rows: [], empty: 'Ma’lumot yo‘q', pageSize: 12, summary: [] });
 const employeeGroupActivity = ref([]);
 const employeeOpenRequests = ref([]);
+const companyGroupDetail = ref({ company: null, summary: {}, groups: [] });
+const companyGroupSelectedChatKey = ref('');
 const employeeAvatarUrls = ref({});
 const employeeAvatarLoading = ref({});
 const mediaUrls = ref({});
@@ -2148,7 +2268,8 @@ const loadingText = computed(() => ({
   saveIntegration: 'Saqlamoqda...',
   saveLogSettings: 'Log sozlamasi saqlanmoqda...',
   testLog: 'Test log yuborilmoqda...',
-  extractKnowledge: 'Fayl o‘qilmoqda...'
+  extractKnowledge: 'Fayl o‘qilmoqda...',
+  companyGroupActivity: 'Kompaniya guruhlari yuklanmoqda...'
 }[loadingAction.value] || 'Yuklanmoqda...'));
 
 function startLoading(action) {
@@ -2926,19 +3047,33 @@ const employeeSupportTitle = computed(() => {
   const employee = employeeProfile.value.employee || {};
   return employee.full_name || employee.username ? `Xodim: ${employee.full_name || employee.username}` : 'Xodim tafsiloti';
 });
+const companyGroupTitle = computed(() => companyGroupDetail.value.company
+  ? `Kompaniya: ${companyGroupDetail.value.company.name || 'Kompaniya'}`
+  : 'Kompaniya guruhlari');
+const companyGroupRows = computed(() => companyGroupDetail.value.groups || []);
+const selectedCompanyGroup = computed(() => {
+  const rows = companyGroupRows.value;
+  if (!rows.length) return null;
+  return rows.find(row => companyGroupChatKey(row) === companyGroupSelectedChatKey.value) || rows[0];
+});
+const companyGroupConversation = computed(() => selectedCompanyGroup.value?.conversation || []);
+const companyGroupRequests = computed(() => selectedCompanyGroup.value?.requests || []);
 const employeeProfileChatRows = computed(() => (employeeProfile.value.groups || []).map(group => {
   const closedRequests = Array.isArray(group.closed_requests) ? group.closed_requests : [];
   const openRequests = Array.isArray(group.open_requests) ? group.open_requests : [];
   const messages = Array.isArray(group.messages) ? group.messages : [];
+  const chatMessages = Array.isArray(group.chat_messages) ? group.chat_messages : messages;
   return {
     ...group,
     source_type: group.source_type || 'private',
     closed_count: Number(group.closed_count ?? closedRequests.length),
     open_count: Number(group.open_count ?? openRequests.length),
     message_count: Number(group.message_count ?? messages.length),
+    chat_message_count: Number(group.chat_message_count ?? chatMessages.length),
     closed_requests: closedRequests,
     open_requests: openRequests,
     messages,
+    chat_messages: chatMessages,
     total_requests: Number(group.total_requests ?? (closedRequests.length + openRequests.length))
   };
 }));
@@ -3028,6 +3163,28 @@ function employeeMessageConversationItem(message = {}, employee = {}) {
   };
 }
 
+function employeeChatMessageConversationItem(message = {}, employee = {}) {
+  const outbound = messageBelongsToEmployee(message, employee)
+    || ['employee_message', 'admin_reply', 'ai_reply'].includes(message.classification || '');
+  return {
+    id: message.id || `chat-message-${message.chat_id || ''}-${message.message_id || message.created_at || ''}`,
+    type: outbound ? 'employee_reply' : 'chat_message',
+    request_id: message.request_id || null,
+    message_id: message.message_id || message.tg_message_id || null,
+    direction: outbound ? 'outbound' : 'inbound',
+    actor_type: outbound ? 'employee' : 'customer',
+    actor_name: message.from_name || message.actor_name || (outbound ? 'Xodim' : 'Mijoz'),
+    actor_username: message.from_username || message.actor_username || '',
+    actor_tg_user_id: message.from_tg_user_id || message.actor_tg_user_id || null,
+    employee_id: message.employee_id || null,
+    text: message.text || '',
+    media: message.media || null,
+    request_text: message.request_text || '',
+    classification: message.classification || '',
+    created_at: message.created_at || null
+  };
+}
+
 function employeeScopedConversation(row = {}, employee = {}) {
   const requestRows = [
     ...(Array.isArray(row.open_requests) ? row.open_requests : []).map(request => ({ ...request, status: request.status || 'open' })),
@@ -3035,9 +3192,13 @@ function employeeScopedConversation(row = {}, employee = {}) {
   ];
   const requests = requestRows.map(employeeRequestConversationItem);
   const requestEvents = requestRows.flatMap(request => employeeRequestEventConversationItems(request, employee));
-  const messages = (Array.isArray(row.messages) ? row.messages : [])
-    .map(message => employeeMessageConversationItem(message, employee))
-    .filter(message => messageBelongsToEmployee(message, employee));
+  const messages = Array.isArray(row.chat_messages)
+    ? row.chat_messages
+      .map(message => employeeChatMessageConversationItem(message, employee))
+      .filter(message => message.direction === 'inbound' || messageBelongsToEmployee(message, employee))
+    : (Array.isArray(row.messages) ? row.messages : [])
+      .map(message => employeeMessageConversationItem(message, employee))
+      .filter(message => messageBelongsToEmployee(message, employee));
   const seen = new Set();
   return [...requests, ...requestEvents, ...messages]
     .filter(item => item.text || item.media || item.created_at)
@@ -3183,8 +3344,8 @@ const companyColumns = [
 ];
 
 const companyActivityColumns = [
-  { key: 'name', label: 'Kompaniya', slot: 'companyIdentity' },
-  { key: 'business_status', label: 'Biznes holati', slot: 'businessStatus' },
+  { key: 'name', label: 'Kompaniya', slot: 'companyIdentity', action: 'companyGroups' },
+  { key: 'business_status', label: 'Biznes holati', slot: 'businessStatus', action: 'companyGroups' },
   { key: 'director', label: 'Direktor', format: v => v || '—' },
   { key: 'uyqur_support_username', label: 'Biriktirilgan mas’ul', slot: 'supportOwner' },
   { key: 'phone', label: 'Telefon', format: v => v || '—' },
@@ -3777,6 +3938,10 @@ function handleTableCellAction({ action, row }) {
     openAssignCompany(row);
     return;
   }
+  if (action === 'companyGroups') {
+    openCompanyGroupActivity(row);
+    return;
+  }
   if (action === 'employeeInfo') {
     openEmployee(tableActionEmployeeRow(row));
     return;
@@ -3849,6 +4014,10 @@ function employeeProfileChatKey(row = {}) {
   return String(row.chat_id || row.key || row.title || '').trim();
 }
 
+function companyGroupChatKey(row = {}) {
+  return String(row.chat_id || row.key || row.title || '').trim();
+}
+
 function chatInitials(row = {}) {
   return initialsFromText(row.title || row.customer_name || row.chat_id || 'Chat');
 }
@@ -3856,7 +4025,7 @@ function chatInitials(row = {}) {
 function chatPreview(row = {}) {
   const openRequest = Array.isArray(row.open_requests) ? row.open_requests[0] : null;
   const closedRequest = Array.isArray(row.closed_requests) ? row.closed_requests[0] : null;
-  const message = Array.isArray(row.messages) ? row.messages[0] : null;
+  const message = Array.isArray(row.chat_messages) ? row.chat_messages[0] : (Array.isArray(row.messages) ? row.messages[0] : null);
   return openRequest?.initial_text || closedRequest?.initial_text || message?.text || 'Yozishma tarixi';
 }
 
@@ -4376,6 +4545,53 @@ function openCompanyMetricDetail(kind = 'total') {
   });
 }
 
+function normalizeCompanyGroupPayload(data = {}, fallback = {}) {
+  const company = Array.isArray(data.companies) ? data.companies[0] : null;
+  return {
+    company: company || {
+      company_id: fallback.company_id || fallback.id || '',
+      name: fallback.name || fallback.company_name || 'Kompaniya'
+    },
+    summary: data.summary || {},
+    groups: company?.groups || []
+  };
+}
+
+async function selectCompanyGroup(row = {}) {
+  companyGroupSelectedChatKey.value = companyGroupChatKey(row);
+  clearMediaUrls();
+  await nextTick();
+  loadConversationMedia(companyGroupConversation.value).catch(error => showToast(error.message));
+}
+
+async function openCompanyGroupActivity(row = {}) {
+  const companyId = String(row.company_id || row.id || '').trim();
+  const companyName = String(row.name || row.company_name || '').trim();
+  if (!companyId && !companyName) return showToast('Kompaniya topilmadi');
+
+  startLoading('companyGroupActivity');
+  try {
+    const data = await api.companyGroupActivity({
+      period: selectedStatsPeriod.value,
+      ...dashboardPeriodQuery(),
+      company_id: companyId,
+      company_name: companyName
+    });
+    const detail = normalizeCompanyGroupPayload(data, row);
+    if (!detail.groups.length) return showToast('Bu kompaniyaga ulangan guruhlarda xabar topilmadi');
+    companyGroupDetail.value = detail;
+    companyGroupSelectedChatKey.value = companyGroupChatKey(detail.groups[0]);
+    modal.value = 'companyGroupActivity';
+    clearMediaUrls();
+    await nextTick();
+    loadConversationMedia(companyGroupConversation.value).catch(error => showToast(error.message));
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    stopLoading('companyGroupActivity');
+  }
+}
+
 function openSupportSummaryCard(action = 'requests') {
   openSupportEmployeeSummary(action);
 }
@@ -4401,7 +4617,7 @@ function openAlertRequests(row = {}) {
 }
 
 function closeModal() {
-  if (modal.value === 'chatDetail' || modal.value === 'metricDetail' || modal.value === 'employeeCompanies') clearMediaUrls();
+  if (modal.value === 'chatDetail' || modal.value === 'metricDetail' || modal.value === 'employeeCompanies' || modal.value === 'companyGroupActivity') clearMediaUrls();
   if (modal.value === 'metricDetail') resetMetricChatDetail();
   if (modal.value === 'employeeCompanies') resetEmployeeProfileChat();
   modal.value = '';
@@ -4541,7 +4757,7 @@ function openRequestReply(row = {}) {
     text: ''
   });
   if (!requestReplyForm.request_id) return showToast('So‘rov ID topilmadi');
-  if (previousModal === 'chatDetail' || previousModal === 'metricDetail' || previousModal === 'employeeCompanies') clearMediaUrls();
+  if (previousModal === 'chatDetail' || previousModal === 'metricDetail' || previousModal === 'employeeCompanies' || previousModal === 'companyGroupActivity') clearMediaUrls();
   if (previousModal === 'metricDetail') resetMetricChatDetail();
   if (previousModal === 'employeeCompanies') resetEmployeeProfileChat();
   modal.value = 'requestReply';

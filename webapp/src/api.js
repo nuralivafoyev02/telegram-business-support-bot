@@ -54,6 +54,7 @@ export const api = {
   employeeActivity: query => request('employeeActivity', { query }).then(r => r.data),
   requests: query => request('requests', { query }).then(r => r.data),
   chatDetail: query => request('chatDetail', { query }).then(r => r.data),
+  companyGroupActivity: query => request('companyGroupActivity', { query }).then(r => r.data),
   telegramFile: fileId => requestBlob('telegramFile', { query: { file_id: fileId } }),
   telegramProfilePhoto: tgUserId => requestBlob('telegramProfilePhoto', { query: { tg_user_id: tgUserId } }),
   settings: () => request('settings').then(r => r.data),

@@ -910,6 +910,117 @@ async function testChatDetailIncludesTicketSolutionAndTimeline() {
   }
 }
 
+async function testCompanyGroupActivityReturnsLinkedGroupMessagesWithTickets() {
+  const originalSelect = supabase.select;
+  const chatId = -100700;
+  const companyId = 'company-1';
+
+  supabase.select = async (table) => {
+    if (table === 'companies') return [{ id: companyId, name: 'China House', brand: 'CH', is_active: true }];
+    if (table === 'employees') return [{ id: 'emp-1', tg_user_id: 909, full_name: 'Ali', username: 'ali', role: 'support', is_active: true }];
+    if (table === 'tg_chats') return [{
+      chat_id: chatId,
+      title: 'China House support',
+      source_type: 'group',
+      company_id: companyId,
+      is_active: true,
+      last_message_at: '2026-04-30T08:10:00.000Z'
+    }];
+    if (table === 'support_requests') return [{
+      id: 'request-1',
+      source_type: 'group',
+      chat_id: chatId,
+      company_id: null,
+      customer_tg_id: 808,
+      customer_name: 'Mijoz',
+      customer_username: 'client',
+      initial_message_id: 10,
+      initial_text: 'Login xato beryapti',
+      status: 'closed',
+      closed_by_employee_id: 'emp-1',
+      closed_by_tg_id: 909,
+      closed_by_name: 'Ali',
+      done_message_id: 12,
+      created_at: '2026-04-30T08:00:00.000Z',
+      closed_at: '2026-04-30T08:04:00.000Z'
+    }];
+    if (table === 'messages') return [
+      {
+        id: 'm1',
+        tg_message_id: 10,
+        chat_id: chatId,
+        from_tg_user_id: 808,
+        from_name: 'Mijoz',
+        from_username: 'client',
+        employee_id: null,
+        source_type: 'group',
+        classification: 'request',
+        text: 'Login xato beryapti',
+        raw: {},
+        created_at: '2026-04-30T08:00:00.000Z'
+      },
+      {
+        id: 'm2',
+        tg_message_id: 11,
+        chat_id: chatId,
+        from_tg_user_id: 808,
+        from_name: 'Mijoz',
+        from_username: 'client',
+        employee_id: null,
+        source_type: 'group',
+        classification: 'message',
+        text: 'Oddiy izoh ham bor',
+        raw: {},
+        created_at: '2026-04-30T08:02:00.000Z'
+      },
+      {
+        id: 'm3',
+        tg_message_id: 12,
+        chat_id: chatId,
+        from_tg_user_id: 909,
+        from_name: 'Ali',
+        from_username: 'ali',
+        employee_id: 'emp-1',
+        source_type: 'group',
+        classification: 'employee_message',
+        text: 'Tuzatdim',
+        raw: {},
+        created_at: '2026-04-30T08:04:00.000Z'
+      }
+    ];
+    if (table === 'request_events') return [{
+      id: 'event-1',
+      request_id: 'request-1',
+      chat_id: chatId,
+      tg_message_id: 12,
+      event_type: 'closed',
+      actor_tg_id: 909,
+      actor_name: 'Ali',
+      employee_id: 'emp-1',
+      text: 'Tuzatdim',
+      raw: {},
+      created_at: '2026-04-30T08:04:20.000Z'
+    }];
+    return [];
+  };
+
+  try {
+    const result = await callAdmin('companyGroupActivity', { query: { period: 'all', company_id: companyId } });
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.data.companies.length, 1);
+    const company = result.payload.data.companies[0];
+    assert.strictEqual(company.name, 'China House');
+    assert.strictEqual(company.group_count, 1);
+    assert.strictEqual(company.total_messages, 3);
+    assert.strictEqual(company.total_requests, 1);
+    assert.strictEqual(company.groups[0].requests[0].initial_text, 'Login xato beryapti');
+    assert.strictEqual(company.groups[0].conversation.some(message => message.text === 'Oddiy izoh ham bor' && !message.request_id), true);
+    assert.strictEqual(company.groups[0].conversation.some(message => message.text === 'Tuzatdim' && message.direction === 'outbound'), true);
+  } finally {
+    supabase.select = originalSelect;
+  }
+}
+
 async function testSendToChatStoresOutgoingAdminMessage() {
   const originalSelect = supabase.select;
   const originalInsert = supabase.insert;
@@ -1139,9 +1250,43 @@ async function testEmployeeActivityReturnsGroupsAndCustomers() {
     text: index === 0 ? 'Javob berdim' : `Javob ${index + 1}`,
     created_at: new Date(Date.parse(today) + index * 1000).toISOString()
   }));
+  const customerMessage = {
+    id: 'customer-message-1',
+    tg_message_id: 90,
+    chat_id: -1001,
+    from_tg_user_id: 501,
+    from_name: 'Mijoz A',
+    from_username: 'mijoz_a',
+    employee_id: null,
+    source_type: 'group',
+    classification: 'message',
+    text: 'Oddiy chat xabari',
+    raw: {},
+    created_at: new Date(Date.parse(today) + 3500).toISOString()
+  };
+  const otherEmployeeMessage = {
+    id: 'other-employee-message-1',
+    tg_message_id: 91,
+    chat_id: -1001,
+    from_tg_user_id: 888,
+    from_name: 'Vali',
+    from_username: 'vali',
+    employee_id: 'emp-2',
+    source_type: 'group',
+    classification: 'employee_message',
+    text: 'Boshqa xodim javobi',
+    raw: {},
+    created_at: new Date(Date.parse(today) + 4500).toISOString()
+  };
+  const chatMessages = [...employeeMessages, customerMessage, otherEmployeeMessage];
 
-  supabase.select = async (table) => {
-    if (table === 'employees') return [{ id: 'emp-1', tg_user_id: 777, full_name: 'Ali', username: 'ali', is_active: true }];
+  supabase.select = async (table, params = {}) => {
+    if (table === 'employees') {
+      return [
+        { id: 'emp-1', tg_user_id: 777, full_name: 'Ali', username: 'ali', is_active: true },
+        { id: 'emp-2', tg_user_id: 888, full_name: 'Vali', username: 'vali', is_active: true }
+      ];
+    }
     if (table === 'support_requests') {
       return [
         {
@@ -1162,7 +1307,11 @@ async function testEmployeeActivityReturnsGroupsAndCustomers() {
         }
       ];
     }
-    if (table === 'messages') return employeeMessages;
+    if (table === 'messages') {
+      if (params.employee_id === 'eq.emp-1') return employeeMessages;
+      if (params.from_tg_user_id === 'eq.777') return employeeMessages;
+      return chatMessages;
+    }
     if (table === 'tg_chats') return [{ chat_id: -1001, title: 'Support guruhi', source_type: 'group' }];
     if (table === 'request_events') {
       return [{
@@ -1191,6 +1340,8 @@ async function testEmployeeActivityReturnsGroupsAndCustomers() {
     assert.strictEqual(result.payload.data.groups[0].closed_requests[0].customer_name, 'Mijoz A');
     assert.strictEqual(result.payload.data.groups[0].messages.length, 35);
     assert.strictEqual(result.payload.data.groups[0].messages.some(message => message.text === 'Javob berdim'), true);
+    assert.strictEqual(result.payload.data.groups[0].chat_messages.some(message => message.text === 'Oddiy chat xabari'), true);
+    assert.strictEqual(result.payload.data.groups[0].chat_messages.some(message => message.text === 'Boshqa xodim javobi'), false);
     assert.strictEqual(result.payload.data.groups[0].closed_requests[0].events[0].text, 'Qo‘shimcha savol');
   } finally {
     supabase.select = originalSelect;
@@ -1468,6 +1619,7 @@ async function run() {
   await testUnrelatedSettingsDoNotNotifyStaleAiIntegration();
   await testPrivateChatsExcludeEmployees();
   await testChatDetailIncludesTicketSolutionAndTimeline();
+  await testCompanyGroupActivityReturnsLinkedGroupMessagesWithTickets();
   await testSendToChatStoresOutgoingAdminMessage();
   await testReplyRequestSendsMessageAndClosesTicket();
   await testReplyRequestFallsBackWhenBusinessPeerInvalid();

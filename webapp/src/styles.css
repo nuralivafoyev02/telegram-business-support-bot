@@ -2880,6 +2880,19 @@ td,
   gap: 18px;
 }
 
+.clickable-company-ticket {
+  cursor: pointer;
+  border-radius: var(--radius);
+  transition: background .18s ease, box-shadow .18s ease;
+}
+
+.clickable-company-ticket:hover,
+.clickable-company-ticket:focus-visible {
+  background: var(--surface-soft);
+  box-shadow: 0 0 0 6px var(--surface-soft);
+  outline: none;
+}
+
 .company-ticket-row>b {
   color: var(--text);
   font-size: 17px;
