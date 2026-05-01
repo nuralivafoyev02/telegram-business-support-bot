@@ -88,6 +88,10 @@ async function setWebhook(payload) {
   return telegram('setWebhook', payload);
 }
 
+async function getUpdates(payload = {}) {
+  return telegram('getUpdates', payload);
+}
+
 async function getFile(fileId) {
   return telegram('getFile', { file_id: fileId });
 }
@@ -120,4 +124,4 @@ function escapeHtml(str = '') {
     .replaceAll('"', '&quot;');
 }
 
-module.exports = { telegram, sendMessage, deleteMessage, reactToMessage, sendBusinessMessage, answerCallbackQuery, editMessageReplyMarkup, getWebhookInfo, setWebhook, getFile, getUserProfilePhotos, downloadFile, tgUserName, escapeHtml };
+module.exports = { telegram, sendMessage, deleteMessage, reactToMessage, sendBusinessMessage, answerCallbackQuery, editMessageReplyMarkup, getWebhookInfo, setWebhook, getUpdates, getFile, getUserProfilePhotos, downloadFile, tgUserName, escapeHtml };

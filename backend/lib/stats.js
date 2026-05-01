@@ -136,6 +136,7 @@ function buildEmployeeStats({ employees, requests }) {
       is_active: employee.is_active,
       received_requests: related.length,
       closed_requests: closed.length,
+      open_requests: related.filter(request => request.status === 'open').length,
       handled_chats: new Set(related.map(request => request.chat_id).filter(Boolean)).size,
       last_closed_at: closed.map(request => request.closed_at).filter(Boolean).sort().at(-1) || null,
       avg_close_minutes: avg

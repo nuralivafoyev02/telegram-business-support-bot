@@ -215,7 +215,8 @@
                   <b class="table-strong">{{ fmtPercent(row.close_rate) }}</b>
                 </template>
                 <template #sla="{ row }">
-                  <span class="sla-badge" :class="slaToneClass(row.sla)">{{ fmtPercent(row.sla) }}</span>
+                  <span class="sla-badge sla-tooltip" :class="slaToneClass(row.sla)"
+                    :data-tooltip="employeeSlaTooltip(row)" tabindex="0">{{ fmtPercent(row.sla) }}</span>
                 </template>
               </DataTable>
             </section>
@@ -749,6 +750,8 @@
                     <button class="btn primary" :disabled="loadingAction === 'webhookConnect'"
                       @click="reconnectTelegramWebhook">{{ loadingAction === 'webhookConnect' ? 'Ulanmoqda...' :
                         'Telegram ulanishini yangilash' }}</button>
+                    <button class="btn" :disabled="loadingAction === 'webhookSync'" @click="syncTelegramUpdates">{{
+                      loadingAction === 'webhookSync' ? 'Olinmoqda...' : 'Webhooksiz sinxronlash' }}</button>
                   </div>
                 </div>
                 <Transition name="fade">
@@ -1215,9 +1218,15 @@
               <section class="metric-request-strip">
                 <div class="metric-strip-head">
                   <b>So‘rovlar</b>
-                  <span>{{ fmtNumber(metricChatDetail.requests?.length) }}</span>
+                  <div class="strip-head-actions">
+                    <span>{{ fmtNumber(metricChatDetail.requests?.length) }}</span>
+                    <button class="btn small" type="button" :disabled="!metricChatDetail.requests?.length"
+                      @click="metricChatTicketsOpen = !metricChatTicketsOpen">
+                      {{ ticketToggleLabel(metricChatTicketsOpen, metricChatDetail.requests?.length) }}
+                    </button>
+                  </div>
                 </div>
-                <div v-if="metricChatDetail.requests?.length" class="metric-request-list">
+                <div v-if="metricChatTicketsOpen && metricChatDetail.requests?.length" class="metric-request-list">
                   <article v-for="request in metricChatDetail.requests" :key="request.id" class="metric-request-card">
                     <div class="metric-request-head">
                       <span class="badge" :class="request.status === 'closed' ? 'green' : 'orange'">
@@ -1231,7 +1240,7 @@
                       @click.stop="openRequestReply(request)">Javob</button>
                   </article>
                 </div>
-                <div v-else class="empty compact">Bu chatda so‘rov yo‘q</div>
+                <div v-else class="empty compact">{{ metricChatDetail.requests?.length ? 'Ticketlar yashirilgan' : 'Bu chatda so‘rov yo‘q' }}</div>
               </section>
 
               <div v-if="metricChatConversation.length" ref="metricChatThreadRef"
@@ -1341,9 +1350,15 @@
                 <section class="metric-request-strip company-request-strip">
                   <div class="metric-strip-head">
                     <b>Ticketlar</b>
-                    <span>{{ fmtNumber(companyGroupRequests.length) }}</span>
+                    <div class="strip-head-actions">
+                      <span>{{ fmtNumber(companyGroupRequests.length) }}</span>
+                      <button class="btn small" type="button" :disabled="!companyGroupRequests.length"
+                        @click="companyGroupTicketsOpen = !companyGroupTicketsOpen">
+                        {{ ticketToggleLabel(companyGroupTicketsOpen, companyGroupRequests.length) }}
+                      </button>
+                    </div>
                   </div>
-                  <div v-if="companyGroupRequests.length" class="metric-request-list">
+                  <div v-if="companyGroupTicketsOpen && companyGroupRequests.length" class="metric-request-list">
                     <article v-for="request in companyGroupRequests" :key="request.id" class="metric-request-card">
                       <div class="metric-request-head">
                         <span class="badge" :class="request.status === 'closed' ? 'green' : 'orange'">
@@ -1357,7 +1372,7 @@
                         @click.stop="openRequestReply(request)">Javob</button>
                     </article>
                   </div>
-                  <div v-else class="empty compact">Bu guruhda ticket yo‘q</div>
+                  <div v-else class="empty compact">{{ companyGroupRequests.length ? 'Ticketlar yashirilgan' : 'Bu guruhda ticket yo‘q' }}</div>
                 </section>
 
                 <div v-if="companyGroupConversation.length" class="telegram-thread employee-profile-thread">
@@ -1406,7 +1421,13 @@
                     fmtNumber(group.open_count) }} ochiq
                 </div>
               </div>
-              <button class="btn small" type="button" @click="loadChatDetail(group)">Chat tafsiloti</button>
+              <div class="drilldown-actions">
+                <button class="btn small" type="button" :disabled="!group.closed_requests?.length"
+                  @click="toggleEmployeeGroupTickets(group)">
+                  {{ ticketToggleLabel(isEmployeeGroupTicketsOpen(group), group.closed_requests?.length) }}
+                </button>
+                <button class="btn small" type="button" @click="loadChatDetail(group)">Chat tafsiloti</button>
+              </div>
             </div>
 
             <div class="drilldown-columns">
@@ -1424,14 +1445,14 @@
 
               <div class="drilldown-panel">
                 <div class="drilldown-label">Yopilgan so‘rovlar</div>
-                <div v-if="group.closed_requests?.length" class="mini-list">
+                <div v-if="isEmployeeGroupTicketsOpen(group) && group.closed_requests?.length" class="mini-list">
                   <article v-for="request in group.closed_requests" :key="request.id" class="mini-item">
                     <b>{{ request.customer_name || 'Mijoz' }}</b>
                     <p>{{ request.initial_text || 'So‘rov matni yo‘q' }}</p>
                     <time>{{ fmtDate(request.closed_at) }}</time>
                   </article>
                 </div>
-                <div v-else class="empty compact">Yopilgan so‘rov yo‘q</div>
+                <div v-else class="empty compact">{{ group.closed_requests?.length ? 'Ticketlar yashirilgan' : 'Yopilgan so‘rov yo‘q' }}</div>
               </div>
             </div>
           </section>
@@ -1528,7 +1549,7 @@
                   </div>
                   <button class="btn small" type="button" :disabled="!employeeProfileChatRequests.length"
                     @click="employeeProfileTicketsOpen = !employeeProfileTicketsOpen">
-                    {{ employeeProfileTicketsOpen ? 'Tiketlarni yopish' : `Tiketlarni ochish (${fmtNumber(employeeProfileChatRequests.length)})` }}
+                    {{ ticketToggleLabel(employeeProfileTicketsOpen, employeeProfileChatRequests.length) }}
                   </button>
                 </div>
 
@@ -1693,16 +1714,23 @@
           <div class="chat-detail-layout">
             <section class="detail-section ticket-panel">
               <div class="detail-section-head">
-                <div class="card-title">So‘rovlar va yechimlar</div>
-                <div class="card-note">{{ fmtNumber(chatDetail.requests?.length) }} ta yozuv</div>
+                <div>
+                  <div class="card-title">So‘rovlar va yechimlar</div>
+                  <div class="card-note">{{ fmtNumber(chatDetail.requests?.length) }} ta yozuv</div>
+                </div>
+                <button class="btn small" type="button" :disabled="!chatDetail.requests?.length"
+                  @click="chatTicketsOpen = !chatTicketsOpen">
+                  {{ ticketToggleLabel(chatTicketsOpen, chatDetail.requests?.length) }}
+                </button>
               </div>
-              <DataTable :columns="chatRequestColumns" :rows="chatDetail.requests || []" empty="Bu chatda so‘rov yo‘q"
+              <DataTable v-if="chatTicketsOpen" :columns="chatRequestColumns" :rows="chatDetail.requests || []" empty="Bu chatda so‘rov yo‘q"
                 :on-cell-action="handleTableCellAction">
                 <template #requestReply="{ row }">
                   <button class="btn small" type="button" :disabled="row.status !== 'open'"
                     @click.stop="openRequestReply(row)">Javob</button>
                 </template>
               </DataTable>
+              <div v-else class="empty compact">Ticketlar yashirilgan</div>
             </section>
 
             <section class="detail-section dialog-panel">
@@ -1855,10 +1883,12 @@ const ticketList = ref({ rows: [], active: 'all', mode: 'all', title: 'Ticketlar
 const ticketListSearch = ref('');
 const ticketListSupport = ref('all');
 const chatDetail = ref({ chat: null, requests: [], timeline: [] });
+const chatTicketsOpen = ref(true);
 const metricChatDetail = ref({ chat: null, requests: [], conversation: [] });
 const metricChatLoading = ref(false);
 const metricChatError = ref('');
 const metricChatSelectedId = ref('');
+const metricChatTicketsOpen = ref(true);
 const metricChatThreadRef = ref(null);
 const employeeDrilldown = ref(null);
 const employeeActivity = ref({ employee: null, summary: {}, groups: [], closed_requests: [], messages: [] });
@@ -1872,9 +1902,11 @@ const employeeProfileChatError = ref('');
 const employeeProfileTicketsOpen = ref(false);
 const metricDetail = ref({ title: '', columns: [], rows: [], empty: 'Ma’lumot yo‘q', pageSize: 12, summary: [] });
 const employeeGroupActivity = ref([]);
+const employeeGroupTicketVisibility = ref({});
 const employeeOpenRequests = ref([]);
 const companyGroupDetail = ref({ company: null, summary: {}, groups: [] });
 const companyGroupSelectedChatKey = ref('');
+const companyGroupTicketsOpen = ref(true);
 const employeeAvatarUrls = ref({});
 const employeeAvatarLoading = ref({});
 const mediaUrls = ref({});
@@ -2191,9 +2223,11 @@ function mergeSupportCandidate(map, row = {}, source = 'identity') {
   const phone = row.phone || row.uyqur_support_phone || '';
   const periodClosed = source === 'period' ? mergeMetricOnce(current, source, row, 'closed_requests') : 0;
   const statsClosed = source === 'stats' ? mergeMetricOnce(current, source, row, 'closed_requests') : 0;
+  const periodOpen = source === 'period' ? mergeMetricOnce(current, source, row, 'open_requests') : 0;
+  const statsOpen = source === 'stats' ? mergeMetricOnce(current, source, row, 'open_requests') : 0;
+  const statsTodayOpen = source === 'stats' ? mergeMetricOnce(current, source, row, 'today_open_requests') : 0;
   const periodHandled = source === 'period' ? mergeMetricOnce(current, source, row, 'handled_chats') : 0;
   const statsHandled = source === 'stats' ? mergeMetricOnce(current, source, row, 'handled_chats') : 0;
-  const statsOpen = source === 'stats' ? mergeMetricOnce(current, source, row, 'today_open_requests') : 0;
   mergeWeightedAverage(current, source, row);
   map.set(key, {
     ...current,
@@ -2207,14 +2241,17 @@ function mergeSupportCandidate(map, row = {}, source = 'identity') {
     full_name: current.full_name || row.full_name || row.closed_by_name || (username ? `@${username}` : '') || phone || 'Xodim',
     period_closed_requests: Number(current.period_closed_requests || 0) + periodClosed,
     stats_closed_requests: Number(current.stats_closed_requests || 0) + statsClosed,
+    period_open_requests: Number(current.period_open_requests || 0) + periodOpen,
+    stats_open_requests: Number(current.stats_open_requests || 0) + statsOpen,
+    stats_today_open_requests: Number(current.stats_today_open_requests || 0) + statsTodayOpen,
     period_handled_chats: Number(current.period_handled_chats || 0) + periodHandled,
-    stats_handled_chats: Number(current.stats_handled_chats || 0) + statsHandled,
-    stats_open_requests: Number(current.stats_open_requests || 0) + statsOpen
+    stats_handled_chats: Number(current.stats_handled_chats || 0) + statsHandled
   });
 }
 
 const supportPerformanceRows = computed(() => {
   const merged = new Map();
+  const openRequestMap = employeeOpenRequestSummaryMap();
   employees.value.filter(row => !isAdminLikeEmployee(row)).forEach(row => mergeSupportCandidate(merged, row, 'employee'));
   (dashboard.employeeStats || []).forEach(row => mergeSupportCandidate(merged, row, 'stats'));
   topEmployeeRows.value.forEach(row => mergeSupportCandidate(merged, row, 'period'));
@@ -2231,11 +2268,19 @@ const supportPerformanceRows = computed(() => {
   return [...merged.values()].filter(row => !isAdminLikeEmployee(row)).map((row, index) => {
     const stat = employeeStatsMap.value.get(employeeLookupKey(row)) || row;
     const candidate = { ...row, ...stat };
+    const openSummary = openRequestMap.get(employeeSummaryKey(candidate)) || openRequestMap.get(employeeSummaryKey(row)) || null;
     const assignedCompanyCount = visibleCompanyInfoRows.value.filter(company => companyMatchesEmployee(company, candidate)).length;
     const closed = Number(row.period_closed_requests || row.stats_closed_requests || row.closed_requests || stat.closed_requests || stat.today_answered_requests || 0);
-    const open = Number(row.stats_open_requests || stat.today_open_requests || stat.open_requests || 0);
+    const open = Math.max(
+      Number(row.period_open_requests || 0),
+      Number(openSummary?.open_requests || 0),
+      Number(row.stats_open_requests || 0),
+      Number(row.stats_today_open_requests || 0),
+      Number(stat.open_requests || 0),
+      Number(stat.today_open_requests || 0)
+    );
     const total = closed + open;
-    const sla = total ? Math.round((closed / total) * 100) : Number(row.close_share_pct || selectedPeriodStats.value.close_rate || 0);
+    const sla = total ? Math.round((closed / total) * 1000) / 10 : Number(row.sla || stat.sla || row.close_rate || stat.close_rate || 0);
     const avg = Number(row._avg_weight ? Math.round((row._avg_total / row._avg_weight) * 10) / 10 : (row.avg_close_minutes || stat.avg_close_minutes || 0));
     const grade = performanceGrade(sla, avg);
     return {
@@ -2247,7 +2292,10 @@ const supportPerformanceRows = computed(() => {
       phone: row.phone || stat.phone || '',
       role: row.role || stat.role || '',
       full_name: row.full_name || stat.full_name || 'Xodim',
-      handled_chats: Number(row.period_handled_chats || row.stats_handled_chats || row.handled_chats || stat.handled_chats || stat.today_written_groups_count || 0),
+      handled_chats: Math.max(
+        Number(row.period_handled_chats || row.stats_handled_chats || row.handled_chats || stat.handled_chats || stat.today_written_groups_count || 0),
+        Number(openSummary?.chat_keys?.size || 0)
+      ),
       closed_requests: closed,
       open_requests: open,
       assigned_company_count: assignedCompanyCount,
@@ -2311,6 +2359,7 @@ const loadingText = computed(() => ({
   mainStats: 'Yuborilmoqda...',
   webhookInfo: 'Tekshirilmoqda...',
   webhookConnect: 'Ulanmoqda...',
+  webhookSync: 'Telegram yangilanishlari olinmoqda...',
   employeeActivity: 'Xodim faoliyati yuklanmoqda...',
   saveSettings: 'Saqlamoqda...',
   saveIntegration: 'Saqlamoqda...',
@@ -2436,6 +2485,16 @@ function slaToneClass(value = 0) {
   if (numeric >= 85) return 'good';
   if (numeric >= 75) return 'warn';
   return 'bad';
+}
+
+function employeeSlaTooltip(row = {}) {
+  const closed = Number(row.closed_requests || 0);
+  const open = Number(row.open_requests || 0);
+  const total = closed + open;
+  const sla = total ? (closed / total) * 100 : Number(row.sla || 0);
+  return total
+    ? `SLA = yopilgan ticketlar / jami biriktirilgan ticketlar. ${fmtNumber(closed)} yopilgan, ${fmtNumber(open)} ochiq = ${fmtPercent(sla)}.`
+    : 'SLA xodimga biriktirilgan ticketlar bo‘yicha hisoblanadi. Bu davrda ticket yo‘q.';
 }
 
 function ticketTrendTooltip(row = {}) {
@@ -3351,7 +3410,7 @@ const supportPerformanceColumns = [
   { key: 'open_requests', label: 'Ochiq qolgan', slot: 'openRequests', action: 'employeeCompanies' },
   { key: 'close_rate', label: 'Yopish foizi', slot: 'closeRate', action: 'employeeCompanies' },
   { key: 'avg_close_minutes', label: 'O‘rtacha vaqt', format: fmtMinutes, action: 'employeeCompanies' },
-  { key: 'sla', label: 'SLA ⓘ', slot: 'sla', action: 'employeeCompanies' }
+  { key: 'sla', label: 'SLA ⓘ', slot: 'sla', action: 'employeeCompanies', tooltip: 'SLA har bir xodim uchun alohida: yopilgan ticketlar / (yopilgan + xodimga biriktirilgan ochiq ticketlar).' }
 ];
 
 const supportSummaryEmployeeColumns = [
@@ -4100,6 +4159,7 @@ function openEmployee(row = null) {
 function openEmployeeGroups(row = {}) {
   employeeDrilldown.value = row;
   employeeGroupActivity.value = Array.isArray(row.today_group_activity) ? row.today_group_activity : [];
+  employeeGroupTicketVisibility.value = {};
   if (!employeeGroupActivity.value.length) return showToast('Bugun yozgan guruhlar topilmadi');
   modal.value = 'employeeGroups';
 }
@@ -4126,6 +4186,28 @@ function chatPreview(row = {}) {
 function shortId(value = '') {
   const text = String(value || '').replace(/-/g, '');
   return text ? text.slice(0, 6).toUpperCase() : '—';
+}
+
+function ticketToggleLabel(isOpen, count = 0) {
+  return isOpen ? 'Tiketlarni yashirish' : `Tiketlarni ko‘rish (${fmtNumber(count)})`;
+}
+
+function employeeGroupVisibilityKey(group = {}) {
+  return String(group.chat_id || group.key || group.title || '').trim();
+}
+
+function isEmployeeGroupTicketsOpen(group = {}) {
+  const key = employeeGroupVisibilityKey(group);
+  return key ? employeeGroupTicketVisibility.value[key] !== false : true;
+}
+
+function toggleEmployeeGroupTickets(group = {}) {
+  const key = employeeGroupVisibilityKey(group);
+  if (!key) return;
+  employeeGroupTicketVisibility.value = {
+    ...employeeGroupTicketVisibility.value,
+    [key]: !isEmployeeGroupTicketsOpen(group)
+  };
 }
 
 function messageBelongsToEmployee(message = {}, employee = {}) {
@@ -4363,6 +4445,7 @@ function resetMetricChatDetail() {
   metricChatLoading.value = false;
   metricChatError.value = '';
   metricChatSelectedId.value = '';
+  metricChatTicketsOpen.value = true;
 }
 
 function setMetricDetail({ title, rows, columns, empty = 'Ma’lumot topilmadi', pageSize = 12, summary = [], chatPane = false }) {
@@ -4407,6 +4490,7 @@ async function loadMetricChatDetail(row = {}) {
   metricChatSelectedId.value = selectedKey;
   metricChatLoading.value = true;
   metricChatError.value = '';
+  metricChatTicketsOpen.value = true;
   clearMediaUrls();
   try {
     const data = await api.chatDetail({ chat_id: chatRow.chat_id });
@@ -4653,6 +4737,7 @@ function normalizeCompanyGroupPayload(data = {}, fallback = {}) {
 
 async function selectCompanyGroup(row = {}) {
   companyGroupSelectedChatKey.value = companyGroupChatKey(row);
+  companyGroupTicketsOpen.value = true;
   clearMediaUrls();
   await nextTick();
   loadConversationMedia(companyGroupConversation.value).catch(error => showToast(error.message));
@@ -4675,6 +4760,7 @@ async function openCompanyGroupActivity(row = {}) {
     if (!detail.groups.length) return showToast('Bu kompaniyaga ulangan guruhlarda xabar topilmadi');
     companyGroupDetail.value = detail;
     companyGroupSelectedChatKey.value = companyGroupChatKey(detail.groups[0]);
+    companyGroupTicketsOpen.value = true;
     modal.value = 'companyGroupActivity';
     clearMediaUrls();
     await nextTick();
@@ -4937,6 +5023,7 @@ async function loadChatDetail(row) {
   if (!row?.chat_id) return showToast('Chat tanlanmagan');
   selectedTarget.value = row;
   clearMediaUrls();
+  chatTicketsOpen.value = true;
   startLoading('chatDetail');
   try {
     chatDetail.value = await api.chatDetail({ chat_id: row.chat_id });
@@ -5008,6 +5095,19 @@ async function reconnectTelegramWebhook() {
     showToast(error.message);
   } finally {
     stopLoading('webhookConnect');
+  }
+}
+
+async function syncTelegramUpdates() {
+  startLoading('webhookSync');
+  try {
+    const result = await api.syncTelegramUpdates({ limit: 100 });
+    await refresh();
+    showToast(`Telegramdan olindi: ${fmtNumber(result.processed || 0)}/${fmtNumber(result.fetched || 0)} update`);
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    stopLoading('webhookSync');
   }
 }
 
@@ -5283,6 +5383,14 @@ const DataTable = defineComponent({
       }
       return h('span', { class: column.truncate ? 'truncate' : '' }, text);
     };
+    const renderHeader = column => {
+      if (!column.tooltip) return column.label;
+      return h('span', {
+        class: 'table-head-tooltip',
+        tabindex: 0,
+        'data-tooltip': column.tooltip
+      }, column.label);
+    };
     const renderPagination = () => {
       if (totalRows.value <= safePageSize.value) return null;
       const start = ((currentPage.value - 1) * safePageSize.value) + 1;
@@ -5311,7 +5419,7 @@ const DataTable = defineComponent({
       h('div', { class: 'table-wrap' }, [
         safeRows.value.length
           ? h('table', [
-            h('thead', h('tr', props.columns.map(col => h('th', { class: col.key === 'select' ? 'select-cell' : '' }, col.label)))),
+            h('thead', h('tr', props.columns.map(col => h('th', { class: col.key === 'select' ? 'select-cell' : '' }, renderHeader(col))))),
             h('tbody', pagedRows.value.map(row => h('tr', {
               class: typeof props.rowClass === 'function' ? props.rowClass(row) : ''
             }, props.columns.map(col => {

@@ -4,7 +4,7 @@ const { Readable } = require('stream');
 const supabase = require('../lib/supabase');
 const { allowCors, sendJson, readBody, getQuery } = require('../lib/http');
 const { login, requireAdmin, hashPassword } = require('../lib/auth');
-const { sendMessage, sendBusinessMessage, getWebhookInfo, setWebhook, getFile, getUserProfilePhotos, downloadFile } = require('../lib/telegram');
+const { sendMessage, sendBusinessMessage, getWebhookInfo, setWebhook, getUpdates, getFile, getUserProfilePhotos, downloadFile } = require('../lib/telegram');
 const { optionalEnv } = require('../lib/env');
 const { normalizeSettings, clearBotSettingsCache } = require('../lib/bot-settings');
 const { normalizeAiIntegration, mergeAiIntegration, sanitizeAiIntegration, isAiIntegrationReady, isAiIntegrationConfigured, aiIntegrationSignature } = require('../lib/ai-config');
@@ -14,6 +14,7 @@ const { resolveMainStatsChatId, sendMainStatsReport } = require('../lib/report')
 const { fetchCompanyInfo } = require('../lib/company-info');
 const { notifyOperationalLog, notifyOperationalError } = require('../lib/log-notifier');
 const stats = require('../lib/stats');
+const botHandler = require('./bot');
 
 const TELEGRAM_ALLOWED_UPDATES = [
   'message',
@@ -31,6 +32,12 @@ const TELEGRAM_ALLOWED_UPDATES = [
 function parseIntSafe(value, fallback = 0) {
   const num = Number.parseInt(value, 10);
   return Number.isFinite(num) ? num : fallback;
+}
+
+function clampInt(value, fallback, min, max) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(Math.max(parsed, min), max);
 }
 
 function limitQuery(query, fallback = 100) {
@@ -232,13 +239,21 @@ function buildPeriodSummary(requests, periodKey, label, keys) {
   };
 }
 
-function buildEmployeePerformance({ requests, employees, periodKey, keys }) {
+function buildEmployeePerformance({ requests, employees, messages = [], periodKey, keys }) {
   const employeeMap = new Map(employees.map(employee => [employee.id, employee]).filter(([id]) => id));
   const employeeByTgId = new Map(employees.map(employee => [telegramIdKey(employee.tg_user_id), employee]).filter(([id]) => id));
+  const employeeMaps = buildEmployeeMaps(employees);
+  const messagesByChat = new Map();
+  messages.forEach(message => {
+    const key = telegramIdKey(message.chat_id);
+    if (!messagesByChat.has(key)) messagesByChat.set(key, []);
+    messagesByChat.get(key).push(message);
+  });
   const closed = requests.filter(request => {
     if (request.status !== 'closed' || !inCurrentPeriod(request.closed_at, periodKey, keys)) return false;
     return Boolean(request.closed_by_employee_id || request.closed_by_tg_id || request.closed_by_name);
   });
+  const open = requests.filter(request => request.status === 'open' && inCurrentPeriod(request.created_at, periodKey, keys));
   const totals = new Map(employees.map(employee => [employee.id, {
     employee_id: employee.id,
     tg_user_id: employee.tg_user_id || null,
@@ -246,21 +261,22 @@ function buildEmployeePerformance({ requests, employees, periodKey, keys }) {
     username: employee.username || '',
     role: employee.role || '',
     closed_requests: 0,
+    open_requests: 0,
     handled_chats: new Set(),
     close_minutes: [],
     last_closed_at: null
   }]).filter(([id]) => id));
 
-  closed.forEach(request => {
-    const employee = employeeMap.get(request.closed_by_employee_id) || employeeByTgId.get(telegramIdKey(request.closed_by_tg_id));
-    const key = employee?.id || request.closed_by_employee_id || (request.closed_by_tg_id ? `tg:${request.closed_by_tg_id}` : `name:${request.closed_by_name}`);
+  function ensureEmployeeTotal({ employee = null, employeeId = '', tgUserId = '', name = '' } = {}) {
+    const key = employee?.id || employeeId || (tgUserId ? `tg:${tgUserId}` : `name:${name || 'Xodim'}`);
     const current = totals.get(key) || {
-      employee_id: employee?.id || request.closed_by_employee_id || '',
-      tg_user_id: employee?.tg_user_id || request.closed_by_tg_id || null,
-      full_name: request.closed_by_name || employee?.full_name || 'Xodim',
+      employee_id: employee?.id || employeeId || '',
+      tg_user_id: employee?.tg_user_id || tgUserId || null,
+      full_name: name || employee?.full_name || 'Xodim',
       username: '',
       role: '',
       closed_requests: 0,
+      open_requests: 0,
       handled_chats: new Set(),
       close_minutes: [],
       last_closed_at: null
@@ -272,12 +288,37 @@ function buildEmployeePerformance({ requests, employees, periodKey, keys }) {
       current.tg_user_id = employee.tg_user_id || null;
       current.employee_id = employee.id || current.employee_id;
     }
+    totals.set(key, current);
+    return current;
+  }
+
+  closed.forEach(request => {
+    const employee = employeeMap.get(request.closed_by_employee_id) || employeeByTgId.get(telegramIdKey(request.closed_by_tg_id));
+    const current = ensureEmployeeTotal({
+      employee,
+      employeeId: request.closed_by_employee_id || '',
+      tgUserId: request.closed_by_tg_id || '',
+      name: request.closed_by_name || ''
+    });
     current.closed_requests += 1;
     if (request.chat_id) current.handled_chats.add(String(request.chat_id));
     const closeMinute = minutesBetween(request.created_at, request.closed_at);
     if (closeMinute !== null) current.close_minutes.push(closeMinute);
     if (!current.last_closed_at || String(request.closed_at || '') > String(current.last_closed_at || '')) current.last_closed_at = request.closed_at || null;
-    totals.set(key, current);
+  });
+
+  open.forEach(request => {
+    const responsible = resolveRequestResponsibleEmployee(request, messagesByChat.get(telegramIdKey(request.chat_id)) || [], employeeMaps);
+    if (!responsible) return;
+    const employee = employeeMap.get(responsible.employee_id) || employeeByTgId.get(telegramIdKey(responsible.tg_user_id));
+    const current = ensureEmployeeTotal({
+      employee,
+      employeeId: responsible.employee_id || '',
+      tgUserId: responsible.tg_user_id || '',
+      name: responsible.full_name || ''
+    });
+    current.open_requests += 1;
+    if (request.chat_id) current.handled_chats.add(String(request.chat_id));
   });
 
   return [...totals.values()]
@@ -287,13 +328,17 @@ function buildEmployeePerformance({ requests, employees, periodKey, keys }) {
       full_name: row.full_name,
       username: row.username,
       role: row.role,
+      total_requests: row.closed_requests + row.open_requests,
       closed_requests: row.closed_requests,
+      open_requests: row.open_requests,
       handled_chats: row.handled_chats.size,
       close_share_pct: percent(row.closed_requests, closed.length),
+      close_rate: percent(row.closed_requests, row.closed_requests + row.open_requests),
+      sla: percent(row.closed_requests, row.closed_requests + row.open_requests),
       avg_close_minutes: average(row.close_minutes),
       last_closed_at: row.last_closed_at
     }))
-    .sort((a, b) => b.closed_requests - a.closed_requests || a.full_name.localeCompare(b.full_name))
+    .sort((a, b) => b.total_requests - a.total_requests || b.closed_requests - a.closed_requests || a.full_name.localeCompare(b.full_name))
     .slice(0, 20);
 }
 
@@ -464,7 +509,7 @@ function buildCompanyTicketPerformance({ requests, chats = [], companies, period
     .slice(0, 8);
 }
 
-function buildDashboardAnalytics({ requests, chats, employees, companies, customPeriod = null }) {
+function buildDashboardAnalytics({ requests, chats, employees, companies, messages = [], customPeriod = null }) {
   const keys = {
     ...currentPeriodKeys(),
     customStart: customPeriod?.start || '',
@@ -480,7 +525,7 @@ function buildDashboardAnalytics({ requests, chats, employees, companies, custom
 
   return {
     periods: Object.fromEntries(periods.map(([key, label]) => [key, buildPeriodSummary(requests, key, label, keys)])),
-    employeePerformance: Object.fromEntries(periods.map(([key]) => [key, buildEmployeePerformance({ requests, employees, periodKey: key, keys })])),
+    employeePerformance: Object.fromEntries(periods.map(([key]) => [key, buildEmployeePerformance({ requests, employees, messages, periodKey: key, keys })])),
     chatPerformance: Object.fromEntries(periods.map(([key]) => [key, buildChatPerformance({ requests, chats, periodKey: key, keys })])),
     groupPerformance: Object.fromEntries(periods.map(([key]) => [key, buildGroupPerformance({ requests, chats, periodKey: key, keys })])),
     responseTimeTrend: Object.fromEntries(periods.map(([key]) => [key, buildResponseTimeTrend(requests, key, keys)])),
@@ -503,8 +548,13 @@ async function getDashboardAnalytics(query = {}) {
     supabase.select('employees', { select: 'id,tg_user_id,full_name,username,role,is_active', limit: '1000' }).catch(() => []),
     supabase.select('companies', { select: 'id,name,is_active', limit: '1000' }).catch(() => [])
   ]);
+  const chatIds = [...new Set(requests.map(request => request.chat_id).filter(value => value !== undefined && value !== null))];
+  const messages = chatIds.length ? await selectPagedByChunks('messages', {
+    select: 'id,tg_message_id,chat_id,from_tg_user_id,from_name,from_username,employee_id,source_type,classification,text,created_at',
+    order: supabase.order('created_at', false)
+  }, 'chat_id', chatIds, { maxRows: 40000 }) : [];
 
-  return buildDashboardAnalytics({ requests, chats, employees, companies, customPeriod });
+  return buildDashboardAnalytics({ requests, chats, employees, companies, messages, customPeriod });
 }
 
 function normalizeTelegramId(value) {
@@ -1283,7 +1333,6 @@ async function getCompanyGroupActivity(query = {}) {
       .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
     const chatMessages = (messagesByChat.get(chatKey) || [])
       .sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')));
-    if (!chatRequests.length && !chatMessages.length) return;
 
     const requestRows = chatRequests.map(requestSummary);
     const conversation = chatMessages.map(messageSummary);
@@ -1903,9 +1952,9 @@ function sanitizeWebhookInfo(info = {}) {
 
 function getAppUrl(body = {}) {
   const vercelUrl = optionalEnv('VERCEL_URL', '');
-  const url = body.app_url
-    || optionalEnv('WEBAPP_URL', '')
+  const url = optionalEnv('WEBAPP_URL', '')
     || optionalEnv('APP_URL', '')
+    || body.app_url
     || (vercelUrl ? `https://${vercelUrl}` : '');
   return String(url || '').trim().replace(/\/$/, '');
 }
@@ -1988,6 +2037,82 @@ async function connectTelegramWebhook(body = {}) {
     url: maskWebhookUrl(webhookUrl),
     allowed_updates: TELEGRAM_ALLOWED_UPDATES,
     webhook: info
+  };
+}
+
+function telegramUpdateOffsetValue(row = {}) {
+  const value = row && row.value && typeof row.value === 'object' ? row.value : {};
+  const offset = Number.parseInt(value.offset, 10);
+  return Number.isFinite(offset) && offset > 0 ? offset : 0;
+}
+
+async function getTelegramUpdateOffset() {
+  const rows = await supabase.select('bot_settings', {
+    select: 'key,value',
+    key: supabase.eq('telegram_update_offset'),
+    limit: '1'
+  }).catch(() => []);
+  return telegramUpdateOffsetValue(rows[0]);
+}
+
+async function saveTelegramUpdateOffset(offset, details = {}) {
+  await supabase.insert('bot_settings', [{
+    key: 'telegram_update_offset',
+    value: {
+      offset,
+      synced_at: nowIso(),
+      ...details
+    },
+    updated_at: nowIso()
+  }], { upsert: true, onConflict: 'key', prefer: 'return=minimal' }).catch(() => null);
+}
+
+async function syncTelegramUpdates(body = {}) {
+  const currentOffset = body.reset_offset === true ? 0 : await getTelegramUpdateOffset();
+  const limit = clampInt(body.limit, 100, 1, 100);
+  const payload = {
+    limit,
+    timeout: 0,
+    allowed_updates: TELEGRAM_ALLOWED_UPDATES
+  };
+  if (currentOffset) payload.offset = currentOffset;
+
+  const updates = await getUpdates(payload);
+  let nextOffset = currentOffset;
+  let processed = 0;
+  const handled = {};
+  const errors = [];
+
+  for (const update of [...updates].sort((a, b) => Number(a.update_id || 0) - Number(b.update_id || 0))) {
+    nextOffset = Math.max(nextOffset, Number(update.update_id || 0) + 1);
+    try {
+      const result = await botHandler.handleTelegramUpdate(update);
+      const key = result && result.handled || 'unknown';
+      handled[key] = (handled[key] || 0) + 1;
+      processed += 1;
+    } catch (error) {
+      errors.push({
+        update_id: update.update_id || null,
+        error: error.message
+      });
+      console.error('[admin:telegram-sync:update-error]', error);
+    }
+  }
+
+  if (updates.length) {
+    await saveTelegramUpdateOffset(nextOffset, {
+      last_fetched: updates.length,
+      last_processed: processed,
+      last_errors: errors.length
+    });
+  }
+
+  return {
+    fetched: updates.length,
+    processed,
+    offset: nextOffset,
+    handled,
+    errors
   };
 }
 
@@ -2661,6 +2786,7 @@ async function handlePost(action, body, currentAdmin) {
     case 'sendMainStats': return sendMainStatsReport(body.chat_id || body.main_group_id);
     case 'testLogNotification': return sendTestLogNotification(body, currentAdmin);
     case 'setTelegramWebhook': return connectTelegramWebhook(body);
+    case 'syncTelegramUpdates': return syncTelegramUpdates(body);
     default: throw new Error(`Unknown POST action: ${action}`);
   }
 }

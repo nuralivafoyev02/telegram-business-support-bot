@@ -1106,6 +1106,81 @@ async function testDashboardCompanyTicketsUseRegisteredGroupCompany() {
   }
 }
 
+async function testDashboardEmployeePerformanceCountsOpenAndSlaPerEmployee() {
+  const originalSelect = supabase.select;
+  const originalEmployeeStats = stats.selectEmployeeStatistics;
+  const originalChatStats = stats.selectChatStatistics;
+  const originalTodaySummary = stats.selectTodaySummary;
+  const chatId = -100901;
+  const now = '2026-04-30T12:00:00.000Z';
+  const closedAt = '2026-04-30T12:10:00.000Z';
+  const employees = [{ id: 'emp-1', tg_user_id: 777, full_name: 'Ali Support', username: 'ali', role: 'support', is_active: true }];
+  const requests = [
+    {
+      id: 'request-closed',
+      source_type: 'group',
+      chat_id: chatId,
+      customer_tg_id: 501,
+      customer_name: 'Mijoz A',
+      status: 'closed',
+      closed_by_employee_id: 'emp-1',
+      closed_by_tg_id: 777,
+      closed_by_name: 'Ali Support',
+      created_at: now,
+      closed_at: closedAt
+    },
+    {
+      id: 'request-open',
+      source_type: 'group',
+      chat_id: chatId,
+      customer_tg_id: 502,
+      customer_name: 'Mijoz B',
+      initial_message_id: 40,
+      initial_text: 'Hisobot chiqmayapti',
+      status: 'open',
+      closed_by_employee_id: null,
+      closed_by_tg_id: null,
+      closed_by_name: null,
+      created_at: now,
+      closed_at: null
+    }
+  ];
+  const messages = [
+    { id: 'm40', tg_message_id: 40, chat_id: chatId, from_tg_user_id: 502, from_name: 'Mijoz B', employee_id: null, text: 'Hisobot chiqmayapti', created_at: now },
+    { id: 'm41', tg_message_id: 41, chat_id: chatId, from_tg_user_id: 777, from_name: 'Ali Support', from_username: 'ali', employee_id: 'emp-1', text: 'Ko‘rib chiqyapman', created_at: '2026-04-30T12:02:00.000Z' }
+  ];
+
+  supabase.select = async (table, query = {}) => {
+    if (table === 'support_requests') return query.status === 'eq.open' ? requests.filter(row => row.status === 'open') : requests;
+    if (table === 'tg_chats') return [{ chat_id: chatId, title: 'Support guruhi', source_type: 'group', is_active: true }];
+    if (table === 'employees') return employees;
+    if (table === 'messages') return messages;
+    if (table === 'companies') return [];
+    if (table === 'request_events') return [];
+    return [];
+  };
+  stats.selectEmployeeStatistics = async () => [];
+  stats.selectChatStatistics = async () => [{ chat_id: chatId, title: 'Support guruhi', source_type: 'group', is_active: true }];
+  stats.selectTodaySummary = async () => [{ total_requests: 2, open_requests: 1, closed_requests: 1 }];
+
+  try {
+    const result = await callAdmin('dashboard', { query: { period: 'all' } });
+    assert.strictEqual(result.status, 200);
+    const row = result.payload.data.analytics.employeePerformance.all.find(item => item.employee_id === 'emp-1');
+    assert.ok(row);
+    assert.strictEqual(row.closed_requests, 1);
+    assert.strictEqual(row.open_requests, 1);
+    assert.strictEqual(row.total_requests, 2);
+    assert.strictEqual(row.sla, 50);
+    assert.strictEqual(row.avg_close_minutes, 10);
+  } finally {
+    supabase.select = originalSelect;
+    stats.selectEmployeeStatistics = originalEmployeeStats;
+    stats.selectChatStatistics = originalChatStats;
+    stats.selectTodaySummary = originalTodaySummary;
+  }
+}
+
 async function testRequestsListEnrichesCompanyFromRegisteredGroup() {
   const originalSelect = supabase.select;
   const chatId = -100801;
@@ -1274,6 +1349,52 @@ async function testWebhookInfoWarnsWhenMessageUpdatesMissing() {
     assert.match(result.payload.data.url, /secret=\*\*\*/);
   } finally {
     global.fetch = originalFetch;
+  }
+}
+
+async function testSetWebhookPrefersConfiguredAppUrl() {
+  const originalFetch = global.fetch;
+  const originalWebappUrl = process.env.WEBAPP_URL;
+  const originalAppUrl = process.env.APP_URL;
+  const calls = [];
+  process.env.WEBAPP_URL = 'https://primary.example.app';
+  delete process.env.APP_URL;
+
+  global.fetch = async (url, options = {}) => {
+    calls.push({ url, body: JSON.parse(options.body || '{}') });
+    if (/setWebhook$/.test(url)) {
+      return { ok: true, json: async () => ({ ok: true, result: true }) };
+    }
+    if (/getWebhookInfo$/.test(url)) {
+      return {
+        ok: true,
+        json: async () => ({
+          ok: true,
+          result: {
+            url: 'https://primary.example.app/api/bot',
+            pending_update_count: 0,
+            allowed_updates: ['message', 'my_chat_member', 'chat_member', 'callback_query']
+          }
+        })
+      };
+    }
+    throw new Error(`Unexpected URL: ${url}`);
+  };
+
+  try {
+    const result = await callAdmin('setTelegramWebhook', {
+      method: 'POST',
+      body: { app_url: 'https://preview-wrong.example.app' }
+    });
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.data.connected, true);
+    assert.strictEqual(calls[0].body.url, 'https://primary.example.app/api/bot');
+  } finally {
+    global.fetch = originalFetch;
+    if (originalWebappUrl === undefined) delete process.env.WEBAPP_URL;
+    else process.env.WEBAPP_URL = originalWebappUrl;
+    if (originalAppUrl === undefined) delete process.env.APP_URL;
+    else process.env.APP_URL = originalAppUrl;
   }
 }
 
@@ -1877,9 +1998,11 @@ async function run() {
   await testChatDetailIncludesTicketSolutionAndTimeline();
   await testCompanyGroupActivityReturnsLinkedGroupMessagesWithTickets();
   await testDashboardCompanyTicketsUseRegisteredGroupCompany();
+  await testDashboardEmployeePerformanceCountsOpenAndSlaPerEmployee();
   await testRequestsListEnrichesCompanyFromRegisteredGroup();
   await testRequestsListShowsResponsibleEmployeeFromTicketMessages();
   await testWebhookInfoWarnsWhenMessageUpdatesMissing();
+  await testSetWebhookPrefersConfiguredAppUrl();
   await testSendToChatStoresOutgoingAdminMessage();
   await testReplyRequestSendsMessageAndClosesTicket();
   await testReplyRequestFallsBackWhenBusinessPeerInvalid();

@@ -133,7 +133,7 @@ async function handleStart(message) {
     '',
     'Qanday yordam bera olaman?'
   ].join('\n');
-  await sendMessage(message.chat.id, text);
+  await sendTrackedBotReply({ message, text, updateKind: 'bot_start', rawSource: 'bot_start' });
 }
 
 function isGroupChat(chat = {}) {
@@ -208,6 +208,50 @@ async function maybeSendMainStatsFromGroup(message, text, settings = null) {
       .catch(replyError => logBackgroundError('reply-main-stats-error', replyError));
   }
   return true;
+}
+
+async function saveOutgoingBotMessage({ telegramResult, sourceMessage, sourceType, text, classification = 'bot_reply', updateKind = 'bot_reply', raw = {} }) {
+  if (!telegramResult || !telegramResult.message_id || !sourceMessage || !sourceMessage.chat) return;
+  const chat = sourceMessage.chat || {};
+  const resolvedSourceType = sourceType || metrics.sourceTypeFrom(updateKind, chat.type);
+  await metrics.upsertChat(chat, resolvedSourceType, {
+    business_connection_id: sourceMessage.business_connection_id || null
+  }, { prefer: 'return=minimal' }).catch(error => logBackgroundError('save-bot-reply-chat', error));
+  await supabase.insert('messages', [{
+    tg_message_id: telegramResult.message_id,
+    chat_id: chat.id,
+    from_tg_user_id: null,
+    from_name: 'Uyqur Bot',
+    from_username: null,
+    source_type: resolvedSourceType,
+    update_kind: updateKind,
+    text,
+    classification,
+    employee_id: null,
+    business_connection_id: sourceMessage.business_connection_id || null,
+    raw: {
+      source: raw.source || 'bot_reply',
+      reply_to_message_id: sourceMessage.message_id || null,
+      telegram: telegramResult,
+      ...raw
+    },
+    created_at: new Date().toISOString()
+  }], { upsert: true, onConflict: 'chat_id,tg_message_id', prefer: 'return=minimal' })
+    .catch(error => logBackgroundError('save-bot-reply', error));
+}
+
+async function sendTrackedBotReply({ message, sourceType, text, options = {}, classification = 'bot_reply', updateKind = 'bot_reply', rawSource = 'bot_reply' }) {
+  const result = await sendMessage(message.chat.id, text, options);
+  await saveOutgoingBotMessage({
+    telegramResult: result,
+    sourceMessage: message,
+    sourceType: sourceType || metrics.sourceTypeFrom(updateKind, (message.chat || {}).type),
+    text,
+    classification,
+    updateKind,
+    raw: { source: rawSource }
+  });
+  return result;
 }
 
 function isGroupBroadcastTrigger(text = '') {
@@ -452,7 +496,7 @@ async function handleGroupRegistrationCommand(message, tracking) {
 }
 
 async function handleHelp(message) {
-  await sendMessage(message.chat.id, [
+  await sendTrackedBotReply({ message, text: [
     '📌 <b>Qisqa qo‘llanma</b>',
     '',
     '1) Mijoz Uyqur dasturidagi savol yoki muammoni guruh/business chatga yozadi.',
@@ -462,7 +506,7 @@ async function handleHelp(message) {
     '5) Guruh webappda ko‘rinmasa guruh ichida <b>/register</b> yuboring.',
     '',
     'Masalan: <code>#done hal qilindi</code>'
-  ].join('\n'));
+  ].join('\n'), updateKind: 'bot_help', rawSource: 'bot_help' });
 }
 
 function logBackgroundError(label, error) {
@@ -478,9 +522,9 @@ async function maybeReplyDone(message, result) {
     if (isGroupChat(message.chat || {})) return;
     const silent = boolEnv('SILENT_DONE_REPLY', false);
     if (silent) return;
-    await sendMessage(message.chat.id, '⚠️ #done qabul qilindi, lekin bu chatda ochiq so‘rov topilmadi.', {
+    await sendTrackedBotReply({ message, text: '⚠️ #done qabul qilindi, lekin bu chatda ochiq so‘rov topilmadi.', options: {
       reply_to_message_id: message.message_id
-    }).catch(error => logBackgroundError('reply-done', error));
+    }, updateKind: 'bot_done_miss', rawSource: 'bot_done_miss' }).catch(error => logBackgroundError('reply-done', error));
   }
 }
 
@@ -780,7 +824,14 @@ async function maybeReplyPrivateGreeting(updateKind, message, text) {
   if (!isDirectBotPrivateChat(updateKind, chat)) return false;
   if (message.from && message.from.is_bot) return false;
   if (!isGreetingOnly(text)) return false;
-  await sendMessage(chat.id, PRIVATE_GREETING_REPLY, { reply_to_message_id: message.message_id })
+  await sendTrackedBotReply({
+    message,
+    sourceType: metrics.sourceTypeFrom(updateKind, chat.type),
+    text: PRIVATE_GREETING_REPLY,
+    options: { reply_to_message_id: message.message_id },
+    updateKind: 'bot_private_greeting',
+    rawSource: 'bot_private_greeting'
+  })
     .catch(error => logBackgroundError('private-greeting-reply', error));
   return true;
 }
@@ -790,8 +841,13 @@ async function maybeReplyPrivateFallback(updateKind, message, classification) {
   if (!isDirectBotPrivateChat(updateKind, chat)) return false;
   if (message.from && message.from.is_bot) return false;
   if (['done', 'command'].includes(classification)) return false;
-  await sendMessage(chat.id, isSupportRequestClassification(classification) ? PRIVATE_REQUEST_REPLY : PRIVATE_UNKNOWN_REPLY, {
-    reply_to_message_id: message.message_id
+  await sendTrackedBotReply({
+    message,
+    sourceType: metrics.sourceTypeFrom(updateKind, chat.type),
+    text: isSupportRequestClassification(classification) ? PRIVATE_REQUEST_REPLY : PRIVATE_UNKNOWN_REPLY,
+    options: { reply_to_message_id: message.message_id },
+    updateKind: 'bot_private_fallback',
+    rawSource: 'bot_private_fallback'
   }).catch(error => logBackgroundError('private-fallback-reply', error));
   return true;
 }
@@ -965,7 +1021,13 @@ async function handleCommand(updateKind, message, sourceType, text, classificati
   if (START_RE.test(text)) reply = handleStart(message);
   if (HELP_RE.test(text)) reply = handleHelp(message);
   if (REGISTER_RE.test(text)) {
-    reply = sendMessage(message.chat.id, `Chat ID: <code>${escapeHtml(message.chat.id)}</code>`);
+    reply = sendTrackedBotReply({
+      message,
+      sourceType,
+      text: `Chat ID: <code>${escapeHtml(message.chat.id)}</code>`,
+      updateKind: 'bot_register',
+      rawSource: 'bot_register'
+    });
   }
 
   await Promise.all([safeTracking, reply]);
@@ -1065,6 +1127,33 @@ async function processMessage(updateKind, message) {
   if (await maybeReplyPrivateFallback(updateKind, message, classification)) return;
 }
 
+async function handleTelegramUpdate(update = {}) {
+  console.info('[bot:update]', summarizeUpdate(update));
+
+  if (update.business_connection) {
+    await metrics.saveBusinessConnection(update.business_connection);
+    return { ok: true, handled: 'business_connection' };
+  }
+
+  if (update.my_chat_member || update.chat_member) {
+    await metrics.registerChatMemberUpdate(update);
+    return { ok: true, handled: 'chat_member' };
+  }
+
+  if (update.callback_query) {
+    await handleCallbackQuery(update.callback_query);
+    return { ok: true, handled: 'callback_query' };
+  }
+
+  const picked = pickMessage(update);
+  if (picked && picked.message) {
+    await processMessage(picked.kind, picked.message);
+    return { ok: true, handled: picked.kind };
+  }
+
+  return { ok: true, handled: 'ignored' };
+}
+
 async function handler(req, res) {
   if (req.method !== 'POST') {
     return sendJson(res, 200, getHealth());
@@ -1077,35 +1166,14 @@ async function handler(req, res) {
 
   try {
     const update = await readBody(req);
-    console.info('[bot:update]', summarizeUpdate(update));
-
-    if (update.business_connection) {
-      await metrics.saveBusinessConnection(update.business_connection);
-      return sendJson(res, 200, { ok: true, handled: 'business_connection' });
-    }
-
-    if (update.my_chat_member || update.chat_member) {
-      await metrics.registerChatMemberUpdate(update);
-      return sendJson(res, 200, { ok: true, handled: 'chat_member' });
-    }
-
-    if (update.callback_query) {
-      await handleCallbackQuery(update.callback_query);
-      return sendJson(res, 200, { ok: true, handled: 'callback_query' });
-    }
-
-    const picked = pickMessage(update);
-    if (picked && picked.message) {
-      await processMessage(picked.kind, picked.message);
-      return sendJson(res, 200, { ok: true, handled: picked.kind });
-    }
-
-    return sendJson(res, 200, { ok: true, handled: 'ignored' });
+    return sendJson(res, 200, await handleTelegramUpdate(update));
   } catch (error) {
     console.error('[bot:error]', error);
     notifyOperationalError('bot:error', error).catch(logError => console.error('[bot:notify-log:error]', logError));
     return sendJson(res, 500, { ok: false, error: error.message });
   }
 }
+
+handler.handleTelegramUpdate = handleTelegramUpdate;
 
 module.exports = handler;

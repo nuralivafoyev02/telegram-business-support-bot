@@ -11,6 +11,7 @@ select
   e.is_active,
   count(sr.id) filter (where sr.closed_by_employee_id = e.id) as received_requests,
   count(sr.id) filter (where sr.closed_by_employee_id = e.id and sr.status = 'closed') as closed_requests,
+  count(sr.id) filter (where sr.closed_by_employee_id = e.id and sr.status = 'open') as open_requests,
   count(distinct sr.chat_id) filter (where sr.closed_by_employee_id = e.id) as handled_chats,
   max(sr.closed_at) as last_closed_at,
   coalesce(round(avg(extract(epoch from (sr.closed_at - sr.created_at)) / 60) filter (where sr.closed_at is not null)::numeric, 1), 0) as avg_close_minutes

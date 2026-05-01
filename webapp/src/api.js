@@ -72,5 +72,6 @@ export const api = {
   sendMainStats: payload => request('sendMainStats', { method: 'POST', body: payload || {} }).then(r => r.data),
   testLogNotification: payload => request('testLogNotification', { method: 'POST', body: payload || {} }).then(r => r.data),
   telegramWebhookInfo: () => request('telegramWebhookInfo').then(r => r.data),
-  setTelegramWebhook: payload => request('setTelegramWebhook', { method: 'POST', body: payload || {} }).then(r => r.data)
+  setTelegramWebhook: payload => request('setTelegramWebhook', { method: 'POST', body: payload || {} }).then(r => r.data),
+  syncTelegramUpdates: payload => request('syncTelegramUpdates', { method: 'POST', body: payload || {} }).then(r => r.data)
 };

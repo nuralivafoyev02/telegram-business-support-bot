@@ -1149,6 +1149,15 @@ tbody tr:hover {
   border-bottom: 1px solid var(--line);
 }
 
+.drilldown-actions,
+.strip-head-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .drilldown-columns {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2612,6 +2621,7 @@ body {
 
 .sla-badge,
 .sla-chip {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2621,6 +2631,79 @@ body {
   font-weight: 900;
   font-style: normal;
   white-space: nowrap;
+}
+
+.sla-tooltip {
+  cursor: help;
+  outline: none;
+}
+
+.sla-tooltip::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 10px);
+  z-index: 40;
+  width: min(280px, 74vw);
+  padding: 10px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.45;
+  text-align: left;
+  white-space: normal;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 4px);
+  transition: opacity .14s ease, transform .14s ease;
+}
+
+.sla-tooltip:hover::after,
+.sla-tooltip:focus-visible::after {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+.table-head-tooltip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  cursor: help;
+  outline: none;
+}
+
+.table-head-tooltip::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 10px);
+  z-index: 40;
+  width: min(320px, 76vw);
+  padding: 10px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.45;
+  text-align: left;
+  white-space: normal;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(4px);
+  transition: opacity .14s ease, transform .14s ease;
+}
+
+.table-head-tooltip:hover::after,
+.table-head-tooltip:focus-visible::after {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .sla-badge.good,
