@@ -2980,6 +2980,34 @@ function employeeRequestConversationItem(request = {}) {
   };
 }
 
+function employeeRequestEventConversationItems(request = {}, employee = {}) {
+  return (Array.isArray(request.events) ? request.events : [])
+    .map(event => {
+      const eventType = event.event_type || event.type || '';
+      const outbound = eventType === 'closed' || Boolean(event.employee_id);
+      const item = {
+        id: `request-event-${event.id || `${request.id || ''}-${event.message_id || event.created_at || ''}`}`,
+        type: eventType === 'closed' ? 'employee_reply' : (eventType === 'opened' ? 'ticket' : 'customer_note'),
+        request_id: request.id || event.request_id || null,
+        message_id: event.message_id || event.tg_message_id || null,
+        direction: outbound ? 'outbound' : 'inbound',
+        actor_type: outbound ? 'employee' : 'customer',
+        actor_name: event.actor_name || (outbound ? request.closed_by_name || 'Xodim' : request.customer_name || 'Mijoz'),
+        actor_username: event.actor_username || '',
+        actor_tg_user_id: event.actor_tg_id || event.actor_tg_user_id || null,
+        employee_id: event.employee_id || null,
+        text: event.text || '',
+        media: event.media || null,
+        request_text: request.initial_text || '',
+        status: request.status || 'open',
+        classification: eventType,
+        created_at: event.created_at || null
+      };
+      return item.direction === 'outbound' && !messageBelongsToEmployee(item, employee) ? null : item;
+    })
+    .filter(Boolean);
+}
+
 function employeeMessageConversationItem(message = {}, employee = {}) {
   return {
     id: message.id || `message-${message.chat_id || ''}-${message.message_id || message.created_at || ''}`,
@@ -3001,18 +3029,20 @@ function employeeMessageConversationItem(message = {}, employee = {}) {
 }
 
 function employeeScopedConversation(row = {}, employee = {}) {
-  const requests = [
+  const requestRows = [
     ...(Array.isArray(row.open_requests) ? row.open_requests : []).map(request => ({ ...request, status: request.status || 'open' })),
     ...(Array.isArray(row.closed_requests) ? row.closed_requests : []).map(request => ({ ...request, status: request.status || 'closed' }))
-  ].map(employeeRequestConversationItem);
+  ];
+  const requests = requestRows.map(employeeRequestConversationItem);
+  const requestEvents = requestRows.flatMap(request => employeeRequestEventConversationItems(request, employee));
   const messages = (Array.isArray(row.messages) ? row.messages : [])
     .map(message => employeeMessageConversationItem(message, employee))
     .filter(message => messageBelongsToEmployee(message, employee));
   const seen = new Set();
-  return [...requests, ...messages]
+  return [...requests, ...requestEvents, ...messages]
     .filter(item => item.text || item.media || item.created_at)
     .filter(item => {
-      const key = `${item.direction}:${item.request_id || item.message_id || item.id || item.created_at}:${item.text || ''}`;
+      const key = `${item.direction}:${item.message_id || item.id || item.request_id || item.created_at}:${item.text || ''}`;
       if (seen.has(key)) return false;
       seen.add(key);
       return true;

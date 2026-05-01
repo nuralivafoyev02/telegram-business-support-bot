@@ -633,6 +633,95 @@ async function testSelectedAiModelClassifiesRequest() {
   }
 }
 
+async function testAiCanClassifyTicketIntent() {
+  const originalInsert = supabase.insert;
+  const originalSelect = supabase.select;
+  const originalFetch = global.fetch;
+  const inserted = [];
+  const aiCalls = [];
+  const telegramCalls = [];
+  clearBotSettingsCache();
+
+  supabase.select = async (table) => {
+    if (table === 'bot_settings') {
+      return [
+        { key: 'ai_mode', value: { enabled: true, provider: 'openai_compatible', model: 'test-model', model_label: 'Test AI' } },
+        {
+          key: 'ai_integration',
+          value: {
+            enabled: true,
+            provider: 'openai_compatible',
+            label: 'Test AI',
+            base_url: 'https://ai.example/v1',
+            model: 'test-model',
+            api_key: 'secret-token',
+            last_check_status: 'ok',
+            system_prompt: 'Return JSON classification',
+            knowledge_text: 'Uyqur technical support'
+          }
+        },
+        { key: 'auto_reply', value: { enabled: false } },
+        { key: 'request_detection', value: { mode: 'keyword', min_text_length: 10 } }
+      ];
+    }
+    if (table === 'employees') return [];
+    if (table === 'support_requests') return [];
+    return [];
+  };
+  supabase.insert = async (table, rows) => {
+    inserted.push({ table, rows });
+    return rows.map(row => ({ id: `${table}-row`, ...row }));
+  };
+  global.fetch = async (url, options) => {
+    if (/api\.telegram\.org/.test(url)) {
+      telegramCalls.push({ url, body: JSON.parse(options.body) });
+      return {
+        ok: true,
+        json: async () => ({ ok: true, result: { message_id: 705 } })
+      };
+    }
+    const body = JSON.parse(options.body);
+    aiCalls.push(body);
+    return {
+      ok: true,
+      json: async () => ({
+        choices: [{
+          message: {
+            content: JSON.stringify({ classification: 'ticket', confidence: 0.96, reason: 'Login failure' })
+          }
+        }]
+      })
+    };
+  };
+
+  try {
+    const result = await callHandler({
+      update_id: 74,
+      message: {
+        message_id: 154,
+        date: 1777100000,
+        text: 'Login ishlamayapti, xato chiqyapti',
+        chat: { id: 782, type: 'private', first_name: 'Sardor' },
+        from: { id: 782, first_name: 'Sardor', is_bot: false }
+      }
+    });
+
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.handled, 'message');
+    assert.strictEqual(aiCalls.length, 1);
+    assert.strictEqual(inserted.some(item => item.table === 'messages' && item.rows[0].classification === 'ticket'), true);
+    assert.strictEqual(inserted.some(item => item.table === 'support_requests'), true);
+    assert.strictEqual(inserted.some(item => item.table === 'request_events' && item.rows[0].event_type === 'opened'), true);
+    assert.strictEqual(telegramCalls.length, 1);
+    assert.match(telegramCalls[0].body.text, /So'rovingiz qabul qilindi/);
+  } finally {
+    supabase.insert = originalInsert;
+    supabase.select = originalSelect;
+    global.fetch = originalFetch;
+    clearBotSettingsCache();
+  }
+}
+
 async function testClassifierJsonIsNotSentAsAutoReply() {
   const originalInsert = supabase.insert;
   const originalSelect = supabase.select;
@@ -1616,6 +1705,75 @@ async function testEmployeePlainAnswerClosesLatestOpenRequest() {
   }
 }
 
+async function testEmployeeSmallTalkDoesNotCloseLatestOpenRequest() {
+  const originalInsert = supabase.insert;
+  const originalSelect = supabase.select;
+  const originalPatch = supabase.patch;
+  const originalFetch = global.fetch;
+  const inserted = [];
+  const patched = [];
+  const telegramCalls = [];
+  clearBotSettingsCache();
+
+  supabase.select = async (table, query = {}) => {
+    if (table === 'bot_settings') return [];
+    if (table === 'employees') return [{ id: 'employee-1', tg_user_id: 777, full_name: 'Ali', username: 'ali', is_active: true }];
+    if (table === 'support_requests' && query.status === 'eq.open') {
+      return [{
+        id: 'request-1',
+        chat_id: -100200,
+        status: 'open',
+        customer_tg_id: 1001,
+        customer_name: 'Customer',
+        initial_message_id: 40,
+        initial_text: 'Login qilolmayapman',
+        created_at: new Date().toISOString()
+      }];
+    }
+    return [];
+  };
+  supabase.insert = async (table, rows) => {
+    inserted.push({ table, rows });
+    return rows.map(row => ({ id: `${table}-row`, ...row }));
+  };
+  supabase.patch = async (table, query, values) => {
+    patched.push({ table, query, values });
+    return [{ id: 'request-1', ...values }];
+  };
+  global.fetch = async (_url, options) => {
+    telegramCalls.push({ url: _url, body: JSON.parse(options.body) });
+    return {
+      ok: true,
+      json: async () => ({ ok: true, result: { message_id: 706 } })
+    };
+  };
+
+  try {
+    const result = await callHandler({
+      update_id: 130,
+      message: {
+        message_id: 43,
+        date: 1777100000,
+        text: 'Rahmat',
+        chat: { id: -100200, type: 'supergroup', title: 'Support group' },
+        from: { id: 777, first_name: 'Ali', username: 'ali', is_bot: false }
+      }
+    });
+
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.handled, 'message');
+    assert.strictEqual(patched.some(item => item.table === 'support_requests'), false);
+    assert.strictEqual(inserted.some(item => item.table === 'request_events' && item.rows[0].event_type === 'closed'), false);
+    assert.strictEqual(telegramCalls.length, 0);
+  } finally {
+    supabase.insert = originalInsert;
+    supabase.select = originalSelect;
+    supabase.patch = originalPatch;
+    global.fetch = originalFetch;
+    clearBotSettingsCache();
+  }
+}
+
 async function testMainGroupBroadcastPreview() {
   const originalInsert = supabase.insert;
   const originalSelect = supabase.select;
@@ -2179,6 +2337,7 @@ async function testConfiguredLogChannelSummarizesLaravelError() {
   await testAiModeSettingOpensPrivateBroadRequest();
   await testLocalSmartIntentOpensPrivateRequestWithoutAiMode();
   await testSelectedAiModelClassifiesRequest();
+  await testAiCanClassifyTicketIntent();
   await testClassifierJsonIsNotSentAsAutoReply();
   await testAiModeAutoRepliesToGroupRequest();
   await testAutoReplyFallbackUsesLocalKnowledge();
@@ -2194,6 +2353,7 @@ async function testConfiguredLogChannelSummarizesLaravelError() {
   await testMainGroupAnswersStatsQuestions();
   await testReplyToCustomerTicketClosesRequest();
   await testEmployeePlainAnswerClosesLatestOpenRequest();
+  await testEmployeeSmallTalkDoesNotCloseLatestOpenRequest();
   await testMainGroupBroadcastPreview();
   await testMainGroupBroadcastConfirmSendsAndReports();
   await testMainGroupBroadcastDeletePreview();

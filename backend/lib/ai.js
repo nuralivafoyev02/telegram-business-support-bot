@@ -2,7 +2,7 @@
 
 const { normalizeAiIntegration, isAiIntegrationReady, DEFAULT_AI_SYSTEM_PROMPT } = require('./ai-config');
 
-const ALLOWED_CLASSIFICATIONS = new Set(['request', 'message', 'ignore']);
+const ALLOWED_CLASSIFICATIONS = new Set(['ticket', 'request', 'message', 'ignore']);
 const MAX_KNOWLEDGE_CHARS = 60000;
 const MAX_AUTO_REPLY_CHARS = 1800;
 const MAX_LOCAL_REPLY_CHARS = 650;
@@ -212,7 +212,7 @@ async function classifyWithAi({ text, chatType, sourceType, settings }) {
               chat_type: chatType,
               source_type: sourceType,
               required_output: {
-                classification: 'request|message|ignore',
+                classification: 'ticket|request|message|ignore',
                 confidence: '0..1',
                 reason: 'short'
               }
@@ -268,7 +268,7 @@ function autoReplyExtraInstruction(systemPrompt = '') {
   const prompt = String(systemPrompt || '').trim();
   if (!prompt) return '';
   if (compactPrompt(prompt) === compactPrompt(DEFAULT_AI_SYSTEM_PROMPT)) return '';
-  if (/\b(request\|message\|ignore|classification|tasniflash|json_object|faqat\s+json|only\s+json)\b/i.test(prompt)) {
+  if (/\b(ticket\|request\|message\|ignore|request\|message\|ignore|classification|tasniflash|json_object|faqat\s+json|only\s+json)\b/i.test(prompt)) {
     return '';
   }
   return prompt.slice(0, 4000);
@@ -298,8 +298,8 @@ function looksLikeClassifierOutput(value = '') {
   } catch (_error) {
     // Not JSON; continue with lightweight textual checks.
   }
-  return /"classification"\s*:\s*"(request|message|ignore)"/i.test(text)
-    || /^\s*(request|message|ignore)\s*[,;:-]\s*(confidence|reason)\b/i.test(text);
+  return /"classification"\s*:\s*"(ticket|request|message|ignore)"/i.test(text)
+    || /^\s*(ticket|request|message|ignore)\s*[,;:-]\s*(confidence|reason)\b/i.test(text);
 }
 
 function mentionsHiddenAiConfig(value = '') {

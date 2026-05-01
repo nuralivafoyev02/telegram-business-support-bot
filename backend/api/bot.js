@@ -4,7 +4,7 @@ const { sendJson, readBody, getQuery } = require('../lib/http');
 const { optionalEnv, boolEnv } = require('../lib/env');
 const supabase = require('../lib/supabase');
 const { sendMessage, deleteMessage, reactToMessage, answerCallbackQuery, editMessageReplyMarkup, escapeHtml, tgUserName } = require('../lib/telegram');
-const { getMessageText, classifyMessage, isGreetingOnly } = require('../lib/parser');
+const { getMessageText, classifyMessage, isGreetingOnly, isSmallTalk, isCompletionIntent } = require('../lib/parser');
 const { getBotSettings } = require('../lib/bot-settings');
 const { resolveMainStatsChatId, sendMainStatsReport, buildMainStatsQuestionReply } = require('../lib/report');
 const { shouldUseExternalAi, classifyWithAi, generateSupportReply, generateLocalSupportReply } = require('../lib/ai');
@@ -703,7 +703,7 @@ async function classifyIncomingMessage({ text, chat, sourceType, updateKind, emp
   if (!employee && useExternalAi && !['done', 'command'].includes(classification)) {
     try {
       const ai = await classifyWithAi({ text, chatType: chat.type, sourceType, settings });
-      if (ai && ai.classification) classification = ai.classification;
+      if (shouldUseAiClassification(classification, ai)) classification = ai.classification;
     } catch (error) {
       logBackgroundError('ai-classify', error);
     }
@@ -736,12 +736,31 @@ function hasCustomerFacingPayload(message = {}, text = '') {
   );
 }
 
+function meaningfulTextLength(text = '') {
+  return String(text || '').replace(/[^\p{L}\p{N}]+/gu, '').length;
+}
+
+function looksLikeEmployeeResolution(text = '') {
+  return /\b(tekshir|ko'?ring|qildim|berdim|yangiladim|tuzatdim|hal|ishladi|ochdim|yoqib|ulab|yubordim|готов|готово|исправ|проверь|сделал|done|fixed|resolved)\b/i
+    .test(String(text || ''));
+}
+
+function isLikelyEmployeeSupportAnswer(message = {}, text = '') {
+  const value = String(text || message.text || message.caption || '').trim();
+  if (isCompletionIntent(value)) return true;
+  if (!value) return hasCustomerFacingPayload(message, value);
+  if (isGreetingOnly(value) || isSmallTalk(value)) return false;
+  if (isQuestionLike(value) && !looksLikeEmployeeResolution(value)) return false;
+  return meaningfulTextLength(value) >= 8 || looksLikeEmployeeResolution(value);
+}
+
 async function maybeCloseRequestFromEmployeeAnswer(message, classification, employee, text) {
   if (!employee || !employee.id) return false;
   if (message.from && message.from.is_bot) return false;
   if (message.reply_to_message) return false;
   if (['done', 'command'].includes(classification)) return false;
   if (!hasCustomerFacingPayload(message, text)) return false;
+  if (!isLikelyEmployeeSupportAnswer(message, text)) return false;
 
   const result = await metrics.closeLatestRequest({ message, employee, recordMissing: false });
   if (result.closed) {
@@ -770,7 +789,7 @@ async function maybeReplyPrivateFallback(updateKind, message, classification) {
   if (!isDirectBotPrivateChat(updateKind, chat)) return false;
   if (message.from && message.from.is_bot) return false;
   if (['done', 'command'].includes(classification)) return false;
-  await sendMessage(chat.id, classification === 'request' ? PRIVATE_REQUEST_REPLY : PRIVATE_UNKNOWN_REPLY, {
+  await sendMessage(chat.id, isSupportRequestClassification(classification) ? PRIVATE_REQUEST_REPLY : PRIVATE_UNKNOWN_REPLY, {
     reply_to_message_id: message.message_id
   }).catch(error => logBackgroundError('private-fallback-reply', error));
   return true;
@@ -808,15 +827,29 @@ function isQuestionLike(text = '') {
   return QUESTION_LIKE_RE.test(String(text || ''));
 }
 
+function isSupportRequestClassification(classification = '') {
+  return ['ticket', 'request'].includes(String(classification || '').toLowerCase());
+}
+
+function shouldUseAiClassification(localClassification = '', ai = null) {
+  if (!ai || !ai.classification) return false;
+  const confidence = Number(ai.confidence);
+  if (Number.isFinite(confidence) && confidence < 0.55) return false;
+  if (isSupportRequestClassification(localClassification) && ['message', 'ignore'].includes(ai.classification)) {
+    return Number.isFinite(confidence) && confidence >= 0.8;
+  }
+  return true;
+}
+
 function classifyAsCustomerRequest({ updateKind, message, text, settings }) {
   const chat = message.chat || {};
-  return classifyMessage({
+  return isSupportRequestClassification(classifyMessage({
     text,
     chatType: chat.type,
     isKnownEmployee: false,
     isBusiness: String(updateKind).includes('business'),
     ...settings
-  }) === 'request';
+  }));
 }
 
 function hasConfiguredAutoReplySource(settings = {}) {
@@ -1016,7 +1049,7 @@ async function processMessage(updateKind, message) {
 
   if (await maybeCloseRequestFromEmployeeAnswer(message, classification, employee, text)) return;
 
-  if (classification === 'request') {
+  if (isSupportRequestClassification(classification)) {
     await metrics.createSupportRequest({
       message,
       sourceType,

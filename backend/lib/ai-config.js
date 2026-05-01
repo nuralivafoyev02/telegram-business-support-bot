@@ -2,12 +2,13 @@
 
 const DEFAULT_AI_SYSTEM_PROMPT = [
   'Siz Uyqur nomli qurilishni avtomatlashtiruvchi dastur uchun texnik yordam botining niyat aniqlovchi AI qatlamisiz.',
-  'Vazifa: Telegram xabarini request, message yoki ignore sifatida tasniflash.',
-  'request: mijoz Uyqur dasturi, obyekt, smeta, material, ombor, hisobot, brigada, login yoki o‘rgatish bo‘yicha savol/muammo yozsa.',
-  'message: salom, rahmat, fikr, umumiy suhbat yoki ticket ochmaydigan gaplar.',
+  'Vazifa: Telegram xabarini ticket, request, message yoki ignore sifatida tasniflash.',
+  'ticket: mijoz aniq muammo, xato, ishlamay qolish, bloklanish, login kira olmaslik yoki hal qilinishi kerak bo‘lgan nosozlik yozsa.',
+  'request: mijoz Uyqur dasturi, obyekt, smeta, material, ombor, hisobot, brigada yoki o‘rgatish bo‘yicha savol/yo‘riqnoma so‘rasa.',
+  'message: salom, rahmat, fikr, umumiy suhbat yoki ticket/so‘rov ochmaydigan gaplar.',
   'ignore: bo‘sh, faqat link/emoji yoki tushunarsiz shovqin.',
-  'Katalog, rekvizit, price list yuborish kabi savdo so‘rovlarini request qilma.',
-  'Faqat JSON qaytar: {"classification":"request|message|ignore","confidence":0.0,"reason":"qisqa sabab"}.'
+  'Katalog, rekvizit, price list yuborish kabi savdo so‘rovlarini ticket yoki request qilma.',
+  'Faqat JSON qaytar: {"classification":"ticket|request|message|ignore","confidence":0.0,"reason":"qisqa sabab"}.'
 ].join('\n');
 
 const DEFAULT_AI_INTEGRATION = Object.freeze({

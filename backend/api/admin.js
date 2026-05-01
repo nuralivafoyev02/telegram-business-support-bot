@@ -38,6 +38,39 @@ function limitQuery(query, fallback = 100) {
   return String(limit);
 }
 
+async function selectPaged(table, query = {}, options = {}) {
+  const pageSize = Math.min(Number(options.pageSize || 1000), 1000);
+  const maxRows = Number(options.maxRows || 20000);
+  const rows = [];
+  let offset = 0;
+  while (rows.length < maxRows) {
+    const page = await supabase.select(table, {
+      ...query,
+      limit: String(Math.min(pageSize, maxRows - rows.length)),
+      offset: String(offset)
+    }).catch(() => []);
+    const pageRows = Array.isArray(page) ? page : [];
+    rows.push(...pageRows);
+    if (pageRows.length < pageSize) break;
+    offset += pageSize;
+  }
+  return rows;
+}
+
+async function selectPagedByChunks(table, baseQuery = {}, field, values = [], options = {}) {
+  const uniqueValues = [...new Set(values.filter(Boolean))];
+  const chunkSize = Number(options.chunkSize || 350);
+  const rows = [];
+  for (let index = 0; index < uniqueValues.length; index += chunkSize) {
+    const chunk = uniqueValues.slice(index, index + chunkSize);
+    rows.push(...await selectPaged(table, {
+      ...baseQuery,
+      [field]: supabase.inList(chunk)
+    }, options));
+  }
+  return rows;
+}
+
 function nowIso() {
   return new Date().toISOString();
 }
@@ -900,29 +933,25 @@ async function getChatDetail(query) {
       chat_id: supabase.eq(chatId),
       limit: '1'
     }).catch(() => []),
-    supabase.select('support_requests', {
+    selectPaged('support_requests', {
       select: 'id,source_type,chat_id,company_id,customer_tg_id,customer_name,customer_username,initial_message_id,initial_text,status,business_connection_id,closed_at,closed_by_employee_id,closed_by_tg_id,closed_by_name,done_message_id,created_at',
       chat_id: supabase.eq(chatId),
-      order: supabase.order('created_at', false),
-      limit: '300'
-    }).catch(() => []),
-    supabase.select('messages', {
+      order: supabase.order('created_at', false)
+    }, { maxRows: 20000 }),
+    selectPaged('messages', {
       select: 'id,tg_message_id,chat_id,from_tg_user_id,from_name,from_username,source_type,update_kind,text,classification,employee_id,business_connection_id,raw,created_at',
       chat_id: supabase.eq(chatId),
-      order: supabase.order('created_at', false),
-      limit: '300'
-    }).catch(() => []),
+      order: supabase.order('created_at', false)
+    }, { maxRows: 20000 }),
     getEmployeeLookup()
   ]);
 
   const requestIds = requests.map(request => request.id).filter(Boolean);
   const events = requestIds.length
-    ? await supabase.select('request_events', {
+    ? await selectPagedByChunks('request_events', {
       select: 'id,request_id,chat_id,tg_message_id,event_type,actor_tg_id,actor_name,employee_id,text,raw,created_at',
-      request_id: supabase.inList(requestIds),
-      order: supabase.order('created_at', false),
-      limit: '1000'
-    }).catch(() => [])
+      order: supabase.order('created_at', false)
+    }, 'request_id', requestIds, { maxRows: 30000 })
     : [];
 
   const chat = chatRows[0] || { chat_id: chatId, title: String(chatId), source_type: 'private' };
@@ -1127,38 +1156,33 @@ async function getEmployeeActivity(query = {}) {
   if (!employee) throw new Error('Xodim topilmadi');
 
   const keys = currentPeriodKeys();
-  const requestSelect = 'id,source_type,chat_id,customer_tg_id,customer_name,customer_username,initial_text,status,closed_at,closed_by_employee_id,closed_by_tg_id,closed_by_name,created_at';
+  const requestSelect = 'id,source_type,chat_id,customer_tg_id,customer_name,customer_username,initial_message_id,initial_text,status,closed_at,closed_by_employee_id,closed_by_tg_id,closed_by_name,done_message_id,created_at';
   const [requestsByEmployeeId, requestsByTgId, employeeMessagesById, employeeMessagesByTg, openRequestCandidates] = await Promise.all([
-    supabase.select('support_requests', {
+    selectPaged('support_requests', {
       select: requestSelect,
       closed_by_employee_id: supabase.eq(employee.id),
-      order: supabase.order('closed_at', false),
-      limit: '5000'
-    }).catch(() => []),
-    employee.tg_user_id ? supabase.select('support_requests', {
+      order: supabase.order('closed_at', false)
+    }, { maxRows: 20000 }),
+    employee.tg_user_id ? selectPaged('support_requests', {
       select: requestSelect,
       closed_by_tg_id: supabase.eq(employee.tg_user_id),
-      order: supabase.order('closed_at', false),
-      limit: '5000'
-    }).catch(() => []) : Promise.resolve([]),
-    supabase.select('messages', {
+      order: supabase.order('closed_at', false)
+    }, { maxRows: 20000 }) : Promise.resolve([]),
+    selectPaged('messages', {
       select: 'id,tg_message_id,chat_id,from_tg_user_id,from_name,from_username,employee_id,source_type,classification,text,created_at',
       employee_id: supabase.eq(employee.id),
-      order: supabase.order('created_at', false),
-      limit: '5000'
-    }).catch(() => []),
-    employee.tg_user_id ? supabase.select('messages', {
+      order: supabase.order('created_at', false)
+    }, { maxRows: 20000 }),
+    employee.tg_user_id ? selectPaged('messages', {
       select: 'id,tg_message_id,chat_id,from_tg_user_id,from_name,from_username,employee_id,source_type,classification,text,created_at',
       from_tg_user_id: supabase.eq(employee.tg_user_id),
-      order: supabase.order('created_at', false),
-      limit: '5000'
-    }).catch(() => []) : Promise.resolve([]),
-    supabase.select('support_requests', {
+      order: supabase.order('created_at', false)
+    }, { maxRows: 20000 }) : Promise.resolve([]),
+    selectPaged('support_requests', {
       select: requestSelect,
       status: supabase.eq('open'),
-      order: supabase.order('created_at', false),
-      limit: '5000'
-    }).catch(() => [])
+      order: supabase.order('created_at', false)
+    }, { maxRows: 20000 })
   ]);
 
   const requests = uniqueRowsBy([...requestsByEmployeeId, ...requestsByTgId], row => row.id || `${row.chat_id}:${row.initial_message_id || row.closed_at}`);
@@ -1176,21 +1200,16 @@ async function getEmployeeActivity(query = {}) {
   ].filter(value => value !== undefined && value !== null))];
   const [chats, allChatMessages, allEmployees] = chatIds.length
     ? await Promise.all([
-      supabase.select('tg_chats', {
+      selectPagedByChunks('tg_chats', {
         select: 'chat_id,title,username,source_type,last_message_at',
-        chat_id: supabase.inList(chatIds),
-        limit: '1000'
-      }).catch(() => []),
-      supabase.select('messages', {
+      }, 'chat_id', chatIds, { maxRows: 10000 }),
+      selectPagedByChunks('messages', {
         select: 'id,tg_message_id,chat_id,from_tg_user_id,from_name,from_username,employee_id,source_type,classification,text,created_at',
-        chat_id: supabase.inList(chatIds),
-        order: supabase.order('created_at', false),
-        limit: '5000'
-      }).catch(() => []),
-      supabase.select('employees', {
+        order: supabase.order('created_at', false)
+      }, 'chat_id', chatIds, { maxRows: 40000 }),
+      selectPaged('employees', {
         select: 'id,tg_user_id,full_name,username,role,is_active',
-        limit: '1000'
-      }).catch(() => [])
+      }, { maxRows: 10000 })
     ])
     : [[], [], []];
   const chatMap = new Map(chats.map(chat => [telegramIdKey(chat.chat_id), chat]));
@@ -1220,7 +1239,38 @@ async function getEmployeeActivity(query = {}) {
   const visibleClosedRequests = closedRequests.filter(request => !isEmployeePrivateChatId(request.chat_id));
   const visibleMessages = messages.filter(message => !isEmployeePrivateChatId(message.chat_id));
   const visibleOpenRequests = periodOpenRequests.filter(request => !isEmployeePrivateChatId(request.chat_id));
+  const visibleRequestIds = [...new Set([
+    ...visibleClosedRequests,
+    ...visibleOpenRequests
+  ].map(request => request.id).filter(Boolean))];
+  const visibleRequestEvents = visibleRequestIds.length
+    ? await selectPagedByChunks('request_events', {
+      select: 'id,request_id,chat_id,tg_message_id,event_type,actor_tg_id,actor_name,employee_id,text,raw,created_at',
+      order: supabase.order('created_at', true)
+    }, 'request_id', visibleRequestIds, { maxRows: 40000 })
+    : [];
+  const eventsByRequestId = new Map();
+  visibleRequestEvents.forEach(event => {
+    if (!event.request_id) return;
+    const list = eventsByRequestId.get(event.request_id) || [];
+    list.push(event);
+    eventsByRequestId.set(event.request_id, list);
+  });
   const chatTitle = chatId => displayChatTitle(chatMap.get(telegramIdKey(chatId)) || { chat_id: chatId });
+  const eventSummary = event => ({
+    id: event.id || null,
+    request_id: event.request_id || null,
+    message_id: event.tg_message_id || null,
+    chat_id: event.chat_id,
+    chat_title: chatTitle(event.chat_id),
+    event_type: event.event_type || '',
+    actor_tg_id: event.actor_tg_id || null,
+    actor_name: event.actor_name || '',
+    employee_id: event.employee_id || null,
+    text: event.text || '',
+    media: extractMessageMedia(event.raw),
+    created_at: event.created_at || null
+  });
   const requestSummary = request => ({
     id: request.id,
     source_type: request.source_type || chatMap.get(telegramIdKey(request.chat_id))?.source_type || '',
@@ -1228,13 +1278,17 @@ async function getEmployeeActivity(query = {}) {
     chat_title: chatTitle(request.chat_id),
     customer_name: request.customer_name || telegramIdKey(request.customer_tg_id) || 'Mijoz',
     customer_username: request.customer_username || '',
+    customer_tg_id: request.customer_tg_id || null,
+    initial_message_id: request.initial_message_id || null,
     initial_text: request.initial_text || '',
     status: request.status,
     closed_by_employee_id: request.closed_by_employee_id || null,
     closed_by_tg_id: request.closed_by_tg_id || null,
     closed_by_name: request.closed_by_name || '',
+    done_message_id: request.done_message_id || null,
     created_at: request.created_at || null,
-    closed_at: request.closed_at || null
+    closed_at: request.closed_at || null,
+    events: (eventsByRequestId.get(request.id) || []).map(eventSummary)
   });
   const messageSummary = message => ({
     id: message.id || null,
@@ -1295,9 +1349,9 @@ async function getEmployeeActivity(query = {}) {
       ...group,
       customers: [...group.customers],
       customer_count: group.customers.size,
-      messages: group.messages.sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || ''))).slice(0, 30),
-      closed_requests: group.closed_requests.sort((a, b) => String(b.closed_at || '').localeCompare(String(a.closed_at || ''))).slice(0, 30),
-      open_requests: group.open_requests.sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || ''))).slice(0, 30)
+      messages: group.messages.sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || ''))),
+      closed_requests: group.closed_requests.sort((a, b) => String(b.closed_at || '').localeCompare(String(a.closed_at || ''))),
+      open_requests: group.open_requests.sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))
     }))
     .sort((a, b) => (b.closed_count + b.open_count + b.message_count) - (a.closed_count + a.open_count + a.message_count));
 

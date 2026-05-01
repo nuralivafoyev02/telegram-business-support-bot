@@ -1126,6 +1126,19 @@ async function testEmployeesIncludeDailyWorkStats() {
 async function testEmployeeActivityReturnsGroupsAndCustomers() {
   const originalSelect = supabase.select;
   const today = new Date().toISOString();
+  const employeeMessages = Array.from({ length: 35 }, (_, index) => ({
+    id: `m${index + 1}`,
+    tg_message_id: 21 + index,
+    chat_id: -1001,
+    from_tg_user_id: 777,
+    from_name: 'Ali',
+    from_username: 'ali',
+    employee_id: 'emp-1',
+    source_type: 'group',
+    classification: 'employee_message',
+    text: index === 0 ? 'Javob berdim' : `Javob ${index + 1}`,
+    created_at: new Date(Date.parse(today) + index * 1000).toISOString()
+  }));
 
   supabase.select = async (table) => {
     if (table === 'employees') return [{ id: 'emp-1', tg_user_id: 777, full_name: 'Ali', username: 'ali', is_active: true }];
@@ -1138,31 +1151,34 @@ async function testEmployeeActivityReturnsGroupsAndCustomers() {
           customer_tg_id: 501,
           customer_name: 'Mijoz A',
           customer_username: 'mijoz_a',
+          initial_message_id: 10,
           initial_text: 'Narx qancha?',
           status: 'closed',
           closed_by_employee_id: 'emp-1',
           closed_by_name: 'Ali',
+          done_message_id: 21,
           created_at: today,
           closed_at: today
         }
       ];
     }
-    if (table === 'messages') {
+    if (table === 'messages') return employeeMessages;
+    if (table === 'tg_chats') return [{ chat_id: -1001, title: 'Support guruhi', source_type: 'group' }];
+    if (table === 'request_events') {
       return [{
-        id: 'm1',
-        tg_message_id: 21,
+        id: 'event-1',
+        request_id: 'r1',
         chat_id: -1001,
-        from_tg_user_id: 777,
-        from_name: 'Ali',
-        from_username: 'ali',
-        employee_id: 'emp-1',
-        source_type: 'group',
-        classification: 'employee_message',
-        text: 'Javob berdim',
-        created_at: today
+        tg_message_id: 11,
+        event_type: 'note',
+        actor_tg_id: 501,
+        actor_name: 'Mijoz A',
+        employee_id: null,
+        text: 'Qo‘shimcha savol',
+        raw: {},
+        created_at: new Date(Date.parse(today) + 500).toISOString()
       }];
     }
-    if (table === 'tg_chats') return [{ chat_id: -1001, title: 'Support guruhi', source_type: 'group' }];
     return [];
   };
 
@@ -1173,7 +1189,9 @@ async function testEmployeeActivityReturnsGroupsAndCustomers() {
     assert.strictEqual(result.payload.data.summary.closed_requests, 1);
     assert.strictEqual(result.payload.data.groups[0].title, 'Support guruhi');
     assert.strictEqual(result.payload.data.groups[0].closed_requests[0].customer_name, 'Mijoz A');
-    assert.strictEqual(result.payload.data.groups[0].messages[0].text, 'Javob berdim');
+    assert.strictEqual(result.payload.data.groups[0].messages.length, 35);
+    assert.strictEqual(result.payload.data.groups[0].messages.some(message => message.text === 'Javob berdim'), true);
+    assert.strictEqual(result.payload.data.groups[0].closed_requests[0].events[0].text, 'Qo‘shimcha savol');
   } finally {
     supabase.select = originalSelect;
   }
