@@ -2117,7 +2117,8 @@ async function saveTelegramUpdateOffset(offset, details = {}) {
 }
 
 async function syncTelegramUpdates(body = {}) {
-  const currentOffset = body.reset_offset === true ? 0 : await getTelegramUpdateOffset();
+  const useSavedOffset = body.use_saved_offset === true && body.reset_offset !== true && body.ignore_saved_offset !== true;
+  const currentOffset = useSavedOffset ? await getTelegramUpdateOffset() : 0;
   const limit = clampInt(body.limit, 100, 1, 100);
   const payload = {
     limit,
@@ -2138,6 +2139,7 @@ async function syncTelegramUpdates(body = {}) {
   }
   let nextOffset = currentOffset;
   let processed = 0;
+  let acknowledged = false;
   const handled = {};
   const errors = [];
 
@@ -2161,8 +2163,20 @@ async function syncTelegramUpdates(body = {}) {
     await saveTelegramUpdateOffset(nextOffset, {
       last_fetched: updates.length,
       last_processed: processed,
-      last_errors: errors.length
+      last_errors: errors.length,
+      mode: body.mode || (body.auto ? 'auto' : 'manual')
     });
+    try {
+      await getUpdates({
+        offset: nextOffset,
+        limit: 1,
+        timeout: 0,
+        allowed_updates: TELEGRAM_ALLOWED_UPDATES
+      });
+      acknowledged = true;
+    } catch (error) {
+      console.error('[admin:telegram-sync:ack-error]', error);
+    }
   }
 
   return {
@@ -2170,6 +2184,8 @@ async function syncTelegramUpdates(body = {}) {
     processed,
     offset: nextOffset,
     webhook_deleted: webhookDeleted,
+    used_saved_offset: useSavedOffset,
+    acknowledged,
     handled,
     errors
   };

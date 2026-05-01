@@ -7,6 +7,10 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+function messageDateIso(message = {}) {
+  return message.date ? new Date(message.date * 1000).toISOString() : nowIso();
+}
+
 function chatTitle(chat = {}) {
   return chat.title || chat.username || [chat.first_name, chat.last_name].filter(Boolean).join(' ').trim() || String(chat.id || 'Unknown chat');
 }
@@ -156,6 +160,7 @@ async function addRequestNote({ request, message }) {
   const from = message.from || {};
   const chat = message.chat || {};
   const text = message.text || message.caption || '';
+  const createdAt = messageDateIso(message);
   await supabase.insert('request_events', [{
     request_id: request.id,
     chat_id: chat.id,
@@ -164,7 +169,8 @@ async function addRequestNote({ request, message }) {
     actor_tg_id: from.id || null,
     actor_name: tgUserName(from),
     text,
-    raw: message
+    raw: message,
+    created_at: createdAt
   }], { prefer: 'return=minimal' }).catch(() => null);
   return { ...request, appended: true };
 }
@@ -173,6 +179,7 @@ async function createSupportRequest({ message, sourceType, companyId = null }) {
   const from = message.from || {};
   const chat = message.chat || {};
   const text = message.text || message.caption || '';
+  const createdAt = messageDateIso(message);
 
   const existing = await findMergeableOpenRequest({ message, sourceType });
   if (existing) return addRequestNote({ request: existing, message });
@@ -189,7 +196,7 @@ async function createSupportRequest({ message, sourceType, companyId = null }) {
     status: 'open',
     business_connection_id: message.business_connection_id || null,
     raw: message,
-    created_at: message.date ? new Date(message.date * 1000).toISOString() : nowIso()
+    created_at: createdAt
   }], { upsert: true, onConflict: 'chat_id,initial_message_id' });
   const request = rows[0];
   await supabase.insert('request_events', [{
@@ -200,7 +207,8 @@ async function createSupportRequest({ message, sourceType, companyId = null }) {
     actor_tg_id: from.id || null,
     actor_name: tgUserName(from),
     text,
-    raw: message
+    raw: message,
+    created_at: createdAt
   }], { prefer: 'return=minimal' }).catch(() => null);
   return request;
 }
@@ -255,10 +263,11 @@ async function findOpenRequestFromReply({ message }) {
 async function closeRequestRecord({ request, message, employee }) {
   const chat = message.chat || {};
   const from = message.from || {};
+  const closedAt = messageDateIso(message);
 
   const patchPromise = supabase.patch('support_requests', { id: supabase.eq(request.id) }, {
     status: 'closed',
-    closed_at: nowIso(),
+    closed_at: closedAt,
     closed_by_employee_id: employee ? employee.id : null,
     closed_by_tg_id: from.id || null,
     closed_by_name: tgUserName(from),
@@ -274,7 +283,8 @@ async function closeRequestRecord({ request, message, employee }) {
     actor_name: tgUserName(from),
     employee_id: employee ? employee.id : null,
     text: message.text || message.caption || '',
-    raw: message
+    raw: message,
+    created_at: closedAt
   }], { prefer: 'return=minimal' }).catch(() => null);
 
   const [closedRows] = await Promise.all([patchPromise, eventPromise]);
@@ -303,7 +313,8 @@ async function closeLatestRequest({ message, employee, recordMissing = true }) {
       actor_name: tgUserName(from),
       employee_id: employee ? employee.id : null,
       text: message.text || message.caption || '',
-      raw: message
+      raw: message,
+      created_at: messageDateIso(message)
     }], { prefer: 'return=minimal' }).catch(() => null);
     return { closed: false, request: null };
   }

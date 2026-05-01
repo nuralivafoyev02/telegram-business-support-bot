@@ -12,6 +12,7 @@ const supabase = require('../backend/lib/supabase');
 const stats = require('../backend/lib/stats');
 const { createToken } = require('../backend/lib/auth');
 const { clearBotSettingsCache } = require('../backend/lib/bot-settings');
+const botHandler = require('../backend/api/bot');
 const handler = require('../backend/api/admin');
 
 function createReq(body, token) {
@@ -1504,6 +1505,66 @@ async function testSyncTelegramUpdatesDeletesActiveWebhookThenProcessesUpdates()
   }
 }
 
+async function testSyncTelegramUpdatesIgnoresStaleOffsetAndAcknowledgesFetchedUpdates() {
+  const originalSelect = supabase.select;
+  const originalInsert = supabase.insert;
+  const originalFetch = global.fetch;
+  const originalHandleUpdate = botHandler.handleTelegramUpdate;
+  const calls = [];
+  const inserts = [];
+  const handledUpdates = [];
+
+  supabase.select = async (table) => {
+    if (table === 'bot_settings') return [{ key: 'telegram_update_offset', value: { offset: 999999 } }];
+    return [];
+  };
+  supabase.insert = async (table, rows, options = {}) => {
+    inserts.push({ table, rows, options });
+    return rows;
+  };
+  botHandler.handleTelegramUpdate = async update => {
+    handledUpdates.push(update);
+    return { ok: true, handled: 'message' };
+  };
+  global.fetch = async (url, options = {}) => {
+    const body = JSON.parse(options.body || '{}');
+    calls.push({ url, body });
+    if (/getUpdates$/.test(url) && body.offset === undefined) {
+      return {
+        ok: true,
+        json: async () => ({ ok: true, result: [{ update_id: 10, message: { message_id: 20, text: 'Salom' } }] })
+      };
+    }
+    if (/getUpdates$/.test(url) && body.offset === 11) {
+      return { ok: true, json: async () => ({ ok: true, result: [] }) };
+    }
+    throw new Error(`Unexpected URL/body: ${url} ${JSON.stringify(body)}`);
+  };
+
+  try {
+    const result = await callAdmin('syncTelegramUpdates', {
+      method: 'POST',
+      body: { limit: 5, mode: 'manual' }
+    });
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.data.used_saved_offset, false);
+    assert.strictEqual(result.payload.data.acknowledged, true);
+    assert.strictEqual(result.payload.data.offset, 11);
+    assert.strictEqual(handledUpdates.length, 1);
+    assert.strictEqual(calls[0].body.offset, undefined);
+    assert.strictEqual(calls[1].body.offset, 11);
+    const offsetInsert = inserts.find(item => item.table === 'bot_settings');
+    assert.ok(offsetInsert);
+    assert.strictEqual(offsetInsert.rows[0].value.offset, 11);
+    assert.strictEqual(offsetInsert.rows[0].value.mode, 'manual');
+  } finally {
+    supabase.select = originalSelect;
+    supabase.insert = originalInsert;
+    global.fetch = originalFetch;
+    botHandler.handleTelegramUpdate = originalHandleUpdate;
+  }
+}
+
 async function testSendToChatStoresOutgoingAdminMessage() {
   const originalSelect = supabase.select;
   const originalInsert = supabase.insert;
@@ -2140,6 +2201,7 @@ async function run() {
   await testWebhookInfoWarnsWhenMessageUpdatesMissing();
   await testSetWebhookPrefersConfiguredAppUrl();
   await testSyncTelegramUpdatesDeletesActiveWebhookThenProcessesUpdates();
+  await testSyncTelegramUpdatesIgnoresStaleOffsetAndAcknowledgesFetchedUpdates();
   await testSendToChatStoresOutgoingAdminMessage();
   await testReplyRequestSendsMessageAndClosesTicket();
   await testReplyRequestFallsBackWhenBusinessPeerInvalid();

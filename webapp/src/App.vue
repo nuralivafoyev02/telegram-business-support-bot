@@ -234,14 +234,11 @@
                 <div v-if="ticketTrendRows.length" class="ticket-trend-chart">
                   <article v-for="row in ticketTrendRows" :key="row.date_key" class="ticket-trend-day">
                     <div class="ticket-trend-bars" :aria-label="ticketTrendTooltip(row)">
-                      <span class="ticket-bar total"
-                        :data-tooltip="ticketTrendMetricTooltip(row, 'total')" tabindex="0"
+                      <span class="ticket-bar total" :data-tooltip="ticketTrendMetricTooltip(row, 'total')" tabindex="0"
                         :style="{ height: chartBarHeight(row.total_requests, ticketTrendMax) }"></span>
-                      <span class="ticket-bar closed"
-                        :data-tooltip="ticketTrendMetricTooltip(row, 'closed')" tabindex="0"
-                        :style="{ height: chartBarHeight(row.closed_requests, ticketTrendMax) }"></span>
-                      <span class="ticket-bar open"
-                        :data-tooltip="ticketTrendMetricTooltip(row, 'open')" tabindex="0"
+                      <span class="ticket-bar closed" :data-tooltip="ticketTrendMetricTooltip(row, 'closed')"
+                        tabindex="0" :style="{ height: chartBarHeight(row.closed_requests, ticketTrendMax) }"></span>
+                      <span class="ticket-bar open" :data-tooltip="ticketTrendMetricTooltip(row, 'open')" tabindex="0"
                         :style="{ height: chartBarHeight(row.open_requests, ticketTrendMax) }"></span>
                     </div>
                     <b>{{ row.weekday_label }}</b>
@@ -429,7 +426,7 @@
                       </div>
                       <div class="timeline-status">
                         <span class="status-pill mini" :class="expiryStatusClass(row)">{{ expiryStatusLabel(row)
-                        }}</span>
+                          }}</span>
                         <small>{{ businessStatusLabel(row.business_status) }}</small>
                       </div>
                     </article>
@@ -1139,14 +1136,14 @@
               </option>
             </select>
           </div>
-          <div class="ticket-list-meta">
+          <!-- <div class="ticket-list-meta">
             <span>Ko‘rsatilmoqda: {{ fmtNumber(filteredTicketListRows.length) }} ta ticket</span>
             <div>
               <b>Jami: {{ fmtNumber(ticketListCounts.all) }}</b>
               <b class="danger">Ochiq: {{ fmtNumber(ticketListCounts.open) }}</b>
               <b class="success">Yopilgan: {{ fmtNumber(ticketListCounts.closed) }}</b>
             </div>
-          </div>
+          </div> -->
           <DataTable :columns="ticketListColumns" :rows="filteredTicketListRows" empty="Ticket topilmadi"
             :page-size="10" :on-cell-action="handleTableCellAction">
             <template #requestReply="{ row }">
@@ -1304,15 +1301,18 @@
             </div>
             <div>
               <span>Xabarlar</span>
-              <b>{{ fmtNumber(companyGroupDetail.company?.total_messages || companyGroupDetail.summary?.total_messages) }}</b>
+              <b>{{ fmtNumber(companyGroupDetail.company?.total_messages || companyGroupDetail.summary?.total_messages)
+                }}</b>
             </div>
             <div>
               <span>Ticketlar</span>
-              <b>{{ fmtNumber(companyGroupDetail.company?.total_requests || companyGroupDetail.summary?.total_requests) }}</b>
+              <b>{{ fmtNumber(companyGroupDetail.company?.total_requests || companyGroupDetail.summary?.total_requests)
+                }}</b>
             </div>
             <div>
               <span>Ochiq</span>
-              <b>{{ fmtNumber(companyGroupDetail.company?.open_requests || companyGroupDetail.summary?.open_requests) }}</b>
+              <b>{{ fmtNumber(companyGroupDetail.company?.open_requests || companyGroupDetail.summary?.open_requests)
+                }}</b>
             </div>
           </section>
 
@@ -1329,7 +1329,8 @@
                   <span class="employee-chat-mini-avatar">{{ chatInitials(group) }}</span>
                   <span>
                     <b>{{ group.title || group.chat_id }}</b>
-                    <small>{{ group.conversation?.[0]?.text || group.requests?.[0]?.initial_text || 'Yozishma tarixi' }}</small>
+                    <small>{{ group.conversation?.[0]?.text || group.requests?.[0]?.initial_text || 'Yozishma tarixi'
+                      }}</small>
                     <em>{{ fmtNumber(group.total_messages) }} xabar · {{ fmtNumber(group.total_requests) }} ticket · {{
                       fmtNumber(group.open_requests) }} ochiq</em>
                   </span>
@@ -1475,7 +1476,7 @@
               <img v-if="employeeAvatarUrl(employeeProfile.employee)" class="employee-profile-avatar"
                 :src="employeeAvatarUrl(employeeProfile.employee)" alt="" />
               <span v-else class="employee-profile-avatar fallback">{{ employeeInitials(employeeProfile.employee)
-              }}</span>
+                }}</span>
             </span>
             <div class="employee-profile-title">
               <h2>{{ employeeProfile.employee?.full_name || employeeProfile.employee?.username || 'Xodim' }}</h2>
@@ -1485,7 +1486,7 @@
             <div class="employee-profile-pills">
               <span class="profile-pill">🛡️ SLA <b>{{ fmtPercent(employeeProfile.summary?.sla) }}</b></span>
               <span class="profile-pill">✅ Yopish foizi <b>{{ fmtPercent(employeeProfile.summary?.close_rate)
-              }}</b></span>
+                  }}</b></span>
               <span class="profile-pill">⭐ Reyting <b>#{{ employeeProfile.rank || '—' }}</b></span>
             </div>
           </header>
@@ -1559,7 +1560,8 @@
                   </button>
                 </div>
 
-                <div v-if="employeeProfileTicketsOpen && employeeProfileChatRequests.length" class="employee-ticket-strip">
+                <div v-if="employeeProfileTicketsOpen && employeeProfileChatRequests.length"
+                  class="employee-ticket-strip">
                   <article v-for="request in employeeProfileChatRequests" :key="request.id"
                     :class="{ open: request.status === 'open' }">
                     <div>
@@ -1729,8 +1731,8 @@
                   {{ ticketToggleLabel(chatTicketsOpen, chatDetail.requests?.length) }}
                 </button>
               </div>
-              <DataTable v-if="chatTicketsOpen" :columns="chatRequestColumns" :rows="chatDetail.requests || []" empty="Bu chatda so‘rov yo‘q"
-                :on-cell-action="handleTableCellAction">
+              <DataTable v-if="chatTicketsOpen" :columns="chatRequestColumns" :rows="chatDetail.requests || []"
+                empty="Bu chatda so‘rov yo‘q" :on-cell-action="handleTableCellAction">
                 <template #requestReply="{ row }">
                   <button class="btn small" type="button" :disabled="row.status !== 'open'"
                     @click.stop="openRequestReply(row)">Javob</button>
@@ -1815,6 +1817,7 @@ import { api, getToken, setToken } from './api';
 
 const ACTIVE_TAB_STORAGE_KEY = 'uyqur_support_active_tab';
 const THEME_STORAGE_KEY = 'uyqur_support_theme';
+const TELEGRAM_AUTO_SYNC_INTERVAL_MS = 25_000;
 const tabs = [
   { key: 'stats', label: 'Support performance', icon: '📊' },
   { key: 'productAnalytics', label: 'Product analytics', icon: '📈' },
@@ -1923,12 +1926,16 @@ let employeeProfileLoadToken = 0;
 let employeeProfileChatToken = 0;
 const settingsRaw = ref({ settings: [], admins: [] });
 const webhookStatus = ref(null);
+const telegramAutoSync = ref({ enabled: false, running: false, last_synced_at: '', fetched: 0, processed: 0, errors: 0, error: '' });
 const showLoginPassword = ref(false);
 const loginStatus = ref('');
 const loginStatusType = ref('');
 const loginError = ref('');
 const nowTick = ref(Date.now());
 let durationTimer = null;
+let telegramAutoSyncTimer = null;
+let telegramAutoSyncBusy = false;
+let modalScrollY = 0;
 
 const settingsForm = reactive({ ai_mode: 'false', auto_reply: 'true', done_tag: '#done', main_group_id: '', request_detection: 'keyword' });
 const isManagerMode = computed(() => false);
@@ -1939,6 +1946,26 @@ const settingsTab = tabs.find(tab => tab.key === 'settings');
 watch(activeTab, key => {
   actionMenuOpen.value = false;
   if (otherTabKeys.includes(key)) otherMenuOpen.value = true;
+});
+
+function setModalScrollLock(locked) {
+  if (typeof document === 'undefined' || typeof window === 'undefined') return;
+  const body = document.body;
+  if (locked) {
+    if (body.classList.contains('modal-open')) return;
+    modalScrollY = window.scrollY || document.documentElement.scrollTop || 0;
+    body.style.top = `-${modalScrollY}px`;
+    body.classList.add('modal-open');
+    return;
+  }
+  if (!body.classList.contains('modal-open')) return;
+  body.classList.remove('modal-open');
+  body.style.top = '';
+  window.scrollTo(0, modalScrollY);
+}
+
+watch(modal, value => {
+  setModalScrollLock(Boolean(value));
 });
 
 const loginForm = reactive({ username: 'admin', password: '' });
@@ -4005,6 +4032,7 @@ async function submitLogin() {
     if (activeTab.value === 'stats') await loadSupportPerformance();
     else if (activeTab.value === 'productAnalytics') await loadProductAnalytics();
     else await refresh();
+    await checkTelegramWebhook(false);
   } catch (error) {
     loginError.value = /login|parol/i.test(error.message)
       ? 'Kirish nomi yoki parol noto‘g‘ri.'
@@ -4016,6 +4044,7 @@ async function submitLogin() {
 
 function logout() {
   actionMenuOpen.value = false;
+  stopTelegramAutoSync();
   setToken('');
   token.value = '';
 }
@@ -5128,14 +5157,74 @@ const webhookStatusText = computed(() => {
   if (!webhookStatus.value) return '';
   const info = webhookStatus.value.webhook || webhookStatus.value;
   const notes = info.diagnostics?.notes || [];
+  const autoSync = telegramAutoSync.value;
   return [
     `Manzil: ${info.url || '—'}`,
     `Kutilayotgan yangilanishlar: ${info.pending_update_count ?? 0}`,
     `Ruxsat etilgan yangilanishlar: ${(info.allowed_updates || []).join(', ') || '—'}`,
     `Oxirgi xato: ${info.last_error_message || '—'}`,
+    `Webhooksiz auto sync: ${autoSync.enabled ? `faol${autoSync.running ? ' (olinmoqda)' : ''}, oxirgi: ${autoSync.last_synced_at ? fmtDate(autoSync.last_synced_at) : '—'}, ${fmtNumber(autoSync.processed || 0)}/${fmtNumber(autoSync.fetched || 0)} update` : 'faol emas'}`,
     notes.length ? `Tekshiruv: ${notes.join(' ')}` : 'Tekshiruv: guruh xabarlari uchun webhook sozlamasi to‘g‘ri ko‘rinmoqda'
   ].join('\n');
 });
+
+function currentWebhookInfo() {
+  return webhookStatus.value?.webhook || webhookStatus.value || null;
+}
+
+function shouldAutoSyncTelegramUpdates() {
+  if (!token.value) return false;
+  const info = currentWebhookInfo();
+  if (!info) return false;
+  return !String(info.url || '').trim();
+}
+
+async function runTelegramAutoSync() {
+  if (!shouldAutoSyncTelegramUpdates() || telegramAutoSyncBusy) return;
+  telegramAutoSyncBusy = true;
+  telegramAutoSync.value = { ...telegramAutoSync.value, enabled: true, running: true, error: '' };
+  try {
+    const result = await api.syncTelegramUpdates({ limit: 100, mode: 'auto', ignore_saved_offset: true });
+    telegramAutoSync.value = {
+      enabled: true,
+      running: false,
+      last_synced_at: new Date().toISOString(),
+      fetched: Number(result.fetched || 0),
+      processed: Number(result.processed || 0),
+      errors: Array.isArray(result.errors) ? result.errors.length : 0,
+      error: ''
+    };
+    if (Number(result.fetched || 0) || Number(result.processed || 0)) {
+      await refresh().catch(() => null);
+    }
+  } catch (error) {
+    telegramAutoSync.value = { ...telegramAutoSync.value, enabled: true, running: false, error: error.message };
+  } finally {
+    telegramAutoSyncBusy = false;
+  }
+}
+
+function stopTelegramAutoSync() {
+  if (telegramAutoSyncTimer) clearInterval(telegramAutoSyncTimer);
+  telegramAutoSyncTimer = null;
+  telegramAutoSyncBusy = false;
+  telegramAutoSync.value = { ...telegramAutoSync.value, enabled: false, running: false };
+}
+
+function updateTelegramAutoSync() {
+  if (!shouldAutoSyncTelegramUpdates()) {
+    stopTelegramAutoSync();
+    return;
+  }
+  telegramAutoSync.value = { ...telegramAutoSync.value, enabled: true };
+  if (!telegramAutoSyncTimer) {
+    runTelegramAutoSync();
+    telegramAutoSyncTimer = setInterval(runTelegramAutoSync, TELEGRAM_AUTO_SYNC_INTERVAL_MS);
+  }
+}
+
+watch(webhookStatus, updateTelegramAutoSync, { deep: true });
+watch(token, updateTelegramAutoSync);
 
 async function checkTelegramWebhook(show = true) {
   if (show) startLoading('webhookInfo');
@@ -5164,7 +5253,8 @@ async function reconnectTelegramWebhook() {
 async function syncTelegramUpdates() {
   startLoading('webhookSync');
   try {
-    const result = await api.syncTelegramUpdates({ limit: 100 });
+    const result = await api.syncTelegramUpdates({ limit: 100, mode: 'manual', ignore_saved_offset: true });
+    await checkTelegramWebhook(false);
     await refresh();
     const prefix = result.webhook_deleted ? 'Webhook o‘chirildi, ' : '';
     showToast(`${prefix}Telegramdan olindi: ${fmtNumber(result.processed || 0)}/${fmtNumber(result.fetched || 0)} update`);
@@ -5344,6 +5434,7 @@ onMounted(async () => {
   if (token.value) {
     await loadSettings().catch(error => showToast(error.message));
     await refresh();
+    await checkTelegramWebhook(false);
   }
 });
 
@@ -5353,6 +5444,8 @@ onUnmounted(() => {
     document.removeEventListener('keydown', handleDocumentKeydown);
   }
   if (durationTimer) clearInterval(durationTimer);
+  stopTelegramAutoSync();
+  setModalScrollLock(false);
   Object.values(employeeAvatarUrls.value).filter(Boolean).forEach(url => URL.revokeObjectURL(url));
 });
 

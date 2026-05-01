@@ -1718,9 +1718,12 @@ async function testReplyToCustomerTicketClosesRequest() {
     assert.strictEqual(closePatch.values.status, 'closed');
     assert.strictEqual(closePatch.values.closed_by_tg_id, 777);
     assert.strictEqual(closePatch.values.done_message_id, 41);
+    assert.strictEqual(closePatch.values.closed_at, new Date(1777100000 * 1000).toISOString());
     assert.strictEqual(inserted.some(item => item.table === 'employees'), true);
     assert.strictEqual(inserted.some(item => item.table === 'support_requests'), false);
-    assert.strictEqual(inserted.some(item => item.table === 'request_events' && item.rows[0].event_type === 'closed'), true);
+    const closeEvent = inserted.find(item => item.table === 'request_events' && item.rows[0].event_type === 'closed');
+    assert.ok(closeEvent);
+    assert.strictEqual(closeEvent.rows[0].created_at, new Date(1777100000 * 1000).toISOString());
     assert.strictEqual(telegramCalls.length, 1);
     assert.match(telegramCalls[0].url, /setMessageReaction$/);
     assert.strictEqual(telegramCalls[0].body.message_id, 41);
@@ -1797,7 +1800,10 @@ async function testEmployeePlainAnswerClosesLatestOpenRequest() {
     assert.strictEqual(closePatch.values.closed_by_employee_id, 'employee-1');
     assert.strictEqual(closePatch.values.closed_by_tg_id, 777);
     assert.strictEqual(closePatch.values.done_message_id, 42);
-    assert.strictEqual(inserted.some(item => item.table === 'request_events' && item.rows[0].event_type === 'closed'), true);
+    assert.strictEqual(closePatch.values.closed_at, new Date(1777100000 * 1000).toISOString());
+    const closeEvent = inserted.find(item => item.table === 'request_events' && item.rows[0].event_type === 'closed');
+    assert.ok(closeEvent);
+    assert.strictEqual(closeEvent.rows[0].created_at, new Date(1777100000 * 1000).toISOString());
     assert.strictEqual(inserted.some(item => item.table === 'request_events' && item.rows[0].event_type === 'done_without_request'), false);
     assert.strictEqual(telegramCalls.length, 1);
     assert.match(telegramCalls[0].url, /setMessageReaction$/);
