@@ -1021,6 +1021,141 @@ async function testCompanyGroupActivityReturnsLinkedGroupMessagesWithTickets() {
   }
 }
 
+async function testDashboardCompanyTicketsUseRegisteredGroupCompany() {
+  const originalSelect = supabase.select;
+  const originalEmployeeStats = stats.selectEmployeeStatistics;
+  const originalChatStats = stats.selectChatStatistics;
+  const originalTodaySummary = stats.selectTodaySummary;
+  const chatId = -100800;
+  const companyId = 'company-2';
+  const requests = [
+    {
+      id: 'request-10',
+      source_type: 'group',
+      chat_id: chatId,
+      company_id: null,
+      customer_tg_id: 707,
+      customer_name: 'Mijoz',
+      status: 'closed',
+      closed_by_employee_id: 'emp-1',
+      closed_by_tg_id: 909,
+      closed_by_name: 'Ali',
+      created_at: '2026-04-30T08:00:00.000Z',
+      closed_at: '2026-04-30T08:07:00.000Z'
+    },
+    {
+      id: 'request-11',
+      source_type: 'group',
+      chat_id: chatId,
+      company_id: null,
+      customer_tg_id: 808,
+      customer_name: 'Mijoz 2',
+      status: 'open',
+      closed_by_employee_id: null,
+      closed_by_tg_id: null,
+      closed_by_name: null,
+      created_at: '2026-04-30T09:00:00.000Z',
+      closed_at: null
+    }
+  ];
+
+  supabase.select = async (table, query = {}) => {
+    if (table === 'support_requests') {
+      return query.status === 'eq.open' ? requests.filter(row => row.status === 'open') : requests;
+    }
+    if (table === 'tg_chats') {
+      return [{
+        chat_id: chatId,
+        title: 'Nuriddin Buildings support',
+        source_type: 'group',
+        company_id: companyId,
+        is_active: true,
+        last_message_at: '2026-04-30T09:00:00.000Z'
+      }];
+    }
+    if (table === 'companies') return [{ id: companyId, name: 'Nuriddin Buildings', is_active: true }];
+    if (table === 'employees') return [];
+    if (table === 'messages') return [];
+    return [];
+  };
+  stats.selectEmployeeStatistics = async () => [];
+  stats.selectChatStatistics = async () => [{
+    chat_id: chatId,
+    title: 'Nuriddin Buildings support',
+    source_type: 'group',
+    company_id: companyId,
+    is_active: true
+  }];
+  stats.selectTodaySummary = async () => [{ total_requests: 2, open_requests: 1, closed_requests: 1 }];
+
+  try {
+    const result = await callAdmin('dashboard', { query: { period: 'all' } });
+    assert.strictEqual(result.status, 200);
+    const rows = result.payload.data.analytics.companyTickets.all;
+    assert.strictEqual(rows.length, 1);
+    assert.strictEqual(rows[0].company_id, companyId);
+    assert.strictEqual(rows[0].name, 'Nuriddin Buildings');
+    assert.strictEqual(rows[0].total_requests, 2);
+    assert.strictEqual(rows[0].closed_requests, 1);
+    assert.strictEqual(rows[0].open_requests, 1);
+  } finally {
+    supabase.select = originalSelect;
+    stats.selectEmployeeStatistics = originalEmployeeStats;
+    stats.selectChatStatistics = originalChatStats;
+    stats.selectTodaySummary = originalTodaySummary;
+  }
+}
+
+async function testRequestsListEnrichesCompanyFromRegisteredGroup() {
+  const originalSelect = supabase.select;
+  const chatId = -100801;
+  const companyId = 'company-3';
+
+  supabase.select = async (table) => {
+    if (table === 'support_requests') return [{
+      id: 'request-20',
+      source_type: 'group',
+      chat_id: chatId,
+      company_id: null,
+      customer_tg_id: 515,
+      customer_name: 'Mijoz',
+      customer_username: 'client',
+      initial_message_id: 20,
+      initial_text: 'Hisobot ochilmayapti',
+      status: 'closed',
+      closed_by_employee_id: 'emp-1',
+      closed_by_tg_id: 909,
+      closed_by_name: 'Ali',
+      done_message_id: 21,
+      created_at: '2026-04-30T10:00:00.000Z',
+      closed_at: '2026-04-30T10:12:00.000Z'
+    }];
+    if (table === 'tg_chats') return [{
+      chat_id: chatId,
+      title: 'Salom City support',
+      source_type: 'group',
+      company_id: companyId,
+      last_message_at: '2026-04-30T10:12:00.000Z'
+    }];
+    if (table === 'companies') return [{ id: companyId, name: 'Salom City', brand: 'SC', is_active: true }];
+    if (table === 'employees') return [{ id: 'emp-1', tg_user_id: 909, full_name: 'Ali Support', username: 'ali', role: 'support' }];
+    return [];
+  };
+
+  try {
+    const result = await callAdmin('requests', { query: { period: 'all', limit: 100 } });
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.data.length, 1);
+    assert.strictEqual(result.payload.data[0].company_id, companyId);
+    assert.strictEqual(result.payload.data[0].company_name, 'Salom City');
+    assert.strictEqual(result.payload.data[0].chat_title, 'Salom City support');
+    assert.strictEqual(result.payload.data[0].support_name, 'Ali Support');
+    assert.strictEqual(result.payload.data[0].response_minutes, 12);
+  } finally {
+    supabase.select = originalSelect;
+  }
+}
+
 async function testSendToChatStoresOutgoingAdminMessage() {
   const originalSelect = supabase.select;
   const originalInsert = supabase.insert;
@@ -1620,6 +1755,8 @@ async function run() {
   await testPrivateChatsExcludeEmployees();
   await testChatDetailIncludesTicketSolutionAndTimeline();
   await testCompanyGroupActivityReturnsLinkedGroupMessagesWithTickets();
+  await testDashboardCompanyTicketsUseRegisteredGroupCompany();
+  await testRequestsListEnrichesCompanyFromRegisteredGroup();
   await testSendToChatStoresOutgoingAdminMessage();
   await testReplyRequestSendsMessageAndClosesTicket();
   await testReplyRequestFallsBackWhenBusinessPeerInvalid();

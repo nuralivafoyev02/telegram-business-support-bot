@@ -1106,6 +1106,51 @@
     </Transition>
 
     <Transition name="modal-fade">
+      <Modal v-if="modal === 'ticketList'" :title="ticketList.title" wide @close="closeModal">
+        <div class="ticket-list-modal">
+          <p class="modal-subtitle">Tanlangan davr bo‘yicha jami, ochiq va yopilgan ticketlar</p>
+          <div class="ticket-filter-tabs">
+            <button type="button" :class="{ active: ticketList.active === 'all' }" @click="ticketList.active = 'all'">
+              Jami ticketlar <span>{{ fmtNumber(ticketListCounts.all) }}</span>
+            </button>
+            <button type="button" :class="{ active: ticketList.active === 'open' }" @click="ticketList.active = 'open'">
+              Ochiq ticketlar <span class="danger">{{ fmtNumber(ticketListCounts.open) }}</span>
+            </button>
+            <button type="button" :class="{ active: ticketList.active === 'closed' }"
+              @click="ticketList.active = 'closed'">
+              Yopilgan ticketlar <span class="success">{{ fmtNumber(ticketListCounts.closed) }}</span>
+            </button>
+          </div>
+          <div class="ticket-list-toolbar">
+            <input v-model.trim="ticketListSearch" class="input"
+              placeholder="Ticket ID, so‘rov matni, kompaniya bo‘yicha qidirish" />
+            <select v-model="ticketListSupport" class="select">
+              <option v-for="option in ticketListSupportOptions" :key="option.value" :value="option.value">
+                {{ option.label }}
+              </option>
+            </select>
+          </div>
+          <div class="ticket-list-meta">
+            <span>Ko‘rsatilmoqda: {{ fmtNumber(filteredTicketListRows.length) }} ta ticket</span>
+            <div>
+              <b>Jami: {{ fmtNumber(ticketListCounts.all) }}</b>
+              <b class="danger">Ochiq: {{ fmtNumber(ticketListCounts.open) }}</b>
+              <b class="success">Yopilgan: {{ fmtNumber(ticketListCounts.closed) }}</b>
+            </div>
+          </div>
+          <DataTable :columns="ticketListColumns" :rows="filteredTicketListRows" empty="Ticket topilmadi"
+            :page-size="10" :on-cell-action="handleTableCellAction">
+            <template #requestReply="{ row }">
+              <button v-if="row.status === 'open'" class="btn small primary" type="button"
+                @click.stop="openRequestReply(row)">Javob berish</button>
+              <button v-else class="btn small" type="button" @click.stop="loadChatDetail(row)">Ko‘rish</button>
+            </template>
+          </DataTable>
+        </div>
+      </Modal>
+    </Transition>
+
+    <Transition name="modal-fade">
       <Modal v-if="modal === 'openRequests'" :title="openRequestsTitle" wide @close="closeModal">
         <DataTable :columns="openRequestColumns" :rows="dashboard.openRequests || []" empty="Ochiq so‘rov qolmagan"
           :on-cell-action="handleTableCellAction">
@@ -1806,6 +1851,9 @@ const privates = ref([]);
 const employees = ref([]);
 const companyInfo = ref({ summary: {}, companies: [], fetched_at: '', source: '' });
 const requestRows = ref([]);
+const ticketList = ref({ rows: [], active: 'all', mode: 'all', title: 'Ticketlar ro‘yxati' });
+const ticketListSearch = ref('');
+const ticketListSupport = ref('all');
 const chatDetail = ref({ chat: null, requests: [], timeline: [] });
 const metricChatDetail = ref({ chat: null, requests: [], conversation: [] });
 const metricChatLoading = ref(false);
@@ -2269,6 +2317,7 @@ const loadingText = computed(() => ({
   saveLogSettings: 'Log sozlamasi saqlanmoqda...',
   testLog: 'Test log yuborilmoqda...',
   extractKnowledge: 'Fayl o‘qilmoqda...',
+  ticketList: 'Ticketlar yuklanmoqda...',
   companyGroupActivity: 'Kompaniya guruhlari yuklanmoqda...'
 }[loadingAction.value] || 'Yuklanmoqda...'));
 
@@ -3039,6 +3088,39 @@ const metricChatTitle = computed(() => {
   const chat = metricChatDetail.value.chat;
   return chat ? chat.title || chat.username || chat.chat_id || 'Chat' : 'Chat tanlanmagan';
 });
+const ticketListCounts = computed(() => {
+  const rows = ticketList.value.rows || [];
+  return {
+    all: rows.length,
+    open: rows.filter(row => row.status === 'open').length,
+    closed: rows.filter(row => row.status === 'closed').length
+  };
+});
+const ticketListSupportOptions = computed(() => {
+  const names = [...new Set((ticketList.value.rows || [])
+    .map(row => row.support_name || row.closed_by_name || row.responsible_employee_name || '')
+    .filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  return [{ value: 'all', label: 'Barcha supportlar' }, ...names.map(name => ({ value: name, label: name }))];
+});
+const filteredTicketListRows = computed(() => {
+  const searchText = ticketListSearch.value.toLowerCase().trim();
+  return (ticketList.value.rows || [])
+    .filter(row => ticketMatchesStatus(row, ticketList.value.active))
+    .filter(row => ticketListSupport.value === 'all' || [row.support_name, row.closed_by_name, row.responsible_employee_name].includes(ticketListSupport.value))
+    .filter(row => {
+      if (!searchText) return true;
+      return [
+        row.id,
+        row.initial_text,
+        row.company_name,
+        row.chat_title,
+        row.customer_name,
+        row.support_name,
+        row.closed_by_name
+      ].filter(Boolean).join(' ').toLowerCase().includes(searchText);
+    })
+    .sort(ticketListSort);
+});
 const employeeDrilldownTitle = computed(() => employeeDrilldown.value ? `Xodim: ${employeeDrilldown.value.full_name || employeeDrilldown.value.username || '—'}` : 'Xodim tafsiloti');
 const employeeCompanyTitle = computed(() => employeeCompanyDetail.value.employee
   ? `Kompaniyalar: ${employeeCompanyDetail.value.employee.full_name || employeeCompanyDetail.value.employee.username || 'Xodim'}`
@@ -3425,6 +3507,17 @@ const requestColumns = [
   { key: 'created_at', label: 'Kelgan', format: fmtDate, action: 'chatDetail' },
   { key: 'closed_at', label: 'Yopilgan', format: fmtDate, action: 'chatDetail' },
   { key: 'reply', label: 'Javob', slot: 'requestReply' }
+];
+
+const ticketListColumns = [
+  { key: 'id', label: 'Ticket ID', format: value => `TK-${shortId(value)}` },
+  { key: 'initial_text', label: 'So‘rov matni', truncate: true, action: 'chatDetail' },
+  { key: 'company_name', label: 'Kompaniya', format: (value, row) => value || row.chat_title || '—', action: 'chatDetail' },
+  { key: 'support_name', label: 'Mas’ul support', format: (value, row) => value || row.closed_by_name || '—' },
+  { key: 'created_at', label: 'So‘rov vaqti', format: fmtDate },
+  { key: 'closed_at', label: 'Javob vaqti', format: value => value ? fmtDate(value) : '—' },
+  { key: 'status', label: 'Holati', format: statusLabel, badge: true },
+  { key: 'reply', label: 'Amal', slot: 'requestReply' }
 ];
 
 const chatRequestColumns = [
@@ -4592,8 +4685,55 @@ async function openCompanyGroupActivity(row = {}) {
   }
 }
 
-function openSupportSummaryCard(action = 'requests') {
-  openSupportEmployeeSummary(action);
+function ticketFilterFromAction(action = 'requests') {
+  if (action === 'open') return 'open';
+  if (action === 'closed' || action === 'avg') return 'closed';
+  return 'all';
+}
+
+function ticketMatchesStatus(row = {}, status = 'all') {
+  if (status === 'open') return row.status === 'open';
+  if (status === 'closed') return row.status === 'closed';
+  return true;
+}
+
+function ticketListSort(left = {}, right = {}) {
+  if (ticketList.value.mode === 'avg') {
+    return Number(right.response_minutes || 0) - Number(left.response_minutes || 0)
+      || String(right.created_at || '').localeCompare(String(left.created_at || ''));
+  }
+  return String(right.created_at || '').localeCompare(String(left.created_at || ''));
+}
+
+async function openSupportSummaryCard(action = 'requests') {
+  const titleMap = {
+    requests: 'Ticketlar ro‘yxati',
+    closed: 'Javob berilgan ticketlar',
+    open: 'Javobsiz ticketlar',
+    avg: 'Javob vaqti bo‘yicha ticketlar'
+  };
+  startLoading('ticketList');
+  try {
+    const rows = await api.requests({
+      period: selectedStatsPeriod.value,
+      ...dashboardPeriodQuery(),
+      limit: 5000
+    });
+    ticketList.value = {
+      rows: Array.isArray(rows) ? rows : [],
+      active: ticketFilterFromAction(action),
+      mode: action,
+      title: titleMap[action] || titleMap.requests
+    };
+    ticketListSearch.value = '';
+    ticketListSupport.value = 'all';
+    if (!ticketList.value.rows.length) return showToast('Bu davr uchun ticket topilmadi');
+    modal.value = 'ticketList';
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    stopLoading('ticketList');
+  }
 }
 
 function openCompanyTimelineDetail(row = {}) {

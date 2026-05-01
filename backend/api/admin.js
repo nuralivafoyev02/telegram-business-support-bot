@@ -428,17 +428,22 @@ function buildTicketAnswerTrend(requests, periodKey, keys) {
     }));
 }
 
-function buildCompanyTicketPerformance({ requests, companies, periodKey, keys }) {
+function buildCompanyTicketPerformance({ requests, chats = [], companies, periodKey, keys }) {
   const companyMap = new Map(companies.map(company => [company.id, company]).filter(([id]) => id));
+  const chatCompanyMap = new Map(chats
+    .map(chat => [telegramIdKey(chat.chat_id), chat.company_id])
+    .filter(([, companyId]) => companyId));
   const totals = new Map();
 
   requests
-    .filter(request => request.company_id && request.created_at && inCurrentPeriod(request.created_at, periodKey, keys))
+    .filter(request => request.created_at && inCurrentPeriod(request.created_at, periodKey, keys))
     .forEach(request => {
-      const company = companyMap.get(request.company_id) || null;
-      const key = company?.id || request.company_id;
+      const companyId = request.company_id || chatCompanyMap.get(telegramIdKey(request.chat_id));
+      if (!companyId) return;
+      const company = companyMap.get(companyId) || null;
+      const key = company?.id || companyId;
       const current = totals.get(key) || {
-        company_id: company?.id || request.company_id,
+        company_id: company?.id || companyId,
         name: company?.name || 'Kompaniya',
         total_requests: 0,
         closed_requests: 0,
@@ -480,7 +485,7 @@ function buildDashboardAnalytics({ requests, chats, employees, companies, custom
     groupPerformance: Object.fromEntries(periods.map(([key]) => [key, buildGroupPerformance({ requests, chats, periodKey: key, keys })])),
     responseTimeTrend: Object.fromEntries(periods.map(([key]) => [key, buildResponseTimeTrend(requests, key, keys)])),
     ticketAnswerTrend: Object.fromEntries(periods.map(([key]) => [key, buildTicketAnswerTrend(requests, key, keys)])),
-    companyTickets: Object.fromEntries(periods.map(([key]) => [key, buildCompanyTicketPerformance({ requests, companies, periodKey: key, keys })])),
+    companyTickets: Object.fromEntries(periods.map(([key]) => [key, buildCompanyTicketPerformance({ requests, chats, companies, periodKey: key, keys })])),
     custom_period: customPeriod,
     generated_at: new Date().toISOString()
   };
@@ -914,13 +919,60 @@ async function listPrivateChats(query) {
 async function listRequests(query) {
   const params = {
     select: 'id,source_type,chat_id,company_id,customer_tg_id,customer_name,customer_username,initial_message_id,initial_text,status,business_connection_id,closed_at,closed_by_employee_id,closed_by_tg_id,closed_by_name,done_message_id,created_at',
-    order: supabase.order(query.orderBy || 'created_at', false),
-    limit: limitQuery(query)
+    order: supabase.order(query.orderBy || 'created_at', false)
   };
   if (query.chat_id) params.chat_id = supabase.eq(query.chat_id);
   if (query.company_id) params.company_id = supabase.eq(query.company_id);
   if (query.status) params.status = `eq.${encodeURIComponent(query.status)}`;
-  return supabase.select('support_requests', params);
+
+  const maxRows = Math.min(parseIntSafe(query.limit, 1000), 5000);
+  const periodContext = query.period ? queryPeriodContext(query) : null;
+  const requests = (await selectPaged('support_requests', params, { maxRows }))
+    .filter(request => !periodContext || inCurrentPeriod(request.created_at, periodContext.period, periodContext.keys));
+
+  const chatIds = [...new Set(requests.map(request => request.chat_id).filter(value => value !== undefined && value !== null))];
+  const companyIds = [...new Set(requests.map(request => request.company_id).filter(Boolean))];
+  const employeeIds = [...new Set(requests.map(request => request.closed_by_employee_id).filter(Boolean))];
+
+  const [chats, requestCompanies, employees] = await Promise.all([
+    chatIds.length ? selectPagedByChunks('tg_chats', {
+      select: 'chat_id,title,username,source_type,company_id,last_message_at'
+    }, 'chat_id', chatIds, { maxRows: 10000 }) : Promise.resolve([]),
+    companyIds.length ? selectPagedByChunks('companies', {
+      select: 'id,name,brand,is_active'
+    }, 'id', companyIds, { maxRows: 10000 }) : Promise.resolve([]),
+    employeeIds.length ? selectPagedByChunks('employees', {
+      select: 'id,tg_user_id,full_name,username,role,is_active'
+    }, 'id', employeeIds, { maxRows: 10000 }) : Promise.resolve([])
+  ]);
+
+  const chatMap = new Map(chats.map(chat => [telegramIdKey(chat.chat_id), chat]));
+  const chatCompanyIds = [...new Set(chats.map(chat => chat.company_id).filter(Boolean))];
+  const missingCompanyIds = chatCompanyIds.filter(id => !companyIds.includes(id));
+  const chatCompanies = missingCompanyIds.length
+    ? await selectPagedByChunks('companies', {
+      select: 'id,name,brand,is_active'
+    }, 'id', missingCompanyIds, { maxRows: 10000 })
+    : [];
+  const companyMap = new Map([...requestCompanies, ...chatCompanies].map(company => [company.id, company]).filter(([id]) => id));
+  const employeeMap = new Map(employees.map(employee => [employee.id, employee]).filter(([id]) => id));
+
+  return requests.map(request => {
+    const chat = chatMap.get(telegramIdKey(request.chat_id)) || {};
+    const companyId = request.company_id || chat.company_id || null;
+    const company = companyId ? companyMap.get(companyId) : null;
+    const employee = request.closed_by_employee_id ? employeeMap.get(request.closed_by_employee_id) : null;
+    return {
+      ...request,
+      company_id: companyId,
+      company_name: company?.name || '',
+      company_brand: company?.brand || '',
+      chat_title: displayChatTitle(chat || { chat_id: request.chat_id }),
+      support_name: employee?.full_name || request.closed_by_name || '',
+      support_username: employee?.username || '',
+      response_minutes: minutesBetween(request.created_at, request.closed_at)
+    };
+  });
 }
 
 async function getChatDetail(query) {

@@ -2165,6 +2165,108 @@ body {
   line-height: 1;
 }
 
+.ticket-list-modal {
+  display: grid;
+  gap: 18px;
+}
+
+.modal-subtitle {
+  margin: -6px 0 4px;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+.ticket-filter-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.ticket-filter-tabs button {
+  min-height: 58px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 900;
+  transition: border-color .16s ease, background .16s ease, box-shadow .16s ease;
+}
+
+.ticket-filter-tabs button:hover,
+.ticket-filter-tabs button:focus-visible,
+.ticket-filter-tabs button.active {
+  border-color: #3b82f6;
+  background: color-mix(in srgb, #3b82f6 8%, var(--surface));
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, .12);
+  outline: none;
+}
+
+.ticket-filter-tabs span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  height: 28px;
+  margin-left: 8px;
+  border-radius: var(--radius);
+  background: #eaf2ff;
+  color: #2563eb;
+}
+
+.ticket-filter-tabs span.danger {
+  color: #dc2626;
+  background: #fee2e2;
+}
+
+.ticket-filter-tabs span.success {
+  color: #047857;
+  background: #dcfce7;
+}
+
+.ticket-list-toolbar {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) minmax(190px, 280px);
+  gap: 12px;
+  align-items: center;
+}
+
+.ticket-list-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.ticket-list-meta div {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ticket-list-meta b {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 4px 12px;
+  border-radius: var(--radius);
+  background: #eef4ff;
+  color: #2563eb;
+}
+
+.ticket-list-meta b.danger {
+  color: #dc2626;
+  background: #fee2e2;
+}
+
+.ticket-list-meta b.success {
+  color: #047857;
+  background: #dcfce7;
+}
+
 .metric {
   padding: 24px;
   min-height: 132px;
@@ -4465,6 +4567,16 @@ tbody tr.selected-row .cell-action {
   .log-channel-item,
   .log-channel-add {
     grid-template-columns: 1fr;
+  }
+
+  .ticket-filter-tabs,
+  .ticket-list-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .ticket-list-meta {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .employee-support-head {
