@@ -895,6 +895,32 @@ function buildChatDetail({ chat, requests, events, messages, employeesById, empl
       };
     });
 
+  const eventConversation = events
+    .filter(event => ['note', 'closed', 'done_without_request'].includes(event.event_type))
+    .map(event => {
+      const request = event.request_id ? requestById.get(event.request_id) : null;
+      const employee = event.employee_id ? employeesById.get(event.employee_id) : null;
+      const outbound = event.event_type === 'closed' || !!employee;
+      return {
+        id: `event:${event.id || event.request_id || event.tg_message_id || event.created_at || ''}`,
+        message_id: event.tg_message_id || null,
+        direction: outbound ? 'outbound' : 'inbound',
+        actor_type: outbound ? 'employee' : 'customer',
+        actor_name: (employee && employee.full_name) || event.actor_name || (outbound ? 'Xodim' : 'Mijoz'),
+        actor_username: (employee && employee.username) || '',
+        actor_tg_user_id: event.actor_tg_id || null,
+        employee_id: (employee && employee.id) || event.employee_id || null,
+        text: event.text || '',
+        media: extractMessageMedia(event.raw),
+        request_id: request ? request.id : null,
+        request_text: request ? request.initial_text || '' : '',
+        status: request ? request.status : null,
+        classification: event.event_type || '',
+        created_at: event.created_at || null
+      };
+    })
+    .filter(item => item.text || item.media || item.created_at);
+
   const replyTimeline = messages
     .filter(message => {
       const employee = message.employee_id ? employeesById.get(message.employee_id) : employeesByTgId.get(telegramIdKey(message.from_tg_user_id));
@@ -903,7 +929,7 @@ function buildChatDetail({ chat, requests, events, messages, employeesById, empl
       if (alreadyRepresentedByEvent && rawSource !== 'admin_send') return false;
       return rawSource === 'admin_send'
         || !!employee
-        || ['employee_message', 'admin_reply'].includes(message.classification)
+        || ['employee_message', 'admin_reply', 'ai_reply'].includes(message.classification)
         || closeMessageIds.has(telegramIdKey(message.tg_message_id));
     })
     .map(message => {
@@ -927,8 +953,9 @@ function buildChatDetail({ chat, requests, events, messages, employeesById, empl
   const timeline = [...requestTimeline, ...eventTimeline, ...replyTimeline]
     .filter(item => item.created_at || item.text)
     .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
-  const conversation = messages
-    .map(message => {
+  const conversationRows = [
+    ...eventConversation,
+    ...messages.map(message => {
       const employee = message.employee_id ? employeesById.get(message.employee_id) : employeesByTgId.get(telegramIdKey(message.from_tg_user_id));
       const rawSource = message.raw && message.raw.source;
       const relatedRequest = requestByInitialMessageId.get(telegramIdKey(message.tg_message_id))
@@ -954,7 +981,16 @@ function buildChatDetail({ chat, requests, events, messages, employeesById, empl
         created_at: message.created_at
       };
     })
+  ];
+  const seenConversation = new Set();
+  const conversation = conversationRows
     .filter(message => message.text || message.media || message.created_at)
+    .filter(message => {
+      const key = `${message.direction}:${telegramIdKey(message.message_id) || message.id || ''}:${message.request_id || ''}:${message.text || ''}:${message.created_at || ''}`;
+      if (seenConversation.has(key)) return false;
+      seenConversation.add(key);
+      return true;
+    })
     .sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')));
 
   return {
@@ -1174,7 +1210,7 @@ function queryPeriodContext(query = {}) {
 }
 
 async function getCompanyGroupActivity(query = {}) {
-  const { period, label, keys } = queryPeriodContext(query);
+  const { period, label } = queryPeriodContext(query);
   const companyIdFilter = String(query.company_id || query.id || '').trim();
   const companyNameFilter = String(query.company_name || query.name || '').trim().toLowerCase();
 
@@ -1209,7 +1245,6 @@ async function getCompanyGroupActivity(query = {}) {
     ])
     : [[], []];
 
-  const periodMessages = messages.filter(message => inCurrentPeriod(message.created_at, period, keys));
   const requestIds = requests.map(request => request.id).filter(Boolean);
   const events = requestIds.length
     ? await selectPagedByChunks('request_events', {
@@ -1225,26 +1260,15 @@ async function getCompanyGroupActivity(query = {}) {
     list.push(event);
     eventsByRequestId.set(event.request_id, list);
   });
-  const periodRequestIds = new Set(requests
-    .filter(request => inCurrentPeriod(request.created_at, period, keys) || inCurrentPeriod(request.closed_at, period, keys))
-    .map(request => request.id)
-    .filter(Boolean));
-  events
-    .filter(event => inCurrentPeriod(event.created_at, period, keys))
-    .forEach(event => {
-      if (event.request_id) periodRequestIds.add(event.request_id);
-    });
-  const periodRequests = requests.filter(request => periodRequestIds.has(request.id));
-
   const chatMap = new Map(linkedChats.map(chat => [telegramIdKey(chat.chat_id), chat]));
   const requestsByChat = new Map();
-  periodRequests.forEach(request => {
+  requests.forEach(request => {
     const key = telegramIdKey(request.chat_id);
     if (!requestsByChat.has(key)) requestsByChat.set(key, []);
     requestsByChat.get(key).push(request);
   });
   const messagesByChat = new Map();
-  periodMessages.forEach(message => {
+  messages.forEach(message => {
     const key = telegramIdKey(message.chat_id);
     if (!messagesByChat.has(key)) messagesByChat.set(key, []);
     messagesByChat.get(key).push(message);
@@ -1412,9 +1436,19 @@ async function getCompanyGroupActivity(query = {}) {
     .sort((a, b) => b.total_requests - a.total_requests || b.total_messages - a.total_messages || a.name.localeCompare(b.name));
 
   if (companyIdFilter || companyNameFilter) {
+    const normalize = value => String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
     rows = rows.filter(company => {
       const idMatches = companyIdFilter && String(company.company_id) === companyIdFilter;
-      const nameMatches = companyNameFilter && String(company.name || '').toLowerCase() === companyNameFilter;
+      const companyName = normalize(company.name);
+      const companyBrand = normalize(company.brand);
+      const filter = normalize(companyNameFilter);
+      const nameMatches = filter && (
+        companyName === filter
+        || companyBrand === filter
+        || companyName.includes(filter)
+        || filter.includes(companyName)
+        || companyBrand.includes(filter)
+      );
       return idMatches || nameMatches;
     });
   }

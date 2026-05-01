@@ -1326,8 +1326,20 @@ tbody tr:hover {
 }
 
 .chat-ticket {
-  color: #ffd99b;
-  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  padding: 2px 8px;
+  border: 1px solid rgba(227, 6, 19, .25);
+  border-radius: var(--radius);
+  color: #b91c1c;
+  background: #fee2e2;
+  font-weight: 900;
+}
+
+.chat-bubble.ticket-message {
+  border-color: rgba(227, 6, 19, .28);
+  background: #fff1f2;
 }
 
 .timeline-list {
@@ -1467,7 +1479,7 @@ tbody tr:hover {
   position: absolute;
   left: 0;
   bottom: calc(100% + 8px);
-  z-index: 80;
+  z-index: 200;
   width: min(560px, 76vw);
   max-height: 220px;
   overflow: auto;
@@ -2723,7 +2735,7 @@ body {
   position: absolute;
   left: 50%;
   bottom: calc(100% + 10px);
-  z-index: 40;
+  z-index: 200;
   width: min(280px, 74vw);
   padding: 10px 12px;
   border: 1px solid var(--line-strong);
@@ -2761,7 +2773,7 @@ body {
   position: absolute;
   right: 0;
   bottom: calc(100% + 10px);
-  z-index: 40;
+  z-index: 200;
   width: min(320px, 76vw);
   padding: 10px 12px;
   border: 1px solid var(--line-strong);
@@ -3083,7 +3095,7 @@ td,
   position: absolute;
   left: 50%;
   bottom: calc(100% + 10px);
-  z-index: 4;
+  z-index: 200;
   min-width: max-content;
   max-width: 220px;
   padding: 8px 10px;

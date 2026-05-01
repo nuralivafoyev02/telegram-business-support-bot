@@ -1283,7 +1283,7 @@
                 class="telegram-thread metric-chat-thread">
                 <article v-for="message in metricChatConversation" :key="chatBubbleKey(message)" class="chat-bubble-row"
                   :class="{ outbound: message.direction === 'outbound' }">
-                  <div class="chat-bubble">
+                  <div class="chat-bubble" :class="{ 'ticket-message': !!message.request_text }">
                     <div class="chat-bubble-author">{{ message.actor_name || (message.direction === 'outbound' ? 'Xodim'
                       : 'Mijoz') }}</div>
                     <div v-if="message.media" class="chat-media">
@@ -1434,7 +1434,7 @@
                   class="telegram-thread employee-profile-thread">
                   <article v-for="message in companyGroupConversation" :key="chatBubbleKey(message)"
                     class="chat-bubble-row" :class="{ outbound: message.direction === 'outbound' }">
-                    <div class="chat-bubble">
+                    <div class="chat-bubble" :class="{ 'ticket-message': !!message.request_text }">
                       <div class="chat-bubble-author">{{ message.actor_name || (message.direction === 'outbound' ?
                         'Xodim' : 'Mijoz') }}</div>
                       <div v-if="message.media" class="chat-media">
@@ -1643,7 +1643,7 @@
                   class="telegram-thread employee-profile-thread">
                   <article v-for="message in employeeProfileConversation" :key="chatBubbleKey(message)"
                     class="chat-bubble-row" :class="{ outbound: message.direction === 'outbound' }">
-                    <div class="chat-bubble">
+                    <div class="chat-bubble" :class="{ 'ticket-message': !!message.request_text }">
                       <div class="chat-bubble-author">{{ message.actor_name || (message.direction === 'outbound' ?
                         employeeProfile.employee?.full_name || 'Xodim' : 'Mijoz') }}</div>
                       <div v-if="message.media" class="chat-media">
@@ -1812,7 +1812,7 @@
               <div v-if="chatConversation.length" ref="chatDetailThreadRef" class="telegram-thread">
                 <article v-for="message in chatConversation" :key="chatBubbleKey(message)" class="chat-bubble-row"
                   :class="{ outbound: message.direction === 'outbound' }">
-                  <div class="chat-bubble">
+                  <div class="chat-bubble" :class="{ 'ticket-message': !!message.request_text }">
                     <div class="chat-bubble-author">{{ message.actor_name || (message.direction === 'outbound' ? 'Xodim'
                       :
                       'Mijoz') }}</div>
@@ -2215,7 +2215,10 @@ const companyTicketRows = computed(() => {
     ...companyApiTicketRows()
   ]);
   return rows
-    .filter(row => row.total_requests > 0)
+    .filter(row => Number(row.total_requests || 0) > 0
+      || Number(row.message_count || 0) > 0
+      || Number(row.ticket_like_messages || 0) > 0
+      || !!row.company_id)
     .sort((a, b) => b.total_requests - a.total_requests || b.closed_requests - a.closed_requests || a.name.localeCompare(b.name))
     .slice(0, 30);
 });
