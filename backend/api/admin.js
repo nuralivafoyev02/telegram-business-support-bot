@@ -523,7 +523,7 @@ function buildCompanyTicketPerformance({ requests, chats = [], companies, messag
 
   return [...totals.values()]
     .map(row => {
-      const fallbackTotal = row.ticket_like_messages || row.message_count;
+      const fallbackTotal = row.ticket_like_messages;
       const totalRequests = row.total_requests || fallbackTotal;
       const openRequests = row.total_requests ? row.open_requests : fallbackTotal;
       return {
