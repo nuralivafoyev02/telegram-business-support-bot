@@ -1106,6 +1106,65 @@ async function testDashboardCompanyTicketsUseRegisteredGroupCompany() {
   }
 }
 
+async function testDashboardCompanyTicketsIncludeLinkedGroupMessagesWithoutRequests() {
+  const originalSelect = supabase.select;
+  const originalEmployeeStats = stats.selectEmployeeStatistics;
+  const originalChatStats = stats.selectChatStatistics;
+  const originalTodaySummary = stats.selectTodaySummary;
+  const chatId = -100810;
+  const companyId = 'company-message-only';
+  const linkedChat = {
+    chat_id: chatId,
+    title: 'Message Only group',
+    source_type: 'group',
+    type: 'supergroup',
+    company_id: companyId,
+    is_active: true,
+    last_message_at: '2026-04-30T12:00:00.000Z'
+  };
+
+  supabase.select = async (table) => {
+    if (table === 'support_requests') return [];
+    if (table === 'tg_chats') return [linkedChat];
+    if (table === 'companies') return [{ id: companyId, name: 'Message Only LLC', is_active: true }];
+    if (table === 'employees') return [];
+    if (table === 'messages') return [{
+      id: 'm-message-only',
+      tg_message_id: 501,
+      chat_id: chatId,
+      from_tg_user_id: 700,
+      from_name: 'Mijoz',
+      employee_id: null,
+      source_type: 'group',
+      classification: 'request',
+      text: 'Guruhda ticketga o‘xshash xabar',
+      created_at: '2026-04-30T12:00:00.000Z'
+    }];
+    return [];
+  };
+  stats.selectEmployeeStatistics = async () => [];
+  stats.selectChatStatistics = async () => [linkedChat];
+  stats.selectTodaySummary = async () => [{ total_requests: 0, open_requests: 0, closed_requests: 0 }];
+
+  try {
+    const result = await callAdmin('dashboard', { query: { period: 'all' } });
+    assert.strictEqual(result.status, 200);
+    const rows = result.payload.data.analytics.companyTickets.all;
+    assert.strictEqual(rows.length, 1);
+    assert.strictEqual(rows[0].company_id, companyId);
+    assert.strictEqual(rows[0].name, 'Message Only LLC');
+    assert.strictEqual(rows[0].message_count, 1);
+    assert.strictEqual(rows[0].ticket_like_messages, 1);
+    assert.strictEqual(rows[0].total_requests, 1);
+    assert.strictEqual(rows[0].open_requests, 1);
+  } finally {
+    supabase.select = originalSelect;
+    stats.selectEmployeeStatistics = originalEmployeeStats;
+    stats.selectChatStatistics = originalChatStats;
+    stats.selectTodaySummary = originalTodaySummary;
+  }
+}
+
 async function testDashboardEmployeePerformanceCountsOpenAndSlaPerEmployee() {
   const originalSelect = supabase.select;
   const originalEmployeeStats = stats.selectEmployeeStatistics;
@@ -1626,12 +1685,13 @@ async function testReplyRequestFallsBackWhenBusinessPeerInvalid() {
 async function testEmployeesIncludeDailyWorkStats() {
   const originalSelect = supabase.select;
   const today = new Date().toISOString();
+  const closedAt = new Date(Date.parse(today) + 10 * 60000).toISOString();
 
   supabase.select = async (table) => {
     if (table === 'employees') return [{ id: 'emp-1', tg_user_id: 777, full_name: 'Ali', username: 'ali', is_active: true }];
     if (table === 'support_requests') {
       return [
-        { id: 'r1', closed_by_employee_id: 'emp-1', status: 'closed', chat_id: -1001, customer_name: 'Mijoz A', initial_text: 'A', created_at: today, closed_at: today },
+        { id: 'r1', closed_by_employee_id: 'emp-1', status: 'closed', chat_id: -1001, customer_name: 'Mijoz A', initial_text: 'A', created_at: today, closed_at: closedAt },
         { id: 'r2', closed_by_employee_id: null, status: 'open', chat_id: -1001, customer_name: 'Mijoz B', initial_text: 'B', created_at: today, closed_at: null }
       ];
     }
@@ -1644,6 +1704,7 @@ async function testEmployeesIncludeDailyWorkStats() {
     const result = await callAdmin('employees');
     assert.strictEqual(result.status, 200);
     const employee = result.payload.data[0];
+    assert.strictEqual(employee.avg_close_minutes, 10);
     assert.strictEqual(employee.today_received_requests, 2);
     assert.strictEqual(employee.today_answered_requests, 1);
     assert.strictEqual(employee.today_open_requests, 1);
@@ -1661,6 +1722,7 @@ async function testEmployeesIncludeDailyWorkStats() {
 async function testEmployeeActivityReturnsGroupsAndCustomers() {
   const originalSelect = supabase.select;
   const today = new Date().toISOString();
+  const closedAt = new Date(Date.parse(today) + 7 * 60000).toISOString();
   const employeeMessages = Array.from({ length: 35 }, (_, index) => ({
     id: `m${index + 1}`,
     tg_message_id: 21 + index,
@@ -1727,7 +1789,7 @@ async function testEmployeeActivityReturnsGroupsAndCustomers() {
           closed_by_name: 'Ali',
           done_message_id: 21,
           created_at: today,
-          closed_at: today
+          closed_at: closedAt
         }
       ];
     }
@@ -1760,6 +1822,7 @@ async function testEmployeeActivityReturnsGroupsAndCustomers() {
     assert.strictEqual(result.status, 200);
     assert.strictEqual(result.payload.data.summary.handled_chats, 1);
     assert.strictEqual(result.payload.data.summary.closed_requests, 1);
+    assert.strictEqual(result.payload.data.summary.avg_close_minutes, 7);
     assert.strictEqual(result.payload.data.groups[0].title, 'Support guruhi');
     assert.strictEqual(result.payload.data.groups[0].closed_requests[0].customer_name, 'Mijoz A');
     assert.strictEqual(result.payload.data.groups[0].messages.length, 35);
@@ -2028,6 +2091,31 @@ async function testAssignGroupToExternalCompanyCreatesLocalCompany() {
   }
 }
 
+async function testAssignGroupCompanyCanBeCleared() {
+  const originalPatch = supabase.patch;
+  const patched = [];
+
+  supabase.patch = async (table, query, values) => {
+    patched.push({ table, query, values });
+    return [{ chat_id: -100900, ...values }];
+  };
+
+  try {
+    const result = await callAdmin('assignChatCompany', {
+      method: 'POST',
+      body: { chat_id: -100900, company_id: '', clear: true }
+    });
+
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(patched.length, 1);
+    assert.strictEqual(patched[0].table, 'tg_chats');
+    assert.strictEqual(patched[0].values.company_id, null);
+    assert.strictEqual(result.payload.data.company_id, null);
+  } finally {
+    supabase.patch = originalPatch;
+  }
+}
+
 async function run() {
   await testAiModeEnableSendsMainGroupNotice();
   await testAiModeDisableSendsMainGroupNotice();
@@ -2045,6 +2133,7 @@ async function run() {
   await testChatDetailIncludesTicketSolutionAndTimeline();
   await testCompanyGroupActivityReturnsLinkedGroupMessagesWithTickets();
   await testDashboardCompanyTicketsUseRegisteredGroupCompany();
+  await testDashboardCompanyTicketsIncludeLinkedGroupMessagesWithoutRequests();
   await testDashboardEmployeePerformanceCountsOpenAndSlaPerEmployee();
   await testRequestsListEnrichesCompanyFromRegisteredGroup();
   await testRequestsListShowsResponsibleEmployeeFromTicketMessages();
@@ -2060,6 +2149,7 @@ async function run() {
   await testLogNotificationsCanSendSelectedLevels();
   await testCompanyInfoProxyNormalizesExternalRows();
   await testAssignGroupToExternalCompanyCreatesLocalCompany();
+  await testAssignGroupCompanyCanBeCleared();
   console.log('Admin tests passed');
 }
 

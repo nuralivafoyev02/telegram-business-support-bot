@@ -1081,7 +1081,7 @@
 
     <Transition name="modal-fade">
       <Modal v-if="modal === 'assignCompany'" title="Guruhni kompaniyaga biriktirish" @close="closeModal">
-        <form class="form" @submit.prevent="saveGroupCompanyAssignment">
+        <form class="form" @submit.prevent="saveGroupCompanyAssignment(false)">
           <label class="label">Guruh
             <input class="input" :value="selectedTarget?.title || selectedTarget?.chat_id || '—'" disabled />
           </label>
@@ -1101,9 +1101,15 @@
             <span>Hozirgi biriktirish</span>
             <b>{{ selectedTarget?.company_name || 'Biriktirilmagan' }}</b>
           </div>
-          <button class="btn primary" :disabled="loadingAction === 'assignCompany'">
-            {{ loadingAction === 'assignCompany' ? 'Biriktirilmoqda...' : 'Biriktirishni saqlash' }}
-          </button>
+          <div class="actions">
+            <button class="btn primary" :disabled="loadingAction === 'assignCompany'">
+              {{ loadingAction === 'assignCompany' ? 'Biriktirilmoqda...' : 'Biriktirishni saqlash' }}
+            </button>
+            <button v-if="selectedTarget?.company_name || selectedTarget?.company_id" class="btn danger" type="button"
+              :disabled="loadingAction === 'assignCompany'" @click="saveGroupCompanyAssignment(true)">
+              Kompaniyadan ajratish
+            </button>
+          </div>
         </form>
       </Modal>
     </Transition>
@@ -2095,13 +2101,14 @@ const ticketTrendMax = computed(() => Math.max(1, ...ticketTrendRows.value.map(r
   Number(row.open_requests || 0)
 ))));
 const companyTicketRows = computed(() => {
-  const companyRows = companyApiTicketRows();
-  const rows = companyRows.length ? companyRows : (analytics.value.companyTickets?.[selectedStatsPeriod.value] || []);
+  const rows = mergeCompanyTicketRows([
+    ...(analytics.value.companyTickets?.[selectedStatsPeriod.value] || []),
+    ...companyApiTicketRows()
+  ]);
   return rows
-    .map(normalizeCompanyTicketRow)
     .filter(row => row.total_requests > 0)
     .sort((a, b) => b.total_requests - a.total_requests || b.closed_requests - a.closed_requests || a.name.localeCompare(b.name))
-    .slice(0, 8);
+    .slice(0, 30);
 });
 const companyTicketMax = computed(() => Math.max(1, ...companyTicketRows.value.map(row => Number(row.total_requests || 0))));
 const supportSummaryCards = computed(() => [
@@ -2229,6 +2236,7 @@ function mergeSupportCandidate(map, row = {}, source = 'identity') {
   const periodHandled = source === 'period' ? mergeMetricOnce(current, source, row, 'handled_chats') : 0;
   const statsHandled = source === 'stats' ? mergeMetricOnce(current, source, row, 'handled_chats') : 0;
   mergeWeightedAverage(current, source, row);
+  const avgCloseMinutes = Number(row.avg_close_minutes || current.avg_close_minutes || 0);
   map.set(key, {
     ...current,
     ...row,
@@ -2245,7 +2253,8 @@ function mergeSupportCandidate(map, row = {}, source = 'identity') {
     stats_open_requests: Number(current.stats_open_requests || 0) + statsOpen,
     stats_today_open_requests: Number(current.stats_today_open_requests || 0) + statsTodayOpen,
     period_handled_chats: Number(current.period_handled_chats || 0) + periodHandled,
-    stats_handled_chats: Number(current.stats_handled_chats || 0) + statsHandled
+    stats_handled_chats: Number(current.stats_handled_chats || 0) + statsHandled,
+    avg_close_minutes: avgCloseMinutes
   });
 }
 
@@ -2833,16 +2842,70 @@ function companyApiTicketRows() {
 
 function normalizeCompanyTicketRow(row = {}) {
   const closed = firstNumericValue(row, ['closed_requests', 'closed_ticket_count', 'closed_tickets', 'resolved_requests', 'resolved_ticket_count']);
-  const open = firstNumericValue(row, ['open_requests', 'open_ticket_count', 'open_tickets', 'unresolved_requests', 'unresolved_ticket_count']);
-  const total = firstNumericValue(row, ['total_requests', 'requests_count', 'ticket_count', 'tickets_count', 'support_ticket_count']) || closed + open;
+  const explicitOpen = firstNumericValue(row, ['open_requests', 'open_ticket_count', 'open_tickets', 'unresolved_requests', 'unresolved_ticket_count']);
+  const messageCount = firstNumericValue(row, ['message_count', 'total_messages', 'messages_count']);
+  const ticketLikeMessages = firstNumericValue(row, ['ticket_like_messages', 'request_messages', 'classified_requests']);
+  const open = explicitOpen || (!closed ? ticketLikeMessages || messageCount : 0);
+  const total = firstNumericValue(row, ['total_requests', 'requests_count', 'ticket_count', 'tickets_count', 'support_ticket_count'])
+    || closed + open
+    || ticketLikeMessages
+    || messageCount;
   return {
     company_id: row.company_id || row.id || row.external_id || row.uyqur_company_id || '',
     name: row.name || row.company_name || row.legal_name || 'Kompaniya',
     total_requests: total,
     closed_requests: closed,
     open_requests: open,
+    message_count: messageCount,
+    ticket_like_messages: ticketLikeMessages,
     close_rate: Number(row.close_rate || row.sla || 0)
   };
+}
+
+function companyTicketKey(row = {}) {
+  const name = String(row.name || row.company_name || row.legal_name || '').trim().toLowerCase();
+  if (name && name !== 'kompaniya') return `name:${name}`;
+  const id = String(row.company_id || row.id || row.external_id || row.uyqur_company_id || '').trim();
+  return id ? `id:${id}` : '';
+}
+
+function mergeCompanyTicketRows(rows = []) {
+  const map = new Map();
+  rows.map(normalizeCompanyTicketRow).forEach(row => {
+    const key = companyTicketKey(row);
+    if (!key) return;
+    const current = map.get(key);
+    if (!current) {
+      map.set(key, row);
+      return;
+    }
+
+    const closed = Math.max(Number(current.closed_requests || 0), Number(row.closed_requests || 0));
+    const open = Math.max(Number(current.open_requests || 0), Number(row.open_requests || 0));
+    const messageCount = Math.max(Number(current.message_count || 0), Number(row.message_count || 0));
+    const ticketLikeMessages = Math.max(Number(current.ticket_like_messages || 0), Number(row.ticket_like_messages || 0));
+    const total = Math.max(
+      Number(current.total_requests || 0),
+      Number(row.total_requests || 0),
+      closed + open,
+      ticketLikeMessages,
+      messageCount
+    );
+
+    map.set(key, {
+      ...current,
+      ...row,
+      company_id: current.company_id || row.company_id || '',
+      name: current.name || row.name || 'Kompaniya',
+      total_requests: total,
+      closed_requests: closed,
+      open_requests: open,
+      message_count: messageCount,
+      ticket_like_messages: ticketLikeMessages,
+      close_rate: Number(row.close_rate || current.close_rate || 0)
+    });
+  });
+  return [...map.values()];
 }
 
 function companyActivitySessionCount(row = {}) {
@@ -3121,8 +3184,8 @@ const topSupportCards = computed(() => supportPerformanceRows.value.map((row, in
   const companies = visibleCompanyInfoRows.value.filter(company => companyMatchesEmployee(company, employee)).map(enrichCompanyUsage);
   const companySummary = companyPortfolioSummary(companies);
   return {
-    ...row,
     ...employee,
+    ...row,
     rank: index + 1,
     assigned_companies: companies,
     company_summary: companySummary,
@@ -4325,7 +4388,7 @@ async function openEmployeeCompanies(row = {}) {
         closed_requests: Number(summary.closed_requests ?? row.closed_requests ?? 0),
         open_requests: Number(summary.open_requests ?? row.open_requests ?? 0),
         company_total: companies.length || Number(row.company_total || row.assigned_company_count || 0),
-        avg_close_minutes: Number(row.avg_close_minutes || 0),
+        avg_close_minutes: Number(summary.avg_close_minutes ?? row.avg_close_minutes ?? 0),
         close_rate: Number(row.close_rate || row.sla || 0),
         sla: Number(row.sla || row.close_rate || 0),
         handled_chats: Number(summary.handled_chats || row.handled_chats || 0),
@@ -4359,9 +4422,9 @@ function openAssignCompany(row = {}) {
   modal.value = 'assignCompany';
 }
 
-async function saveGroupCompanyAssignment() {
+async function saveGroupCompanyAssignment(clearOnly = false) {
   if (!selectedTarget.value?.chat_id) return showToast('Guruh tanlanmagan');
-  const company = companyAssignForm.companyKey
+  const company = !clearOnly && companyAssignForm.companyKey
     ? companyInfoRows.value.find(row => companyAssignKey(row) === companyAssignForm.companyKey)
     : null;
   startLoading('assignCompany');

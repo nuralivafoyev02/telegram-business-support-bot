@@ -473,40 +473,69 @@ function buildTicketAnswerTrend(requests, periodKey, keys) {
     }));
 }
 
-function buildCompanyTicketPerformance({ requests, chats = [], companies, periodKey, keys }) {
+function buildCompanyTicketPerformance({ requests, chats = [], companies, messages = [], periodKey, keys }) {
   const companyMap = new Map(companies.map(company => [company.id, company]).filter(([id]) => id));
-  const chatCompanyMap = new Map(chats
+  const linkedGroupChats = chats.filter(chat => chat.company_id && (chat.source_type === 'group' || ['group', 'supergroup'].includes(chat.type)));
+  const chatCompanyMap = new Map(linkedGroupChats
     .map(chat => [telegramIdKey(chat.chat_id), chat.company_id])
     .filter(([, companyId]) => companyId));
   const totals = new Map();
+
+  function ensureCompanyTotal(companyId) {
+    if (!companyId) return null;
+    const company = companyMap.get(companyId) || null;
+    const key = company?.id || companyId;
+    const current = totals.get(key) || {
+      company_id: company?.id || companyId,
+      name: company?.name || 'Kompaniya',
+      total_requests: 0,
+      closed_requests: 0,
+      open_requests: 0,
+      message_count: 0,
+      ticket_like_messages: 0
+    };
+    totals.set(key, current);
+    return current;
+  }
 
   requests
     .filter(request => request.created_at && inCurrentPeriod(request.created_at, periodKey, keys))
     .forEach(request => {
       const companyId = request.company_id || chatCompanyMap.get(telegramIdKey(request.chat_id));
-      if (!companyId) return;
-      const company = companyMap.get(companyId) || null;
-      const key = company?.id || companyId;
-      const current = totals.get(key) || {
-        company_id: company?.id || companyId,
-        name: company?.name || 'Kompaniya',
-        total_requests: 0,
-        closed_requests: 0,
-        open_requests: 0
-      };
+      const current = ensureCompanyTotal(companyId);
+      if (!current) return;
       current.total_requests += 1;
       if (request.status === 'closed') current.closed_requests += 1;
       if (request.status === 'open') current.open_requests += 1;
-      totals.set(key, current);
+    });
+
+  messages
+    .filter(message => message.created_at && inCurrentPeriod(message.created_at, periodKey, keys))
+    .forEach(message => {
+      const companyId = chatCompanyMap.get(telegramIdKey(message.chat_id));
+      const current = ensureCompanyTotal(companyId);
+      if (!current) return;
+      current.message_count += 1;
+      if (['request', 'ticket'].includes(String(message.classification || '').toLowerCase())) {
+        current.ticket_like_messages += 1;
+      }
     });
 
   return [...totals.values()]
-    .map(row => ({
-      ...row,
-      close_rate: percent(row.closed_requests, row.total_requests)
-    }))
-    .sort((a, b) => b.total_requests - a.total_requests || b.closed_requests - a.closed_requests || a.name.localeCompare(b.name))
-    .slice(0, 8);
+    .map(row => {
+      const fallbackTotal = row.ticket_like_messages || row.message_count;
+      const totalRequests = row.total_requests || fallbackTotal;
+      const openRequests = row.total_requests ? row.open_requests : fallbackTotal;
+      return {
+        ...row,
+        total_requests: totalRequests,
+        open_requests: openRequests,
+        close_rate: percent(row.closed_requests, totalRequests)
+      };
+    })
+    .filter(row => Number(row.total_requests || 0) > 0)
+    .sort((a, b) => b.total_requests - a.total_requests || b.closed_requests - a.closed_requests || b.message_count - a.message_count || a.name.localeCompare(b.name))
+    .slice(0, 30);
 }
 
 function buildDashboardAnalytics({ requests, chats, employees, companies, messages = [], customPeriod = null }) {
@@ -530,7 +559,7 @@ function buildDashboardAnalytics({ requests, chats, employees, companies, messag
     groupPerformance: Object.fromEntries(periods.map(([key]) => [key, buildGroupPerformance({ requests, chats, periodKey: key, keys })])),
     responseTimeTrend: Object.fromEntries(periods.map(([key]) => [key, buildResponseTimeTrend(requests, key, keys)])),
     ticketAnswerTrend: Object.fromEntries(periods.map(([key]) => [key, buildTicketAnswerTrend(requests, key, keys)])),
-    companyTickets: Object.fromEntries(periods.map(([key]) => [key, buildCompanyTicketPerformance({ requests, chats, companies, periodKey: key, keys })])),
+    companyTickets: Object.fromEntries(periods.map(([key]) => [key, buildCompanyTicketPerformance({ requests, chats, companies, messages, periodKey: key, keys })])),
     custom_period: customPeriod,
     generated_at: new Date().toISOString()
   };
@@ -544,11 +573,16 @@ async function getDashboardAnalytics(query = {}) {
       order: supabase.order('created_at', false),
       limit: '10000'
     }).catch(() => []),
-    stats.selectChatStatistics({ select: '*', is_active: 'eq.true', limit: '1000' }).catch(() => []),
-    supabase.select('employees', { select: 'id,tg_user_id,full_name,username,role,is_active', limit: '1000' }).catch(() => []),
-    supabase.select('companies', { select: 'id,name,is_active', limit: '1000' }).catch(() => [])
+    stats.selectChatStatistics({ select: '*', is_active: 'eq.true', limit: '5000' }).catch(() => []),
+    supabase.select('employees', { select: 'id,tg_user_id,full_name,username,role,is_active', limit: '5000' }).catch(() => []),
+    supabase.select('companies', { select: 'id,name,is_active', limit: '5000' }).catch(() => [])
   ]);
-  const chatIds = [...new Set(requests.map(request => request.chat_id).filter(value => value !== undefined && value !== null))];
+  const chatIds = [...new Set([
+    ...requests.map(request => request.chat_id),
+    ...chats
+      .filter(chat => chat.company_id && (chat.source_type === 'group' || ['group', 'supergroup'].includes(chat.type)))
+      .map(chat => chat.chat_id)
+  ].filter(value => value !== undefined && value !== null))];
   const messages = chatIds.length ? await selectPagedByChunks('messages', {
     select: 'id,tg_message_id,chat_id,from_tg_user_id,from_name,from_username,employee_id,source_type,classification,text,created_at',
     order: supabase.order('created_at', false)
@@ -1415,7 +1449,7 @@ async function listEmployees(query) {
       limit: limitQuery(query)
     }),
     supabase.select('support_requests', {
-      select: 'id,closed_by_employee_id,status,chat_id,customer_name,customer_tg_id,initial_text,closed_at,created_at',
+      select: 'id,closed_by_employee_id,closed_by_tg_id,closed_by_name,status,chat_id,customer_name,customer_tg_id,initial_text,closed_at,created_at',
       limit: '5000'
     }).catch(() => []),
     supabase.select('tg_chats', {
@@ -1459,8 +1493,13 @@ async function listEmployees(query) {
   });
 
   return employees.map(employee => {
-    const related = requests.filter(request => request.closed_by_employee_id === employee.id);
+    const employeeNameKey = String(employee.full_name || '').trim().toLowerCase();
+    const requestClosedByEmployee = request => request.closed_by_employee_id === employee.id
+      || (employee.tg_user_id && telegramIdKey(request.closed_by_tg_id) === telegramIdKey(employee.tg_user_id))
+      || (employeeNameKey && String(request.closed_by_name || '').trim().toLowerCase() === employeeNameKey);
+    const related = requests.filter(requestClosedByEmployee);
     const closed = related.filter(request => request.status === 'closed');
+    const closeMinutes = closed.map(request => minutesBetween(request.created_at, request.closed_at)).filter(value => value !== null);
     const directChat = chats.find(chat => isPrivateLikeChat(chat) && String(chat.chat_id) === String(employee.tg_user_id));
     const latestMessage = messages.find(message => isPrivateLikeChat(message) && String(message.from_tg_user_id) === String(employee.tg_user_id));
     const businessConnectionId = (directChat && directChat.business_connection_id) || (latestMessage && latestMessage.business_connection_id) || '';
@@ -1482,7 +1521,7 @@ async function listEmployees(query) {
     ]);
     const todayRelatedRequests = requests.filter(request => {
       const requestChatId = telegramIdKey(request.chat_id);
-      const closedByEmployee = request.closed_by_employee_id === employee.id;
+      const closedByEmployee = requestClosedByEmployee(request);
       return isToday(request.created_at) && (closedByEmployee || relatedChatIds.has(requestChatId));
     });
     const todayOpenRequests = todayRelatedRequests.filter(request => request.status === 'open');
@@ -1525,6 +1564,7 @@ async function listEmployees(query) {
       ...employee,
       received_requests: related.length,
       closed_requests: closed.length,
+      avg_close_minutes: average(closeMinutes),
       handled_chats: new Set(related.map(request => request.chat_id).filter(Boolean)).size,
       last_closed_at: closed.map(request => request.closed_at).filter(Boolean).sort().at(-1) || null,
       today_received_requests: todayRelatedRequests.length,
@@ -1675,6 +1715,9 @@ async function getEmployeeActivity(query = {}) {
   const visibleClosedRequests = closedRequests.filter(request => !isEmployeePrivateChatId(request.chat_id));
   const visibleMessages = messages.filter(message => !isEmployeePrivateChatId(message.chat_id));
   const visibleOpenRequests = periodOpenRequests.filter(request => !isEmployeePrivateChatId(request.chat_id));
+  const visibleCloseMinutes = visibleClosedRequests
+    .map(request => minutesBetween(request.created_at, request.closed_at))
+    .filter(value => value !== null);
   const visibleChatIdKeys = new Set([
     ...visibleClosedRequests,
     ...visibleOpenRequests,
@@ -1816,6 +1859,7 @@ async function getEmployeeActivity(query = {}) {
       message_count: visibleMessages.length,
       closed_requests: visibleClosedRequests.length,
       open_requests: visibleOpenRequests.length,
+      avg_close_minutes: average(visibleCloseMinutes),
       customer_count: new Set([...visibleClosedRequests, ...visibleOpenRequests].map(request => request.customer_tg_id || request.customer_name).filter(Boolean)).size
     },
     groups,
