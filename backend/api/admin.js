@@ -589,6 +589,30 @@ function resolveRequestResponsibleEmployee(request, messages = [], employeeMaps 
   return latestBefore ? employeeSummary(latestBefore.employee) : null;
 }
 
+function resolveEventEmployee(event = {}, employeeMaps = buildEmployeeMaps([])) {
+  const employee = employeeMaps.byId.get(event.employee_id) || employeeMaps.byTgId.get(telegramIdKey(event.actor_tg_id));
+  return employee ? employeeSummary(employee) : null;
+}
+
+function resolveRequestResponsibleEmployeeFromEvents(request = {}, events = [], employeeMaps = buildEmployeeMaps([])) {
+  const employeeEvents = events
+    .filter(event => event && (event.employee_id || employeeMaps.byTgId.has(telegramIdKey(event.actor_tg_id))))
+    .map(event => ({ event, employee: resolveEventEmployee(event, employeeMaps) }))
+    .filter(item => item.employee);
+
+  const closedEvent = employeeEvents
+    .filter(item => item.event.event_type === 'closed')
+    .sort((a, b) => String(b.event.created_at || '').localeCompare(String(a.event.created_at || '')))[0];
+  if (closedEvent) return closedEvent.employee;
+
+  const requestTime = new Date(request.created_at || 0).getTime();
+  const afterRequest = employeeEvents
+    .map(item => ({ ...item, time: new Date(item.event.created_at || 0).getTime() }))
+    .filter(item => Number.isFinite(item.time) && (!Number.isFinite(requestTime) || item.time >= requestTime))
+    .sort((a, b) => a.time - b.time)[0];
+  return afterRequest ? afterRequest.employee : null;
+}
+
 function enrichOpenRequests({ requests = [], chats = [], messages = [], employees = [] }) {
   const now = new Date();
   const chatMap = new Map(chats.map(chat => [telegramIdKey(chat.chat_id), chat]));
@@ -931,22 +955,44 @@ async function listRequests(query) {
     .filter(request => !periodContext || inCurrentPeriod(request.created_at, periodContext.period, periodContext.keys));
 
   const chatIds = [...new Set(requests.map(request => request.chat_id).filter(value => value !== undefined && value !== null))];
+  const requestIds = [...new Set(requests.map(request => request.id).filter(Boolean))];
   const companyIds = [...new Set(requests.map(request => request.company_id).filter(Boolean))];
-  const employeeIds = [...new Set(requests.map(request => request.closed_by_employee_id).filter(Boolean))];
 
-  const [chats, requestCompanies, employees] = await Promise.all([
+  const [chats, requestCompanies, employees, messages, events] = await Promise.all([
     chatIds.length ? selectPagedByChunks('tg_chats', {
       select: 'chat_id,title,username,source_type,company_id,last_message_at'
     }, 'chat_id', chatIds, { maxRows: 10000 }) : Promise.resolve([]),
     companyIds.length ? selectPagedByChunks('companies', {
       select: 'id,name,brand,is_active'
     }, 'id', companyIds, { maxRows: 10000 }) : Promise.resolve([]),
-    employeeIds.length ? selectPagedByChunks('employees', {
+    selectPaged('employees', {
       select: 'id,tg_user_id,full_name,username,role,is_active'
-    }, 'id', employeeIds, { maxRows: 10000 }) : Promise.resolve([])
+    }, { maxRows: 10000 }),
+    chatIds.length ? selectPagedByChunks('messages', {
+      select: 'id,tg_message_id,chat_id,from_tg_user_id,from_name,from_username,employee_id,source_type,classification,text,created_at',
+      order: supabase.order('created_at', false)
+    }, 'chat_id', chatIds, { maxRows: 40000 }) : Promise.resolve([]),
+    requestIds.length ? selectPagedByChunks('request_events', {
+      select: 'id,request_id,chat_id,tg_message_id,event_type,actor_tg_id,actor_name,employee_id,text,created_at',
+      order: supabase.order('created_at', false)
+    }, 'request_id', requestIds, { maxRows: 40000 }) : Promise.resolve([])
   ]);
 
   const chatMap = new Map(chats.map(chat => [telegramIdKey(chat.chat_id), chat]));
+  const employeeMaps = buildEmployeeMaps(employees);
+  const messagesByChat = new Map();
+  messages.forEach(message => {
+    const key = telegramIdKey(message.chat_id);
+    if (!messagesByChat.has(key)) messagesByChat.set(key, []);
+    messagesByChat.get(key).push(message);
+  });
+  const eventsByRequestId = new Map();
+  events.forEach(event => {
+    if (!event.request_id) return;
+    const list = eventsByRequestId.get(event.request_id) || [];
+    list.push(event);
+    eventsByRequestId.set(event.request_id, list);
+  });
   const chatCompanyIds = [...new Set(chats.map(chat => chat.company_id).filter(Boolean))];
   const missingCompanyIds = chatCompanyIds.filter(id => !companyIds.includes(id));
   const chatCompanies = missingCompanyIds.length
@@ -955,21 +1001,27 @@ async function listRequests(query) {
     }, 'id', missingCompanyIds, { maxRows: 10000 })
     : [];
   const companyMap = new Map([...requestCompanies, ...chatCompanies].map(company => [company.id, company]).filter(([id]) => id));
-  const employeeMap = new Map(employees.map(employee => [employee.id, employee]).filter(([id]) => id));
 
   return requests.map(request => {
     const chat = chatMap.get(telegramIdKey(request.chat_id)) || {};
     const companyId = request.company_id || chat.company_id || null;
     const company = companyId ? companyMap.get(companyId) : null;
-    const employee = request.closed_by_employee_id ? employeeMap.get(request.closed_by_employee_id) : null;
+    const closer = employeeMaps.byId.get(request.closed_by_employee_id) || employeeMaps.byTgId.get(telegramIdKey(request.closed_by_tg_id)) || null;
+    const responsible = resolveRequestResponsibleEmployeeFromEvents(request, eventsByRequestId.get(request.id) || [], employeeMaps)
+      || resolveRequestResponsibleEmployee(request, messagesByChat.get(telegramIdKey(request.chat_id)) || [], employeeMaps)
+      || employeeSummary(closer);
+    const responsibleName = responsible?.full_name || request.closed_by_name || '';
     return {
       ...request,
       company_id: companyId,
       company_name: company?.name || '',
       company_brand: company?.brand || '',
       chat_title: displayChatTitle(chat || { chat_id: request.chat_id }),
-      support_name: employee?.full_name || request.closed_by_name || '',
-      support_username: employee?.username || '',
+      responsible_employee_id: responsible?.employee_id || null,
+      responsible_employee_name: responsibleName,
+      responsible_employee_username: responsible?.username || '',
+      support_name: responsibleName,
+      support_username: responsible?.username || '',
       response_minutes: minutesBetween(request.created_at, request.closed_at)
     };
   });

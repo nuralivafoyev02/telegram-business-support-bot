@@ -1156,6 +1156,98 @@ async function testRequestsListEnrichesCompanyFromRegisteredGroup() {
   }
 }
 
+async function testRequestsListShowsResponsibleEmployeeFromTicketMessages() {
+  const originalSelect = supabase.select;
+  const chatId = -100802;
+  const companyId = 'company-4';
+
+  supabase.select = async (table) => {
+    if (table === 'support_requests') return [{
+      id: 'request-30',
+      source_type: 'group',
+      chat_id: chatId,
+      company_id: companyId,
+      customer_tg_id: 616,
+      customer_name: 'Mijoz',
+      customer_username: 'client',
+      initial_message_id: 30,
+      initial_text: 'Balans yangilanmayapti',
+      status: 'open',
+      closed_by_employee_id: null,
+      closed_by_tg_id: null,
+      closed_by_name: null,
+      done_message_id: null,
+      created_at: '2026-04-30T11:00:00.000Z',
+      closed_at: null
+    }];
+    if (table === 'tg_chats') return [{
+      chat_id: chatId,
+      title: 'Besh Bola support',
+      source_type: 'group',
+      company_id: companyId,
+      last_message_at: '2026-04-30T11:05:00.000Z'
+    }];
+    if (table === 'companies') return [{ id: companyId, name: 'Besh Bola Buildings', brand: 'BBB', is_active: true }];
+    if (table === 'employees') return [
+      { id: 'emp-1', tg_user_id: 901, full_name: 'Ali Support', username: 'ali', role: 'support' },
+      { id: 'emp-2', tg_user_id: 902, full_name: 'Ozodbek Support', username: 'ozodbek', role: 'support' }
+    ];
+    if (table === 'messages') return [
+      {
+        id: 'm30',
+        tg_message_id: 30,
+        chat_id: chatId,
+        from_tg_user_id: 616,
+        from_name: 'Mijoz',
+        from_username: 'client',
+        employee_id: null,
+        source_type: 'group',
+        classification: 'request',
+        text: 'Balans yangilanmayapti',
+        created_at: '2026-04-30T11:00:00.000Z'
+      },
+      {
+        id: 'm31',
+        tg_message_id: 31,
+        chat_id: chatId,
+        from_tg_user_id: 902,
+        from_name: 'Ozodbek Support',
+        from_username: 'ozodbek',
+        employee_id: 'emp-2',
+        source_type: 'group',
+        classification: 'employee_message',
+        text: 'Tekshirib ko‘raman',
+        created_at: '2026-04-30T11:03:00.000Z'
+      },
+      {
+        id: 'm32',
+        tg_message_id: 32,
+        chat_id: chatId,
+        from_tg_user_id: 901,
+        from_name: 'Ali Support',
+        from_username: 'ali',
+        employee_id: 'emp-1',
+        source_type: 'group',
+        classification: 'employee_message',
+        text: 'Keyingi xabar',
+        created_at: '2026-04-30T11:05:00.000Z'
+      }
+    ];
+    if (table === 'request_events') return [];
+    return [];
+  };
+
+  try {
+    const result = await callAdmin('requests', { query: { period: 'all', limit: 100 } });
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.data[0].responsible_employee_id, 'emp-2');
+    assert.strictEqual(result.payload.data[0].responsible_employee_name, 'Ozodbek Support');
+    assert.strictEqual(result.payload.data[0].support_name, 'Ozodbek Support');
+  } finally {
+    supabase.select = originalSelect;
+  }
+}
+
 async function testSendToChatStoresOutgoingAdminMessage() {
   const originalSelect = supabase.select;
   const originalInsert = supabase.insert;
@@ -1757,6 +1849,7 @@ async function run() {
   await testCompanyGroupActivityReturnsLinkedGroupMessagesWithTickets();
   await testDashboardCompanyTicketsUseRegisteredGroupCompany();
   await testRequestsListEnrichesCompanyFromRegisteredGroup();
+  await testRequestsListShowsResponsibleEmployeeFromTicketMessages();
   await testSendToChatStoresOutgoingAdminMessage();
   await testReplyRequestSendsMessageAndClosesTicket();
   await testReplyRequestFallsBackWhenBusinessPeerInvalid();

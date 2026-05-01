@@ -3098,7 +3098,7 @@ const ticketListCounts = computed(() => {
 });
 const ticketListSupportOptions = computed(() => {
   const names = [...new Set((ticketList.value.rows || [])
-    .map(row => row.support_name || row.closed_by_name || row.responsible_employee_name || '')
+    .map(row => row.responsible_employee_name || row.support_name || row.closed_by_name || '')
     .filter(Boolean))].sort((a, b) => a.localeCompare(b));
   return [{ value: 'all', label: 'Barcha supportlar' }, ...names.map(name => ({ value: name, label: name }))];
 });
@@ -3106,7 +3106,7 @@ const filteredTicketListRows = computed(() => {
   const searchText = ticketListSearch.value.toLowerCase().trim();
   return (ticketList.value.rows || [])
     .filter(row => ticketMatchesStatus(row, ticketList.value.active))
-    .filter(row => ticketListSupport.value === 'all' || [row.support_name, row.closed_by_name, row.responsible_employee_name].includes(ticketListSupport.value))
+    .filter(row => ticketListSupport.value === 'all' || [row.responsible_employee_name, row.support_name, row.closed_by_name].includes(ticketListSupport.value))
     .filter(row => {
       if (!searchText) return true;
       return [
@@ -3115,6 +3115,7 @@ const filteredTicketListRows = computed(() => {
         row.company_name,
         row.chat_title,
         row.customer_name,
+        row.responsible_employee_name,
         row.support_name,
         row.closed_by_name
       ].filter(Boolean).join(' ').toLowerCase().includes(searchText);
@@ -3513,7 +3514,7 @@ const ticketListColumns = [
   { key: 'id', label: 'Ticket ID', format: value => `TK-${shortId(value)}` },
   { key: 'initial_text', label: 'So‘rov matni', truncate: true, action: 'chatDetail' },
   { key: 'company_name', label: 'Kompaniya', format: (value, row) => value || row.chat_title || '—', action: 'chatDetail' },
-  { key: 'support_name', label: 'Mas’ul support', format: (value, row) => value || row.closed_by_name || '—' },
+  { key: 'responsible_employee_name', label: 'Mas’ul xodim', format: (value, row) => value || row.support_name || row.closed_by_name || '—' },
   { key: 'created_at', label: 'So‘rov vaqti', format: fmtDate },
   { key: 'closed_at', label: 'Javob vaqti', format: value => value ? fmtDate(value) : '—' },
   { key: 'status', label: 'Holati', format: statusLabel, badge: true },
