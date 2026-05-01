@@ -178,11 +178,13 @@ async function testGroupStartRegistersGroupAndDeletesCommand() {
     assert.strictEqual(result.payload.handled, 'message');
     assert.strictEqual(chatRow.chat_id, -100777);
     assert.strictEqual(chatRow.source_type, 'group');
-    assert.strictEqual(telegramCalls.length, 1);
-    assert.match(telegramCalls[0].url, /deleteMessage$/);
-    assert.strictEqual(String(telegramCalls[0].body.chat_id), '-100777');
-    assert.strictEqual(telegramCalls[0].body.message_id, 12);
-    assert.strictEqual(telegramCalls[0].body.text, undefined);
+    const deleteCall = telegramCalls.find(call => /deleteMessage$/.test(call.url));
+    const registerReply = telegramCalls.find(call => /sendMessage$/.test(call.url) && /Guruh ro‘yxatga olindi/.test(call.body.text || ''));
+    assert.ok(deleteCall);
+    assert.ok(registerReply);
+    assert.strictEqual(String(deleteCall.body.chat_id), '-100777');
+    assert.strictEqual(deleteCall.body.message_id, 12);
+    assert.match(registerReply.body.text, /setprivacy/i);
   } finally {
     supabase.insert = originalInsert;
     supabase.select = originalSelect;
@@ -219,11 +221,12 @@ async function testGroupRegisterDbFailureStillDeletesCommand() {
     });
 
     assert.strictEqual(result.status, 200);
-    assert.strictEqual(telegramCalls.length, 1);
-    assert.match(telegramCalls[0].url, /deleteMessage$/);
-    assert.strictEqual(telegramCalls[0].body.chat_id, -100888);
-    assert.strictEqual(telegramCalls[0].body.message_id, 13);
-    assert.strictEqual(telegramCalls[0].body.text, undefined);
+    const deleteCall = telegramCalls.find(call => /deleteMessage$/.test(call.url));
+    const errorReply = telegramCalls.find(call => /sendMessage$/.test(call.url) && /ro‘yxatga olishda xatolik/.test(call.body.text || ''));
+    assert.ok(deleteCall);
+    assert.ok(errorReply);
+    assert.strictEqual(deleteCall.body.chat_id, -100888);
+    assert.strictEqual(deleteCall.body.message_id, 13);
   } finally {
     supabase.insert = originalInsert;
     global.fetch = originalFetch;

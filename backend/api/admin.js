@@ -28,6 +28,8 @@ const TELEGRAM_ALLOWED_UPDATES = [
   'chat_member',
   'callback_query'
 ];
+const COMPANY_GROUP_ACTIVITY_CONVERSATION_LIMIT = 500;
+const COMPANY_GROUP_ACTIVITY_REQUEST_LIMIT = 300;
 
 function parseIntSafe(value, fallback = 0) {
   const num = Number.parseInt(value, 10);
@@ -1393,7 +1395,9 @@ async function getCompanyGroupActivity(query = {}) {
       .sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')));
 
     const requestRows = chatRequests.map(requestSummary);
-    const conversation = chatMessages.map(messageSummary);
+    const conversationRows = chatMessages.map(messageSummary);
+    const requestPreview = requestRows.slice(0, COMPANY_GROUP_ACTIVITY_REQUEST_LIMIT);
+    const conversationPreview = conversationRows.slice(-COMPANY_GROUP_ACTIVITY_CONVERSATION_LIMIT);
     const group = {
       chat_id: chat.chat_id,
       title: displayChatTitle(chat),
@@ -1401,13 +1405,15 @@ async function getCompanyGroupActivity(query = {}) {
       source_type: 'group',
       company_id: companyId,
       last_message_at: chat.last_message_at || latestBy(chatMessages, 'created_at'),
-      total_messages: conversation.length,
+      total_messages: conversationRows.length,
       total_requests: requestRows.length,
       closed_requests: requestRows.filter(request => request.status === 'closed').length,
       open_requests: requestRows.filter(request => request.status === 'open').length,
       unique_customers: new Set(requestRows.map(request => request.customer_tg_id || request.customer_name).filter(Boolean)).size,
-      requests: requestRows,
-      conversation
+      requests: requestPreview,
+      conversation: conversationPreview,
+      requests_truncated: requestRows.length > requestPreview.length,
+      conversation_truncated: conversationRows.length > conversationPreview.length
     };
 
     company.groups.push(group);

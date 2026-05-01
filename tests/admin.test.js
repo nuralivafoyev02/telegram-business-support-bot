@@ -1022,6 +1022,56 @@ async function testCompanyGroupActivityReturnsLinkedGroupMessagesWithTickets() {
   }
 }
 
+async function testCompanyGroupActivityLimitsLargeConversationPayload() {
+  const originalSelect = supabase.select;
+  const chatId = -100799;
+  const companyId = 'company-heavy';
+  const messages = Array.from({ length: 760 }, (_, index) => ({
+    id: `m${index + 1}`,
+    tg_message_id: 2000 + index,
+    chat_id: chatId,
+    from_tg_user_id: 900 + (index % 3),
+    from_name: `User ${index % 3}`,
+    from_username: `user${index % 3}`,
+    employee_id: index % 5 === 0 ? 'emp-1' : null,
+    source_type: 'group',
+    classification: index % 7 === 0 ? 'request' : 'message',
+    text: `Message ${index + 1}`,
+    raw: {},
+    created_at: new Date(Date.parse('2026-04-30T08:00:00.000Z') + index * 1000).toISOString()
+  }));
+
+  supabase.select = async (table) => {
+    if (table === 'companies') return [{ id: companyId, name: 'Heavy Co', brand: 'HV', is_active: true }];
+    if (table === 'employees') return [{ id: 'emp-1', tg_user_id: 901, full_name: 'Ali', username: 'ali', role: 'support', is_active: true }];
+    if (table === 'tg_chats') return [{
+      chat_id: chatId,
+      title: 'Heavy Co support',
+      source_type: 'group',
+      company_id: companyId,
+      is_active: true,
+      last_message_at: messages[messages.length - 1].created_at
+    }];
+    if (table === 'support_requests') return [];
+    if (table === 'messages') return messages;
+    if (table === 'request_events') return [];
+    return [];
+  };
+
+  try {
+    const result = await callAdmin('companyGroupActivity', { query: { period: 'all', company_id: companyId } });
+    assert.strictEqual(result.status, 200);
+    const group = result.payload.data.companies[0].groups[0];
+    assert.strictEqual(group.total_messages, 760);
+    assert.strictEqual(group.conversation.length, 500);
+    assert.strictEqual(group.conversation_truncated, true);
+    assert.strictEqual(group.conversation[0].text, 'Message 261');
+    assert.strictEqual(group.conversation[group.conversation.length - 1].text, 'Message 760');
+  } finally {
+    supabase.select = originalSelect;
+  }
+}
+
 async function testDashboardCompanyTicketsUseRegisteredGroupCompany() {
   const originalSelect = supabase.select;
   const originalEmployeeStats = stats.selectEmployeeStatistics;
@@ -2193,6 +2243,7 @@ async function run() {
   await testPrivateChatsExcludeEmployees();
   await testChatDetailIncludesTicketSolutionAndTimeline();
   await testCompanyGroupActivityReturnsLinkedGroupMessagesWithTickets();
+  await testCompanyGroupActivityLimitsLargeConversationPayload();
   await testDashboardCompanyTicketsUseRegisteredGroupCompany();
   await testDashboardCompanyTicketsIncludeLinkedGroupMessagesWithoutRequests();
   await testDashboardEmployeePerformanceCountsOpenAndSlaPerEmployee();

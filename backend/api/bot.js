@@ -3,7 +3,7 @@
 const { sendJson, readBody, getQuery } = require('../lib/http');
 const { optionalEnv, boolEnv } = require('../lib/env');
 const supabase = require('../lib/supabase');
-const { sendMessage, deleteMessage, reactToMessage, answerCallbackQuery, editMessageReplyMarkup, escapeHtml, tgUserName } = require('../lib/telegram');
+const { sendMessage, deleteMessage, reactToMessage, answerCallbackQuery, editMessageReplyMarkup, escapeHtml, tgUserName, getWebhookInfo } = require('../lib/telegram');
 const { getMessageText, classifyMessage, isGreetingOnly, isSmallTalk, isCompletionIntent } = require('../lib/parser');
 const { getBotSettings } = require('../lib/bot-settings');
 const { resolveMainStatsChatId, sendMainStatsReport, buildMainStatsQuestionReply } = require('../lib/report');
@@ -490,7 +490,40 @@ async function maybeStartGroupBroadcastDeletePreview(message, text, settings = n
 
 async function handleGroupRegistrationCommand(message, tracking) {
   const chat = message.chat || {};
-  await tracking.catch(error => logBackgroundError('register-group', error));
+  let registered = true;
+  await tracking.catch(error => {
+    registered = false;
+    logBackgroundError('register-group', error);
+  });
+  const diagnostics = [];
+  try {
+    const info = await getWebhookInfo();
+    const allowedUpdates = Array.isArray(info && info.allowed_updates) ? info.allowed_updates : [];
+    if (allowedUpdates.length && !allowedUpdates.includes('message')) {
+      diagnostics.push('Webhook `allowed_updates` ichida `message` yo‘q.');
+    }
+    if (allowedUpdates.length && !allowedUpdates.includes('my_chat_member')) {
+      diagnostics.push('Webhook `allowed_updates` ichida `my_chat_member` yo‘q.');
+    }
+  } catch (error) {
+    logBackgroundError('register-group-webhook-diagnostics', error);
+  }
+  const registrationText = registered
+    ? [
+      '✅ Guruh ro‘yxatga olindi.',
+      'Agar oddiy guruh xabarlari baribir ko‘rinmasa:',
+      '1) BotFather -> `/setprivacy` -> `Disable` qiling.',
+      '2) Webhookda `allowed_updates` ichida `message` bo‘lishini tekshiring.',
+      diagnostics.length ? `⚠️ Aniqlangan muammo: ${diagnostics.join(' ')}` : ''
+    ].filter(Boolean).join('\n')
+    : '⚠️ Guruhni ro‘yxatga olishda xatolik bo‘ldi. Iltimos, keyinroq qayta urinib ko‘ring.';
+  await sendTrackedBotReply({
+    message,
+    text: registrationText,
+    options: { reply_to_message_id: message.message_id },
+    updateKind: 'bot_register_group',
+    rawSource: 'bot_register_group'
+  }).catch(error => logBackgroundError('register-group-reply', error));
   await deleteMessage(chat.id, message.message_id)
     .catch(error => logBackgroundError('delete-group-command', error));
 }
