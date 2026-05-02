@@ -917,16 +917,6 @@ function isQuestionLike(text = '') {
   return QUESTION_LIKE_RE.test(String(text || ''));
 }
 
-async function notifyMainGroupAboutSave(chat = {}, settings = null) {
-  if (!isGroupChat(chat)) return;
-  if (isConfiguredMainGroup(chat, settings)) return;
-  const mainId = configuredMainGroupId(settings);
-  if (!mainId) return;
-  const title = chat.title || String(chat.id);
-  await sendMessage(mainId, `${escapeHtml(title)} dagi xabar saqlandi.`)
-    .catch(error => logBackgroundError('notify-main-group-save', error));
-}
-
 function isSupportRequestClassification(classification = '') {
   return ['ticket', 'request'].includes(String(classification || '').toLowerCase());
 }
@@ -1115,7 +1105,6 @@ async function processMessage(updateKind, message) {
 
   if (possibleMainGroupAutomation) {
     await metrics.saveMessage({ message, updateKind, sourceType, classification: 'message', employee }, { prefer: 'return=minimal' });
-    notifyMainGroupAboutSave(chat, settings);
     if (await maybeSendMainStatsFromGroup(message, text, settings)) return;
     if (await maybeStartGroupBroadcastDeletePreview(message, text, settings)) return;
     if (await maybeStartGroupBroadcastPreview(message, text, settings)) return;
@@ -1131,7 +1120,6 @@ async function processMessage(updateKind, message) {
   });
 
   await metrics.saveMessage({ message, updateKind, sourceType, classification, employee }, { prefer: 'return=minimal' });
-  notifyMainGroupAboutSave(chat, settings);
 
   if (await maybeSendMainStatsFromGroup(message, text, settings)) return;
   if (await maybeStartGroupBroadcastDeletePreview(message, text, settings)) return;
