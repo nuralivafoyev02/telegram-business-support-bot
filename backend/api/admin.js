@@ -57,7 +57,10 @@ async function selectPaged(table, query = {}, options = {}) {
       ...query,
       limit: String(Math.min(pageSize, maxRows - rows.length)),
       offset: String(offset)
-    }).catch(() => []);
+    }).catch(error => {
+      console.error('[admin:select-paged:error]', { table, offset, error: error.message });
+      return [];
+    });
     const pageRows = Array.isArray(page) ? page : [];
     rows.push(...pageRows);
     if (pageRows.length < pageSize) break;
@@ -638,6 +641,67 @@ function displayChatTitle(chat = {}) {
   return chat.title || chat.username || telegramIdKey(chat.chat_id) || 'Chat';
 }
 
+function latestTimestamp(...values) {
+  return values.filter(Boolean).sort().at(-1) || null;
+}
+
+function messagePreviewText(message = {}) {
+  const text = String(message.text || '').trim();
+  if (text) return text;
+  const media = extractMessageMedia(message.raw);
+  return media ? mediaPlaceholderLabel(media.kind) : '';
+}
+
+function mediaPlaceholderLabel(kind = '') {
+  return ({
+    photo: 'Rasm',
+    video: 'Video',
+    voice: 'Ovozli xabar',
+    audio: 'Audio',
+    video_note: 'Video xabar',
+    animation: 'Animatsiya',
+    document: 'Fayl'
+  }[kind] || 'Media xabar');
+}
+
+async function enrichChatsWithMessageStats(rows = []) {
+  const chatIds = [...new Set(rows.map(row => row.chat_id).filter(value => value !== undefined && value !== null))];
+  if (!chatIds.length) return rows;
+  const messages = await selectPagedByChunks('messages', {
+    select: 'id,tg_message_id,chat_id,from_name,text,raw,created_at',
+    order: supabase.order('created_at', false)
+  }, 'chat_id', chatIds, { maxRows: Math.min(Math.max(chatIds.length * 250, 1000), 80000) });
+  const statsByChat = new Map();
+  messages.forEach(message => {
+    const key = telegramIdKey(message.chat_id);
+    const current = statsByChat.get(key) || {
+      message_count: 0,
+      last_message_at: null,
+      last_message_text: '',
+      last_message_from: ''
+    };
+    current.message_count += 1;
+    if (!current.last_message_at || String(message.created_at || '') > String(current.last_message_at || '')) {
+      current.last_message_at = message.created_at || null;
+      current.last_message_text = messagePreviewText(message);
+      current.last_message_from = message.from_name || '';
+    }
+    statsByChat.set(key, current);
+  });
+  return rows.map(row => {
+    const statsRow = statsByChat.get(telegramIdKey(row.chat_id)) || {};
+    const messageCount = Number(statsRow.message_count || 0);
+    return {
+      ...row,
+      message_count: messageCount,
+      total_messages: Number(row.total_messages || messageCount || 0),
+      last_message_text: statsRow.last_message_text || row.last_message_text || '',
+      last_message_from: statsRow.last_message_from || row.last_message_from || '',
+      last_message_at: latestTimestamp(row.last_message_at, statsRow.last_message_at)
+    };
+  });
+}
+
 function buildEmployeeMaps(employees = []) {
   return {
     byId: new Map(employees.map(employee => [employee.id, employee]).filter(([id]) => id)),
@@ -1039,8 +1103,10 @@ function buildChatDetail({ chat, requests, events, messages, employeesById, empl
       ...chat,
       title: displayChatTitle(chat),
       total_requests: enrichedRequests.length,
+      total_messages: messages.length,
       open_requests: enrichedRequests.filter(request => request.status === 'open').length,
       closed_requests: enrichedRequests.filter(request => request.status === 'closed').length,
+      last_message_at: latestTimestamp(chat.last_message_at, latestBy(messages, 'created_at')),
       last_request_at: latestBy(enrichedRequests, 'created_at'),
       last_closed_at: latestBy(enrichedRequests, 'closed_at')
     },
@@ -1079,13 +1145,14 @@ async function getDashboard(query = {}) {
 }
 
 async function listGroups(query) {
-  return stats.selectChatStatistics({
+  const rows = await stats.selectChatStatistics({
     select: '*',
     source_type: 'eq.group',
     is_active: 'eq.true',
     order: supabase.order(query.orderBy || 'last_message_at', false),
     limit: limitQuery(query)
   });
+  return enrichChatsWithMessageStats(rows);
 }
 
 async function listPrivateChats(query) {

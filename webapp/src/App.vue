@@ -712,6 +712,7 @@
                   </label>
                   <label class="label">Yangi parol
                     <input v-model="adminForm.new_password" class="input" type="password"
+                      autocomplete="new-password"
                       placeholder="Bo‘sh qoldirilsa o‘zgarmaydi" />
                   </label>
                   <button class="btn primary" :disabled="loadingAction === 'saveAdmin'">{{ loadingAction === 'saveAdmin'
@@ -805,6 +806,7 @@
                   </label>
                   <label class="label">API kalit
                     <input v-model="integrationForm.api_key" class="input" type="password"
+                      autocomplete="new-password"
                       :placeholder="integrationForm.has_api_key ? 'Saqlangan kalitni almashtirish' : 'sk-...'" />
                   </label>
                   <label class="label">Holat
@@ -3701,6 +3703,8 @@ const groupColumns = [
   { key: 'title', label: 'Guruh', action: 'telegram' },
   { key: 'chat_id', label: 'Chat raqami', action: 'telegram' },
   { key: 'company_name', label: 'Kompaniya', format: v => v || 'Biriktirilmagan', action: 'companyAssign' },
+  { key: 'message_count', label: 'Xabar', format: fmtNumber, action: 'chatDetail' },
+  { key: 'last_message_text', label: 'Oxirgi xabar', format: v => v || '—', truncate: true, action: 'chatDetail' },
   { key: 'total_requests', label: 'So‘rov', action: 'requests' },
   { key: 'open_requests', label: 'Ochiq', action: 'requests' },
   { key: 'closed_requests', label: 'Yopilgan', action: 'requests' },

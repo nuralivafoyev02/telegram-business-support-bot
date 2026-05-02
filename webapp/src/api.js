@@ -9,19 +9,49 @@ export function setToken(token) {
   else localStorage.removeItem(TOKEN_KEY);
 }
 
+function safeQuery(query = {}) {
+  return Object.fromEntries(Object.entries(query).filter(([, value]) => value !== undefined && value !== null && value !== ''));
+}
+
+function logApiError(action, error, meta = {}) {
+  console.error('[webapp:api:error]', {
+    action,
+    ...meta,
+    error: error && error.message ? error.message : String(error || 'Unknown error')
+  });
+}
+
 async function request(action, { method = 'GET', body, query = {} } = {}) {
   const params = new URLSearchParams({ action, ...query });
   const headers = { 'Content-Type': 'application/json' };
   const token = getToken();
   if (token) headers.Authorization = `Bearer ${token}`;
 
-  const response = await fetch(`/api/admin?${params.toString()}`, {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined
-  });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok || data.ok === false) throw new Error(data.error || 'Server xatosi');
+  let response;
+  try {
+    response = await fetch(`/api/admin?${params.toString()}`, {
+      method,
+      headers,
+      body: body ? JSON.stringify(body) : undefined
+    });
+  } catch (error) {
+    logApiError(action, error, { method, query: safeQuery(query), stage: 'network' });
+    throw error;
+  }
+
+  let data = {};
+  try {
+    data = await response.json();
+  } catch (error) {
+    logApiError(action, error, { method, query: safeQuery(query), status: response.status, stage: 'parse' });
+    throw new Error('Server javobi noto‘g‘ri formatda');
+  }
+
+  if (!response.ok || data.ok === false) {
+    const error = new Error(data.error || 'Server xatosi');
+    logApiError(action, error, { method, query: safeQuery(query), status: response.status, stage: 'response' });
+    throw error;
+  }
   return data;
 }
 
@@ -31,10 +61,18 @@ async function requestBlob(action, { query = {} } = {}) {
   const token = getToken();
   if (token) headers.Authorization = `Bearer ${token}`;
 
-  const response = await fetch(`/api/admin?${params.toString()}`, { headers });
+  let response;
+  try {
+    response = await fetch(`/api/admin?${params.toString()}`, { headers });
+  } catch (error) {
+    logApiError(action, error, { method: 'GET', query: safeQuery(query), stage: 'network' });
+    throw error;
+  }
   if (!response.ok) {
     const data = await response.json().catch(() => ({}));
-    throw new Error(data.error || 'Fayl yuklanmadi');
+    const error = new Error(data.error || 'Fayl yuklanmadi');
+    logApiError(action, error, { method: 'GET', query: safeQuery(query), status: response.status, stage: 'response' });
+    throw error;
   }
   return response.blob();
 }

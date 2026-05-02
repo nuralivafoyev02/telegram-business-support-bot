@@ -37,15 +37,29 @@ function buildQuery(params = {}) {
 async function request(path, { method = 'GET', body, query, prefer } = {}) {
   const { url } = getConfig();
   const endpoint = `${url}/rest/v1/${path}${buildQuery(query)}`;
-  const response = await fetch(endpoint, {
-    method,
-    headers: headers(prefer ? { Prefer: prefer } : {}),
-    body: body === undefined ? undefined : JSON.stringify(body)
-  });
+  let response;
+  try {
+    response = await fetch(endpoint, {
+      method,
+      headers: headers(prefer ? { Prefer: prefer } : {}),
+      body: body === undefined ? undefined : JSON.stringify(body)
+    });
+  } catch (error) {
+    console.error('[supabase:request:network-error]', { method, path, error: error.message });
+    throw error;
+  }
+
   const text = await response.text();
-  const payload = text ? JSON.parse(text) : null;
+  let payload = null;
+  try {
+    payload = text ? JSON.parse(text) : null;
+  } catch (error) {
+    console.error('[supabase:request:parse-error]', { method, path, status: response.status, error: error.message });
+    throw error;
+  }
   if (!response.ok) {
     const details = typeof payload === 'object' ? JSON.stringify(payload) : text;
+    console.error('[supabase:request:error]', { method, path, status: response.status, details });
     throw new Error(`Supabase ${response.status}: ${details}`);
   }
   return payload;

@@ -810,6 +810,48 @@ async function testPrivateChatsExcludeEmployees() {
   }
 }
 
+async function testGroupsIncludeMessageStatsForChatPreview() {
+  const originalSelect = supabase.select;
+  const originalStats = stats.selectChatStatistics;
+  const chatId = -1001001;
+
+  stats.selectChatStatistics = async (query) => {
+    assert.strictEqual(query.source_type, 'eq.group');
+    return [{
+      chat_id: chatId,
+      title: 'Support guruhi',
+      source_type: 'group',
+      total_requests: 0,
+      open_requests: 0,
+      closed_requests: 0,
+      last_message_at: null,
+      is_active: true
+    }];
+  };
+  supabase.select = async (table) => {
+    if (table === 'messages') {
+      return [
+        { id: 'm2', chat_id: chatId, tg_message_id: 2, from_name: 'Ali', text: 'Oxirgi guruh xabari', created_at: '2026-05-02T08:10:00.000Z', raw: {} },
+        { id: 'm1', chat_id: chatId, tg_message_id: 1, from_name: 'Mijoz', text: 'Eski xabar', created_at: '2026-05-02T08:00:00.000Z', raw: {} }
+      ];
+    }
+    return [];
+  };
+
+  try {
+    const result = await callAdmin('groups');
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.data[0].message_count, 2);
+    assert.strictEqual(result.payload.data[0].total_messages, 2);
+    assert.strictEqual(result.payload.data[0].last_message_text, 'Oxirgi guruh xabari');
+    assert.strictEqual(result.payload.data[0].last_message_from, 'Ali');
+    assert.strictEqual(result.payload.data[0].last_message_at, '2026-05-02T08:10:00.000Z');
+  } finally {
+    supabase.select = originalSelect;
+    stats.selectChatStatistics = originalStats;
+  }
+}
+
 async function testChatDetailIncludesTicketSolutionAndTimeline() {
   const originalSelect = supabase.select;
   const chatId = 101;
@@ -898,6 +940,7 @@ async function testChatDetailIncludesTicketSolutionAndTimeline() {
     const result = await callAdmin('chatDetail', { query: { chat_id: chatId } });
     assert.strictEqual(result.status, 200);
     assert.strictEqual(result.payload.data.chat.total_requests, 1);
+    assert.strictEqual(result.payload.data.chat.total_messages, 2);
     assert.strictEqual(result.payload.data.requests[0].solution_text, 'Lift qayta ishga tushirildi');
     assert.strictEqual(result.payload.data.requests[0].solution_by, 'Ali');
     assert.strictEqual(result.payload.data.timeline.some(item => item.type === 'solution' && item.request_text === 'Lift ishlamayapti'), true);
@@ -2242,6 +2285,7 @@ async function run() {
   await testAiModeModelRejectsStaleHasApiKeyWithoutSecret();
   await testUnrelatedSettingsDoNotNotifyStaleAiIntegration();
   await testPrivateChatsExcludeEmployees();
+  await testGroupsIncludeMessageStatsForChatPreview();
   await testChatDetailIncludesTicketSolutionAndTimeline();
   await testCompanyGroupActivityReturnsLinkedGroupMessagesWithTickets();
   await testCompanyGroupActivityLimitsLargeConversationPayload();
