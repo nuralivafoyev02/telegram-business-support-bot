@@ -140,9 +140,15 @@ Bot endpoint health check:
 curl "$APP_URL/api/bot"
 ```
 
-Javobdagi `env.botToken`, `env.supabaseUrl`, `env.supabaseServiceRoleKey` qiymatlari `true` bo‘lishi kerak. Guruhlar webappda ko‘rinishi uchun webhook `allowed_updates` ichida `my_chat_member`, inline tasdiq tugmalari ishlashi uchun `callback_query` bo‘lishi shart. Admin paneldagi `Sozlamalar → Telegram webhook → Webhookni ulash` tugmasi webhookni joriy domen va secret bilan qayta sozlaydi. Guruhdagi oddiy murojaat xabarlarini o‘qish uchun BotFather’da bot privacy mode’ni disable qiling: `/setprivacy` → botni tanlang → `Disable`.
+Chuqurroq diagnostika:
 
-Agar bot webhook sozlanishidan oldin guruhlarga qo‘shilgan bo‘lsa, Telegram eski guruhlar ro‘yxatini botga qayta bermaydi. Bunday guruhlarni webapp ro‘yxatiga tushirish uchun har bir guruh ichida `/register` yoki `/start` yuboring. Bot guruhni ro‘yxatga olishga urinadi va guruhdagi command xabarini o‘chiradi. Xabar o‘chishi uchun bot guruhda delete permissionga ega admin bo‘lishi kerak.
+```bash
+curl "$APP_URL/api/bot?diagnostics=1&secret=$WEBHOOK_SECRET"
+```
+
+Javobdagi `env.botToken`, `env.supabaseUrl`, `env.supabaseServiceRoleKey` qiymatlari `true`, `diagnostics.supabase.ok` va `diagnostics.telegram.ok` qiymatlari ham `true` bo‘lishi kerak. Guruhlar webappda ko‘rinishi uchun webhook `allowed_updates` ichida `message` va `my_chat_member`, inline tasdiq tugmalari ishlashi uchun `callback_query` bo‘lishi shart. Admin paneldagi `Sozlamalar → Telegram webhook → Webhookni ulash` tugmasi webhookni joriy domen va secret bilan qayta sozlaydi. Guruhdagi oddiy murojaat xabarlarini o‘qish uchun BotFather’da bot privacy mode’ni disable qiling: `/setprivacy` → botni tanlang → `Disable`.
+
+Agar bot webhook sozlanishidan oldin guruhlarga qo‘shilgan bo‘lsa, Telegram eski guruhlar ro‘yxatini botga qayta bermaydi. Bunday guruhlarni webapp ro‘yxatiga tushirish uchun har bir guruh ichida `/register` yoki `/start` yuboring. Bot guruhni ro‘yxatga olishga urinadi va guruhdagi command xabarini o‘chiradi. Xabar o‘chishi uchun bot guruhda admin bo‘lishi va `can_delete_messages` permissionga ega bo‘lishi kerak; permission yetmasa bot reply’da aniq sababini ko‘rsatadi.
 
 ## Fayl strukturasi
 

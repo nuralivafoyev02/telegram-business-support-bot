@@ -3,7 +3,7 @@
 const { sendJson, readBody, getQuery } = require('../lib/http');
 const { optionalEnv, boolEnv } = require('../lib/env');
 const supabase = require('../lib/supabase');
-const { sendMessage, deleteMessage, reactToMessage, answerCallbackQuery, editMessageReplyMarkup, escapeHtml, tgUserName, getWebhookInfo } = require('../lib/telegram');
+const { sendMessage, deleteMessage, reactToMessage, answerCallbackQuery, editMessageReplyMarkup, escapeHtml, tgUserName, getWebhookInfo, getMe, getChatMember } = require('../lib/telegram');
 const { getMessageText, classifyMessage, isGreetingOnly, isSmallTalk, isCompletionIntent } = require('../lib/parser');
 const { getBotSettings } = require('../lib/bot-settings');
 const { resolveMainStatsChatId, sendMainStatsReport, buildMainStatsQuestionReply } = require('../lib/report');
@@ -73,7 +73,7 @@ function pickMessage(update) {
   return null;
 }
 
-function getHealth() {
+function baseHealth() {
   return {
     ok: true,
     service: 'telegram-business-support-bot',
@@ -85,6 +85,106 @@ function getHealth() {
       supabaseServiceRoleKey: !!optionalEnv('SUPABASE_SERVICE_ROLE_KEY', '')
     }
   };
+}
+
+function maskWebhookUrl(url = '') {
+  if (!url) return '';
+  try {
+    const parsed = new URL(url);
+    if (parsed.searchParams.has('secret')) parsed.searchParams.set('secret', '***');
+    return parsed.toString();
+  } catch (_error) {
+    return String(url).replace(/secret=[^&]+/g, 'secret=***');
+  }
+}
+
+async function getHealth({ diagnostics = false } = {}) {
+  const health = baseHealth();
+  if (!diagnostics) return health;
+
+  const [db, telegram] = await Promise.all([
+    supabase.select('tg_chats', { select: 'chat_id', limit: '1' })
+      .then(() => ({ ok: true }))
+      .catch(error => ({ ok: false, error: error.message })),
+    getWebhookInfo()
+      .then(info => ({
+        ok: true,
+        url: maskWebhookUrl(info && info.url || ''),
+        allowed_updates: Array.isArray(info && info.allowed_updates) ? info.allowed_updates : [],
+        pending_update_count: info && info.pending_update_count || 0,
+        last_error_message: info && info.last_error_message || ''
+      }))
+      .catch(error => ({ ok: false, error: compactError(error) }))
+  ]);
+
+  return {
+    ...health,
+    diagnostics: {
+      supabase: db,
+      telegram
+    }
+  };
+}
+
+function telegramDescription(error = {}) {
+  return String(error.telegram && error.telegram.description || error.message || '');
+}
+
+function isDeleteAlreadyHandled(error = {}) {
+  return /message to delete not found|message can't be deleted|message identifier is not specified|not found/i.test(telegramDescription(error));
+}
+
+function isDeletePermissionError(error = {}) {
+  return /not enough rights|message can't be deleted|can't remove|need administrator rights|have no rights|forbidden/i.test(telegramDescription(error));
+}
+
+function compactError(error = {}) {
+  const description = telegramDescription(error);
+  return description.replace(/^Telegram\s+\w+:\s*/i, '').trim() || String(error || 'unknown error');
+}
+
+function deletePermissionDiagnostic(member = null) {
+  if (!member) return '';
+  const status = String(member.status || '').toLowerCase();
+  if (!['administrator', 'creator'].includes(status)) {
+    return `Bot statusi: ${status || 'unknown'}. Botni guruhda admin qiling.`;
+  }
+  if (status === 'administrator' && member.can_delete_messages !== true) {
+    return 'Bot admin, lekin `can_delete_messages` permission yo‘q.';
+  }
+  return 'Botda delete permission bor, lekin Telegram deleteMessage rad etdi.';
+}
+
+async function inspectBotDeletePermission(chatId) {
+  try {
+    const bot = await getMe();
+    if (!bot || !bot.id) return '';
+    const member = await getChatMember(chatId, bot.id);
+    return deletePermissionDiagnostic(member);
+  } catch (error) {
+    return `Delete permission tekshirilmadi: ${compactError(error)}`;
+  }
+}
+
+async function deleteCommandMessage(chatId, messageId) {
+  try {
+    await deleteMessage(chatId, messageId);
+    return { deleted: true };
+  } catch (error) {
+    if (isDeleteAlreadyHandled(error) && !isDeletePermissionError(error)) {
+      return { deleted: true, alreadyHandled: true };
+    }
+    const permissionDiagnostic = isDeletePermissionError(error)
+      ? await inspectBotDeletePermission(chatId)
+      : '';
+    logBackgroundError('delete-group-command', error);
+    return {
+      deleted: false,
+      error,
+      reason: compactError(error),
+      permissionDiagnostic
+    };
+  }
 }
 
 function summarizeUpdate(update = {}) {
@@ -577,12 +677,7 @@ async function maybeStartGroupBroadcastDeletePreview(message, text, settings = n
 
 async function handleGroupRegistrationCommand(message, tracking) {
   const chat = message.chat || {};
-  const deleteCommandPromise = deleteMessage(chat.id, message.message_id)
-    .then(() => ({ deleted: true }))
-    .catch(error => {
-      logBackgroundError('delete-group-command', error);
-      return { deleted: false, error };
-    });
+  const deleteCommandPromise = deleteCommandMessage(chat.id, message.message_id);
   let registered = true;
   await tracking.catch(error => {
     registered = false;
@@ -603,11 +698,15 @@ async function handleGroupRegistrationCommand(message, tracking) {
   }
   const deleteResult = await deleteCommandPromise;
   if (!deleteResult.deleted) {
-    diagnostics.push('Command o‘chirilmadi: bot guruhda admin bo‘lib, delete permissionga ega bo‘lishi kerak.');
+    diagnostics.push([
+      `Command o‘chirilmadi: ${deleteResult.reason || 'Telegram deleteMessage rad etdi.'}`,
+      deleteResult.permissionDiagnostic || 'Bot guruhda admin va delete permissionga ega ekanini tekshiring.'
+    ].filter(Boolean).join(' '));
   }
   const registrationText = registered
     ? [
       '✅ Guruh ro‘yxatga olindi.',
+      deleteResult.deleted ? '🧹 Command xabari o‘chirildi.' : '',
       'Agar oddiy guruh xabarlari baribir ko‘rinmasa:',
       '1) BotFather -> `/setprivacy` -> `Disable` qiling.',
       '2) Webhookda `allowed_updates` ichida `message` bo‘lishini tekshiring.',
@@ -1312,7 +1411,12 @@ async function handleTelegramUpdate(update = {}) {
 
 async function handler(req, res) {
   if (req.method !== 'POST') {
-    return sendJson(res, 200, getHealth());
+    const query = getQuery(req);
+    const diagnostics = ['1', 'true', 'yes'].includes(String(query.diagnostics || query.check || '').toLowerCase());
+    if (diagnostics && !verifyWebhook(req)) {
+      return sendJson(res, 401, { ok: false, error: 'Invalid webhook secret' });
+    }
+    return sendJson(res, 200, await getHealth({ diagnostics }));
   }
 
   if (!verifyWebhook(req)) {

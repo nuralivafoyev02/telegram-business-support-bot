@@ -84,6 +84,17 @@ async function getWebhookInfo() {
   return telegram('getWebhookInfo');
 }
 
+async function getMe() {
+  return telegram('getMe');
+}
+
+async function getChatMember(chatId, userId) {
+  return telegram('getChatMember', {
+    chat_id: chatId,
+    user_id: userId
+  });
+}
+
 async function setWebhook(payload) {
   return telegram('setWebhook', payload);
 }
@@ -128,4 +139,4 @@ function escapeHtml(str = '') {
     .replaceAll('"', '&quot;');
 }
 
-module.exports = { telegram, sendMessage, deleteMessage, reactToMessage, sendBusinessMessage, answerCallbackQuery, editMessageReplyMarkup, getWebhookInfo, setWebhook, deleteWebhook, getUpdates, getFile, getUserProfilePhotos, downloadFile, tgUserName, escapeHtml };
+module.exports = { telegram, sendMessage, deleteMessage, reactToMessage, sendBusinessMessage, answerCallbackQuery, editMessageReplyMarkup, getWebhookInfo, getMe, getChatMember, setWebhook, deleteWebhook, getUpdates, getFile, getUserProfilePhotos, downloadFile, tgUserName, escapeHtml };

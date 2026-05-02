@@ -36,6 +36,17 @@ function createReq(body, headers = {}) {
   return req;
 }
 
+function createGetReq(url = '/api/bot', headers = {}) {
+  const req = Readable.from([]);
+  req.method = 'GET';
+  req.url = url;
+  req.headers = {
+    host: 'localhost',
+    ...headers
+  };
+  return req;
+}
+
 function createRes() {
   const res = {
     statusCode: 0,
@@ -58,6 +69,18 @@ async function callHandler(body) {
   console.info = () => {};
   try {
     await handler(createReq(body), res);
+  } finally {
+    console.info = originalInfo;
+  }
+  return { status: res.statusCode, payload: JSON.parse(res.body) };
+}
+
+async function callGetHandler(url = '/api/bot', headers = {}) {
+  const res = createRes();
+  const originalInfo = console.info;
+  console.info = () => {};
+  try {
+    await handler(createGetReq(url, headers), res);
   } finally {
     console.info = originalInfo;
   }
@@ -231,6 +254,106 @@ async function testGroupRegisterDbFailureStillDeletesCommand() {
     supabase.insert = originalInsert;
     global.fetch = originalFetch;
     console.error = originalConsoleError;
+  }
+}
+
+async function testGroupRegisterReportsDeletePermissionProblem() {
+  const originalInsert = supabase.insert;
+  const originalSelect = supabase.select;
+  const originalFetch = global.fetch;
+  const originalConsoleError = console.error;
+  const telegramCalls = [];
+
+  supabase.insert = async (table, rows) => rows;
+  supabase.select = async () => [];
+  console.error = () => {};
+  global.fetch = async (_url, options) => {
+    const body = JSON.parse(options.body || '{}');
+    telegramCalls.push({ url: _url, body });
+    if (/deleteMessage$/.test(_url)) {
+      return {
+        ok: true,
+        json: async () => ({ ok: false, error_code: 400, description: 'Bad Request: not enough rights to delete messages' })
+      };
+    }
+    if (/getMe$/.test(_url)) {
+      return {
+        ok: true,
+        json: async () => ({ ok: true, result: { id: 999, is_bot: true, username: 'uyqur_bot' } })
+      };
+    }
+    if (/getChatMember$/.test(_url)) {
+      return {
+        ok: true,
+        json: async () => ({ ok: true, result: { status: 'administrator', can_delete_messages: false } })
+      };
+    }
+    return {
+      ok: true,
+      json: async () => ({ ok: true, result: { message_id: 104, allowed_updates: ['message', 'my_chat_member'] } })
+    };
+  };
+
+  try {
+    const result = await callHandler({
+      update_id: 51,
+      message: {
+        message_id: 31,
+        date: 1777100000,
+        text: '/register',
+        chat: { id: -100991, type: 'supergroup', title: 'Support group' },
+        from: { id: 777, first_name: 'Ali', is_bot: false }
+      }
+    });
+
+    assert.strictEqual(result.status, 200);
+    const reply = telegramCalls.find(call => /sendMessage$/.test(call.url));
+    assert.ok(reply);
+    assert.match(reply.body.text, /Guruh ro‘yxatga olindi/);
+    assert.match(reply.body.text, /Command o‘chirilmadi/);
+    assert.match(reply.body.text, /can_delete_messages/);
+    assert.strictEqual(reply.body.reply_to_message_id, 31);
+  } finally {
+    supabase.insert = originalInsert;
+    supabase.select = originalSelect;
+    global.fetch = originalFetch;
+    console.error = originalConsoleError;
+  }
+}
+
+async function testBotDiagnosticsChecksSupabaseAndTelegram() {
+  const originalSelect = supabase.select;
+  const originalFetch = global.fetch;
+
+  supabase.select = async (table) => {
+    assert.strictEqual(table, 'tg_chats');
+    return [{ chat_id: -1001 }];
+  };
+  global.fetch = async (_url) => {
+    assert.match(_url, /getWebhookInfo$/);
+    return {
+      ok: true,
+      json: async () => ({
+        ok: true,
+        result: {
+          url: 'https://example.com/api/bot?secret=test-secret',
+          allowed_updates: ['message'],
+          pending_update_count: 2
+        }
+      })
+    };
+  };
+
+  try {
+    const result = await callGetHandler('/api/bot?diagnostics=1&secret=test-secret');
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.diagnostics.supabase.ok, true);
+    assert.strictEqual(result.payload.diagnostics.telegram.ok, true);
+    assert.strictEqual(result.payload.diagnostics.telegram.url, 'https://example.com/api/bot?secret=***');
+    assert.deepStrictEqual(result.payload.diagnostics.telegram.allowed_updates, ['message']);
+  } finally {
+    supabase.select = originalSelect;
+    global.fetch = originalFetch;
   }
 }
 
@@ -2463,6 +2586,8 @@ async function testConfiguredLogChannelSummarizesLaravelError() {
   await testChatMemberUpdateRegistersGroup();
   await testGroupStartRegistersGroupAndDeletesCommand();
   await testGroupRegisterDbFailureStillDeletesCommand();
+  await testGroupRegisterReportsDeletePermissionProblem();
+  await testBotDiagnosticsChecksSupabaseAndTelegram();
   await testCompanyGroupPlainMessageIsStoredAndKeepsCompanyLink();
   await testCompanyGroupRequestUsesRegisteredChatCompany();
   await testGroupDoneDoesNotReplyToGroup();
