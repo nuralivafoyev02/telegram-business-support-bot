@@ -1803,6 +1803,10 @@ async function getEmployeeActivity(query = {}) {
     const messageEmployee = employeeMaps.byId.get(message.employee_id) || employeeMaps.byTgId.get(telegramIdKey(message.from_tg_user_id));
     return Boolean(messageEmployee && !isSelectedEmployeeMessage(message));
   }
+  function isGroupMessageChat(message = {}) {
+    const chat = chatMap.get(telegramIdKey(message.chat_id)) || {};
+    return (chat.source_type || message.source_type) === 'group';
+  }
   const periodOpenRequests = openRequestCandidates
     .filter(request => request.status === 'open' && inCurrentPeriod(request.created_at, periodKey, keys))
     .filter(requestResponsibleMatchesEmployee);
@@ -1821,7 +1825,7 @@ async function getEmployeeActivity(query = {}) {
     .filter(message => visibleChatIdKeys.has(telegramIdKey(message.chat_id)))
     .filter(message => inCurrentPeriod(message.created_at, periodKey, keys))
     .filter(message => !isEmployeePrivateChatId(message.chat_id))
-    .filter(message => !isOtherEmployeeMessage(message));
+    .filter(message => isGroupMessageChat(message) || !isOtherEmployeeMessage(message));
   const visibleRequestIds = [...new Set([
     ...visibleClosedRequests,
     ...visibleOpenRequests

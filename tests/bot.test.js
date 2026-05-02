@@ -411,11 +411,79 @@ async function testCompanyGroupPlainMessageIsStoredAndKeepsCompanyLink() {
     assert.strictEqual(inserted.some(item => item.table === 'support_requests'), false);
     const notice = telegramCalls.find(call => /sendMessage$/.test(call.url) && String(call.body.chat_id) === '-100999');
     assert.ok(notice);
-    assert.match(notice.body.text, /Company support group guruhidagi xabar saqlandi/);
+    assert.match(notice.body.text, /Guruh xabari saqlandi/);
+    assert.match(notice.body.text, /Manba guruh: <b>Company support group<\/b>/);
+    assert.match(notice.body.text, /Kelgan manba: <code>customer_message<\/code>/);
+    assert.match(notice.body.text, /Saqlangan joy: <code>public\.messages<\/code>/);
   } finally {
     supabase.insert = originalInsert;
     supabase.select = originalSelect;
     global.fetch = originalFetch;
+    clearBotSettingsCache();
+  }
+}
+
+async function testCompanyGroupMessageSaveFailureNotifiesMainGroup() {
+  const originalInsert = supabase.insert;
+  const originalSelect = supabase.select;
+  const originalFetch = global.fetch;
+  const originalConsoleError = console.error;
+  const inserted = [];
+  const telegramCalls = [];
+  const chatId = -100458;
+  clearBotSettingsCache();
+
+  supabase.select = async (table) => {
+    if (table === 'bot_settings') return [
+      { key: 'auto_reply', value: { enabled: false } },
+      { key: 'main_group', value: { chat_id: '-100999' } }
+    ];
+    if (table === 'tg_chats') return [{ chat_id: chatId, business_connection_id: null }];
+    if (table === 'employees') return [];
+    if (table === 'support_requests') return [];
+    return [];
+  };
+  supabase.insert = async (table, rows, options = {}) => {
+    inserted.push({ table, rows, options });
+    if (table === 'messages' && rows.some(row => row.tg_message_id === 133)) {
+      throw new Error('messages insert failed');
+    }
+    return rows.map(row => ({ id: `${table}-row`, ...row }));
+  };
+  console.error = () => {};
+  global.fetch = async (_url, options) => {
+    telegramCalls.push({ url: _url, body: JSON.parse(options.body) });
+    return {
+      ok: true,
+      json: async () => ({ ok: true, result: { message_id: 703 } })
+    };
+  };
+
+  try {
+    const result = await callHandler({
+      update_id: 33,
+      message: {
+        message_id: 133,
+        date: 1777100000,
+        text: 'Saqlash sinovi',
+        chat: { id: chatId, type: 'supergroup', title: 'Company support group' },
+        from: { id: 703, first_name: 'Mijoz', is_bot: false }
+      }
+    });
+
+    assert.strictEqual(result.status, 500);
+    assert.match(result.payload.error, /messages insert failed/);
+    const notice = telegramCalls.find(call => /sendMessage$/.test(call.url) && String(call.body.chat_id) === '-100999');
+    assert.ok(notice);
+    assert.match(notice.body.text, /Guruh xabari saqlanmadi/);
+    assert.match(notice.body.text, /Saqlashga uringan joy: <code>public\.messages<\/code>/);
+    assert.match(notice.body.text, /Saqlanmagan sababi: <code>messages insert failed<\/code>/);
+    assert.strictEqual(inserted.some(item => item.table === 'messages' && item.rows[0].raw?.source === 'bot_message_save_failed_notice'), true);
+  } finally {
+    supabase.insert = originalInsert;
+    supabase.select = originalSelect;
+    global.fetch = originalFetch;
+    console.error = originalConsoleError;
     clearBotSettingsCache();
   }
 }
@@ -472,7 +540,9 @@ async function testCompanyGroupRequestUsesRegisteredChatCompany() {
     assert.strictEqual(inserted.some(item => item.table === 'messages' && item.rows[0].classification === 'request'), true);
     const notice = telegramCalls.find(call => /sendMessage$/.test(call.url) && String(call.body.chat_id) === '-100999');
     assert.ok(notice);
-    assert.match(notice.body.text, /Company support group guruhidagi xabar saqlandi/);
+    assert.match(notice.body.text, /Guruh xabari saqlandi/);
+    assert.match(notice.body.text, /Manba guruh: <b>Company support group<\/b>/);
+    assert.match(notice.body.text, /Saqlangan joy: <code>public\.messages<\/code>/);
   } finally {
     supabase.insert = originalInsert;
     supabase.select = originalSelect;
@@ -2589,6 +2659,7 @@ async function testConfiguredLogChannelSummarizesLaravelError() {
   await testGroupRegisterReportsDeletePermissionProblem();
   await testBotDiagnosticsChecksSupabaseAndTelegram();
   await testCompanyGroupPlainMessageIsStoredAndKeepsCompanyLink();
+  await testCompanyGroupMessageSaveFailureNotifiesMainGroup();
   await testCompanyGroupRequestUsesRegisteredChatCompany();
   await testGroupDoneDoesNotReplyToGroup();
   await testRequestMessageAppendsToExistingOpenRequest();

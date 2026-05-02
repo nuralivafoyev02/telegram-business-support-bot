@@ -274,6 +274,81 @@ function groupDisplayName(message = {}, chatRow = null) {
     || String(message.chat && message.chat.id || 'Guruh');
 }
 
+function auditValue(value, fallback = '-') {
+  if (value === undefined || value === null || value === '') return fallback;
+  return String(value);
+}
+
+function auditCode(value) {
+  return `<code>${escapeHtml(auditValue(value))}</code>`;
+}
+
+function inferMessageRawSource({ message = {}, employee = null, savedMessage = null, classification = '' } = {}) {
+  const rawSource = savedMessage && savedMessage.raw && savedMessage.raw.source;
+  if (rawSource) return rawSource;
+  if (message.from && message.from.is_bot) return 'bot_message';
+  if (employee || classification === 'employee_message') return 'employee_message';
+  return 'customer_message';
+}
+
+function auditActorName(message = {}, employee = null) {
+  const from = message.from || {};
+  const username = from.username ? ` @${from.username}` : '';
+  const name = (employee && employee.full_name) || tgUserName(from);
+  return `${name}${username}`;
+}
+
+function buildGroupSaveAudit({ status, message, chatRow, classification, employee, savedMessage = null, error = null, target = 'public.messages', stage = '' }) {
+  const chat = message.chat || {};
+  const from = message.from || {};
+  const groupName = groupDisplayName(message, chatRow);
+  const rawSource = inferMessageRawSource({ message, employee, savedMessage, classification });
+  const savedRowId = savedMessage && savedMessage.id || '';
+  const savedTgMessageId = savedMessage && (savedMessage.tg_message_id || savedMessage.message_id) || message.message_id || '';
+  const title = status === 'saved' ? 'Guruh xabari saqlandi' : 'Guruh xabari saqlanmadi';
+  const statusIcon = status === 'saved' ? '✅' : '❌';
+  const plainLines = [
+    `${statusIcon} ${title}`,
+    `Manba guruh: ${groupName}`,
+    `Manba chat_id: ${auditValue(chat.id)}`,
+    `Manba message_id: ${auditValue(message.message_id)}`,
+    `Yuboruvchi: ${auditActorName(message, employee)} (${auditValue(from.id)})`,
+    `Kelgan manba: ${rawSource}`,
+    `Classification: ${auditValue(classification)}`,
+    status === 'saved'
+      ? `Saqlangan joy: ${target}`
+      : `Saqlashga uringan joy: ${target}`,
+    `DB chat_id: ${auditValue(chat.id)}`,
+    `DB tg_message_id: ${auditValue(savedTgMessageId)}`,
+    savedRowId ? `DB row_id: ${savedRowId}` : '',
+    stage ? `Bosqich: ${stage}` : '',
+    error ? `Saqlanmagan sababi: ${compactError(error)}` : ''
+  ].filter(Boolean);
+  const htmlLines = [
+    `${statusIcon} <b>${escapeHtml(title)}</b>`,
+    `Manba guruh: <b>${escapeHtml(groupName)}</b>`,
+    `Manba chat_id: ${auditCode(chat.id)}`,
+    `Manba message_id: ${auditCode(message.message_id)}`,
+    `Yuboruvchi: <b>${escapeHtml(auditActorName(message, employee))}</b> (${auditCode(from.id)})`,
+    `Kelgan manba: ${auditCode(rawSource)}`,
+    `Classification: ${auditCode(classification)}`,
+    status === 'saved'
+      ? `Saqlangan joy: ${auditCode(target)}`
+      : `Saqlashga uringan joy: ${auditCode(target)}`,
+    `DB chat_id: ${auditCode(chat.id)}`,
+    `DB tg_message_id: ${auditCode(savedTgMessageId)}`,
+    savedRowId ? `DB row_id: ${auditCode(savedRowId)}` : '',
+    stage ? `Bosqich: ${auditCode(stage)}` : '',
+    error ? `Saqlanmagan sababi: ${auditCode(compactError(error))}` : ''
+  ].filter(Boolean);
+  return {
+    groupName,
+    rawSource,
+    text: plainLines.join('\n'),
+    telegramText: htmlLines.join('\n')
+  };
+}
+
 async function resolveMainNotificationChat(settings = null) {
   const configured = configuredMainGroupId(settings);
   if (configured) return configured;
@@ -297,23 +372,27 @@ async function loadChatForBotRecord(chatId) {
   };
 }
 
-async function maybeNotifyMainGroupMessageSaved({ updateKind, message, settings, chatRow, classification }) {
+async function maybeNotifyMainGroupMessageSaveAudit({ status, updateKind, message, settings, chatRow, classification, employee = null, savedMessage = null, error = null, target = 'public.messages', stage = '' }) {
   const chat = message.chat || {};
   if (!isGroupChat(chat)) return;
   if (isConfiguredMainGroup(chat, settings)) return;
   if (String(updateKind || '').includes('edited')) return;
 
-  const mainGroupId = await resolveMainNotificationChat(settings);
+  let mainGroupId = '';
+  try {
+    mainGroupId = await resolveMainNotificationChat(settings);
+  } catch (resolveError) {
+    logBackgroundError(`notify-main-message-${status}-resolve`, resolveError);
+    return;
+  }
   if (!mainGroupId || sameChatId(mainGroupId, chat.id)) return;
 
-  const groupName = groupDisplayName(message, chatRow);
-  const text = `${groupName} guruhidagi xabar saqlandi`;
-  const telegramText = `${escapeHtml(groupName)} guruhidagi xabar saqlandi`;
+  const audit = buildGroupSaveAudit({ status, message, chatRow, classification, employee, savedMessage, error, target, stage });
   let telegramResult = null;
   try {
-    telegramResult = await sendMessage(mainGroupId, telegramText);
-  } catch (error) {
-    logBackgroundError('notify-main-message-saved', error);
+    telegramResult = await sendMessage(mainGroupId, audit.telegramText);
+  } catch (sendError) {
+    logBackgroundError(`notify-main-message-${status}`, sendError);
     return;
   }
 
@@ -322,18 +401,32 @@ async function maybeNotifyMainGroupMessageSaved({ updateKind, message, settings,
     telegramResult,
     chat: mainChat,
     sourceType: 'group',
-    text,
+    text: audit.text,
     classification: 'bot_notification',
-    updateKind: 'bot_message_saved_notice',
+    updateKind: status === 'saved' ? 'bot_message_saved_notice' : 'bot_message_save_failed_notice',
     businessConnectionId: mainChat.business_connection_id || null,
     raw: {
-      source: 'bot_message_saved_notice',
+      source: status === 'saved' ? 'bot_message_saved_notice' : 'bot_message_save_failed_notice',
+      audit_status: status,
+      target_table: target,
+      stage: stage || null,
       source_chat_id: chat.id || null,
-      source_chat_title: groupName,
+      source_chat_title: audit.groupName,
       source_message_id: message.message_id || null,
-      source_classification: classification || ''
+      source_classification: classification || '',
+      source_raw: audit.rawSource,
+      saved_message_id: savedMessage && savedMessage.id || null,
+      error: error ? compactError(error) : ''
     }
   });
+}
+
+async function maybeNotifyMainGroupMessageSaved(params) {
+  return maybeNotifyMainGroupMessageSaveAudit({ ...params, status: 'saved' });
+}
+
+async function maybeNotifyMainGroupMessageSaveFailed(params) {
+  return maybeNotifyMainGroupMessageSaveAudit({ ...params, status: 'failed' });
 }
 
 async function maybeRelayIncomingLog(updateKind, message, settings) {
@@ -1310,14 +1403,33 @@ async function processMessage(updateKind, message) {
     return;
   }
 
-  const [settings, , chatRow, employee] = await Promise.all([
-    getBotSettings(),
-    metrics.upsertTelegramUser(from, {}, { prefer: 'return=minimal' }),
-    metrics.upsertChat(chat, sourceType, {
-      business_connection_id: message.business_connection_id || null
-    }),
-    metrics.getKnownEmployeeByTelegramId(from.id)
-  ]);
+  const settings = await getBotSettings();
+  let chatRow = null;
+  let employee = null;
+  try {
+    const [, resolvedChatRow, resolvedEmployee] = await Promise.all([
+      metrics.upsertTelegramUser(from, {}, { prefer: 'return=minimal' }),
+      metrics.upsertChat(chat, sourceType, {
+        business_connection_id: message.business_connection_id || null
+      }),
+      metrics.getKnownEmployeeByTelegramId(from.id)
+    ]);
+    chatRow = resolvedChatRow;
+    employee = resolvedEmployee;
+  } catch (error) {
+    await maybeNotifyMainGroupMessageSaveFailed({
+      updateKind,
+      message,
+      settings,
+      chatRow,
+      classification: 'prepare',
+      employee,
+      error,
+      target: 'public.tg_users / public.tg_chats / public.messages',
+      stage: 'prepare_message_context'
+    });
+    throw error;
+  }
 
   const possibleMainGroupAutomation = isGroupChat(chat)
     && (isMainStatsTrigger(text) || isGroupBroadcastDeleteTrigger(text) || isGroupBroadcastTrigger(text))
@@ -1340,8 +1452,24 @@ async function processMessage(updateKind, message) {
     settings
   });
 
-  await metrics.saveMessage({ message, updateKind, sourceType, classification, employee }, { prefer: 'return=minimal' });
-  await maybeNotifyMainGroupMessageSaved({ updateKind, message, settings, chatRow, classification });
+  let savedMessage = null;
+  try {
+    savedMessage = await metrics.saveMessage({ message, updateKind, sourceType, classification, employee });
+  } catch (error) {
+    await maybeNotifyMainGroupMessageSaveFailed({
+      updateKind,
+      message,
+      settings,
+      chatRow,
+      classification,
+      employee,
+      error,
+      target: 'public.messages',
+      stage: 'messages_insert'
+    });
+    throw error;
+  }
+  await maybeNotifyMainGroupMessageSaved({ updateKind, message, settings, chatRow, classification, employee, savedMessage, target: 'public.messages' });
 
   if (await maybeSendMainStatsFromGroup(message, text, settings)) return;
   if (await maybeStartGroupBroadcastDeletePreview(message, text, settings)) return;
