@@ -444,7 +444,7 @@
                       </div>
                       <div class="timeline-status">
                         <span class="status-pill mini" :class="expiryStatusClass(row)">{{ expiryStatusLabel(row)
-                          }}</span>
+                        }}</span>
                         <small>{{ businessStatusLabel(row.business_status) }}</small>
                       </div>
                     </article>
@@ -759,7 +759,7 @@
                   <div>
                     <div class="card-title">Telegram ulanishi</div>
                   </div>
-                  <div class="actions webhook-actions">
+                  <!-- <div class="actions webhook-actions">
                     <button class="btn" :disabled="loadingAction === 'webhookInfo'" @click="checkTelegramWebhook">{{
                       loadingAction === 'webhookInfo' ? 'Tekshirilmoqda...' : 'Holatni ko‘rish' }}</button>
                     <button class="btn primary" :disabled="loadingAction === 'webhookConnect'"
@@ -767,7 +767,7 @@
                         'Telegram ulanishini yangilash' }}</button>
                     <button class="btn" :disabled="loadingAction === 'webhookSync'" @click="syncTelegramUpdates">{{
                       loadingAction === 'webhookSync' ? 'Olinmoqda...' : 'Webhooksiz sinxronlash' }}</button>
-                  </div>
+                  </div> -->
                 </div>
                 <Transition name="fade">
                   <pre v-if="webhookStatusText" class="webhook-status">{{ webhookStatusText }}</pre>
@@ -1276,7 +1276,8 @@
                     </template>
                   </article>
                 </div>
-                <div v-else class="empty compact">{{ metricChatDetail.requests?.length ? 'Ticketlar yashirilgan' : 'Bu chatda so‘rov yo‘q' }}</div>
+                <div v-else class="empty compact">{{ metricChatDetail.requests?.length ? 'Ticketlar yashirilgan' : 'Bu
+                  chatda so‘rov yo‘q' }}</div>
               </section>
 
               <div v-if="metricChatConversation.length" ref="metricChatThreadRef"
@@ -1335,17 +1336,17 @@
             <div>
               <span>Xabarlar</span>
               <b>{{ fmtNumber(companyGroupDetail.company?.total_messages || companyGroupDetail.summary?.total_messages)
-                }}</b>
+              }}</b>
             </div>
             <div>
               <span>Ticketlar</span>
               <b>{{ fmtNumber(companyGroupDetail.company?.total_requests || companyGroupDetail.summary?.total_requests)
-                }}</b>
+              }}</b>
             </div>
             <div>
               <span>Ochiq</span>
               <b>{{ fmtNumber(companyGroupDetail.company?.open_requests || companyGroupDetail.summary?.open_requests)
-                }}</b>
+              }}</b>
             </div>
           </section>
 
@@ -1363,7 +1364,7 @@
                   <span>
                     <b>{{ group.title || group.chat_id }}</b>
                     <small>{{ group.conversation?.[0]?.text || group.requests?.[0]?.initial_text || 'Yozishma tarixi'
-                      }}</small>
+                    }}</small>
                     <em>{{ fmtNumber(group.total_messages) }} xabar · {{ fmtNumber(group.total_requests) }} ticket · {{
                       fmtNumber(group.open_requests) }} ochiq</em>
                   </span>
@@ -1416,7 +1417,8 @@
                             placeholder="Javob yozing..."></textarea>
                           <div>
                             <button class="btn small" type="button" @click="cancelInlineReply">Bekor</button>
-                            <button class="btn small primary" type="submit" :disabled="loadingAction === 'replyRequest'">
+                            <button class="btn small primary" type="submit"
+                              :disabled="loadingAction === 'replyRequest'">
                               Yuborish
                             </button>
                           </div>
@@ -1427,7 +1429,9 @@
                       </template>
                     </article>
                   </div>
-                  <div v-else class="empty compact">{{ companyGroupRequests.length ? 'Ticketlar yashirilgan' : 'Bu guruhda ticket yo‘q' }}</div>
+                  <div v-else class="empty compact">{{ companyGroupRequests.length ? 'Ticketlar yashirilgan' : 'Bu
+                    guruhda ticket
+                    yo‘q' }}</div>
                 </section>
 
                 <div v-if="companyGroupConversation.length" ref="companyGroupThreadRef"
@@ -1508,7 +1512,8 @@
                     <time>{{ fmtDate(request.closed_at) }}</time>
                   </article>
                 </div>
-                <div v-else class="empty compact">{{ group.closed_requests?.length ? 'Ticketlar yashirilgan' : 'Yopilgan so‘rov yo‘q' }}</div>
+                <div v-else class="empty compact">{{ group.closed_requests?.length ? 'Ticketlar yashirilgan' : 'Yopilgan
+                  so‘rov yo‘q' }}</div>
               </div>
             </div>
           </section>
@@ -1525,7 +1530,7 @@
               <img v-if="employeeAvatarUrl(employeeProfile.employee)" class="employee-profile-avatar"
                 :src="employeeAvatarUrl(employeeProfile.employee)" alt="" />
               <span v-else class="employee-profile-avatar fallback">{{ employeeInitials(employeeProfile.employee)
-                }}</span>
+              }}</span>
             </span>
             <div class="employee-profile-title">
               <h2>{{ employeeProfile.employee?.full_name || employeeProfile.employee?.username || 'Xodim' }}</h2>
@@ -1553,7 +1558,7 @@
             <div class="employee-profile-pills">
               <span class="profile-pill">🛡️ SLA <b>{{ fmtPercent(employeeProfile.summary?.sla) }}</b></span>
               <span class="profile-pill">✅ Yopish foizi <b>{{ fmtPercent(employeeProfile.summary?.close_rate)
-                  }}</b></span>
+              }}</b></span>
               <span class="profile-pill">⭐ Reyting <b>#{{ employeeProfile.rank || '—' }}</b></span>
             </div>
           </header>
