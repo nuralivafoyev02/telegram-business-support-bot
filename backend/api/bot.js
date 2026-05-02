@@ -168,6 +168,74 @@ function getIncomingLogText(message = {}) {
   return String(message.text || message.caption || '').trim();
 }
 
+function groupDisplayName(message = {}, chatRow = null) {
+  return (chatRow && chatRow.title)
+    || (message.chat && (message.chat.title || message.chat.username))
+    || String(message.chat && message.chat.id || 'Guruh');
+}
+
+async function resolveMainNotificationChat(settings = null) {
+  const configured = configuredMainGroupId(settings);
+  if (configured) return configured;
+  return resolveMainStatsChatId().catch(() => '');
+}
+
+async function loadChatForBotRecord(chatId) {
+  const rows = await supabase.select('tg_chats', {
+    select: 'chat_id,title,username,type,source_type,business_connection_id',
+    chat_id: supabase.eq(chatId),
+    limit: '1'
+  }).catch(() => []);
+  const row = rows[0] || {};
+  return {
+    id: chatId,
+    type: row.type || 'supergroup',
+    title: row.title || String(chatId),
+    username: row.username || undefined,
+    business_connection_id: row.business_connection_id || null,
+    source_type: row.source_type || 'group'
+  };
+}
+
+async function maybeNotifyMainGroupMessageSaved({ updateKind, message, settings, chatRow, classification }) {
+  const chat = message.chat || {};
+  if (!isGroupChat(chat)) return;
+  if (isConfiguredMainGroup(chat, settings)) return;
+  if (String(updateKind || '').includes('edited')) return;
+
+  const mainGroupId = await resolveMainNotificationChat(settings);
+  if (!mainGroupId || sameChatId(mainGroupId, chat.id)) return;
+
+  const groupName = groupDisplayName(message, chatRow);
+  const text = `${groupName} guruhidagi xabar saqlandi`;
+  const telegramText = `${escapeHtml(groupName)} guruhidagi xabar saqlandi`;
+  let telegramResult = null;
+  try {
+    telegramResult = await sendMessage(mainGroupId, telegramText);
+  } catch (error) {
+    logBackgroundError('notify-main-message-saved', error);
+    return;
+  }
+
+  const mainChat = await loadChatForBotRecord(mainGroupId);
+  await saveBotMessageRecord({
+    telegramResult,
+    chat: mainChat,
+    sourceType: 'group',
+    text,
+    classification: 'bot_notification',
+    updateKind: 'bot_message_saved_notice',
+    businessConnectionId: mainChat.business_connection_id || null,
+    raw: {
+      source: 'bot_message_saved_notice',
+      source_chat_id: chat.id || null,
+      source_chat_title: groupName,
+      source_message_id: message.message_id || null,
+      source_classification: classification || ''
+    }
+  });
+}
+
 async function maybeRelayIncomingLog(updateKind, message, settings) {
   const chat = message.chat || {};
   if (!isChannelLogPost(updateKind, chat)) return false;
@@ -210,12 +278,11 @@ async function maybeSendMainStatsFromGroup(message, text, settings = null) {
   return true;
 }
 
-async function saveOutgoingBotMessage({ telegramResult, sourceMessage, sourceType, text, classification = 'bot_reply', updateKind = 'bot_reply', raw = {} }) {
-  if (!telegramResult || !telegramResult.message_id || !sourceMessage || !sourceMessage.chat) return;
-  const chat = sourceMessage.chat || {};
+async function saveBotMessageRecord({ telegramResult, chat, sourceType, text, classification = 'bot_reply', updateKind = 'bot_reply', businessConnectionId = null, raw = {} }) {
+  if (!telegramResult || !telegramResult.message_id || !chat || chat.id === undefined || chat.id === null) return;
   const resolvedSourceType = sourceType || metrics.sourceTypeFrom(updateKind, chat.type);
   await metrics.upsertChat(chat, resolvedSourceType, {
-    business_connection_id: sourceMessage.business_connection_id || null
+    business_connection_id: businessConnectionId || null
   }, { prefer: 'return=minimal' }).catch(error => logBackgroundError('save-bot-reply-chat', error));
   await supabase.insert('messages', [{
     tg_message_id: telegramResult.message_id,
@@ -228,10 +295,9 @@ async function saveOutgoingBotMessage({ telegramResult, sourceMessage, sourceTyp
     text,
     classification,
     employee_id: null,
-    business_connection_id: sourceMessage.business_connection_id || null,
+    business_connection_id: businessConnectionId || null,
     raw: {
       source: raw.source || 'bot_reply',
-      reply_to_message_id: sourceMessage.message_id || null,
       telegram: telegramResult,
       ...raw
     },
@@ -240,8 +306,29 @@ async function saveOutgoingBotMessage({ telegramResult, sourceMessage, sourceTyp
     .catch(error => logBackgroundError('save-bot-reply', error));
 }
 
+async function saveOutgoingBotMessage({ telegramResult, sourceMessage, sourceType, text, classification = 'bot_reply', updateKind = 'bot_reply', raw = {} }) {
+  if (!sourceMessage || !sourceMessage.chat) return;
+  await saveBotMessageRecord({
+    telegramResult,
+    chat: sourceMessage.chat,
+    sourceType,
+    text,
+    classification,
+    updateKind,
+    businessConnectionId: sourceMessage.business_connection_id || null,
+    raw: {
+      reply_to_message_id: sourceMessage.message_id || null,
+      ...raw
+    }
+  });
+}
+
 async function sendTrackedBotReply({ message, sourceType, text, options = {}, classification = 'bot_reply', updateKind = 'bot_reply', rawSource = 'bot_reply' }) {
-  const result = await sendMessage(message.chat.id, text, options);
+  const sendOptions = { ...options };
+  if (message.business_connection_id && !sendOptions.business_connection_id) {
+    sendOptions.business_connection_id = message.business_connection_id;
+  }
+  const result = await sendMessage(message.chat.id, text, sendOptions);
   await saveOutgoingBotMessage({
     telegramResult: result,
     sourceMessage: message,
@@ -490,6 +577,12 @@ async function maybeStartGroupBroadcastDeletePreview(message, text, settings = n
 
 async function handleGroupRegistrationCommand(message, tracking) {
   const chat = message.chat || {};
+  const deleteCommandPromise = deleteMessage(chat.id, message.message_id)
+    .then(() => ({ deleted: true }))
+    .catch(error => {
+      logBackgroundError('delete-group-command', error);
+      return { deleted: false, error };
+    });
   let registered = true;
   await tracking.catch(error => {
     registered = false;
@@ -508,6 +601,10 @@ async function handleGroupRegistrationCommand(message, tracking) {
   } catch (error) {
     logBackgroundError('register-group-webhook-diagnostics', error);
   }
+  const deleteResult = await deleteCommandPromise;
+  if (!deleteResult.deleted) {
+    diagnostics.push('Command o‘chirilmadi: bot guruhda admin bo‘lib, delete permissionga ega bo‘lishi kerak.');
+  }
   const registrationText = registered
     ? [
       '✅ Guruh ro‘yxatga olindi.',
@@ -520,12 +617,10 @@ async function handleGroupRegistrationCommand(message, tracking) {
   await sendTrackedBotReply({
     message,
     text: registrationText,
-    options: { reply_to_message_id: message.message_id },
+    options: deleteResult.deleted ? {} : { reply_to_message_id: message.message_id },
     updateKind: 'bot_register_group',
     rawSource: 'bot_register_group'
   }).catch(error => logBackgroundError('register-group-reply', error));
-  await deleteMessage(chat.id, message.message_id)
-    .catch(error => logBackgroundError('delete-group-command', error));
 }
 
 async function handleHelp(message) {
@@ -599,7 +694,7 @@ async function sendPendingGroupBroadcast({ broadcast }) {
   const results = await mapWithConcurrency(targets, BROADCAST_CONCURRENCY, async target => {
     try {
       const telegramResult = await sendMessage(target.chat_id, broadcast.text, { parse_mode: null });
-      return { target, ok: true, message_id: telegramResult.message_id };
+      return { target, ok: true, telegramResult, message_id: telegramResult.message_id };
     } catch (error) {
       return { target, ok: false, error: error.message };
     }
@@ -625,6 +720,31 @@ async function sendPendingGroupBroadcast({ broadcast }) {
 
   if (targetRows.length) {
     await supabase.insert('broadcast_targets', targetRows, { prefer: 'return=minimal' }).catch(() => null);
+  }
+  const messageRows = results
+    .filter(result => result.ok && result.message_id)
+    .map(result => ({
+      tg_message_id: result.message_id,
+      chat_id: result.target.chat_id,
+      from_tg_user_id: null,
+      from_name: 'Uyqur Bot',
+      from_username: null,
+      source_type: result.target.source_type || 'group',
+      update_kind: 'bot_group_broadcast',
+      text: broadcast.text,
+      classification: 'bot_broadcast',
+      employee_id: null,
+      business_connection_id: result.target.business_connection_id || null,
+      raw: {
+        source: 'bot_group_broadcast',
+        broadcast_id: broadcast.id,
+        telegram: result.telegramResult
+      },
+      created_at: new Date().toISOString()
+    }));
+  if (messageRows.length) {
+    await supabase.insert('messages', messageRows, { upsert: true, onConflict: 'chat_id,tg_message_id', prefer: 'return=minimal' })
+      .catch(error => logBackgroundError('save-broadcast-messages', error));
   }
 
   await supabase.patch('broadcasts', { id: supabase.eq(broadcast.id) }, {
@@ -767,7 +887,8 @@ async function recordIncomingMessage(updateKind, message, sourceType, classifica
   return chatRow;
 }
 
-async function classifyIncomingMessage({ text, chat, sourceType, updateKind, employee, settings }) {
+async function classifyIncomingMessage({ text, chat, sourceType, updateKind, message, employee, settings }) {
+  if (message && message.from && message.from.is_bot) return 'bot_message';
   const useExternalAi = shouldUseExternalAi(settings);
   const localSettings = useExternalAi ? { ...settings, aiMode: false } : settings;
   let classification = classifyMessage({
@@ -1115,11 +1236,13 @@ async function processMessage(updateKind, message) {
     chat,
     sourceType,
     updateKind,
+    message,
     employee,
     settings
   });
 
   await metrics.saveMessage({ message, updateKind, sourceType, classification, employee }, { prefer: 'return=minimal' });
+  await maybeNotifyMainGroupMessageSaved({ updateKind, message, settings, chatRow, classification });
 
   if (await maybeSendMainStatsFromGroup(message, text, settings)) return;
   if (await maybeStartGroupBroadcastDeletePreview(message, text, settings)) return;

@@ -846,6 +846,7 @@ tbody tr:hover {
 
 .webhook-actions {
   justify-content: flex-start;
+  display: hidden;
 }
 
 .login-screen {
@@ -1319,10 +1320,23 @@ tbody tr:hover {
   display: flex;
   align-items: center;
   justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 8px;
   margin-top: 4px;
   color: rgba(234, 245, 255, .68);
   font-size: 11px;
+}
+
+.chat-source {
+  display: inline-flex;
+  align-items: center;
+  min-height: 18px;
+  padding: 1px 7px;
+  border: 1px solid rgba(255, 255, 255, .12);
+  border-radius: var(--radius);
+  color: rgba(234, 245, 255, .82);
+  background: rgba(255, 255, 255, .07);
+  font-weight: 800;
 }
 
 .chat-ticket {

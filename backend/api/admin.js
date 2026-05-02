@@ -824,11 +824,34 @@ function extractMessageMedia(raw = {}) {
   return null;
 }
 
+function messageRawSource(message = {}) {
+  return String(message.raw && message.raw.source || '').trim();
+}
+
+function messageOrigin({ message = {}, employee = null } = {}) {
+  const rawSource = messageRawSource(message);
+  const classification = String(message.classification || '').trim();
+  const rawFrom = message.raw && message.raw.from || {};
+  if (/^admin/.test(rawSource) || classification === 'admin_reply') return 'admin';
+  if (rawSource === 'ai_auto_reply' || classification === 'ai_reply') return 'ai';
+  if (/^bot/.test(rawSource) || classification === 'bot_reply' || classification === 'bot_message' || rawFrom.is_bot) return 'bot';
+  if (employee || rawSource === 'employee_message' || classification === 'employee_message') return 'employee';
+  return 'customer';
+}
+
+function messageOriginLabel(origin = '') {
+  return ({
+    customer: 'Mijoz',
+    employee: 'Xodim',
+    admin: 'Admin',
+    bot: 'Bot',
+    ai: 'AI'
+  }[origin] || 'Manba');
+}
+
 function messageDirection({ message, employee }) {
-  const rawSource = message.raw && message.raw.source;
-  if (rawSource === 'admin_send') return 'outbound';
-  if (employee) return 'outbound';
-  if (['admin_reply', 'employee_message', 'ai_reply'].includes(message.classification)) return 'outbound';
+  const origin = messageOrigin({ message, employee });
+  if (['admin', 'employee', 'bot', 'ai'].includes(origin)) return 'outbound';
   return 'inbound';
 }
 
@@ -903,11 +926,21 @@ function buildChatDetail({ chat, requests, events, messages, employeesById, empl
       const request = event.request_id ? requestById.get(event.request_id) : null;
       const employee = event.employee_id ? employeesById.get(event.employee_id) : null;
       const outbound = event.event_type === 'closed' || !!employee;
+      const origin = messageOrigin({
+        message: {
+          raw: event.raw || null,
+          classification: event.event_type === 'closed' ? 'employee_message' : event.event_type
+        },
+        employee
+      });
+      const resolvedOrigin = origin === 'customer' && outbound ? 'employee' : origin;
       return {
         id: `event:${event.id || event.request_id || event.tg_message_id || event.created_at || ''}`,
         message_id: event.tg_message_id || null,
         direction: outbound ? 'outbound' : 'inbound',
         actor_type: outbound ? 'employee' : 'customer',
+        origin_type: resolvedOrigin,
+        source_label: messageOriginLabel(resolvedOrigin),
         actor_name: (employee && employee.full_name) || event.actor_name || (outbound ? 'Xodim' : 'Mijoz'),
         actor_username: (employee && employee.username) || '',
         actor_tg_user_id: event.actor_tg_id || null,
@@ -937,6 +970,7 @@ function buildChatDetail({ chat, requests, events, messages, employeesById, empl
     .map(message => {
       const employee = message.employee_id ? employeesById.get(message.employee_id) : employeesByTgId.get(telegramIdKey(message.from_tg_user_id));
       const rawSource = message.raw && message.raw.source;
+      const origin = messageOrigin({ message, employee });
       const request = enrichedRequests.find(item => telegramIdKey(item.done_message_id) === telegramIdKey(message.tg_message_id));
       return {
         type: rawSource === 'admin_send' ? 'admin_reply' : 'employee_reply',
@@ -944,6 +978,8 @@ function buildChatDetail({ chat, requests, events, messages, employeesById, empl
         message_id: message.tg_message_id || null,
         actor_name: (employee && employee.full_name) || message.from_name || (rawSource === 'admin_send' ? 'Admin' : 'Xodim'),
         actor_username: (employee && employee.username) || message.from_username || '',
+        origin_type: origin,
+        source_label: messageOriginLabel(origin),
         actor_tg_user_id: message.from_tg_user_id || null,
         employee_id: (employee && employee.id) || message.employee_id || null,
         text: message.text || '',
@@ -965,12 +1001,15 @@ function buildChatDetail({ chat, requests, events, messages, employeesById, empl
         || eventRequestByMessageId.get(telegramIdKey(message.tg_message_id))
         || null;
       const direction = messageDirection({ message, employee });
+      const origin = messageOrigin({ message, employee });
       return {
         id: message.id || null,
         message_id: message.tg_message_id || null,
         direction,
-        actor_type: direction === 'outbound' ? 'employee' : 'customer',
-        actor_name: (employee && employee.full_name) || message.from_name || (rawSource === 'admin_send' ? 'Admin' : 'Mijoz'),
+        actor_type: origin,
+        origin_type: origin,
+        source_label: messageOriginLabel(origin),
+        actor_name: (employee && employee.full_name) || message.from_name || (rawSource === 'admin_send' ? 'Admin' : messageOriginLabel(origin)),
         actor_username: (employee && employee.username) || message.from_username || '',
         actor_tg_user_id: message.from_tg_user_id || null,
         employee_id: (employee && employee.id) || message.employee_id || null,
@@ -1314,18 +1353,30 @@ async function getCompanyGroupActivity(query = {}) {
       solution_at: closeEvent?.created_at || request.closed_at || null,
       created_at: request.created_at || null,
       closed_at: request.closed_at || null,
-      events: relatedEvents.map(event => ({
-        id: event.id || null,
-        request_id: event.request_id || null,
-        message_id: event.tg_message_id || null,
-        event_type: event.event_type || '',
-        actor_tg_id: event.actor_tg_id || null,
-        actor_name: event.actor_name || '',
-        employee_id: event.employee_id || null,
-        text: event.text || '',
-        media: extractMessageMedia(event.raw),
-        created_at: event.created_at || null
-      }))
+      events: relatedEvents.map(event => {
+        const eventEmployee = event.employee_id ? employeesById.get(event.employee_id) : null;
+        const origin = messageOrigin({
+          message: {
+            raw: event.raw || null,
+            classification: event.event_type === 'closed' ? 'employee_message' : event.event_type
+          },
+          employee: eventEmployee
+        });
+        return {
+          id: event.id || null,
+          request_id: event.request_id || null,
+          message_id: event.tg_message_id || null,
+          event_type: event.event_type || '',
+          actor_tg_id: event.actor_tg_id || null,
+          actor_name: event.actor_name || '',
+          employee_id: event.employee_id || null,
+          origin_type: origin,
+          source_label: messageOriginLabel(origin),
+          text: event.text || '',
+          media: extractMessageMedia(event.raw),
+          created_at: event.created_at || null
+        };
+      })
     };
   };
 
@@ -1336,13 +1387,16 @@ async function getCompanyGroupActivity(query = {}) {
       || eventRequestByMessageId.get(telegramIdKey(message.tg_message_id))
       || null;
     const direction = messageDirection({ message, employee });
+    const origin = messageOrigin({ message, employee });
     return {
       id: message.id || null,
       message_id: message.tg_message_id || null,
       chat_id: message.chat_id,
       direction,
-      actor_type: direction === 'outbound' ? 'employee' : 'customer',
-      actor_name: employee?.full_name || message.from_name || (direction === 'outbound' ? 'Xodim' : 'Mijoz'),
+      actor_type: origin,
+      origin_type: origin,
+      source_label: messageOriginLabel(origin),
+      actor_name: employee?.full_name || message.from_name || messageOriginLabel(origin),
       actor_username: employee?.username || message.from_username || '',
       actor_tg_user_id: message.from_tg_user_id || null,
       employee_id: employee?.id || message.employee_id || null,
@@ -1786,20 +1840,32 @@ async function getEmployeeActivity(query = {}) {
     eventsByRequestId.set(event.request_id, list);
   });
   const chatTitle = chatId => displayChatTitle(chatMap.get(telegramIdKey(chatId)) || { chat_id: chatId });
-  const eventSummary = event => ({
-    id: event.id || null,
-    request_id: event.request_id || null,
-    message_id: event.tg_message_id || null,
-    chat_id: event.chat_id,
-    chat_title: chatTitle(event.chat_id),
-    event_type: event.event_type || '',
-    actor_tg_id: event.actor_tg_id || null,
-    actor_name: event.actor_name || '',
-    employee_id: event.employee_id || null,
-    text: event.text || '',
-    media: extractMessageMedia(event.raw),
-    created_at: event.created_at || null
-  });
+  const eventSummary = event => {
+    const eventEmployee = employeeMaps.byId.get(event.employee_id) || employeeMaps.byTgId.get(telegramIdKey(event.actor_tg_id));
+    const origin = messageOrigin({
+      message: {
+        raw: event.raw || null,
+        classification: event.event_type === 'closed' ? 'employee_message' : event.event_type
+      },
+      employee: eventEmployee
+    });
+    return {
+      id: event.id || null,
+      request_id: event.request_id || null,
+      message_id: event.tg_message_id || null,
+      chat_id: event.chat_id,
+      chat_title: chatTitle(event.chat_id),
+      event_type: event.event_type || '',
+      actor_tg_id: event.actor_tg_id || null,
+      actor_name: event.actor_name || '',
+      employee_id: event.employee_id || null,
+      origin_type: origin,
+      source_label: messageOriginLabel(origin),
+      text: event.text || '',
+      media: extractMessageMedia(event.raw),
+      created_at: event.created_at || null
+    };
+  };
   const requestSummary = request => ({
     id: request.id,
     source_type: request.source_type || chatMap.get(telegramIdKey(request.chat_id))?.source_type || '',
@@ -1819,20 +1885,26 @@ async function getEmployeeActivity(query = {}) {
     closed_at: request.closed_at || null,
     events: (eventsByRequestId.get(request.id) || []).map(eventSummary)
   });
-  const messageSummary = message => ({
-    id: message.id || null,
-    message_id: message.tg_message_id || null,
-    chat_id: message.chat_id,
-    chat_title: chatTitle(message.chat_id),
-    from_tg_user_id: message.from_tg_user_id || null,
-    from_name: message.from_name || '',
-    from_username: message.from_username || '',
-    employee_id: message.employee_id || null,
-    text: message.text || '',
-    media: extractMessageMedia(message.raw),
-    classification: message.classification || '',
-    created_at: message.created_at || null
-  });
+  const messageSummary = message => {
+    const messageEmployee = employeeMaps.byId.get(message.employee_id) || employeeMaps.byTgId.get(telegramIdKey(message.from_tg_user_id));
+    const origin = messageOrigin({ message, employee: messageEmployee });
+    return {
+      id: message.id || null,
+      message_id: message.tg_message_id || null,
+      chat_id: message.chat_id,
+      chat_title: chatTitle(message.chat_id),
+      from_tg_user_id: message.from_tg_user_id || null,
+      from_name: message.from_name || '',
+      from_username: message.from_username || '',
+      employee_id: message.employee_id || null,
+      origin_type: origin,
+      source_label: messageOriginLabel(origin),
+      text: message.text || '',
+      media: extractMessageMedia(message.raw),
+      classification: message.classification || '',
+      created_at: message.created_at || null
+    };
+  };
 
   const grouped = new Map();
   const ensureGroup = chatId => {
@@ -2429,6 +2501,26 @@ async function broadcast(body) {
       sent += 1;
       details.push({ chat_id: target.chat_id, ok: true, message_id: telegramResult.message_id });
       await supabase.insert('broadcast_targets', [{ broadcast_id: broadcastRow.id, chat_id: target.chat_id, status: 'sent', sent_at: new Date().toISOString(), telegram_message_id: telegramResult.message_id }], { prefer: 'return=minimal' }).catch(() => null);
+      await supabase.insert('messages', [{
+        tg_message_id: telegramResult.message_id,
+        chat_id: target.chat_id,
+        from_tg_user_id: null,
+        from_name: body.created_by || 'admin',
+        from_username: body.created_by || null,
+        source_type: target.source_type || 'group',
+        update_kind: 'admin_broadcast',
+        text: body.text,
+        classification: 'admin_reply',
+        employee_id: null,
+        business_connection_id: target.business_connection_id || null,
+        raw: {
+          source: 'admin_broadcast',
+          broadcast_id: broadcastRow.id,
+          created_by: body.created_by || 'admin',
+          telegram: telegramResult
+        },
+        created_at: nowIso()
+      }], { upsert: true, onConflict: 'chat_id,tg_message_id', prefer: 'return=minimal' }).catch(() => null);
     } catch (error) {
       failed += 1;
       details.push({ chat_id: target.chat_id, ok: false, error: error.message });
@@ -2604,6 +2696,30 @@ async function sendToEmployee(body) {
   const telegramResult = target.business_connection_id
     ? await sendBusinessMessage(target.business_connection_id, target.chat_id, body.text)
     : await sendMessage(target.chat_id, body.text);
+  if (telegramResult && telegramResult.message_id) {
+    const actorName = body.created_by || 'admin';
+    await supabase.insert('messages', [{
+      tg_message_id: telegramResult.message_id,
+      chat_id: target.chat_id,
+      from_tg_user_id: null,
+      from_name: actorName,
+      from_username: body.created_by || null,
+      source_type: target.business_connection_id ? 'business' : 'private',
+      update_kind: 'admin_employee_send',
+      text: body.text,
+      classification: 'admin_reply',
+      employee_id: null,
+      business_connection_id: target.business_connection_id || null,
+      raw: {
+        source: 'admin_employee_send',
+        target_employee_id: employee.id || null,
+        target_employee_tg_user_id: employee.tg_user_id || null,
+        created_by: body.created_by || 'admin',
+        telegram: telegramResult
+      },
+      created_at: nowIso()
+    }], { upsert: true, onConflict: 'chat_id,tg_message_id', prefer: 'return=minimal' }).catch(() => null);
+  }
   return { sent: true, employee_id: employee.id || null, chat_id: target.chat_id, via: target.via, telegram: telegramResult };
 }
 
@@ -2634,7 +2750,7 @@ async function sendToEmployees(body) {
   const details = [];
   for (const target of targets) {
     try {
-      const result = await sendToEmployee({ employee_id: target.employee_id, tg_user_id: target.tg_user_id, text: body.text });
+      const result = await sendToEmployee({ employee_id: target.employee_id, tg_user_id: target.tg_user_id, text: body.text, created_by: body.created_by });
       sent += 1;
       details.push({ label: target.label, ok: true, employee_id: result.employee_id, chat_id: result.chat_id, via: result.via });
     } catch (error) {
@@ -2892,8 +3008,8 @@ async function handlePost(action, body, currentAdmin) {
     case 'company': return upsertCompany(body);
     case 'employee': return upsertEmployee(body);
     case 'deleteGroup': return deactivateGroup(body);
-    case 'sendEmployeeMessage': return sendToEmployee(body);
-    case 'sendEmployeesMessage': return sendToEmployees(body);
+    case 'sendEmployeeMessage': return sendToEmployee({ ...body, created_by: currentAdmin.username });
+    case 'sendEmployeesMessage': return sendToEmployees({ ...body, created_by: currentAdmin.username });
     case 'assignChatCompany': return assignChatCompany(body);
     case 'settings': return updateSettings(body);
     case 'aiKnowledgeExtract': return extractAiKnowledge(body);

@@ -11,8 +11,8 @@ function messageDateIso(message = {}) {
   return message.date ? new Date(message.date * 1000).toISOString() : nowIso();
 }
 
-function chatTitle(chat = {}) {
-  return chat.title || chat.username || [chat.first_name, chat.last_name].filter(Boolean).join(' ').trim() || String(chat.id || 'Unknown chat');
+function chatTitle(chat = {}, fallback = '') {
+  return chat.title || chat.username || [chat.first_name, chat.last_name].filter(Boolean).join(' ').trim() || fallback || String(chat.id || 'Unknown chat');
 }
 
 function sourceTypeFrom(updateKind, chatType) {
@@ -70,18 +70,18 @@ async function ensureEmployee(user = {}) {
 async function upsertChat(chat = {}, sourceType = 'group', extra = {}, options = {}) {
   if (!chat || chat.id === undefined || chat.id === null) return null;
   const existingRows = await supabase.select('tg_chats', {
-    select: 'chat_id,company_id,business_connection_id',
+    select: 'chat_id,title,username,type,company_id,business_connection_id',
     chat_id: supabase.eq(chat.id),
     limit: '1'
   }).catch(() => []);
   const existing = existingRows[0] || {};
-  const title = chatTitle(chat);
+  const title = chatTitle(chat, existing.title || '');
   const row = {
     chat_id: chat.id,
-    type: chat.type || sourceType,
+    type: chat.type || existing.type || sourceType,
     source_type: sourceType,
     title,
-    username: chat.username || null,
+    username: chat.username || existing.username || null,
     is_active: true,
     last_message_at: nowIso(),
     raw: chat,
@@ -120,6 +120,11 @@ async function saveMessage({ message, updateKind, sourceType, classification, em
   const from = message.from || {};
   const chat = message.chat || {};
   const text = message.text || message.caption || '';
+  const messageSource = from.is_bot
+    ? 'bot_message'
+    : employee
+      ? 'employee_message'
+      : 'customer_message';
   const rows = await supabase.insert('messages', [{
     tg_message_id: message.message_id,
     chat_id: chat.id,
@@ -132,7 +137,13 @@ async function saveMessage({ message, updateKind, sourceType, classification, em
     classification,
     employee_id: employee ? employee.id : null,
     business_connection_id: message.business_connection_id || null,
-    raw: message,
+    raw: {
+      ...message,
+      source: message.source || messageSource,
+      source_type: sourceType,
+      update_kind: updateKind,
+      classification
+    },
     created_at: message.date ? new Date(message.date * 1000).toISOString() : nowIso()
   }], { upsert: true, onConflict: 'chat_id,tg_message_id', prefer: options.prefer || 'return=representation' });
   return Array.isArray(rows) ? rows[0] : null;

@@ -759,7 +759,7 @@
                   <div>
                     <div class="card-title">Telegram ulanishi</div>
                   </div>
-                  <!-- <div class="actions webhook-actions">
+                  <div class="actions webhook-actions">
                     <button class="btn" :disabled="loadingAction === 'webhookInfo'" @click="checkTelegramWebhook">{{
                       loadingAction === 'webhookInfo' ? 'Tekshirilmoqda...' : 'Holatni ko‘rish' }}</button>
                     <button class="btn primary" :disabled="loadingAction === 'webhookConnect'"
@@ -767,7 +767,7 @@
                         'Telegram ulanishini yangilash' }}</button>
                     <button class="btn" :disabled="loadingAction === 'webhookSync'" @click="syncTelegramUpdates">{{
                       loadingAction === 'webhookSync' ? 'Olinmoqda...' : 'Webhooksiz sinxronlash' }}</button>
-                  </div> -->
+                  </div>
                 </div>
                 <Transition name="fade">
                   <pre v-if="webhookStatusText" class="webhook-status">{{ webhookStatusText }}</pre>
@@ -1301,6 +1301,7 @@
                     <p v-if="message.text">{{ message.text }}</p>
                     <div class="chat-bubble-footer">
                       <span v-if="message.request_text" class="chat-ticket">So‘rov</span>
+                      <span class="chat-source">{{ messageSourceLabel(message) }}</span>
                       <time>{{ fmtChatTime(message.created_at) }}</time>
                     </div>
                   </div>
@@ -1454,6 +1455,7 @@
                       <p v-if="message.text">{{ message.text }}</p>
                       <div class="chat-bubble-footer">
                         <span v-if="message.request_text" class="chat-ticket">Ticket</span>
+                        <span class="chat-source">{{ messageSourceLabel(message) }}</span>
                         <time>{{ fmtChatTime(message.created_at) }}</time>
                       </div>
                     </div>
@@ -1664,6 +1666,7 @@
                       <p v-if="message.text">{{ message.text }}</p>
                       <div class="chat-bubble-footer">
                         <span v-if="message.request_text" class="chat-ticket">So‘rov</span>
+                        <span class="chat-source">{{ messageSourceLabel(message) }}</span>
                         <time>{{ fmtChatTime(message.created_at) }}</time>
                       </div>
                     </div>
@@ -1834,6 +1837,7 @@
                     <p v-if="message.text">{{ message.text }}</p>
                     <div class="chat-bubble-footer">
                       <span v-if="message.request_text" class="chat-ticket">So‘rov</span>
+                      <span class="chat-source">{{ messageSourceLabel(message) }}</span>
                       <time>{{ fmtChatTime(message.created_at) }}</time>
                     </div>
                   </div>
@@ -3466,6 +3470,8 @@ function employeeRequestConversationItem(request = {}) {
     message_id: request.initial_message_id || null,
     direction: 'inbound',
     actor_type: 'customer',
+    origin_type: 'customer',
+    source_label: 'Mijoz',
     actor_name: request.customer_name || 'Mijoz',
     actor_username: request.customer_username || '',
     actor_tg_user_id: request.customer_tg_id || null,
@@ -3482,13 +3488,16 @@ function employeeRequestEventConversationItems(request = {}, employee = {}) {
     .map(event => {
       const eventType = event.event_type || event.type || '';
       const outbound = eventType === 'closed' || Boolean(event.employee_id);
+      const origin = event.origin_type || (outbound ? 'employee' : 'customer');
       const item = {
         id: `request-event-${event.id || `${request.id || ''}-${event.message_id || event.created_at || ''}`}`,
         type: eventType === 'closed' ? 'employee_reply' : (eventType === 'opened' ? 'ticket' : 'customer_note'),
         request_id: request.id || event.request_id || null,
         message_id: event.message_id || event.tg_message_id || null,
         direction: outbound ? 'outbound' : 'inbound',
-        actor_type: outbound ? 'employee' : 'customer',
+        actor_type: origin,
+        origin_type: origin,
+        source_label: event.source_label || messageSourceLabel({ origin_type: origin, direction: outbound ? 'outbound' : 'inbound' }),
         actor_name: event.actor_name || (outbound ? request.closed_by_name || 'Xodim' : request.customer_name || 'Mijoz'),
         actor_username: event.actor_username || '',
         actor_tg_user_id: event.actor_tg_id || event.actor_tg_user_id || null,
@@ -3512,7 +3521,9 @@ function employeeMessageConversationItem(message = {}, employee = {}) {
     request_id: message.request_id || null,
     message_id: message.message_id || message.tg_message_id || null,
     direction: 'outbound',
-    actor_type: 'employee',
+    actor_type: message.actor_type || message.origin_type || 'employee',
+    origin_type: message.origin_type || message.actor_type || 'employee',
+    source_label: message.source_label || messageSourceLabel(message),
     actor_name: message.from_name || message.actor_name || 'Xodim',
     actor_username: message.from_username || message.actor_username || '',
     actor_tg_user_id: message.from_tg_user_id || message.actor_tg_user_id || null,
@@ -3527,14 +3538,17 @@ function employeeMessageConversationItem(message = {}, employee = {}) {
 
 function employeeChatMessageConversationItem(message = {}, employee = {}) {
   const outbound = messageBelongsToEmployee(message, employee)
-    || ['employee_message', 'admin_reply', 'ai_reply'].includes(message.classification || '');
+    || ['employee_message', 'admin_reply', 'ai_reply', 'bot_reply', 'bot_broadcast', 'bot_notification', 'bot_message'].includes(message.classification || '');
+  const origin = message.origin_type || message.actor_type || (outbound ? 'employee' : 'customer');
   return {
     id: message.id || `chat-message-${message.chat_id || ''}-${message.message_id || message.created_at || ''}`,
     type: outbound ? 'employee_reply' : 'chat_message',
     request_id: message.request_id || null,
     message_id: message.message_id || message.tg_message_id || null,
     direction: outbound ? 'outbound' : 'inbound',
-    actor_type: outbound ? 'employee' : 'customer',
+    actor_type: origin,
+    origin_type: origin,
+    source_label: message.source_label || messageSourceLabel({ ...message, origin_type: origin, direction: outbound ? 'outbound' : 'inbound' }),
     actor_name: message.from_name || message.actor_name || (outbound ? 'Xodim' : 'Mijoz'),
     actor_username: message.from_username || message.actor_username || '',
     actor_tg_user_id: message.from_tg_user_id || message.actor_tg_user_id || null,
@@ -3844,6 +3858,19 @@ function timelineKey(item, index) {
 function fmtChatTime(value) {
   if (!value) return '';
   return new Intl.DateTimeFormat('uz-UZ', { hour: '2-digit', minute: '2-digit' }).format(new Date(value));
+}
+
+function messageSourceLabel(message = {}) {
+  const label = String(message.source_label || '').trim();
+  if (label) return label;
+  const origin = String(message.origin_type || message.actor_type || '').trim().toLowerCase();
+  if (origin === 'admin') return 'Admin';
+  if (origin === 'bot') return 'Bot';
+  if (origin === 'ai') return 'AI';
+  if (origin === 'employee') return 'Xodim';
+  if (origin === 'customer') return 'Mijoz';
+  if (message.direction === 'outbound') return 'Xodim';
+  return 'Mijoz';
 }
 
 function chatBubbleKey(message) {

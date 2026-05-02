@@ -239,6 +239,7 @@ async function testCompanyGroupPlainMessageIsStoredAndKeepsCompanyLink() {
   const originalSelect = supabase.select;
   const originalFetch = global.fetch;
   const inserted = [];
+  const telegramCalls = [];
   const chatId = -100456;
   const companyId = 'company-plain';
   clearBotSettingsCache();
@@ -257,8 +258,12 @@ async function testCompanyGroupPlainMessageIsStoredAndKeepsCompanyLink() {
     inserted.push({ table, rows, options });
     return rows.map(row => ({ id: `${table}-row`, ...row }));
   };
-  global.fetch = async () => {
-    throw new Error('plain group message should not call Telegram');
+  global.fetch = async (_url, options) => {
+    telegramCalls.push({ url: _url, body: JSON.parse(options.body) });
+    return {
+      ok: true,
+      json: async () => ({ ok: true, result: { message_id: 701 } })
+    };
   };
 
   try {
@@ -279,7 +284,11 @@ async function testCompanyGroupPlainMessageIsStoredAndKeepsCompanyLink() {
     assert.ok(chatInsert);
     assert.strictEqual(chatInsert.rows[0].company_id, companyId);
     assert.strictEqual(inserted.some(item => item.table === 'messages' && item.rows[0].text === 'Bugun yig‘ilish vaqti 16:00'), true);
+    assert.strictEqual(inserted.some(item => item.table === 'messages' && item.rows[0].raw?.source === 'customer_message'), true);
     assert.strictEqual(inserted.some(item => item.table === 'support_requests'), false);
+    const notice = telegramCalls.find(call => /sendMessage$/.test(call.url) && String(call.body.chat_id) === '-100999');
+    assert.ok(notice);
+    assert.match(notice.body.text, /Company support group guruhidagi xabar saqlandi/);
   } finally {
     supabase.insert = originalInsert;
     supabase.select = originalSelect;
@@ -293,6 +302,7 @@ async function testCompanyGroupRequestUsesRegisteredChatCompany() {
   const originalSelect = supabase.select;
   const originalFetch = global.fetch;
   const inserted = [];
+  const telegramCalls = [];
   const chatId = -100457;
   const companyId = 'company-request';
   clearBotSettingsCache();
@@ -311,8 +321,12 @@ async function testCompanyGroupRequestUsesRegisteredChatCompany() {
     inserted.push({ table, rows, options });
     return rows.map(row => ({ id: `${table}-row`, ...row }));
   };
-  global.fetch = async () => {
-    throw new Error('auto reply is disabled');
+  global.fetch = async (_url, options) => {
+    telegramCalls.push({ url: _url, body: JSON.parse(options.body) });
+    return {
+      ok: true,
+      json: async () => ({ ok: true, result: { message_id: 702 } })
+    };
   };
 
   try {
@@ -333,6 +347,9 @@ async function testCompanyGroupRequestUsesRegisteredChatCompany() {
     assert.ok(requestInsert);
     assert.strictEqual(requestInsert.rows[0].company_id, companyId);
     assert.strictEqual(inserted.some(item => item.table === 'messages' && item.rows[0].classification === 'request'), true);
+    const notice = telegramCalls.find(call => /sendMessage$/.test(call.url) && String(call.body.chat_id) === '-100999');
+    assert.ok(notice);
+    assert.match(notice.body.text, /Company support group guruhidagi xabar saqlandi/);
   } finally {
     supabase.insert = originalInsert;
     supabase.select = originalSelect;
