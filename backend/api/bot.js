@@ -130,6 +130,14 @@ function telegramDescription(error = {}) {
   return String(error.telegram && error.telegram.description || error.message || '');
 }
 
+function isBusinessPeerInvalid(error = {}) {
+  return /BUSINESS_PEER_INVALID/i.test(telegramDescription(error));
+}
+
+function isReplyTargetInvalid(error = {}) {
+  return /reply message not found|message to be replied not found|replied message not found/i.test(telegramDescription(error));
+}
+
 function isDeleteAlreadyHandled(error = {}) {
   return /message to delete not found|message can't be deleted|message identifier is not specified|not found/i.test(telegramDescription(error));
 }
@@ -508,7 +516,9 @@ async function saveOutgoingBotMessage({ telegramResult, sourceMessage, sourceTyp
     text,
     classification,
     updateKind,
-    businessConnectionId: sourceMessage.business_connection_id || null,
+    businessConnectionId: Object.prototype.hasOwnProperty.call(raw, 'business_connection_id')
+      ? raw.business_connection_id
+      : sourceMessage.business_connection_id || null,
     raw: {
       reply_to_message_id: sourceMessage.message_id || null,
       ...raw
@@ -516,22 +526,84 @@ async function saveOutgoingBotMessage({ telegramResult, sourceMessage, sourceTyp
   });
 }
 
+async function sendCustomerFacingMessage({ message, text, options = {} }) {
+  const baseOptions = { ...options };
+  const requestedBusinessConnectionId = baseOptions.business_connection_id || message.business_connection_id || null;
+  if (requestedBusinessConnectionId && !baseOptions.business_connection_id) {
+    baseOptions.business_connection_id = requestedBusinessConnectionId;
+  }
+
+  async function sendWithOptions(sendOptions) {
+    return sendMessage(message.chat.id, text, sendOptions);
+  }
+
+  try {
+    return {
+      telegramResult: await sendWithOptions(baseOptions),
+      businessConnectionId: baseOptions.business_connection_id || null,
+      fallbackFromBusiness: false
+    };
+  } catch (error) {
+    let businessError = error;
+    if (baseOptions.reply_to_message_id && isReplyTargetInvalid(error)) {
+      const retryOptions = { ...baseOptions };
+      delete retryOptions.reply_to_message_id;
+      try {
+        return {
+          telegramResult: await sendWithOptions(retryOptions),
+          businessConnectionId: retryOptions.business_connection_id || null,
+          fallbackFromBusiness: false,
+          droppedReplyTarget: true
+        };
+      } catch (retryError) {
+        businessError = retryError;
+      }
+    }
+
+    if (!baseOptions.business_connection_id || !isBusinessPeerInvalid(businessError)) throw businessError;
+
+    const fallbackOptions = { ...baseOptions };
+    delete fallbackOptions.business_connection_id;
+    try {
+      return {
+        telegramResult: await sendWithOptions(fallbackOptions),
+        businessConnectionId: null,
+        fallbackFromBusiness: true
+      };
+    } catch (fallbackError) {
+      if (fallbackOptions.reply_to_message_id && isReplyTargetInvalid(fallbackError)) {
+        const retryOptions = { ...fallbackOptions };
+        delete retryOptions.reply_to_message_id;
+        return {
+          telegramResult: await sendWithOptions(retryOptions),
+          businessConnectionId: null,
+          fallbackFromBusiness: true,
+          droppedReplyTarget: true
+        };
+      }
+      throw businessError;
+    }
+  }
+}
+
 async function sendTrackedBotReply({ message, sourceType, text, options = {}, classification = 'bot_reply', updateKind = 'bot_reply', rawSource = 'bot_reply' }) {
   const sendOptions = { ...options };
-  if (message.business_connection_id && !sendOptions.business_connection_id) {
-    sendOptions.business_connection_id = message.business_connection_id;
-  }
-  const result = await sendMessage(message.chat.id, text, sendOptions);
+  const delivery = await sendCustomerFacingMessage({ message, text, options: sendOptions });
   await saveOutgoingBotMessage({
-    telegramResult: result,
+    telegramResult: delivery.telegramResult,
     sourceMessage: message,
     sourceType: sourceType || metrics.sourceTypeFrom(updateKind, (message.chat || {}).type),
     text,
     classification,
     updateKind,
-    raw: { source: rawSource }
+    raw: {
+      source: rawSource,
+      business_connection_id: delivery.businessConnectionId,
+      fallback_from_business: delivery.fallbackFromBusiness,
+      dropped_reply_target: !!delivery.droppedReplyTarget
+    }
   });
-  return result;
+  return delivery.telegramResult;
 }
 
 function isGroupBroadcastTrigger(text = '') {
@@ -1198,7 +1270,7 @@ async function maybeReplyPrivateFallback(updateKind, message, classification) {
   return true;
 }
 
-async function saveAiReplyMessage({ telegramResult, sourceMessage, sourceType, text, settings }) {
+async function saveAiReplyMessage({ telegramResult, sourceMessage, sourceType, text, settings, businessConnectionId, fallbackFromBusiness = false, droppedReplyTarget = false }) {
   if (!telegramResult || !telegramResult.message_id) return;
   const chat = sourceMessage.chat || {};
   await supabase.insert('messages', [{
@@ -1212,11 +1284,13 @@ async function saveAiReplyMessage({ telegramResult, sourceMessage, sourceType, t
     text,
     classification: 'ai_reply',
     employee_id: null,
-    business_connection_id: sourceMessage.business_connection_id || null,
+    business_connection_id: businessConnectionId === undefined ? sourceMessage.business_connection_id || null : businessConnectionId,
     raw: {
       source: 'ai_auto_reply',
       reply_to_message_id: sourceMessage.message_id,
-      telegram: telegramResult
+      telegram: telegramResult,
+      fallback_from_business: !!fallbackFromBusiness,
+      dropped_reply_target: !!droppedReplyTarget
     },
     created_at: new Date().toISOString()
   }], { upsert: true, onConflict: 'chat_id,tg_message_id', prefer: 'return=minimal' }).catch(error => logBackgroundError('save-ai-reply', error));
@@ -1301,8 +1375,17 @@ async function maybeSendAiAutoReply({ updateKind, message, sourceType, text, set
     if (String(updateKind).includes('business') && message.business_connection_id) {
       options.business_connection_id = message.business_connection_id;
     }
-    const telegramResult = await sendMessage(message.chat.id, reply, options);
-    await saveAiReplyMessage({ telegramResult, sourceMessage: message, sourceType, text: reply, settings });
+    const delivery = await sendCustomerFacingMessage({ message, text: reply, options });
+    await saveAiReplyMessage({
+      telegramResult: delivery.telegramResult,
+      sourceMessage: message,
+      sourceType,
+      text: reply,
+      settings,
+      businessConnectionId: delivery.businessConnectionId,
+      fallbackFromBusiness: delivery.fallbackFromBusiness,
+      droppedReplyTarget: !!delivery.droppedReplyTarget
+    });
     return true;
   } catch (error) {
     logBackgroundError('ai-auto-reply', error);

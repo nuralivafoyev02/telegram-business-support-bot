@@ -5,6 +5,28 @@ const supabase = require('./supabase');
 
 const DEFAULT_COMPANY_INFO_URL = 'https://backend.app.uyqur.uz/dev/company/info-for-bot';
 const EXPIRING_SOON_DAYS = 30;
+const COMPANY_INFO_FIELDS = Object.freeze([
+  'id',
+  'name',
+  'status',
+  'created_at',
+  'updated_at',
+  'phone',
+  'brand',
+  'director',
+  'icon',
+  'last_activity',
+  'currency_id',
+  'auto_refresh_currencies',
+  'expired',
+  'uyqur_support_username',
+  'uyqur_support_phone',
+  'subscription_start_date',
+  'business_status',
+  'is_real',
+  'status_histories'
+]);
+const STATUS_HISTORY_FIELDS = Object.freeze(['id', 'old_status', 'new_status', 'company_id', 'changed_at']);
 
 function companyInfoUrl() {
   return optionalEnv('UYQUR_COMPANY_INFO_URL', DEFAULT_COMPANY_INFO_URL);
@@ -47,6 +69,25 @@ function normalizeSupportUsername(value = '') {
 
 function normalizePhone(value = '') {
   return String(value || '').replace(/\D/g, '');
+}
+
+function pickFields(source = {}, fields = []) {
+  return Object.fromEntries(fields
+    .filter(field => Object.prototype.hasOwnProperty.call(source, field))
+    .map(field => [field, source[field]]));
+}
+
+function sanitizeStatusHistory(row = {}) {
+  return pickFields(row && typeof row === 'object' ? row : {}, STATUS_HISTORY_FIELDS);
+}
+
+function sanitizeCompanyRow(row = {}) {
+  const source = row && typeof row === 'object' ? row : {};
+  const picked = pickFields(source, COMPANY_INFO_FIELDS);
+  if (Array.isArray(source.status_histories)) {
+    picked.status_histories = source.status_histories.map(sanitizeStatusHistory);
+  }
+  return picked;
 }
 
 function normalizeCompany(row = {}) {
@@ -171,11 +212,30 @@ function extractCompanyRows(payload = {}) {
   return [];
 }
 
-async function fetchCompanyInfo() {
-  const url = companyInfoUrl();
-  const auth = companyInfoAuth();
-  if (!auth) throw new Error('UYQUR_COMPANY_INFO_AUTH env sozlanmagan');
+function scopedCompanyInfoUrl(rawUrl = companyInfoUrl()) {
+  let parsed;
+  try {
+    parsed = new URL(rawUrl);
+  } catch (_error) {
+    throw new Error('UYQUR_COMPANY_INFO_URL noto‘g‘ri formatda');
+  }
+  if (!parsed.searchParams.has('fields')) {
+    parsed.searchParams.set('fields', COMPANY_INFO_FIELDS.join(','));
+  }
+  if (!parsed.searchParams.has('include')) {
+    parsed.searchParams.set('include', 'status_histories');
+  }
+  if (!parsed.searchParams.has('scope')) {
+    parsed.searchParams.set('scope', 'companies');
+  }
+  return parsed.toString();
+}
 
+function safePayloadMessage(payload = {}) {
+  return typeof payload.message === 'string' ? payload.message.slice(0, 500) : null;
+}
+
+async function requestCompanyInfo(url, auth) {
   const response = await fetch(url, {
     headers: { 'X-Auth': auth }
   });
@@ -184,19 +244,43 @@ async function fetchCompanyInfo() {
     const message = payload && payload.message
       ? JSON.stringify(payload.message)
       : response.statusText || `HTTP ${response.status}`;
-    throw new Error(`Uyqur company API: ${message}`);
+    const error = new Error(`Uyqur company API: ${message}`);
+    error.status = response.status;
+    throw error;
+  }
+  return payload;
+}
+
+function shouldRetryUnscoped(error = {}) {
+  return [400, 404, 405, 422].includes(Number(error.status || 0));
+}
+
+async function fetchCompanyInfo() {
+  const baseUrl = companyInfoUrl();
+  const url = scopedCompanyInfoUrl(baseUrl);
+  const auth = companyInfoAuth();
+  if (!auth) throw new Error('UYQUR_COMPANY_INFO_AUTH env sozlanmagan');
+
+  let payload;
+  let source = url;
+  try {
+    payload = await requestCompanyInfo(url, auth);
+  } catch (error) {
+    if (url === baseUrl || !shouldRetryUnscoped(error)) throw error;
+    payload = await requestCompanyInfo(baseUrl, auth);
+    source = baseUrl;
   }
 
-  const companies = extractCompanyRows(payload).map(normalizeCompany);
+  const companies = extractCompanyRows(payload).map(sanitizeCompanyRow).map(normalizeCompany);
   const supportEmployeeSync = await syncSupportEmployees(companies);
   return {
     summary: buildSummary(companies),
     companies,
     support_employee_sync: supportEmployeeSync,
     fetched_at: new Date().toISOString(),
-    source: url,
-    message: payload.message || null
+    source,
+    message: safePayloadMessage(payload)
   };
 }
 
-module.exports = { fetchCompanyInfo, normalizeCompany, buildSummary, syncSupportEmployees };
+module.exports = { fetchCompanyInfo, normalizeCompany, buildSummary, syncSupportEmployees, scopedCompanyInfoUrl };

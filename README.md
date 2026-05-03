@@ -84,7 +84,7 @@ UYQUR_COMPANY_INFO_AUTH=company-info-x-auth-token
 
 `SUPABASE_SERVICE_ROLE_KEY` faqat backend environmentda turishi kerak. Webappga chiqarilmagan.
 
-`UYQUR_COMPANY_INFO_AUTH` ham faqat backend environmentda turadi. Webapp `Company Activity` paneli ma’lumotni `/api/admin?action=companyInfo` orqali oladi, token browserga yuborilmaydi.
+`UYQUR_COMPANY_INFO_AUTH` ham faqat backend environmentda turadi. Webapp `Company Activity` paneli ma’lumotni `/api/admin?action=companyInfo` orqali oladi, token browserga yuborilmaydi. Backend bu URLga faqat kompaniya paneli uchun kerakli maydonlar (`fields`, `include=status_histories`, `scope=companies`) bilan so‘rov yuboradi va javobni allowlist orqali tozalab webappga qaytaradi.
 
 `MAIN_GROUP_ID` noto‘g‘ri bo‘lsa `Telegram sendMessage: Bad Request: chat not found` chiqadi. Buni webappdagi `Sozlamalar → Bot sozlamalari → Main guruh chat ID` orqali ham sozlash mumkin. Chat ID `-100...` formatida bo‘ladi; bot shu guruhda bo‘lishi va xabar yuborish huquqiga ega bo‘lishi kerak.
 
@@ -146,7 +146,7 @@ Chuqurroq diagnostika:
 curl "$APP_URL/api/bot?diagnostics=1&secret=$WEBHOOK_SECRET"
 ```
 
-Javobdagi `env.botToken`, `env.supabaseUrl`, `env.supabaseServiceRoleKey` qiymatlari `true`, `diagnostics.supabase.ok` va `diagnostics.telegram.ok` qiymatlari ham `true` bo‘lishi kerak. Guruhlar webappda ko‘rinishi uchun webhook `allowed_updates` ichida `message` va `my_chat_member`, inline tasdiq tugmalari ishlashi uchun `callback_query` bo‘lishi shart. Admin paneldagi `Sozlamalar → Telegram webhook → Webhookni ulash` tugmasi webhookni joriy domen va secret bilan qayta sozlaydi. Guruhdagi oddiy murojaat xabarlarini o‘qish uchun BotFather’da bot privacy mode’ni disable qiling: `/setprivacy` → botni tanlang → `Disable`.
+Javobdagi `env.botToken`, `env.supabaseUrl`, `env.supabaseServiceRoleKey` qiymatlari `true`, `diagnostics.supabase.ok` va `diagnostics.telegram.ok` qiymatlari ham `true` bo‘lishi kerak. Guruhlar webappda ko‘rinishi uchun webhook `allowed_updates` ichida `message` va `my_chat_member`, inline tasdiq tugmalari ishlashi uchun `callback_query` bo‘lishi shart. Admin paneldagi `Sozlamalar → Telegram webhook → Webhookni ulash` tugmasi webhookni joriy domen va secret bilan qayta sozlaydi. `WEBAPP_URL` bot turgan Vercel domeni bo‘lishi kerak; uni `UYQUR_COMPANY_INFO_URL`ga yoki `info-for-bot` endpointiga qo‘ymang. Admin endpoint bunday ulanishni rad etadi va diagnostikada alohida ogohlantiradi. Guruhdagi oddiy murojaat xabarlarini o‘qish uchun BotFather’da bot privacy mode’ni disable qiling: `/setprivacy` → botni tanlang → `Disable`.
 
 Agar bot webhook sozlanishidan oldin guruhlarga qo‘shilgan bo‘lsa, Telegram eski guruhlar ro‘yxatini botga qayta bermaydi. Bunday guruhlarni webapp ro‘yxatiga tushirish uchun har bir guruh ichida `/register` yoki `/start` yuboring. Bot guruhni ro‘yxatga olishga urinadi va guruhdagi command xabarini o‘chiradi. Xabar o‘chishi uchun bot guruhda admin bo‘lishi va `can_delete_messages` permissionga ega bo‘lishi kerak; permission yetmasa bot reply’da aniq sababini ko‘rsatadi.
 

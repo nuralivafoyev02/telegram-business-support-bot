@@ -1505,6 +1505,85 @@ async function testWebhookInfoWarnsWhenMessageUpdatesMissing() {
   }
 }
 
+async function testWebhookInfoWarnsWhenPointingToCompanyInfoUrl() {
+  const originalFetch = global.fetch;
+  const originalCompanyInfoUrl = process.env.UYQUR_COMPANY_INFO_URL;
+  process.env.UYQUR_COMPANY_INFO_URL = 'https://backend.app.uyqur.uz/dev/company/info-for-bot';
+
+  global.fetch = async (url) => {
+    assert.match(url, /getWebhookInfo$/);
+    return {
+      ok: true,
+      json: async () => ({
+        ok: true,
+        result: {
+          url: 'https://backend.app.uyqur.uz/dev/company/info-for-bot',
+          pending_update_count: 0,
+          allowed_updates: ['message', 'business_message']
+        }
+      })
+    };
+  };
+
+  try {
+    const result = await callAdmin('telegramWebhookInfo');
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.data.diagnostics.points_to_company_info_url, true);
+    assert.strictEqual(result.payload.data.diagnostics.receives_group_messages, false);
+    assert.match(result.payload.data.diagnostics.notes.join(' '), /company info URLga ulangan/);
+  } finally {
+    global.fetch = originalFetch;
+    if (originalCompanyInfoUrl === undefined) delete process.env.UYQUR_COMPANY_INFO_URL;
+    else process.env.UYQUR_COMPANY_INFO_URL = originalCompanyInfoUrl;
+  }
+}
+
+async function testSetWebhookRejectsCompanyInfoUrl() {
+  const originalFetch = global.fetch;
+  const originalCompanyInfoUrl = process.env.UYQUR_COMPANY_INFO_URL;
+  const originalWebappUrl = process.env.WEBAPP_URL;
+  const originalAppUrl = process.env.APP_URL;
+  const originalVercelUrl = process.env.VERCEL_URL;
+  const originalConsoleError = console.error;
+  let setWebhookCalled = false;
+  process.env.UYQUR_COMPANY_INFO_URL = 'https://backend.app.uyqur.uz/dev/company/info-for-bot';
+  delete process.env.WEBAPP_URL;
+  delete process.env.APP_URL;
+  delete process.env.VERCEL_URL;
+  console.error = () => {};
+
+  global.fetch = async (url) => {
+    if (/setWebhook$/.test(url)) setWebhookCalled = true;
+    return {
+      ok: true,
+      text: async () => '[]',
+      json: async () => ({ ok: true, result: true })
+    };
+  };
+
+  try {
+    const result = await callAdmin('setTelegramWebhook', {
+      method: 'POST',
+      body: { app_url: 'https://backend.app.uyqur.uz/dev/company/info-for-bot' }
+    });
+    assert.strictEqual(result.status, 400);
+    assert.strictEqual(result.payload.ok, false);
+    assert.match(result.payload.error, /UYQUR_COMPANY_INFO_URL/);
+    assert.strictEqual(setWebhookCalled, false);
+  } finally {
+    global.fetch = originalFetch;
+    if (originalCompanyInfoUrl === undefined) delete process.env.UYQUR_COMPANY_INFO_URL;
+    else process.env.UYQUR_COMPANY_INFO_URL = originalCompanyInfoUrl;
+    if (originalWebappUrl === undefined) delete process.env.WEBAPP_URL;
+    else process.env.WEBAPP_URL = originalWebappUrl;
+    if (originalAppUrl === undefined) delete process.env.APP_URL;
+    else process.env.APP_URL = originalAppUrl;
+    if (originalVercelUrl === undefined) delete process.env.VERCEL_URL;
+    else process.env.VERCEL_URL = originalVercelUrl;
+    console.error = originalConsoleError;
+  }
+}
+
 async function testSetWebhookPrefersConfiguredAppUrl() {
   const originalFetch = global.fetch;
   const originalWebappUrl = process.env.WEBAPP_URL;
@@ -2165,7 +2244,8 @@ async function testCompanyInfoProxyNormalizesExternalRows() {
           subscription_start_date: '21.12.2023',
           business_status: 'ACTIVE',
           is_real: 1,
-          status_histories: [{ id: 5, old_status: null, new_status: 'ACTIVE', company_id: 3, changed_at: 1776196774 }]
+          secret_token: 'must-not-leak',
+          status_histories: [{ id: 5, old_status: null, new_status: 'ACTIVE', company_id: 3, changed_at: 1776196774, internal_note: 'hidden' }]
         }]
       })
     };
@@ -2174,7 +2254,15 @@ async function testCompanyInfoProxyNormalizesExternalRows() {
   try {
     const result = await callAdmin('companyInfo');
     assert.strictEqual(result.status, 200);
-    assert.strictEqual(calls[0].url, 'https://example.test/company-info');
+    const calledUrl = new URL(calls[0].url);
+    assert.strictEqual(`${calledUrl.origin}${calledUrl.pathname}`, 'https://example.test/company-info');
+    assert.strictEqual(calledUrl.searchParams.get('scope'), 'companies');
+    assert.strictEqual(calledUrl.searchParams.get('include'), 'status_histories');
+    const fields = calledUrl.searchParams.get('fields').split(',');
+    assert.ok(fields.includes('id'));
+    assert.ok(fields.includes('name'));
+    assert.ok(fields.includes('status_histories'));
+    assert.strictEqual(fields.includes('secret_token'), false);
     assert.strictEqual(calls[0].options.headers['X-Auth'], 'test-company-auth');
     assert.strictEqual(result.payload.data.summary.total, 1);
     assert.strictEqual(result.payload.data.summary.active, 1);
@@ -2185,6 +2273,54 @@ async function testCompanyInfoProxyNormalizesExternalRows() {
     assert.strictEqual(result.payload.data.companies[0].name, 'Gagarin Avenue');
     assert.strictEqual(result.payload.data.companies[0].created_at_iso, '2023-12-21T04:11:11.000Z');
     assert.strictEqual(result.payload.data.companies[0].latest_status_change.new_status, 'ACTIVE');
+    assert.strictEqual(result.payload.data.companies[0].secret_token, undefined);
+    assert.strictEqual(result.payload.data.companies[0].status_histories[0].internal_note, undefined);
+  } finally {
+    supabase.select = originalSelect;
+    supabase.insert = originalInsert;
+    global.fetch = originalFetch;
+    if (originalAuth === undefined) delete process.env.UYQUR_COMPANY_INFO_AUTH;
+    else process.env.UYQUR_COMPANY_INFO_AUTH = originalAuth;
+    if (originalUrl === undefined) delete process.env.UYQUR_COMPANY_INFO_URL;
+    else process.env.UYQUR_COMPANY_INFO_URL = originalUrl;
+  }
+}
+
+async function testCompanyInfoProxyFallsBackWhenScopedQueryUnsupported() {
+  const originalFetch = global.fetch;
+  const originalSelect = supabase.select;
+  const originalInsert = supabase.insert;
+  const originalAuth = process.env.UYQUR_COMPANY_INFO_AUTH;
+  const originalUrl = process.env.UYQUR_COMPANY_INFO_URL;
+  process.env.UYQUR_COMPANY_INFO_AUTH = 'test-company-auth';
+  process.env.UYQUR_COMPANY_INFO_URL = 'https://example.test/company-info';
+  const calls = [];
+
+  supabase.select = async () => [];
+  supabase.insert = async (_table, rows) => rows;
+  global.fetch = async (url, options = {}) => {
+    calls.push({ url, options });
+    if (calls.length === 1) {
+      return {
+        ok: false,
+        status: 422,
+        statusText: 'Unprocessable Entity',
+        json: async () => ({ message: 'Unknown fields parameter' })
+      };
+    }
+    return {
+      ok: true,
+      json: async () => ({ data: [] })
+    };
+  };
+
+  try {
+    const result = await callAdmin('companyInfo');
+    assert.strictEqual(result.status, 200);
+    assert.match(calls[0].url, /fields=/);
+    assert.strictEqual(calls[1].url, 'https://example.test/company-info');
+    assert.strictEqual(result.payload.data.source, 'https://example.test/company-info');
+    assert.strictEqual(result.payload.data.summary.total, 0);
   } finally {
     supabase.select = originalSelect;
     supabase.insert = originalInsert;
@@ -2295,6 +2431,8 @@ async function run() {
   await testRequestsListEnrichesCompanyFromRegisteredGroup();
   await testRequestsListShowsResponsibleEmployeeFromTicketMessages();
   await testWebhookInfoWarnsWhenMessageUpdatesMissing();
+  await testWebhookInfoWarnsWhenPointingToCompanyInfoUrl();
+  await testSetWebhookRejectsCompanyInfoUrl();
   await testSetWebhookPrefersConfiguredAppUrl();
   await testSyncTelegramUpdatesDeletesActiveWebhookThenProcessesUpdates();
   await testSyncTelegramUpdatesIgnoresStaleOffsetAndAcknowledgesFetchedUpdates();
@@ -2306,6 +2444,7 @@ async function run() {
   await testEmployeeActivityIsolatesSelectedEmployeeChats();
   await testLogNotificationsCanSendSelectedLevels();
   await testCompanyInfoProxyNormalizesExternalRows();
+  await testCompanyInfoProxyFallsBackWhenScopedQueryUnsupported();
   await testAssignGroupToExternalCompanyCreatesLocalCompany();
   await testAssignGroupCompanyCanBeCleared();
   console.log('Admin tests passed');

@@ -83,7 +83,9 @@ function buildSystemPrompt(config) {
 }
 
 function shouldUseExternalAi(settings = {}) {
-  return Boolean(settings.aiMode && settings.aiProvider && isAiIntegrationReady(settings.aiIntegration));
+  const config = normalizeAiIntegration(settings.aiIntegration);
+  const provider = String(settings.aiProvider || config.provider || '').trim();
+  return Boolean(settings.aiMode && provider && isAiIntegrationReady(config));
 }
 
 function assertValidAiBaseUrl(baseUrl = '') {

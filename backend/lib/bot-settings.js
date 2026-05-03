@@ -3,7 +3,7 @@
 const supabase = require('./supabase');
 const { boolEnv } = require('./env');
 const { DEFAULT_DONE_TAG } = require('./parser');
-const { normalizeAiIntegration } = require('./ai-config');
+const { normalizeAiIntegration, isAiIntegrationReady } = require('./ai-config');
 
 const DEFAULT_SETTINGS = Object.freeze({
   aiMode: boolEnv('AI_MODE_DEFAULT', false),
@@ -78,7 +78,8 @@ function normalizeSettings(rows = []) {
   const detection = settingValue(rows, 'request_detection');
   const mainGroup = settingValue(rows, 'main_group');
   const aiMode = normalizeBoolean(ai.enabled, DEFAULT_SETTINGS.aiMode);
-  const aiProvider = aiMode && ai.provider ? String(ai.provider).trim() : '';
+  const inferredAiProvider = isAiIntegrationReady(integration) ? integration.provider : '';
+  const aiProvider = aiMode ? String(ai.provider || inferredAiProvider || '').trim() : '';
 
   return {
     aiMode,

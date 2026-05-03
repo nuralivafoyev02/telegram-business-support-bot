@@ -953,6 +953,154 @@ async function testSelectedAiModelClassifiesRequest() {
   }
 }
 
+async function testAiModeUsesReadyIntegrationWhenProviderMissing() {
+  const originalInsert = supabase.insert;
+  const originalSelect = supabase.select;
+  const originalFetch = global.fetch;
+  const insertedTables = [];
+  const telegramCalls = [];
+  const aiCalls = [];
+  clearBotSettingsCache();
+
+  supabase.select = async (table) => {
+    if (table === 'bot_settings') {
+      return [
+        { key: 'ai_mode', value: { enabled: true, provider: null } },
+        {
+          key: 'ai_integration',
+          value: {
+            enabled: true,
+            provider: 'openai_compatible',
+            label: 'Uyqur AI',
+            base_url: 'https://ai.example/v1',
+            model: 'uyqur-model',
+            api_key: 'secret-token',
+            last_check_status: 'ok',
+            knowledge_text: 'Uyqur technical support'
+          }
+        },
+        { key: 'auto_reply', value: { enabled: true } },
+        { key: 'request_detection', value: { mode: 'keyword', min_text_length: 10 } }
+      ];
+    }
+    if (table === 'support_requests') return [];
+    return [];
+  };
+  supabase.insert = async (table, rows) => {
+    insertedTables.push(table);
+    return rows.map(row => ({ id: `${table}-row`, ...row }));
+  };
+  global.fetch = async (url, options) => {
+    if (/api\.telegram\.org/.test(url)) {
+      telegramCalls.push({ url, body: JSON.parse(options.body) });
+      return {
+        ok: true,
+        json: async () => ({ ok: true, result: { message_id: 607 } })
+      };
+    }
+    const body = JSON.parse(options.body);
+    aiCalls.push(body);
+    if (body.response_format) {
+      return {
+        ok: true,
+        json: async () => ({
+          choices: [{
+            message: {
+              content: JSON.stringify({ classification: 'request', confidence: 0.94, reason: 'support intent' })
+            }
+          }]
+        })
+      };
+    }
+    return {
+      ok: true,
+      json: async () => ({
+        choices: [{
+          message: { content: 'Uyqur AI javobi: qaysi bo‘limda xatolik chiqayotganini yozing.' }
+        }]
+      })
+    };
+  };
+
+  try {
+    const result = await callHandler({
+      update_id: 12,
+      business_message: {
+        message_id: 20,
+        date: 1777100000,
+        text: 'Buni texnik yordam ko‘rib chiqsin',
+        business_connection_id: 'business-ready',
+        chat: { id: 783, type: 'private', first_name: 'Sardor' },
+        from: { id: 783, first_name: 'Sardor', is_bot: false }
+      }
+    });
+
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.handled, 'business_message');
+    assert.strictEqual(aiCalls.length, 2);
+    assert.strictEqual(insertedTables.includes('support_requests'), true);
+    assert.strictEqual(insertedTables.includes('request_events'), true);
+    assert.strictEqual(telegramCalls.length, 1);
+    assert.strictEqual(telegramCalls[0].body.business_connection_id, 'business-ready');
+    assert.match(telegramCalls[0].body.text, /Uyqur AI javobi/);
+  } finally {
+    supabase.insert = originalInsert;
+    supabase.select = originalSelect;
+    global.fetch = originalFetch;
+    clearBotSettingsCache();
+  }
+}
+
+async function testBusinessCommandFallsBackWhenBusinessConnectionIsInvalid() {
+  const originalInsert = supabase.insert;
+  const originalSelect = supabase.select;
+  const originalFetch = global.fetch;
+  const telegramCalls = [];
+
+  supabase.select = async () => [];
+  supabase.insert = async (_table, rows) => rows.map(row => ({ id: `${_table}-row`, ...row }));
+  global.fetch = async (url, options = {}) => {
+    const body = JSON.parse(options.body || '{}');
+    telegramCalls.push({ url, body });
+    if (/sendMessage$/.test(url) && body.business_connection_id) {
+      return {
+        ok: true,
+        json: async () => ({ ok: false, error_code: 400, description: 'Bad Request: BUSINESS_PEER_INVALID' })
+      };
+    }
+    return {
+      ok: true,
+      json: async () => ({ ok: true, result: { message_id: 608 } })
+    };
+  };
+
+  try {
+    const result = await callHandler({
+      update_id: 13,
+      business_message: {
+        message_id: 21,
+        date: 1777100000,
+        text: '/start',
+        business_connection_id: 'business-stale',
+        chat: { id: 784, type: 'private', first_name: 'Sardor' },
+        from: { id: 784, first_name: 'Sardor', is_bot: false }
+      }
+    });
+
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.handled, 'business_message');
+    const sendCalls = telegramCalls.filter(call => /sendMessage$/.test(call.url));
+    assert.strictEqual(sendCalls.length, 2);
+    assert.strictEqual(sendCalls[0].body.business_connection_id, 'business-stale');
+    assert.strictEqual(sendCalls[1].body.business_connection_id, undefined);
+    assert.match(sendCalls[1].body.text, /Assalomu alaykum/);
+  } finally {
+    supabase.insert = originalInsert;
+    supabase.select = originalSelect;
+    global.fetch = originalFetch;
+  }
+}
+
 async function testAiCanClassifyTicketIntent() {
   const originalInsert = supabase.insert;
   const originalSelect = supabase.select;
@@ -2668,6 +2816,8 @@ async function testConfiguredLogChannelSummarizesLaravelError() {
   await testAiModeSettingOpensPrivateBroadRequest();
   await testLocalSmartIntentOpensPrivateRequestWithoutAiMode();
   await testSelectedAiModelClassifiesRequest();
+  await testAiModeUsesReadyIntegrationWhenProviderMissing();
+  await testBusinessCommandFallsBackWhenBusinessConnectionIsInvalid();
   await testAiCanClassifyTicketIntent();
   await testClassifierJsonIsNotSentAsAutoReply();
   await testAiModeAutoRepliesToGroupRequest();

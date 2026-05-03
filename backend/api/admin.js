@@ -2155,8 +2155,12 @@ function sanitizeWebhookInfo(info = {}) {
   const missingAllowedUpdates = allowedUpdates.length
     ? TELEGRAM_ALLOWED_UPDATES.filter(update => !allowedUpdates.includes(update))
     : [];
+  const companyInfoWebhook = isCompanyInfoUrl(info.url || '');
   const diagnostics = [];
   if (!info.url) diagnostics.push('Webhook URL ulanmagan.');
+  if (companyInfoWebhook) {
+    diagnostics.push('Telegram webhook Uyqur company info URLga ulangan. Bot commandlari va business xabarlar ishlashi uchun webhook Vercel `/api/bot` endpointiga ulanishi kerak.');
+  }
   if (missingAllowedUpdates.includes('message')) {
     diagnostics.push('allowed_updates ichida message yo‘q: guruhdagi oddiy xabarlar botga kelmaydi.');
   }
@@ -2170,7 +2174,8 @@ function sanitizeWebhookInfo(info = {}) {
     has_custom_certificate: !!info.has_custom_certificate,
     allowed_updates: allowedUpdates,
     diagnostics: {
-      receives_group_messages: !allowedUpdates.length || allowedUpdates.includes('message'),
+      receives_group_messages: !companyInfoWebhook && (!allowedUpdates.length || allowedUpdates.includes('message')),
+      points_to_company_info_url: companyInfoWebhook,
       missing_allowed_updates: missingAllowedUpdates,
       notes: diagnostics
     }
@@ -2184,6 +2189,46 @@ function getAppUrl(body = {}) {
     || body.app_url
     || (vercelUrl ? `https://${vercelUrl}` : '');
   return String(url || '').trim().replace(/\/$/, '');
+}
+
+function isCompanyInfoUrl(value = '') {
+  if (!value) return false;
+  let parsed;
+  try {
+    parsed = new URL(value);
+  } catch (_error) {
+    return /company\/info-for-bot/i.test(String(value || ''));
+  }
+
+  const companyInfo = optionalEnv('UYQUR_COMPANY_INFO_URL', '');
+  if (companyInfo) {
+    try {
+      const companyParsed = new URL(companyInfo);
+      const companyPath = companyParsed.pathname.replace(/\/$/, '');
+      if (parsed.origin === companyParsed.origin && parsed.pathname.startsWith(companyPath)) {
+        return true;
+      }
+    } catch (_error) {
+      // Fall through to route-pattern guard.
+    }
+  }
+
+  return /\/company\/info-for-bot(?:\/|$)/i.test(parsed.pathname);
+}
+
+function assertSafeTelegramWebhookAppUrl(appUrl = '') {
+  let parsed;
+  try {
+    parsed = new URL(appUrl);
+  } catch (_error) {
+    throw new Error('Telegram webhook uchun WEBAPP_URL noto‘g‘ri formatda');
+  }
+  if (!['http:', 'https:'].includes(parsed.protocol)) {
+    throw new Error('Telegram webhook URL faqat http yoki https bo‘lishi mumkin');
+  }
+  if (isCompanyInfoUrl(appUrl)) {
+    throw new Error('Telegram webhook UYQUR_COMPANY_INFO_URL ga ulanmasligi kerak. WEBAPP_URL sifatida bot joylashgan Vercel domenini kiriting.');
+  }
 }
 
 function contentTypeFromPath(filePath = '') {
@@ -2247,6 +2292,7 @@ async function getTelegramWebhookStatus() {
 async function connectTelegramWebhook(body = {}) {
   const appUrl = getAppUrl(body);
   if (!appUrl) throw new Error('WEBAPP_URL env yoki app_url kerak');
+  assertSafeTelegramWebhookAppUrl(appUrl);
 
   const secret = optionalEnv('TELEGRAM_WEBHOOK_SECRET', '');
   const webhookUrl = `${appUrl}/api/bot${secret ? `?secret=${encodeURIComponent(secret)}` : ''}`;
