@@ -215,6 +215,58 @@ async function testGroupStartRegistersGroupAndDeletesCommand() {
   }
 }
 
+async function testGroupRegisterRetriesCommandDeleteOnTransientError() {
+  const originalInsert = supabase.insert;
+  const originalSelect = supabase.select;
+  const originalFetch = global.fetch;
+  const telegramCalls = [];
+  let deleteAttempts = 0;
+
+  supabase.insert = async (_table, rows) => rows;
+  supabase.select = async () => [];
+  global.fetch = async (_url, options) => {
+    const body = JSON.parse(options.body);
+    telegramCalls.push({ url: _url, body });
+    if (/deleteMessage$/.test(_url)) {
+      deleteAttempts += 1;
+      if (deleteAttempts === 1) {
+        return {
+          ok: true,
+          json: async () => ({ ok: false, error_code: 429, description: 'Too Many Requests: retry after 1' })
+        };
+      }
+    }
+    return {
+      ok: true,
+      json: async () => ({ ok: true, result: { message_id: 105 } })
+    };
+  };
+
+  try {
+    const result = await callHandler({
+      update_id: 52,
+      message: {
+        message_id: 32,
+        date: 1777100000,
+        text: '/register',
+        chat: { id: -100992, type: 'supergroup', title: 'Support group' },
+        from: { id: 777, first_name: 'Ali', is_bot: false }
+      }
+    });
+
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(deleteAttempts, 2);
+    const reply = telegramCalls.find(call => /sendMessage$/.test(call.url) && /Guruh ro‘yxatga olindi/.test(call.body.text || ''));
+    assert.ok(reply);
+    assert.match(reply.body.text, /Command xabari o‘chirildi/);
+    assert.doesNotMatch(reply.body.text, /Command o‘chirilmadi/);
+  } finally {
+    supabase.insert = originalInsert;
+    supabase.select = originalSelect;
+    global.fetch = originalFetch;
+  }
+}
+
 async function testGroupRegisterDbFailureStillDeletesCommand() {
   const originalInsert = supabase.insert;
   const originalFetch = global.fetch;
@@ -254,6 +306,64 @@ async function testGroupRegisterDbFailureStillDeletesCommand() {
     supabase.insert = originalInsert;
     global.fetch = originalFetch;
     console.error = originalConsoleError;
+  }
+}
+
+async function testGroupRegisterSaveFailureNotifiesMainGroup() {
+  const originalInsert = supabase.insert;
+  const originalSelect = supabase.select;
+  const originalFetch = global.fetch;
+  const originalConsoleError = console.error;
+  const inserted = [];
+  const telegramCalls = [];
+  clearBotSettingsCache();
+
+  supabase.select = async (table) => {
+    if (table === 'bot_settings') return [{ key: 'main_group', value: { chat_id: '-100999' } }];
+    if (table === 'tg_chats') return [{ chat_id: -100999, title: 'Main group', source_type: 'group' }];
+    return [];
+  };
+  supabase.insert = async (table, rows, options = {}) => {
+    inserted.push({ table, rows, options });
+    if (table === 'messages' && rows.some(row => row.tg_message_id === 14)) {
+      throw new Error('command message insert failed');
+    }
+    return rows.map(row => ({ id: `${table}-row`, ...row }));
+  };
+  console.error = () => {};
+  global.fetch = async (_url, options) => {
+    telegramCalls.push({ url: _url, body: JSON.parse(options.body) });
+    return {
+      ok: true,
+      json: async () => ({ ok: true, result: { message_id: 106, allowed_updates: ['message', 'my_chat_member'] } })
+    };
+  };
+
+  try {
+    const result = await callHandler({
+      update_id: 53,
+      message: {
+        message_id: 14,
+        date: 1777100000,
+        text: '/register',
+        chat: { id: -100889, type: 'supergroup', title: 'Support group' },
+        from: { id: 777, first_name: 'Ali', is_bot: false }
+      }
+    });
+
+    assert.strictEqual(result.status, 200);
+    const notice = telegramCalls.find(call => /sendMessage$/.test(call.url) && String(call.body.chat_id) === '-100999');
+    assert.ok(notice);
+    assert.match(notice.body.text, /Guruh xabari saqlanmadi/);
+    assert.match(notice.body.text, /record_incoming_message/);
+    assert.match(notice.body.text, /command message insert failed/);
+    assert.strictEqual(inserted.some(item => item.table === 'messages' && item.rows[0].raw?.source === 'bot_message_save_failed_notice'), true);
+  } finally {
+    supabase.insert = originalInsert;
+    supabase.select = originalSelect;
+    global.fetch = originalFetch;
+    console.error = originalConsoleError;
+    clearBotSettingsCache();
   }
 }
 
@@ -478,6 +588,70 @@ async function testCompanyGroupMessageSaveFailureNotifiesMainGroup() {
     assert.match(notice.body.text, /Guruh xabari saqlanmadi/);
     assert.match(notice.body.text, /Saqlashga uringan joy: <code>public\.messages<\/code>/);
     assert.match(notice.body.text, /Saqlanmagan sababi: <code>messages insert failed<\/code>/);
+    assert.strictEqual(inserted.some(item => item.table === 'messages' && item.rows[0].raw?.source === 'bot_message_save_failed_notice'), true);
+  } finally {
+    supabase.insert = originalInsert;
+    supabase.select = originalSelect;
+    global.fetch = originalFetch;
+    console.error = originalConsoleError;
+    clearBotSettingsCache();
+  }
+}
+
+async function testPrivateMessageSaveFailureNotifiesMainGroup() {
+  const originalInsert = supabase.insert;
+  const originalSelect = supabase.select;
+  const originalFetch = global.fetch;
+  const originalConsoleError = console.error;
+  const inserted = [];
+  const telegramCalls = [];
+  clearBotSettingsCache();
+
+  supabase.select = async (table) => {
+    if (table === 'bot_settings') return [
+      { key: 'auto_reply', value: { enabled: false } },
+      { key: 'main_group', value: { chat_id: '-100999' } }
+    ];
+    if (table === 'tg_chats') return [{ chat_id: -100999, title: 'Main group', source_type: 'group' }];
+    if (table === 'employees') return [];
+    if (table === 'support_requests') return [];
+    return [];
+  };
+  supabase.insert = async (table, rows, options = {}) => {
+    inserted.push({ table, rows, options });
+    if (table === 'messages' && rows.some(row => row.tg_message_id === 134)) {
+      throw new Error('private message insert failed');
+    }
+    return rows.map(row => ({ id: `${table}-row`, ...row }));
+  };
+  console.error = () => {};
+  global.fetch = async (_url, options) => {
+    telegramCalls.push({ url: _url, body: JSON.parse(options.body) });
+    return {
+      ok: true,
+      json: async () => ({ ok: true, result: { message_id: 704 } })
+    };
+  };
+
+  try {
+    const result = await callHandler({
+      update_id: 34,
+      message: {
+        message_id: 134,
+        date: 1777100000,
+        text: 'Savolim bor',
+        chat: { id: 803, type: 'private', first_name: 'Mijoz', username: 'client' },
+        from: { id: 803, first_name: 'Mijoz', username: 'client', is_bot: false }
+      }
+    });
+
+    assert.strictEqual(result.status, 500);
+    assert.match(result.payload.error, /private message insert failed/);
+    const notice = telegramCalls.find(call => /sendMessage$/.test(call.url) && String(call.body.chat_id) === '-100999');
+    assert.ok(notice);
+    assert.match(notice.body.text, /Chat xabari saqlanmadi/);
+    assert.match(notice.body.text, /Manba chat: <b>client<\/b>/);
+    assert.match(notice.body.text, /private message insert failed/);
     assert.strictEqual(inserted.some(item => item.table === 'messages' && item.rows[0].raw?.source === 'bot_message_save_failed_notice'), true);
   } finally {
     supabase.insert = originalInsert;
@@ -2978,11 +3152,14 @@ async function testConfiguredLogChannelSummarizesLaravelError() {
   await testStartRepliesWhenDbTrackingFails();
   await testChatMemberUpdateRegistersGroup();
   await testGroupStartRegistersGroupAndDeletesCommand();
+  await testGroupRegisterRetriesCommandDeleteOnTransientError();
   await testGroupRegisterDbFailureStillDeletesCommand();
+  await testGroupRegisterSaveFailureNotifiesMainGroup();
   await testGroupRegisterReportsDeletePermissionProblem();
   await testBotDiagnosticsChecksSupabaseAndTelegram();
   await testCompanyGroupPlainMessageIsStoredAndKeepsCompanyLink();
   await testCompanyGroupMessageSaveFailureNotifiesMainGroup();
+  await testPrivateMessageSaveFailureNotifiesMainGroup();
   await testCompanyGroupRequestUsesRegisteredChatCompany();
   await testGroupDoneDoesNotReplyToGroup();
   await testRequestMessageAppendsToExistingOpenRequest();

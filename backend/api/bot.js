@@ -147,6 +147,15 @@ function isDeletePermissionError(error = {}) {
   return /not enough rights|message can't be deleted|can't remove|need administrator rights|have no rights|forbidden/i.test(telegramDescription(error));
 }
 
+function isRetryableDeleteError(error = {}) {
+  if (isDeleteAlreadyHandled(error) || isDeletePermissionError(error)) return false;
+  return /too many requests|retry after|timed out|timeout|fetch failed|network|econnreset|etimedout/i.test(telegramDescription(error));
+}
+
+function sleep(ms = 0) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 function compactError(error = {}) {
   const description = telegramDescription(error);
   return description.replace(/^Telegram\s+\w+:\s*/i, '').trim() || String(error || 'unknown error');
@@ -175,25 +184,43 @@ async function inspectBotDeletePermission(chatId) {
   }
 }
 
-async function deleteCommandMessage(chatId, messageId) {
+async function deleteCommandMessage(chatId, messageId, options = {}) {
+  const attempts = clampInt(options.attempts, 3, 1, 5);
+  const delayMs = clampInt(options.delayMs, 350, 50, 1500);
+  let lastError = null;
+
   try {
-    await deleteMessage(chatId, messageId);
-    return { deleted: true };
-  } catch (error) {
-    if (isDeleteAlreadyHandled(error) && !isDeletePermissionError(error)) {
-      return { deleted: true, alreadyHandled: true };
+    for (let attempt = 1; attempt <= attempts; attempt += 1) {
+      try {
+        await deleteMessage(chatId, messageId);
+        return { deleted: true, attempts: attempt };
+      } catch (error) {
+        lastError = error;
+        if (isDeleteAlreadyHandled(error) && !isDeletePermissionError(error)) {
+          return { deleted: true, alreadyHandled: true, attempts: attempt };
+        }
+        if (attempt >= attempts || !isRetryableDeleteError(error)) break;
+        await sleep(delayMs * attempt);
+      }
     }
-    const permissionDiagnostic = isDeletePermissionError(error)
-      ? await inspectBotDeletePermission(chatId)
-      : '';
-    logBackgroundError('delete-group-command', error);
-    return {
-      deleted: false,
-      error,
-      reason: compactError(error),
-      permissionDiagnostic
-    };
+  } catch (error) {
+    lastError = error;
   }
+
+  const error = lastError || new Error('Telegram deleteMessage rad etdi');
+  if (isDeleteAlreadyHandled(error) && !isDeletePermissionError(error)) {
+    return { deleted: true, alreadyHandled: true };
+  }
+  const permissionDiagnostic = isDeletePermissionError(error)
+    ? await inspectBotDeletePermission(chatId)
+    : '';
+  logBackgroundError('delete-group-command', error);
+  return {
+    deleted: false,
+    error,
+    reason: compactError(error),
+    permissionDiagnostic
+  };
 }
 
 function summarizeUpdate(update = {}) {
@@ -277,10 +304,11 @@ function getIncomingLogText(message = {}) {
   return String(message.text || message.caption || '').trim();
 }
 
-function groupDisplayName(message = {}, chatRow = null) {
+function chatDisplayName(message = {}, chatRow = null) {
   return (chatRow && chatRow.title)
     || (message.chat && (message.chat.title || message.chat.username))
-    || String(message.chat && message.chat.id || 'Guruh');
+    || (message.chat && tgUserName(message.chat))
+    || String(message.chat && message.chat.id || 'Chat');
 }
 
 function auditValue(value, fallback = '-') {
@@ -310,15 +338,19 @@ function auditActorName(message = {}, employee = null) {
 function buildGroupSaveAudit({ status, message, chatRow, classification, employee, savedMessage = null, error = null, target = 'public.messages', stage = '' }) {
   const chat = message.chat || {};
   const from = message.from || {};
-  const groupName = groupDisplayName(message, chatRow);
+  const sourceName = chatDisplayName(message, chatRow);
+  const isGroup = isGroupChat(chat);
+  const sourceLabel = isGroup ? 'guruh' : 'chat';
+  const title = status === 'saved'
+    ? `${isGroup ? 'Guruh' : 'Chat'} xabari saqlandi`
+    : `${isGroup ? 'Guruh' : 'Chat'} xabari saqlanmadi`;
   const rawSource = inferMessageRawSource({ message, employee, savedMessage, classification });
   const savedRowId = savedMessage && savedMessage.id || '';
   const savedTgMessageId = savedMessage && (savedMessage.tg_message_id || savedMessage.message_id) || message.message_id || '';
-  const title = status === 'saved' ? 'Guruh xabari saqlandi' : 'Guruh xabari saqlanmadi';
   const statusIcon = status === 'saved' ? '✅' : '❌';
   const plainLines = [
     `${statusIcon} ${title}`,
-    `Manba guruh: ${groupName}`,
+    `Manba ${sourceLabel}: ${sourceName}`,
     `Manba chat_id: ${auditValue(chat.id)}`,
     `Manba message_id: ${auditValue(message.message_id)}`,
     `Yuboruvchi: ${auditActorName(message, employee)} (${auditValue(from.id)})`,
@@ -335,7 +367,7 @@ function buildGroupSaveAudit({ status, message, chatRow, classification, employe
   ].filter(Boolean);
   const htmlLines = [
     `${statusIcon} <b>${escapeHtml(title)}</b>`,
-    `Manba guruh: <b>${escapeHtml(groupName)}</b>`,
+    `Manba ${sourceLabel}: <b>${escapeHtml(sourceName)}</b>`,
     `Manba chat_id: ${auditCode(chat.id)}`,
     `Manba message_id: ${auditCode(message.message_id)}`,
     `Yuboruvchi: <b>${escapeHtml(auditActorName(message, employee))}</b> (${auditCode(from.id)})`,
@@ -351,7 +383,8 @@ function buildGroupSaveAudit({ status, message, chatRow, classification, employe
     error ? `Saqlanmagan sababi: ${auditCode(compactError(error))}` : ''
   ].filter(Boolean);
   return {
-    groupName,
+    groupName: sourceName,
+    sourceName,
     rawSource,
     text: plainLines.join('\n'),
     telegramText: htmlLines.join('\n')
@@ -383,9 +416,12 @@ async function loadChatForBotRecord(chatId) {
 
 async function maybeNotifyMainGroupMessageSaveAudit({ status, updateKind, message, settings, chatRow, classification, employee = null, savedMessage = null, error = null, target = 'public.messages', stage = '' }) {
   const chat = message.chat || {};
-  if (!isGroupChat(chat)) return;
-  if (isConfiguredMainGroup(chat, settings)) return;
-  if (String(updateKind || '').includes('edited')) return;
+  const failed = status === 'failed';
+  if (!failed) {
+    if (!isGroupChat(chat)) return;
+    if (isConfiguredMainGroup(chat, settings)) return;
+    if (String(updateKind || '').includes('edited')) return;
+  }
 
   let mainGroupId = '';
   try {
@@ -394,7 +430,8 @@ async function maybeNotifyMainGroupMessageSaveAudit({ status, updateKind, messag
     logBackgroundError(`notify-main-message-${status}-resolve`, resolveError);
     return;
   }
-  if (!mainGroupId || sameChatId(mainGroupId, chat.id)) return;
+  if (!mainGroupId) return;
+  if (!failed && sameChatId(mainGroupId, chat.id)) return;
 
   const audit = buildGroupSaveAudit({ status, message, chatRow, classification, employee, savedMessage, error, target, stage });
   let telegramResult = null;
@@ -843,11 +880,14 @@ async function maybeStartGroupBroadcastDeletePreview(message, text, settings = n
 
 async function handleGroupRegistrationCommand(message, tracking) {
   const chat = message.chat || {};
-  const deleteCommandPromise = deleteCommandMessage(chat.id, message.message_id);
   let registered = true;
   await tracking.catch(error => {
     registered = false;
     logBackgroundError('register-group', error);
+  });
+  const deleteResult = await deleteCommandMessage(chat.id, message.message_id, {
+    attempts: registered ? 3 : 1,
+    delayMs: 150
   });
   const diagnostics = [];
   try {
@@ -862,7 +902,6 @@ async function handleGroupRegistrationCommand(message, tracking) {
   } catch (error) {
     logBackgroundError('register-group-webhook-diagnostics', error);
   }
-  const deleteResult = await deleteCommandPromise;
   if (!deleteResult.deleted) {
     diagnostics.push([
       `Command o‘chirilmadi: ${deleteResult.reason || 'Telegram deleteMessage rad etdi.'}`,
@@ -1150,6 +1189,29 @@ async function recordIncomingMessage(updateKind, message, sourceType, classifica
   ]);
   await metrics.saveMessage({ message, updateKind, sourceType, classification, employee }, { prefer: 'return=minimal' });
   return chatRow;
+}
+
+async function recordIncomingMessageWithAudit(updateKind, message, sourceType, classification, employee = null, settings = null) {
+  try {
+    return await recordIncomingMessage(updateKind, message, sourceType, classification, employee);
+  } catch (error) {
+    const resolvedSettings = settings || await getBotSettings().catch(settingsError => {
+      logBackgroundError('record-incoming-settings', settingsError);
+      return null;
+    });
+    await maybeNotifyMainGroupMessageSaveFailed({
+      updateKind,
+      message,
+      settings: resolvedSettings,
+      chatRow: null,
+      classification,
+      employee,
+      error,
+      target: 'public.tg_users / public.tg_chats / public.messages',
+      stage: 'record_incoming_message'
+    });
+    throw error;
+  }
 }
 
 async function classifyIncomingMessage({ text, chat, sourceType, updateKind, message, employee, settings }) {
@@ -1484,7 +1546,7 @@ function shouldTryGeneralAiAutoReply({ updateKind, message, text, classification
 }
 
 async function handleCommand(updateKind, message, sourceType, text, classification) {
-  const tracking = recordIncomingMessage(updateKind, message, sourceType, classification);
+  const tracking = recordIncomingMessageWithAudit(updateKind, message, sourceType, classification);
   const chat = message.chat || {};
 
   if (isGroupChat(chat) && (START_RE.test(text) || REGISTER_RE.test(text))) {
@@ -1567,7 +1629,22 @@ async function processMessage(updateKind, message) {
     && await isMainStatsGroup(chat, settings);
 
   if (possibleMainGroupAutomation) {
-    await metrics.saveMessage({ message, updateKind, sourceType, classification: 'message', employee }, { prefer: 'return=minimal' });
+    try {
+      await metrics.saveMessage({ message, updateKind, sourceType, classification: 'message', employee }, { prefer: 'return=minimal' });
+    } catch (error) {
+      await maybeNotifyMainGroupMessageSaveFailed({
+        updateKind,
+        message,
+        settings,
+        chatRow,
+        classification: 'message',
+        employee,
+        error,
+        target: 'public.messages',
+        stage: 'main_group_automation_message_insert'
+      });
+      throw error;
+    }
     if (await maybeSendMainStatsFromGroup(message, text, settings)) return;
     if (await maybeStartGroupBroadcastDeletePreview(message, text, settings)) return;
     if (await maybeStartGroupBroadcastPreview(message, text, settings)) return;
