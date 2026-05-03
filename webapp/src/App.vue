@@ -264,7 +264,7 @@
                 <div class="card-header chart-card-head">
                   <div>
                     <div class="card-title">Kompaniyalar bo‘yicha ticketlar</div>
-                    <div class="card-note">Kompaniyalar kesimida yopilgan va ochiq qolgan ticketlar</div>
+                    <div class="card-note">Guruhga biriktirilgan kompaniyalar kesimida ticket va xabarlar</div>
                   </div>
                 </div>
                 <div v-if="companyTicketRows.length" class="company-ticket-bars">
@@ -1363,7 +1363,10 @@
                 <button v-for="group in companyGroupRows" :key="companyGroupChatKey(group)" type="button"
                   :class="{ active: companyGroupChatKey(group) === companyGroupSelectedChatKey, 'has-open': chatHasOpenTickets(group) }"
                   @click="selectCompanyGroup(group)">
-                  <span class="employee-chat-mini-avatar">{{ chatInitials(group) }}</span>
+                  <span class="employee-chat-mini-avatar">
+                    <img v-if="chatAvatarUrl(group)" :src="chatAvatarUrl(group)" alt="" />
+                    <span v-else>{{ chatInitials(group) }}</span>
+                  </span>
                   <span>
                     <b>{{ group.title || group.chat_id }}</b>
                     <small>{{ group.conversation?.[0]?.text || group.requests?.[0]?.initial_text || 'Yozishma tarixi'
@@ -1587,7 +1590,10 @@
                 <button v-for="chat in employeeProfileVisibleChats" :key="employeeProfileChatKey(chat)" type="button"
                   :class="{ active: employeeProfileChatKey(chat) === employeeProfileSelectedChatKey, 'has-open': chatHasOpenTickets(chat) }"
                   @click="selectEmployeeProfileChat(chat)">
-                  <span class="employee-chat-mini-avatar">{{ chatInitials(chat) }}</span>
+                  <span class="employee-chat-mini-avatar">
+                    <img v-if="chatAvatarUrl(chat)" :src="chatAvatarUrl(chat)" alt="" />
+                    <span v-else>{{ chatInitials(chat) }}</span>
+                  </span>
                   <span>
                     <b>{{ chat.title || chat.chat_id }}</b>
                     <small>{{ chatPreview(chat) }}</small>
@@ -2003,6 +2009,8 @@ const companyGroupSelectedChatKey = ref('');
 const companyGroupTicketsOpen = ref(true);
 const employeeAvatarUrls = ref({});
 const employeeAvatarLoading = ref({});
+const chatAvatarUrls = ref({});
+const chatAvatarLoading = ref({});
 const mediaUrls = ref({});
 const mediaLoading = ref({});
 const mediaErrors = ref({});
@@ -2607,6 +2615,58 @@ async function loadEmployeeAvatar(row = {}) {
   }
 }
 
+function customerTelegramIdFromChat(row = {}) {
+  row = row || {};
+  const direct = row.customer_tg_id || row.tg_user_id || row.from_tg_user_id || row.actor_tg_user_id || '';
+  if (direct) return String(direct).trim();
+  const sourceType = String(row.source_type || '').toLowerCase();
+  const chatId = String(row.chat_id || '').trim();
+  if (chatId && !chatId.startsWith('-') && ['private', 'business'].includes(sourceType)) return chatId;
+
+  const requestLists = [row.open_requests, row.requests, row.closed_requests];
+  for (const list of requestLists) {
+    if (!Array.isArray(list)) continue;
+    const request = list.find(item => item && item.customer_tg_id);
+    if (request) return String(request.customer_tg_id).trim();
+  }
+
+  const messageLists = [row.chat_messages, row.messages, row.conversation];
+  for (const list of messageLists) {
+    if (!Array.isArray(list)) continue;
+    const message = list.find(item => item && item.actor_type !== 'employee' && item.origin_type !== 'employee' && item.direction !== 'outbound' && (item.actor_tg_user_id || item.from_tg_user_id));
+    if (message) return String(message.actor_tg_user_id || message.from_tg_user_id).trim();
+  }
+
+  return '';
+}
+
+function chatAvatarKey(row = {}) {
+  const tgUserId = customerTelegramIdFromChat(row);
+  if (tgUserId) return `tg:${tgUserId}`;
+  return String(row.chat_id || row.key || row.title || '').trim();
+}
+
+function chatAvatarUrl(row = {}) {
+  const key = chatAvatarKey(row);
+  return key ? chatAvatarUrls.value[key] || '' : '';
+}
+
+async function loadChatAvatar(row = {}) {
+  const tgUserId = customerTelegramIdFromChat(row);
+  const key = chatAvatarKey(row);
+  if (!key || !tgUserId || chatAvatarUrls.value[key] || chatAvatarLoading.value[key]) return;
+  chatAvatarLoading.value = { ...chatAvatarLoading.value, [key]: true };
+  try {
+    const blob = await api.telegramProfilePhoto(tgUserId);
+    const url = URL.createObjectURL(blob);
+    chatAvatarUrls.value = { ...chatAvatarUrls.value, [key]: url };
+  } catch (_) {
+    chatAvatarUrls.value = { ...chatAvatarUrls.value, [key]: '' };
+  } finally {
+    chatAvatarLoading.value = { ...chatAvatarLoading.value, [key]: false };
+  }
+}
+
 function chartBarHeight(value, max) {
   const numeric = Number(value || 0);
   const maximum = Math.max(1, Number(max || 1));
@@ -2974,10 +3034,11 @@ function normalizeCompanyTicketRow(row = {}) {
   const explicitOpen = firstNumericValue(row, ['open_requests', 'open_ticket_count', 'open_tickets', 'unresolved_requests', 'unresolved_ticket_count']);
   const messageCount = firstNumericValue(row, ['message_count', 'total_messages', 'messages_count']);
   const ticketLikeMessages = firstNumericValue(row, ['ticket_like_messages', 'request_messages', 'classified_requests']);
-  const open = explicitOpen || (!closed ? ticketLikeMessages : 0);
+  const open = explicitOpen || (!closed ? (ticketLikeMessages || messageCount) : 0);
   const total = firstNumericValue(row, ['total_requests', 'requests_count', 'ticket_count', 'tickets_count', 'support_ticket_count'])
     || closed + open
-    || ticketLikeMessages;
+    || ticketLikeMessages
+    || messageCount;
   return {
     company_id: row.company_id || row.id || row.external_id || row.uyqur_company_id || '',
     name: row.name || row.company_name || row.legal_name || 'Kompaniya',
@@ -3016,7 +3077,8 @@ function mergeCompanyTicketRows(rows = []) {
       Number(current.total_requests || 0),
       Number(row.total_requests || 0),
       closed + open,
-      ticketLikeMessages
+      ticketLikeMessages,
+      messageCount
     );
 
     map.set(key, {
@@ -3450,6 +3512,12 @@ const employeeProfileGroupChats = computed(() => employeeProfileChatRows.value.f
 const employeeProfileVisibleChats = computed(() => employeeProfileTab.value === 'group'
   ? employeeProfileGroupChats.value
   : employeeProfilePrivateChats.value);
+watch(companyGroupRows, rows => {
+  rows.slice(0, 40).forEach(row => loadChatAvatar(row));
+}, { immediate: true });
+watch(employeeProfileVisibleChats, rows => {
+  rows.slice(0, 40).forEach(row => loadChatAvatar(row));
+}, { immediate: true });
 const selectedEmployeeProfileChat = computed(() => {
   const rows = employeeProfileVisibleChats.value;
   if (!rows.length) return null;
@@ -5786,6 +5854,7 @@ onUnmounted(() => {
   stopTelegramAutoSync();
   setModalScrollLock(false);
   Object.values(employeeAvatarUrls.value).filter(Boolean).forEach(url => URL.revokeObjectURL(url));
+  Object.values(chatAvatarUrls.value).filter(Boolean).forEach(url => URL.revokeObjectURL(url));
 });
 
 const Toolbar = defineComponent({

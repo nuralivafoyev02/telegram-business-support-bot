@@ -6,7 +6,7 @@ const supabase = require('../lib/supabase');
 const { sendMessage, deleteMessage, reactToMessage, answerCallbackQuery, editMessageReplyMarkup, escapeHtml, tgUserName, getWebhookInfo, getMe, getChatMember } = require('../lib/telegram');
 const { getMessageText, classifyMessage, isGreetingOnly, isSmallTalk, isCompletionIntent } = require('../lib/parser');
 const { getBotSettings } = require('../lib/bot-settings');
-const { resolveMainStatsChatId, sendMainStatsReport, buildMainStatsQuestionReply } = require('../lib/report');
+const { resolveMainStatsChatId, sendMainStatsReport, buildMainStatsQuestionReply, isMainStatsQuestion } = require('../lib/report');
 const { shouldUseExternalAi, classifyWithAi, generateSupportReply, generateLocalSupportReply } = require('../lib/ai');
 const { notifyIncomingLog, notifyOperationalError } = require('../lib/log-notifier');
 const metrics = require('../lib/metrics');
@@ -31,6 +31,7 @@ const PRIVATE_UNKNOWN_REPLY = "So'rovingizni guruhga yoki @uyqur_nurali ga beris
 const PRIVATE_REQUEST_REPLY = "So'rovingiz qabul qilindi. Guruhga yoki @uyqur_nurali ga yozishingiz mumkin.";
 const MAIN_GROUP_AUTO_REPLY_MISS = "Bu savol bo'yicha bilim bazasida aniq javob topilmadi. Mas'ul xodim javob beradi.";
 const AUTO_REPLY_MISS = "Savolingiz qabul qilindi. Bilim bazasida aniq javob topilmadi, mas'ul xodim javob beradi.";
+const MAIN_STATS_SCOPE_REPLY = "Bu statistika savoli faqat main guruhda ishlaydi. Sozlamalarda <code>main_group_id</code> ni tekshiring yoki savolni main guruhda qayta yuboring.";
 const QUESTION_LIKE_RE = /[?؟]|\b(qanday|qanaqa|qayerda|qayerdan|qachon|nega|nimaga|nima\s+uchun|qancha|savol|tushuntir|ko'?rsat|o'?rgat|как|где|почему|зачем|сколько|what|how|where|why|when)\b/i;
 
 function clampInt(value, fallback, min, max) {
@@ -1394,7 +1395,6 @@ async function maybeSendAiAutoReply({ updateKind, message, sourceType, text, set
 }
 
 async function maybeSendMainStatsQuestionReply({ message, sourceType, text, settings }) {
-  if (!shouldAutoReply(settings)) return false;
   if (message.from && message.from.is_bot) return false;
 
   let reply = '';
@@ -1416,11 +1416,40 @@ async function maybeSendMainStatsQuestionReply({ message, sourceType, text, sett
   }
 }
 
-async function maybeAnswerMainGroupQuestion({ updateKind, message, sourceType, text, settings }) {
+async function maybeSendMainStatsScopeNotice({ message, sourceType }) {
+  if (message.from && message.from.is_bot) return false;
+  try {
+    await sendTrackedBotReply({
+      message,
+      sourceType,
+      text: MAIN_STATS_SCOPE_REPLY,
+      options: { reply_to_message_id: message.message_id },
+      classification: 'bot_reply',
+      updateKind: 'bot_main_stats_scope',
+      rawSource: 'bot_main_stats_scope'
+    });
+    return true;
+  } catch (error) {
+    logBackgroundError('main-stats-scope-reply', error);
+    return false;
+  }
+}
+
+async function maybeAnswerGroupQuestion({ updateKind, message, sourceType, text, settings, employee = null }) {
   const chat = message.chat || {};
   if (!isGroupChat(chat)) return false;
   if (message.reply_to_message) return false;
-  if (!await isMainStatsGroup(chat, settings, { resolveFallback: false })) return false;
+  const statsQuestion = isMainStatsQuestion(text);
+  const isMainGroup = await isMainStatsGroup(chat, settings, statsQuestion ? {} : { resolveFallback: false });
+
+  if (!isMainGroup) {
+    if (!statsQuestion) return false;
+    if (employee && employee.id) {
+      return maybeSendMainStatsQuestionReply({ message, sourceType, text, settings });
+    }
+    return maybeSendMainStatsScopeNotice({ message, sourceType });
+  }
+
   if (await maybeSendMainStatsQuestionReply({ message, sourceType, text, settings })) return true;
   if (!isQuestionLike(text)) return false;
   if (!classifyAsCustomerRequest({ updateKind, message, text, settings })) return false;
@@ -1433,6 +1462,25 @@ async function maybeAnswerMainGroupQuestion({ updateKind, message, sourceType, t
     settings,
     fallbackText: MAIN_GROUP_AUTO_REPLY_MISS
   });
+}
+
+function shouldTryGeneralAiAutoReply({ updateKind, message, text, classification, employee, settings }) {
+  if (!shouldAutoReply(settings)) return false;
+  if (!hasConfiguredAutoReplySource(settings)) return false;
+  if (employee || (message.from && message.from.is_bot)) return false;
+  if (!hasCustomerFacingPayload(message, text)) return false;
+  const normalizedClassification = String(classification || '').toLowerCase();
+  if (['done', 'command', 'ignore', 'bot_message', 'employee_message', 'ai_reply'].includes(normalizedClassification)) return false;
+  if (isSupportRequestClassification(normalizedClassification)) return false;
+  if (isGreetingOnly(text) || isSmallTalk(text)) return false;
+
+  const chat = message.chat || {};
+  if (isGroupChat(chat) && isConfiguredMainGroup(chat, settings)) return false;
+  if (isQuestionLike(text)) return true;
+  if (isDirectBotPrivateChat(updateKind, chat) || String(updateKind).includes('business')) {
+    return meaningfulTextLength(text) >= Number(settings.minTextLength || 10);
+  }
+  return Boolean(settings.aiMode && meaningfulTextLength(text) >= Number(settings.minTextLength || 10));
 }
 
 async function handleCommand(updateKind, message, sourceType, text, classification) {
@@ -1559,7 +1607,7 @@ async function processMessage(updateKind, message) {
   if (await maybeStartGroupBroadcastPreview(message, text, settings)) return;
 
   if (isGroupChat(chat) && isConfiguredMainGroup(chat, settings)) {
-    await maybeAnswerMainGroupQuestion({ updateKind, message, sourceType, text, settings });
+    await maybeAnswerGroupQuestion({ updateKind, message, sourceType, text, settings, employee });
     return;
   }
 
@@ -1574,7 +1622,7 @@ async function processMessage(updateKind, message) {
 
   if (await maybeCloseRequestFromReply(message, classification, employee)) return;
 
-  if (await maybeAnswerMainGroupQuestion({ updateKind, message, sourceType, text, settings })) return;
+  if (await maybeAnswerGroupQuestion({ updateKind, message, sourceType, text, settings, employee })) return;
 
   if (await maybeCloseRequestFromEmployeeAnswer(message, classification, employee, text)) return;
 
@@ -1588,6 +1636,11 @@ async function processMessage(updateKind, message) {
     if (await maybeSendAiAutoReply({ updateKind, message, sourceType, text, settings, fallbackText })) return;
     await maybeReplyPrivateFallback(updateKind, message, classification);
     return;
+  }
+
+  if (shouldTryGeneralAiAutoReply({ updateKind, message, text, classification, employee, settings })) {
+    const fallbackText = autoReplyFallbackText({ updateKind, chat, settings });
+    if (await maybeSendAiAutoReply({ updateKind, message, sourceType, text, settings, fallbackText })) return;
   }
 
   if (await maybeReplyPrivateFallback(updateKind, message, classification)) return;

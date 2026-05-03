@@ -1259,6 +1259,64 @@ async function testDashboardCompanyTicketsIncludeLinkedGroupMessagesWithoutReque
   }
 }
 
+async function testDashboardCompanyTicketsUseLinkedGroupOrdinaryMessages() {
+  const originalSelect = supabase.select;
+  const originalEmployeeStats = stats.selectEmployeeStatistics;
+  const originalChatStats = stats.selectChatStatistics;
+  const originalTodaySummary = stats.selectTodaySummary;
+  const chatId = -100811;
+  const companyId = 'company-ordinary-message';
+  const linkedChat = {
+    chat_id: chatId,
+    title: 'Ordinary Message group',
+    source_type: 'group',
+    type: 'supergroup',
+    company_id: companyId,
+    is_active: true,
+    last_message_at: '2026-04-30T13:00:00.000Z'
+  };
+
+  supabase.select = async (table) => {
+    if (table === 'support_requests') return [];
+    if (table === 'tg_chats') return [linkedChat];
+    if (table === 'companies') return [{ id: companyId, name: 'Ordinary Message LLC', is_active: true }];
+    if (table === 'employees') return [];
+    if (table === 'messages') return [{
+      id: 'm-ordinary-message',
+      tg_message_id: 502,
+      chat_id: chatId,
+      from_tg_user_id: 701,
+      from_name: 'Mijoz',
+      employee_id: null,
+      source_type: 'group',
+      classification: 'message',
+      text: 'Guruhda oddiy xabar',
+      created_at: '2026-04-30T13:00:00.000Z'
+    }];
+    return [];
+  };
+  stats.selectEmployeeStatistics = async () => [];
+  stats.selectChatStatistics = async () => [linkedChat];
+  stats.selectTodaySummary = async () => [{ total_requests: 0, open_requests: 0, closed_requests: 0 }];
+
+  try {
+    const result = await callAdmin('dashboard', { query: { period: 'all' } });
+    assert.strictEqual(result.status, 200);
+    const rows = result.payload.data.analytics.companyTickets.all;
+    assert.strictEqual(rows.length, 1);
+    assert.strictEqual(rows[0].company_id, companyId);
+    assert.strictEqual(rows[0].message_count, 1);
+    assert.strictEqual(rows[0].ticket_like_messages, 0);
+    assert.strictEqual(rows[0].total_requests, 1);
+    assert.strictEqual(rows[0].open_requests, 1);
+  } finally {
+    supabase.select = originalSelect;
+    stats.selectEmployeeStatistics = originalEmployeeStats;
+    stats.selectChatStatistics = originalChatStats;
+    stats.selectTodaySummary = originalTodaySummary;
+  }
+}
+
 async function testDashboardEmployeePerformanceCountsOpenAndSlaPerEmployee() {
   const originalSelect = supabase.select;
   const originalEmployeeStats = stats.selectEmployeeStatistics;
@@ -2427,6 +2485,7 @@ async function run() {
   await testCompanyGroupActivityLimitsLargeConversationPayload();
   await testDashboardCompanyTicketsUseRegisteredGroupCompany();
   await testDashboardCompanyTicketsIncludeLinkedGroupMessagesWithoutRequests();
+  await testDashboardCompanyTicketsUseLinkedGroupOrdinaryMessages();
   await testDashboardEmployeePerformanceCountsOpenAndSlaPerEmployee();
   await testRequestsListEnrichesCompanyFromRegisteredGroup();
   await testRequestsListShowsResponsibleEmployeeFromTicketMessages();

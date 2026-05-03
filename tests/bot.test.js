@@ -1396,6 +1396,108 @@ async function testAiModeAutoRepliesToGroupRequest() {
   }
 }
 
+async function testAiModeAutoRepliesToGroupQuestionWithoutTicket() {
+  const originalSelect = supabase.select;
+  const originalInsert = supabase.insert;
+  const originalFetch = global.fetch;
+  const telegramCalls = [];
+  const aiCalls = [];
+  const inserted = [];
+  clearBotSettingsCache();
+
+  supabase.select = async (table) => {
+    if (table === 'bot_settings') {
+      return [
+        { key: 'ai_mode', value: { enabled: true, provider: 'openai_compatible', model: 'gpt-test' } },
+        { key: 'auto_reply', value: { enabled: true } },
+        {
+          key: 'ai_integration',
+          value: {
+            enabled: true,
+            provider: 'openai_compatible',
+            base_url: 'https://ai.example/v1',
+            model: 'gpt-test',
+            api_key: 'secret-token',
+            last_check_status: 'ok',
+            system_prompt: 'Return JSON classification',
+            knowledge_text: 'Kontragent qo‘shish uchun Kontragentlar bo‘limida qo‘shish tugmasi bosiladi.'
+          }
+        },
+        { key: 'request_detection', value: { mode: 'keyword', min_text_length: 10 } }
+      ];
+    }
+    if (table === 'employees') return [];
+    if (table === 'support_requests') return [];
+    return [];
+  };
+  supabase.insert = async (table, rows) => {
+    inserted.push({ table, rows });
+    return rows.map(row => ({ id: `${table}-row`, ...row }));
+  };
+  global.fetch = async (url, options) => {
+    if (/api\.telegram\.org/.test(url)) {
+      telegramCalls.push({ url, body: JSON.parse(options.body) });
+      return {
+        ok: true,
+        json: async () => ({ ok: true, result: { message_id: 705 } })
+      };
+    }
+
+    const body = JSON.parse(options.body);
+    aiCalls.push(body);
+    if (body.response_format) {
+      return {
+        ok: true,
+        json: async () => ({
+          choices: [{
+            message: {
+              content: JSON.stringify({ classification: 'message', confidence: 0.92, reason: 'knowledge question' })
+            }
+          }]
+        })
+      };
+    }
+    return {
+      ok: true,
+      json: async () => ({
+        choices: [{
+          message: {
+            content: 'Kontragent qo‘shish uchun Kontragentlar bo‘limida qo‘shish tugmasini bosing.'
+          }
+        }]
+      })
+    };
+  };
+
+  try {
+    const result = await callHandler({
+      update_id: 73,
+      message: {
+        message_id: 153,
+        date: 1777100000,
+        text: 'Kontragent qanday qo‘shiladi?',
+        chat: { id: -100301, type: 'supergroup', title: 'Client group' },
+        from: { id: 1002, first_name: 'Customer', is_bot: false }
+      }
+    });
+
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.handled, 'message');
+    assert.strictEqual(aiCalls.length, 2);
+    assert.strictEqual(inserted.some(item => item.table === 'support_requests'), false);
+    assert.strictEqual(inserted.some(item => item.table === 'messages' && item.rows[0].classification === 'ai_reply'), true);
+    assert.strictEqual(telegramCalls.length, 1);
+    assert.strictEqual(telegramCalls[0].body.chat_id, -100301);
+    assert.strictEqual(telegramCalls[0].body.reply_to_message_id, 153);
+    assert.match(telegramCalls[0].body.text, /Kontragentlar bo‘limida/);
+  } finally {
+    supabase.insert = originalInsert;
+    supabase.select = originalSelect;
+    global.fetch = originalFetch;
+    clearBotSettingsCache();
+  }
+}
+
 async function testAutoReplyFallbackUsesLocalKnowledge() {
   const originalSelect = supabase.select;
   const originalInsert = supabase.insert;
@@ -2001,6 +2103,79 @@ async function testMainGroupAnswersStatsQuestions() {
     assert.match(telegramCalls[1].body.text, /1<\/b> tasi ochiq/);
     assert.strictEqual(inserted.some(item => item.table === 'support_requests'), false);
     assert.strictEqual(inserted.some(item => item.table === 'messages' && item.rows[0].classification === 'ai_reply'), true);
+  } finally {
+    supabase.insert = originalInsert;
+    supabase.select = originalSelect;
+    global.fetch = originalFetch;
+    clearBotSettingsCache();
+  }
+}
+
+async function testKnownEmployeeStatsQuestionWorksOutsideMainGroup() {
+  const originalInsert = supabase.insert;
+  const originalSelect = supabase.select;
+  const originalFetch = global.fetch;
+  const telegramCalls = [];
+  const inserted = [];
+  clearBotSettingsCache();
+
+  const now = new Date().toISOString();
+  const employees = [
+    { id: 'employee-1', tg_user_id: 777, full_name: 'Ali Valiyev', username: 'ali', is_active: true },
+    { id: 'employee-2', tg_user_id: 778, full_name: 'Vali Karimov', username: 'vali', is_active: true }
+  ];
+  const requests = [
+    { id: 'request-1', source_type: 'group', chat_id: -1001, status: 'closed', closed_by_employee_id: 'employee-1', closed_by_name: 'Ali Valiyev', created_at: now, closed_at: now },
+    { id: 'request-2', source_type: 'group', chat_id: -1002, status: 'closed', closed_by_employee_id: 'employee-1', closed_by_name: 'Ali Valiyev', created_at: now, closed_at: now },
+    { id: 'request-3', source_type: 'group', chat_id: -1003, status: 'closed', closed_by_employee_id: 'employee-2', closed_by_name: 'Vali Karimov', created_at: now, closed_at: now }
+  ];
+
+  supabase.select = async (table) => {
+    if (table === 'bot_settings') {
+      return [
+        { key: 'main_group', value: { chat_id: '-100777' } },
+        { key: 'ai_mode', value: { enabled: false, provider: null } },
+        { key: 'auto_reply', value: { enabled: false } },
+        { key: 'request_detection', value: { mode: 'keyword', min_text_length: 10 } }
+      ];
+    }
+    if (table === 'employees') return employees;
+    if (table === 'v_today_summary') return [{ total_requests: 3, open_requests: 0, closed_requests: 3 }];
+    if (table === 'v_chat_statistics') return [];
+    if (table === 'support_requests') return requests;
+    return [];
+  };
+  supabase.insert = async (table, rows) => {
+    inserted.push({ table, rows });
+    return rows.map(row => ({ id: `${table}-row`, ...row }));
+  };
+  global.fetch = async (_url, options) => {
+    telegramCalls.push({ url: _url, body: JSON.parse(options.body) });
+    return {
+      ok: true,
+      json: async () => ({ ok: true, result: { message_id: 911 } })
+    };
+  };
+
+  try {
+    const result = await callHandler({
+      update_id: 87,
+      message: {
+        message_id: 187,
+        date: 1777100000,
+        text: 'eng faol xodim',
+        chat: { id: -100999, type: 'supergroup', title: 'Support ishchi guruhi' },
+        from: { id: 777, first_name: 'Ali', username: 'ali', is_bot: false }
+      }
+    });
+
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.handled, 'message');
+    const statsReply = telegramCalls.find(call => /sendMessage$/.test(call.url) && /Eng faol xodim/.test(call.body.text || ''));
+    assert.ok(statsReply);
+    assert.match(statsReply.body.text, /Ali Valiyev/);
+    assert.strictEqual(statsReply.body.reply_to_message_id, 187);
+    assert.strictEqual(inserted.some(item => item.table === 'support_requests'), false);
   } finally {
     supabase.insert = originalInsert;
     supabase.select = originalSelect;
@@ -2821,6 +2996,7 @@ async function testConfiguredLogChannelSummarizesLaravelError() {
   await testAiCanClassifyTicketIntent();
   await testClassifierJsonIsNotSentAsAutoReply();
   await testAiModeAutoRepliesToGroupRequest();
+  await testAiModeAutoRepliesToGroupQuestionWithoutTicket();
   await testAutoReplyFallbackUsesLocalKnowledge();
   await testLocalKnowledgeParsesNumberedSavolJavobLabels();
   await testLocalKnowledgeDoesNotEchoQuestionOnlyEntry();
@@ -2832,6 +3008,7 @@ async function testConfiguredLogChannelSummarizesLaravelError() {
   await testMainGroupCustomerRequestDoesNotCreateTicket();
   await testMainGroupStatsTriggerSendsReport();
   await testMainGroupAnswersStatsQuestions();
+  await testKnownEmployeeStatsQuestionWorksOutsideMainGroup();
   await testReplyToCustomerTicketClosesRequest();
   await testEmployeePlainAnswerClosesLatestOpenRequest();
   await testEmployeeSmallTalkDoesNotCloseLatestOpenRequest();

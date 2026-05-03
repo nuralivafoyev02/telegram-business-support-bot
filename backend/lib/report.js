@@ -163,6 +163,10 @@ function mainStatsQuestionIntents(text = '') {
   return { wantsTopCloser, wantsActiveEmployee, wantsOpenToday, wantsAllClosed };
 }
 
+function isMainStatsQuestion(text = '') {
+  return !!mainStatsQuestionIntents(text);
+}
+
 function buildMainStatsQuestionText({ text, summaryRows, employees, requests }) {
   const intents = mainStatsQuestionIntents(text);
   if (!intents) return '';
@@ -330,4 +334,4 @@ async function sendMainStatsReport(chatId) {
   return { chat_id: target, message_id: result.message_id, text };
 }
 
-module.exports = { buildMainStatsReport, buildMainStatsQuestionReply, resolveMainStatsChatId, sendMainStatsReport };
+module.exports = { buildMainStatsReport, buildMainStatsQuestionReply, isMainStatsQuestion, resolveMainStatsChatId, sendMainStatsReport };
