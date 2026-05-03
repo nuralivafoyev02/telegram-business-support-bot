@@ -1191,7 +1191,7 @@ async function listRequests(query) {
       select: 'chat_id,title,username,source_type,company_id,last_message_at'
     }, 'chat_id', chatIds, { maxRows: 10000 }) : Promise.resolve([]),
     companyIds.length ? selectPagedByChunks('companies', {
-      select: 'id,name,brand,is_active'
+      select: 'id,name,legal_name,is_active'
     }, 'id', companyIds, { maxRows: 10000 }) : Promise.resolve([]),
     selectPaged('employees', {
       select: 'id,tg_user_id,full_name,username,role,is_active'
@@ -1225,7 +1225,7 @@ async function listRequests(query) {
   const missingCompanyIds = chatCompanyIds.filter(id => !companyIds.includes(id));
   const chatCompanies = missingCompanyIds.length
     ? await selectPagedByChunks('companies', {
-      select: 'id,name,brand,is_active'
+      select: 'id,name,legal_name,is_active'
     }, 'id', missingCompanyIds, { maxRows: 10000 })
     : [];
   const companyMap = new Map([...requestCompanies, ...chatCompanies].map(company => [company.id, company]).filter(([id]) => id));
@@ -1243,7 +1243,7 @@ async function listRequests(query) {
       ...request,
       company_id: companyId,
       company_name: company?.name || '',
-      company_brand: company?.brand || '',
+      company_brand: company?.brand || company?.legal_name || '',
       chat_title: displayChatTitle(chat || { chat_id: request.chat_id }),
       responsible_employee_id: responsible?.employee_id || null,
       responsible_employee_name: responsibleName,
@@ -1324,7 +1324,7 @@ async function getCompanyGroupActivity(query = {}) {
 
   const [companies, chats, employeeLookup] = await Promise.all([
     selectPaged('companies', {
-      select: 'id,name,brand,is_active,notes'
+      select: 'id,name,legal_name,is_active,notes'
     }, { maxRows: 10000 }),
     selectPaged('tg_chats', {
       select: 'chat_id,title,username,type,source_type,company_id,business_connection_id,is_active,last_message_at,first_seen_at',
@@ -1485,7 +1485,7 @@ async function getCompanyGroupActivity(query = {}) {
     const current = groupedCompanies.get(key) || {
       company_id: key,
       name: company.name || 'Kompaniya',
-      brand: company.brand || '',
+      brand: company.brand || company.legal_name || '',
       is_active: company.is_active !== false,
       groups: [],
       group_count: 0,
