@@ -128,9 +128,16 @@
                 @click="openSupportSummaryCard(card.action)"
                 @keydown.enter.prevent="openSupportSummaryCard(card.action)"
                 @keydown.space.prevent="openSupportSummaryCard(card.action)">
-                <div>
+                <div class="support-summary-content">
                   <div class="support-summary-title">{{ card.title }}</div>
-                  <div class="support-summary-value" :class="{ danger: card.tone === 'danger' }">{{ card.value }}</div>
+                  <div class="support-summary-value-row">
+                    <div class="support-summary-value" :class="{ danger: card.tone === 'danger' }">{{ card.value }}</div>
+                    <Transition name="fade">
+                      <div v-if="comparisonEnabled && card.comparison" class="trend-label" :class="card.comparison.tone">
+                        {{ card.comparison.text }}
+                      </div>
+                    </Transition>
+                  </div>
                   <div class="support-summary-note">{{ card.note }}</div>
                 </div>
                 <span class="support-summary-icon" aria-hidden="true">{{ card.icon }}</span>
@@ -188,22 +195,84 @@
                   <div class="card-title">Hodimlar reytingi</div>
                   <div class="card-note">Ticketlarni yopish, ochiq qoldiqlar va SLA bo‘yicha support natijasi</div>
                 </div>
-                <div class="ranking-actions" ref="rankingMenuRef">
-                  <span v-if="topPerformerName" class="success-pill">🏆 Top hodim: {{ topPerformerName }}</span>
-                  <button class="btn small icon-btn" type="button" aria-label="Qo‘shimcha amallar"
-                    :aria-expanded="rankingMenuOpen ? 'true' : 'false'" @click="rankingMenuOpen = !rankingMenuOpen">
-                    •••
-                  </button>
-                  <Transition name="fade">
-                    <div v-if="rankingMenuOpen" class="ranking-menu">
-                      <label class="switch-row compact plain">
-                        <input v-model="comparisonEnabled" type="checkbox" />
-                        <span>Taqqoslash</span>
-                      </label>
+              </div>
+
+              <!-- New: Comparison Bar -->
+              <div class="comparison-bar">
+                <div class="comp-section">
+                  <span class="comp-label">Davr</span>
+                  <div class="comp-select-wrapper">
+                    <select v-model="selectedStatsPeriod" class="select small" @change="handleStatsPeriodChange">
+                      <option v-for="period in periodOptions" :key="period.key" :value="period.key">
+                        {{ period.label }}
+                      </option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="comp-section">
+                  <span class="comp-label">Taqqoslashni yoqish</span>
+                  <div class="comp-toggle-wrapper">
+                    <label class="switch">
+                      <input v-model="comparisonEnabled" type="checkbox" />
+                      <span class="slider"></span>
+                    </label>
+                    <span class="comp-toggle-label">{{ comparisonEnabled ? 'Yoqilgan' : 'O‘chirilgan' }}</span>
+                  </div>
+                </div>
+
+                <Transition name="fade">
+                  <div v-if="comparisonEnabled" class="comp-dates">
+                    <div class="comp-date-card">
+                      <div class="comp-date-dot current"></div>
+                      <div class="comp-date-info">
+                        <span>Joriy davr</span>
+                        <b>{{ currentPeriodDates.current || '—' }}</b>
+                      </div>
                     </div>
-                  </Transition>
+                    <div class="comp-vs">VS</div>
+                    <div class="comp-date-card">
+                      <div class="comp-date-dot prev"></div>
+                      <div class="comp-date-info">
+                        <span>Oldingi davr</span>
+                        <b>{{ currentPeriodDates.prev || '—' }}</b>
+                      </div>
+                    </div>
+                  </div>
+                </Transition>
+
+                <!-- Top Performer Summary (matches Image 2 right side) -->
+                <div v-if="topPerformer" class="top-performer-summary">
+                  <div class="top-perf-avatar">🏆</div>
+                  <div class="top-perf-info">
+                    <span>Top hodim</span>
+                    <b>{{ topPerformer.full_name || topPerformer.name }}</b>
+                  </div>
+                  <div class="top-perf-metrics">
+                    <div class="top-perf-metric">
+                      <span>Yopilgan</span>
+                      <b>{{ fmtNumber(topPerformer.closed_requests) }}</b>
+                      <div v-if="comparisonEnabled && topPerformer.closed_comparison" class="trend-label"
+                        :class="topPerformer.closed_comparison.tone">
+                        {{ topPerformer.closed_comparison.text }}
+                      </div>
+                    </div>
+                    <div class="top-perf-metric">
+                      <span>SLA</span>
+                      <b>{{ fmtPercent(topPerformer.close_rate) }}</b>
+                      <div v-if="comparisonEnabled && topPerformer.sla_comparison" class="trend-label"
+                        :class="topPerformer.sla_comparison.tone">
+                        {{ topPerformer.sla_comparison.text }}
+                      </div>
+                    </div>
+                    <div class="top-perf-metric">
+                      <span>Guruh/Chat</span>
+                      <b>{{ fmtNumber(topPerformer.handled_chats) }}</b>
+                    </div>
+                  </div>
                 </div>
               </div>
+
               <DataTable :columns="supportPerformanceColumns" :rows="topSupportCards"
                 empty="Hozircha natija ma’lumoti yo‘q" :on-cell-action="handleTableCellAction" :page-size="12">
                 <template #rank="{ row }">
@@ -2319,14 +2388,6 @@ const supportSummaryCards = computed(() => {
     }
   ];
 
-  if (comparisonEnabled.value) {
-    cards.forEach(card => {
-      if (card.comparison) {
-        card.note = `${card.note} (${card.comparison.text} oldingi davrdan)`;
-      }
-    });
-  }
-
   return cards;
 });
 const topEmployeeChartRows = computed(() => topEmployeeRows.value.slice(0, 6));
@@ -2500,7 +2561,9 @@ const supportPerformanceRows = computed(() => {
     || b.assigned_company_count - a.assigned_company_count
     || a.full_name.localeCompare(b.full_name));
 });
-const topPerformerName = computed(() => supportPerformanceRows.value[0]?.full_name || '');
+const topPerformer = computed(() => supportPerformanceRows.value[0] || null);
+const topPerformerName = computed(() => topPerformer.value?.full_name || '');
+const currentPeriodDates = computed(() => analytics.value.periodDates?.[selectedStatsPeriod.value] || { current: '', prev: '' });
 const openRequestsTitle = computed(() => `Ochiq so‘rovlar (${fmtNumber((dashboard.openRequests || []).length)})`);
 const unansweredAlerts = computed(() => {
   const grouped = new Map();

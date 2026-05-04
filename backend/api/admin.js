@@ -651,8 +651,37 @@ async function getDashboardAnalytics(query = {}) {
   ];
   if (customPeriod) periods.push(['custom', customPeriod.label || 'Ixtiyoriy']);
 
+  const periodContext = periods.map(([key, label]) => {
+    const summary = buildPeriodSummary(requests, key, label, keys);
+    let currentLabel = label;
+    let prevLabel = '';
+
+    if (key === 'today') {
+      currentLabel = shortDateLabel(keys.today);
+      prevLabel = shortDateLabel(keys.yesterday);
+    } else if (key === 'week') {
+      currentLabel = `${shortDateLabel(keys.weekStart)} - ${shortDateLabel(keys.today)}`;
+      prevLabel = `${shortDateLabel(keys.prevWeekStart)} - ${shortDateLabel(keys.prevWeekEnd)}`;
+    } else if (key === 'month') {
+      currentLabel = keys.month;
+      prevLabel = keys.prevMonth;
+    } else if (key === 'custom' && customPeriod) {
+      currentLabel = `${shortDateLabel(customPeriod.start)} - ${shortDateLabel(customPeriod.end)}`;
+      prevLabel = prevCustomPeriod ? `${shortDateLabel(prevCustomPeriod.start)} - ${shortDateLabel(prevCustomPeriod.end)}` : '';
+    }
+
+    return {
+      key,
+      label,
+      currentLabel,
+      prevLabel,
+      summary
+    };
+  });
+
   return {
-    periods: Object.fromEntries(periods.map(([key, label]) => [key, buildPeriodSummary(requests, key, label, keys)])),
+    periods: Object.fromEntries(periodContext.map(p => [p.key, p.summary])),
+    periodDates: Object.fromEntries(periodContext.map(p => [p.key, { current: p.currentLabel, prev: p.prevLabel }])),
     employeePerformance: Object.fromEntries(periods.map(([key]) => [key, buildEmployeePerformance({ requests, employees, messages, periodKey: key, keys })])),
     chatPerformance: Object.fromEntries(periods.map(([key]) => [key, buildChatPerformance({ requests, chats, periodKey: key, keys })])),
     groupPerformance: Object.fromEntries(periods.map(([key]) => [key, buildGroupPerformance({ requests, chats, periodKey: key, keys })])),
