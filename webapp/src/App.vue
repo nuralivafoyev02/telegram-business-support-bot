@@ -195,55 +195,53 @@
                   <div class="card-title">Hodimlar reytingi</div>
                   <div class="card-note">Ticketlarni yopish, ochiq qoldiqlar va SLA bo‘yicha support natijasi</div>
                 </div>
-                <div class="ranking-actions" ref="rankingMenuRef">
-                  <button class="btn small icon-btn" @click="rankingMenuOpen = !rankingMenuOpen">•••</button>
+                <div class="card-header-actions" ref="rankingMenuRef">
+                  <button class="btn-icon mini-icon" @click="rankingMenuOpen = !rankingMenuOpen" title="Sozlamalar">
+                    <span>⋯</span>
+                  </button>
                   <Transition name="fade">
-                    <div v-if="rankingMenuOpen" class="ranking-menu">
-                      <div class="comp-section" style="padding: 4px 8px 8px;">
-                        <div class="comp-label" style="margin-bottom: 8px;">Davrni tanlang</div>
-                        <select v-model="selectedStatsPeriod" class="select mini-select" @change="handleStatsPeriodChange(); rankingMenuOpen = false" style="width: 100%;">
-                          <option v-for="opt in periodOptions" :key="opt.key" :value="opt.key">{{ opt.label }}</option>
-                        </select>
-                      </div>
-                      <div class="switch-row plain">
+                    <div v-if="rankingMenuOpen" class="actions-dropdown mini-dropdown right-align">
+                      <label class="theme-menu-row">
                         <span>Taqqoslash</span>
-                        <label class="switch">
+                        <label class="switch mini-switch">
                           <input type="checkbox" v-model="comparisonEnabled">
                           <span class="slider"></span>
                         </label>
-                      </div>
+                      </label>
                     </div>
                   </Transition>
                 </div>
               </div>
 
-              <!-- Top Performer Summary -->
-              <div v-if="topPerformer" class="top-performer-summary" style="margin: 0 20px 16px;">
-                <div class="top-perf-avatar">🏆</div>
-                <div class="top-perf-info">
-                  <span>Top hodim</span>
-                  <b>{{ topPerformer.full_name || topPerformer.name }}</b>
-                </div>
-                <div class="top-perf-metrics">
-                  <div class="top-perf-metric">
-                    <span>Yopilgan</span>
-                    <b>{{ fmtNumber(topPerformer.closed_requests) }}</b>
-                    <div v-if="comparisonEnabled && topPerformer.closed_comparison" class="trend-label"
-                      :class="topPerformer.closed_comparison.tone">
-                      {{ topPerformer.closed_comparison.text }}
-                    </div>
+              <!-- Ranking Controls and Top Performer -->
+              <div class="ranking-header-area">
+                <div v-if="topPerformer" class="top-performer-summary">
+                  <div class="top-perf-avatar">🏆</div>
+                  <div class="top-perf-info">
+                    <span>Top hodim</span>
+                    <b>{{ topPerformer.full_name || topPerformer.name }}</b>
                   </div>
-                  <div class="top-perf-metric">
-                    <span>SLA</span>
-                    <b>{{ fmtPercent(topPerformer.close_rate) }}</b>
-                    <div v-if="comparisonEnabled && topPerformer.sla_comparison" class="trend-label"
-                      :class="topPerformer.sla_comparison.tone">
-                      {{ topPerformer.sla_comparison.text }}
+                  <div class="top-perf-metrics">
+                    <div class="top-perf-metric">
+                      <span>Yopilgan</span>
+                      <b>{{ fmtNumber(topPerformer.closed_requests) }}</b>
+                      <div v-if="comparisonEnabled && topPerformer.closed_comparison" class="trend-label"
+                        :class="topPerformer.closed_comparison.tone">
+                        {{ topPerformer.closed_comparison.text }}
+                      </div>
                     </div>
-                  </div>
-                  <div class="top-perf-metric">
-                    <span>Guruh/Chat</span>
-                    <b>{{ fmtNumber(topPerformer.handled_chats) }}</b>
+                    <div class="top-perf-metric">
+                      <span>SLA</span>
+                      <b>{{ fmtPercent(topPerformer.close_rate) }}</b>
+                      <div v-if="comparisonEnabled && topPerformer.sla_comparison" class="trend-label"
+                        :class="topPerformer.sla_comparison.tone">
+                        {{ topPerformer.sla_comparison.text }}
+                      </div>
+                    </div>
+                    <div class="top-perf-metric">
+                      <span>Guruh/Chat</span>
+                      <b>{{ fmtNumber(topPerformer.handled_chats) }}</b>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -299,7 +297,7 @@
 
             <div class="spacer"></div>
 
-            <div v-if="comparisonEnabled" class="stats-charts support-analytics-grid">
+            <div class="stats-charts support-analytics-grid">
               <section class="card chart-card ticket-trend-card">
                 <div class="card-header chart-card-head">
                   <div>
@@ -361,13 +359,6 @@
                 </div>
               </section>
             </div>
-            <section v-else class="card comparison-disabled-card">
-              <div>
-                <div class="card-title">Taqqoslash o‘chiq</div>
-                <div class="card-note">Trend va kompaniya ticketlari solishtirish grafigi menyudan qayta yoqiladi</div>
-              </div>
-              <button class="btn small primary" type="button" @click="comparisonEnabled = true">Yoqish</button>
-            </section>
 
           </template>
 
@@ -2919,19 +2910,33 @@ function pct(row) {
   return total ? `${Math.round((closed / total) * 100)}%` : '0%';
 }
 
-function compareValue(current, previous) {
+function compareValue(current, previous, invert = false) {
   const curr = Number(current || 0);
   const prev = Number(previous || 0);
-  if (!prev) return curr ? { text: `+${fmtNumber(curr)}`, tone: 'good' } : null;
+  if (curr === prev) return null;
+  
   const diff = curr - prev;
-  if (!diff) return null;
-  const percent = Math.round((diff / prev) * 100);
-  const sign = diff > 0 ? '+' : '';
   const arrow = diff > 0 ? '↑' : '↓';
+  const diffAbs = Math.abs(diff);
+  const diffText = diff > 0 ? `+${fmtNumber(diffAbs)}` : `-${fmtNumber(diffAbs)}`;
+
+  let tone = diff > 0 ? 'good' : 'bad';
+  if (invert) tone = diff > 0 ? 'bad' : 'good';
+
+  if (prev === 0) {
+    return {
+      text: `${arrow} ${diffText}`,
+      diff: diffText,
+      tone
+    };
+  }
+
+  const percent = Math.round((diffAbs / prev) * 100);
+  const sign = diff > 0 ? '+' : '-';
   return {
-    text: `${arrow} ${sign}${percent}%`,
-    diff: `${sign}${fmtNumber(diff)}`,
-    tone: diff > 0 ? 'good' : 'bad'
+    text: `${arrow} ${sign}${percent}% (${diffText})`,
+    diff: diffText,
+    tone
   };
 }
 
@@ -3500,7 +3505,7 @@ const topSupportCards = computed(() => supportPerformanceRows.value.map((row, in
     // Comparison metrics
     closed_comparison: comparisonEnabled.value ? compareValue(row.closed_requests, row.prev_closed_requests) : null,
     sla_comparison: comparisonEnabled.value ? compareValue(row.sla, row.prev_close_rate) : null,
-    avg_comparison: comparisonEnabled.value ? compareValue(row.prev_avg_close_minutes, row.avg_close_minutes) : null
+    avg_comparison: comparisonEnabled.value ? compareValue(row.avg_close_minutes, row.prev_avg_close_minutes, true) : null
   };
 }));
 watch(topSupportCards, rows => {
