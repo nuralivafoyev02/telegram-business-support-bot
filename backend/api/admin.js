@@ -175,12 +175,31 @@ function weekdayLabel(dateKey) {
 
 function currentPeriodKeys(now = new Date()) {
   const today = tashkentDateKey(now);
-  const { year, month, day } = tashkentDateParts(now);
+  const { year, month } = tashkentDateParts(now);
 
   return {
     today,
     weekStart: addDaysToDateKey(today, -6),
     month: `${year}-${month}`
+  };
+}
+
+function previousPeriodKeys(now = new Date()) {
+  const today = tashkentDateKey(now);
+  const yesterday = addDaysToDateKey(today, -1);
+  const weekStart = addDaysToDateKey(today, -6);
+  const prevWeekEnd = addDaysToDateKey(weekStart, -1);
+  const prevWeekStart = addDaysToDateKey(prevWeekEnd, -6);
+
+  const prevMonthDate = new Date(now);
+  prevMonthDate.setUTCMonth(prevMonthDate.getUTCMonth() - 1);
+  const { year: prevYear, month: prevMonth } = tashkentDateParts(prevMonthDate);
+
+  return {
+    yesterday,
+    prevWeekStart,
+    prevWeekEnd,
+    prevMonth: `${prevYear}-${prevMonth}`
   };
 }
 
@@ -199,15 +218,47 @@ function normalizeCustomPeriod(query = {}) {
     : { start: end, end: start, label: `${shortDateLabel(end)} - ${shortDateLabel(start)}` };
 }
 
-function inCurrentPeriod(value, periodKey, keys) {
-  if (periodKey === 'all') return true;
+function getPreviousCustomPeriod(customPeriod) {
+  if (!customPeriod || !customPeriod.start || !customPeriod.end) return null;
+  const start = dateFromTashkentKey(customPeriod.start);
+  const end = dateFromTashkentKey(customPeriod.end);
+  if (!start || !end) return null;
+  const diffDays = Math.ceil((end.getTime() - start.getTime()) / 86400000) + 1;
+  const prevEndKey = addDaysToDateKey(customPeriod.start, -1);
+  const prevStartKey = addDaysToDateKey(prevEndKey, -(diffDays - 1));
+  return { start: prevStartKey, end: prevEndKey };
+}
+
+function inDatePeriod(value, periodKey, keys, isPrevious = false) {
+  if (periodKey === 'all') return !isPrevious;
   if (!value) return false;
   const dateKey = tashkentDateKey(value);
-  if (periodKey === 'today') return dateKey === keys.today;
-  if (periodKey === 'week') return dateKey >= keys.weekStart && dateKey <= keys.today;
-  if (periodKey === 'month') return dateKey.startsWith(keys.month);
-  if (periodKey === 'custom') return keys.customStart && keys.customEnd && dateKey >= keys.customStart && dateKey <= keys.customEnd;
+  if (periodKey === 'today') {
+    return isPrevious ? dateKey === keys.yesterday : dateKey === keys.today;
+  }
+  if (periodKey === 'week') {
+    return isPrevious
+      ? (dateKey >= keys.prevWeekStart && dateKey <= keys.prevWeekEnd)
+      : (dateKey >= keys.weekStart && dateKey <= keys.today);
+  }
+  if (periodKey === 'month') {
+    return isPrevious ? dateKey.startsWith(keys.prevMonth) : dateKey.startsWith(keys.month);
+  }
+  if (periodKey === 'custom') {
+    if (isPrevious) {
+      return keys.prevCustomStart && keys.prevCustomEnd && dateKey >= keys.prevCustomStart && dateKey <= keys.prevCustomEnd;
+    }
+    return keys.customStart && keys.customEnd && dateKey >= keys.customStart && dateKey <= keys.customEnd;
+  }
   return false;
+}
+
+function inCurrentPeriod(value, periodKey, keys) {
+  return inDatePeriod(value, periodKey, keys, false);
+}
+
+function inPreviousPeriod(value, periodKey, keys) {
+  return inDatePeriod(value, periodKey, keys, true);
 }
 
 function emptyPeriod(periodKey, label) {
@@ -230,6 +281,11 @@ function buildPeriodSummary(requests, periodKey, label, keys) {
   const created = requests.filter(request => inCurrentPeriod(request.created_at, periodKey, keys));
   const closed = created.filter(request => request.status === 'closed');
   const closeMinutes = closed.map(request => minutesBetween(request.created_at, request.closed_at)).filter(value => value !== null);
+
+  const prevCreated = requests.filter(request => inPreviousPeriod(request.created_at, periodKey, keys));
+  const prevClosed = prevCreated.filter(request => request.status === 'closed');
+  const prevCloseMinutes = prevClosed.map(request => minutesBetween(request.created_at, request.closed_at)).filter(value => value !== null);
+
   return {
     ...emptyPeriod(periodKey, label),
     total_requests: created.length,
@@ -240,7 +296,12 @@ function buildPeriodSummary(requests, periodKey, label, keys) {
     group_requests: created.filter(request => request.source_type === 'group').length,
     private_requests: created.filter(request => request.source_type === 'private').length,
     business_requests: created.filter(request => request.source_type === 'business').length,
-    unique_customers: new Set(created.map(request => request.customer_tg_id).filter(Boolean)).size
+    unique_customers: new Set(created.map(request => request.customer_tg_id).filter(Boolean)).size,
+    // Previous period stats
+    prev_total_requests: prevCreated.length,
+    prev_closed_requests: prevClosed.length,
+    prev_close_rate: percent(prevClosed.length, prevCreated.length),
+    prev_avg_close_minutes: average(prevCloseMinutes)
   };
 }
 
@@ -254,57 +315,46 @@ function buildEmployeePerformance({ requests, employees, messages = [], periodKe
     if (!messagesByChat.has(key)) messagesByChat.set(key, []);
     messagesByChat.get(key).push(message);
   });
+
   const closed = requests.filter(request => {
     if (request.status !== 'closed' || !inCurrentPeriod(request.closed_at, periodKey, keys)) return false;
     return Boolean(request.closed_by_employee_id || request.closed_by_tg_id || request.closed_by_name);
   });
   const open = requests.filter(request => request.status === 'open' && inCurrentPeriod(request.created_at, periodKey, keys));
-  const totals = new Map(employees.map(employee => [employee.id, {
-    employee_id: employee.id,
-    tg_user_id: employee.tg_user_id || null,
-    full_name: employee.full_name || 'Xodim',
-    username: employee.username || '',
-    role: employee.role || '',
-    closed_requests: 0,
-    open_requests: 0,
-    handled_chats: new Set(),
-    close_minutes: [],
-    last_closed_at: null
-  }]).filter(([id]) => id));
+
+  const prevClosed = requests.filter(request => {
+    if (request.status !== 'closed' || !inPreviousPeriod(request.closed_at, periodKey, keys)) return false;
+    return Boolean(request.closed_by_employee_id || request.closed_by_tg_id || request.closed_by_name);
+  });
+  const prevOpen = requests.filter(request => request.status === 'open' && inPreviousPeriod(request.created_at, periodKey, keys));
+
+  const totals = new Map();
 
   function ensureEmployeeTotal({ employee = null, employeeId = '', tgUserId = '', name = '' } = {}) {
     const key = employee?.id || employeeId || (tgUserId ? `tg:${tgUserId}` : `name:${name || 'Xodim'}`);
-    const current = totals.get(key) || {
-      employee_id: employee?.id || employeeId || '',
-      tg_user_id: employee?.tg_user_id || tgUserId || null,
-      full_name: name || employee?.full_name || 'Xodim',
-      username: '',
-      role: '',
-      closed_requests: 0,
-      open_requests: 0,
-      handled_chats: new Set(),
-      close_minutes: [],
-      last_closed_at: null
-    };
-    if (employee) {
-      current.full_name = employee.full_name || current.full_name;
-      current.username = employee.username || '';
-      current.role = employee.role || '';
-      current.tg_user_id = employee.tg_user_id || null;
-      current.employee_id = employee.id || current.employee_id;
+    if (!totals.has(key)) {
+      totals.set(key, {
+        employee_id: employee?.id || employeeId || '',
+        tg_user_id: employee?.tg_user_id || tgUserId || null,
+        full_name: name || employee?.full_name || 'Xodim',
+        username: employee?.username || '',
+        role: employee?.role || '',
+        closed_requests: 0,
+        open_requests: 0,
+        close_minutes: [],
+        prev_closed_requests: 0,
+        prev_open_requests: 0,
+        prev_close_minutes: [],
+        handled_chats: new Set(),
+        last_closed_at: null
+      });
     }
-    totals.set(key, current);
-    return current;
+    return totals.get(key);
   }
 
   closed.forEach(request => {
     const employee = employeeMap.get(request.closed_by_employee_id) || employeeByTgId.get(telegramIdKey(request.closed_by_tg_id));
-    const current = ensureEmployeeTotal({
-      employee,
-      employeeId: request.closed_by_employee_id || '',
-      tgUserId: request.closed_by_tg_id || '',
-      name: request.closed_by_name || ''
-    });
+    const current = ensureEmployeeTotal({ employee, employeeId: request.closed_by_employee_id, tgUserId: request.closed_by_tg_id, name: request.closed_by_name });
     current.closed_requests += 1;
     if (request.chat_id) current.handled_chats.add(String(request.chat_id));
     const closeMinute = minutesBetween(request.created_at, request.closed_at);
@@ -316,14 +366,25 @@ function buildEmployeePerformance({ requests, employees, messages = [], periodKe
     const responsible = resolveRequestResponsibleEmployee(request, messagesByChat.get(telegramIdKey(request.chat_id)) || [], employeeMaps);
     if (!responsible) return;
     const employee = employeeMap.get(responsible.employee_id) || employeeByTgId.get(telegramIdKey(responsible.tg_user_id));
-    const current = ensureEmployeeTotal({
-      employee,
-      employeeId: responsible.employee_id || '',
-      tgUserId: responsible.tg_user_id || '',
-      name: responsible.full_name || ''
-    });
+    const current = ensureEmployeeTotal({ employee, employeeId: responsible.employee_id, tgUserId: responsible.tg_user_id, name: responsible.full_name });
     current.open_requests += 1;
     if (request.chat_id) current.handled_chats.add(String(request.chat_id));
+  });
+
+  prevClosed.forEach(request => {
+    const employee = employeeMap.get(request.closed_by_employee_id) || employeeByTgId.get(telegramIdKey(request.closed_by_tg_id));
+    const current = ensureEmployeeTotal({ employee, employeeId: request.closed_by_employee_id, tgUserId: request.closed_by_tg_id, name: request.closed_by_name });
+    current.prev_closed_requests += 1;
+    const closeMinute = minutesBetween(request.created_at, request.closed_at);
+    if (closeMinute !== null) current.prev_close_minutes.push(closeMinute);
+  });
+
+  prevOpen.forEach(request => {
+    const responsible = resolveRequestResponsibleEmployee(request, messagesByChat.get(telegramIdKey(request.chat_id)) || [], employeeMaps);
+    if (!responsible) return;
+    const employee = employeeMap.get(responsible.employee_id) || employeeByTgId.get(telegramIdKey(responsible.tg_user_id));
+    const current = ensureEmployeeTotal({ employee, employeeId: responsible.employee_id, tgUserId: responsible.tg_user_id, name: responsible.full_name });
+    current.prev_open_requests += 1;
   });
 
   return [...totals.values()]
@@ -341,10 +402,15 @@ function buildEmployeePerformance({ requests, employees, messages = [], periodKe
       close_rate: percent(row.closed_requests, row.closed_requests + row.open_requests),
       sla: percent(row.closed_requests, row.closed_requests + row.open_requests),
       avg_close_minutes: average(row.close_minutes),
-      last_closed_at: row.last_closed_at
+      last_closed_at: row.last_closed_at,
+      // Previous stats for comparison
+      prev_closed_requests: row.prev_closed_requests,
+      prev_total_requests: row.prev_closed_requests + row.prev_open_requests,
+      prev_close_rate: percent(row.prev_closed_requests, row.prev_closed_requests + row.prev_open_requests),
+      prev_avg_close_minutes: average(row.prev_close_minutes)
     }))
     .sort((a, b) => b.total_requests - a.total_requests || b.closed_requests - a.closed_requests || a.full_name.localeCompare(b.full_name))
-    .slice(0, 20);
+    .slice(0, 50);
 }
 
 function buildChatPerformance({ requests, chats, periodKey, keys, sourceType = '' }) {
@@ -543,35 +609,19 @@ function buildCompanyTicketPerformance({ requests, chats = [], companies, messag
     .slice(0, 30);
 }
 
-function buildDashboardAnalytics({ requests, chats, employees, companies, messages = [], customPeriod = null }) {
-  const keys = {
-    ...currentPeriodKeys(),
-    customStart: customPeriod?.start || '',
-    customEnd: customPeriod?.end || ''
-  };
-  const periods = [
-    ['today', 'Bugun'],
-    ['week', 'Hafta'],
-    ['month', 'Oy'],
-    ['all', 'Jami']
-  ];
-  if (customPeriod) periods.push(['custom', customPeriod.label || 'Ixtiyoriy']);
-
-  return {
-    periods: Object.fromEntries(periods.map(([key, label]) => [key, buildPeriodSummary(requests, key, label, keys)])),
-    employeePerformance: Object.fromEntries(periods.map(([key]) => [key, buildEmployeePerformance({ requests, employees, messages, periodKey: key, keys })])),
-    chatPerformance: Object.fromEntries(periods.map(([key]) => [key, buildChatPerformance({ requests, chats, periodKey: key, keys })])),
-    groupPerformance: Object.fromEntries(periods.map(([key]) => [key, buildGroupPerformance({ requests, chats, periodKey: key, keys })])),
-    responseTimeTrend: Object.fromEntries(periods.map(([key]) => [key, buildResponseTimeTrend(requests, key, keys)])),
-    ticketAnswerTrend: Object.fromEntries(periods.map(([key]) => [key, buildTicketAnswerTrend(requests, key, keys)])),
-    companyTickets: Object.fromEntries(periods.map(([key]) => [key, buildCompanyTicketPerformance({ requests, chats, companies, messages, periodKey: key, keys })])),
-    custom_period: customPeriod,
-    generated_at: new Date().toISOString()
-  };
-}
 
 async function getDashboardAnalytics(query = {}) {
   const customPeriod = normalizeCustomPeriod(query);
+  const prevCustomPeriod = getPreviousCustomPeriod(customPeriod);
+  const keys = {
+    ...currentPeriodKeys(),
+    ...previousPeriodKeys(),
+    customStart: customPeriod?.start || '',
+    customEnd: customPeriod?.end || '',
+    prevCustomStart: prevCustomPeriod?.start || '',
+    prevCustomEnd: prevCustomPeriod?.end || ''
+  };
+
   const [requests, chats, employees, companies] = await Promise.all([
     supabase.select('support_requests', {
       select: 'id,source_type,chat_id,company_id,customer_tg_id,customer_name,status,closed_by_employee_id,closed_by_tg_id,closed_by_name,created_at,closed_at',
@@ -593,7 +643,25 @@ async function getDashboardAnalytics(query = {}) {
     order: supabase.order('created_at', false)
   }, 'chat_id', chatIds, { maxRows: 40000 }) : [];
 
-  return buildDashboardAnalytics({ requests, chats, employees, companies, messages, customPeriod });
+  const periods = [
+    ['today', 'Bugun'],
+    ['week', 'Hafta'],
+    ['month', 'Oy'],
+    ['all', 'Jami']
+  ];
+  if (customPeriod) periods.push(['custom', customPeriod.label || 'Ixtiyoriy']);
+
+  return {
+    periods: Object.fromEntries(periods.map(([key, label]) => [key, buildPeriodSummary(requests, key, label, keys)])),
+    employeePerformance: Object.fromEntries(periods.map(([key]) => [key, buildEmployeePerformance({ requests, employees, messages, periodKey: key, keys })])),
+    chatPerformance: Object.fromEntries(periods.map(([key]) => [key, buildChatPerformance({ requests, chats, periodKey: key, keys })])),
+    groupPerformance: Object.fromEntries(periods.map(([key]) => [key, buildGroupPerformance({ requests, chats, periodKey: key, keys })])),
+    responseTimeTrend: Object.fromEntries(periods.map(([key]) => [key, buildResponseTimeTrend(requests, key, keys)])),
+    ticketAnswerTrend: Object.fromEntries(periods.map(([key]) => [key, buildTicketAnswerTrend(requests, key, keys)])),
+    companyTickets: Object.fromEntries(periods.map(([key]) => [key, buildCompanyTicketPerformance({ requests, chats, companies, messages, periodKey: key, keys })])),
+    custom_period: customPeriod,
+    generated_at: new Date().toISOString()
+  };
 }
 
 function normalizeTelegramId(value) {

@@ -4983,3 +4983,26 @@ tbody tr.selected-row .cell-action {
     padding: 12px;
   }
 }
+.trend-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.trend-label {
+  font-size: 11px;
+  font-weight: 800;
+  padding: 1px 4px;
+  border-radius: 4px;
+  width: fit-content;
+}
+
+.trend-label.good {
+  color: #95ffc8;
+  background: rgba(33, 214, 129, 0.12);
+}
+
+.trend-label.bad {
+  color: #ffd7df;
+  background: rgba(255, 85, 117, 0.12);
+}

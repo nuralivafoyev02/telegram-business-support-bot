@@ -216,6 +216,14 @@
                     <b>{{ row.full_name || 'Xodim' }}</b>
                   </span>
                 </template>
+                <template #closedRequests="{ row }">
+                  <div class="trend-cell">
+                    <b class="table-strong">{{ fmtNumber(row.closed_requests) }}</b>
+                    <span v-if="comparisonEnabled && row.closed_comparison" class="trend-label" :class="row.closed_comparison.tone">
+                      {{ row.closed_comparison.text }}
+                    </span>
+                  </div>
+                </template>
                 <template #openRequests="{ row }">
                   <span class="open-count"
                     :class="{ warn: Number(row.open_requests || 0) >= 5, danger: Number(row.open_requests || 0) >= 8 }">
@@ -223,7 +231,20 @@
                   </span>
                 </template>
                 <template #closeRate="{ row }">
-                  <b class="table-strong">{{ fmtPercent(row.close_rate) }}</b>
+                  <div class="trend-cell">
+                    <b class="table-strong">{{ fmtPercent(row.close_rate) }}</b>
+                    <span v-if="comparisonEnabled && row.sla_comparison" class="trend-label" :class="row.sla_comparison.tone">
+                      {{ row.sla_comparison.text }}
+                    </span>
+                  </div>
+                </template>
+                <template #avgTime="{ row }">
+                  <div class="trend-cell">
+                    <span>{{ fmtMinutes(row.avg_close_minutes) }}</span>
+                    <span v-if="comparisonEnabled && row.avg_comparison" class="trend-label" :class="row.avg_comparison.tone">
+                      {{ row.avg_comparison.text }}
+                    </span>
+                  </div>
                 </template>
                 <template #sla="{ row }">
                   <span class="sla-badge sla-tooltip" :class="slaToneClass(row.sla)"
@@ -2241,41 +2262,57 @@ const companyTicketRows = computed(() => {
     .slice(0, 30);
 });
 const companyTicketMax = computed(() => Math.max(1, ...companyTicketRows.value.map(row => Number(row.total_requests || 0))));
-const supportSummaryCards = computed(() => [
-  {
-    key: 'requests',
-    title: selectedStatsPeriod.value === 'today' ? 'Bugungi so‘rovlar' : `${selectedPeriodLabel.value} so‘rovlar`,
-    value: fmtNumber(selectedPeriodStats.value.total_requests),
-    note: `${fmtNumber(selectedPeriodStats.value.unique_customers)} ta mijozdan kelgan`,
-    icon: '🎫',
-    action: 'requests'
-  },
-  {
-    key: 'closed',
-    title: 'Javob berilgan',
-    value: fmtNumber(selectedPeriodStats.value.closed_requests),
-    note: `${fmtPercent(selectedPeriodStats.value.close_rate)} so‘rov yopilgan`,
-    icon: '✅',
-    action: 'closed'
-  },
-  {
-    key: 'open',
-    title: 'Javobsiz',
-    value: fmtNumber(selectedPeriodStats.value.open_requests),
-    note: `${fmtNumber(overdueOpenRequestsTotal.value)} tasi 30 daqiqadan oshgan`,
-    icon: '⚠️',
-    tone: 'danger',
-    action: 'open'
-  },
-  {
-    key: 'avg',
-    title: 'O‘rtacha javob',
-    value: fmtMinutes(selectedPeriodStats.value.avg_close_minutes),
-    note: `SLA: ${fmtPercent(selectedPeriodStats.value.close_rate)}`,
-    icon: '⏱️',
-    action: 'avg'
+const supportSummaryCards = computed(() => {
+  const stats = selectedPeriodStats.value;
+  const cards = [
+    {
+      key: 'requests',
+      title: selectedStatsPeriod.value === 'today' ? 'Bugungi so‘rovlar' : `${selectedPeriodLabel.value} so‘rovlar`,
+      value: fmtNumber(stats.total_requests),
+      note: `${fmtNumber(stats.unique_customers)} ta mijozdan kelgan`,
+      icon: '🎫',
+      action: 'requests',
+      comparison: comparisonEnabled.value ? compareValue(stats.total_requests, stats.prev_total_requests) : null
+    },
+    {
+      key: 'closed',
+      title: 'Javob berilgan',
+      value: fmtNumber(stats.closed_requests),
+      note: `${fmtPercent(stats.close_rate)} so‘rov yopilgan`,
+      icon: '✅',
+      action: 'closed',
+      comparison: comparisonEnabled.value ? compareValue(stats.closed_requests, stats.prev_closed_requests) : null
+    },
+    {
+      key: 'open',
+      title: 'Javobsiz',
+      value: fmtNumber(stats.open_requests),
+      note: `${fmtNumber(overdueOpenRequestsTotal.value)} tasi 30 daqiqadan oshgan`,
+      icon: '⚠️',
+      tone: 'danger',
+      action: 'open'
+    },
+    {
+      key: 'avg',
+      title: 'O‘rtacha javob',
+      value: fmtMinutes(stats.avg_close_minutes),
+      note: `SLA: ${fmtPercent(stats.close_rate)}`,
+      icon: '⏱️',
+      action: 'avg',
+      comparison: comparisonEnabled.value ? compareValue(stats.prev_avg_close_minutes, stats.avg_close_minutes) : null // Lower is better for time
+    }
+  ];
+
+  if (comparisonEnabled.value) {
+    cards.forEach(card => {
+      if (card.comparison) {
+        card.note = `${card.note} (${card.comparison.text} oldingi davrdan)`;
+      }
+    });
   }
-]);
+
+  return cards;
+});
 const topEmployeeChartRows = computed(() => topEmployeeRows.value.slice(0, 6));
 const topEmployeeChartMax = computed(() => Math.max(1, ...topEmployeeChartRows.value.map(row => Number(row.closed_requests || 0))));
 const groupChartRows = computed(() => groupPerformanceRows.value.slice(0, 6));
@@ -2818,6 +2855,22 @@ function pct(row) {
   const total = Number(row.total_requests || row.received_requests || 0);
   const closed = Number(row.closed_requests || 0);
   return total ? `${Math.round((closed / total) * 100)}%` : '0%';
+}
+
+function compareValue(current, previous) {
+  const curr = Number(current || 0);
+  const prev = Number(previous || 0);
+  if (!prev) return curr ? { text: `+${fmtNumber(curr)}`, tone: 'good' } : null;
+  const diff = curr - prev;
+  if (!diff) return null;
+  const percent = Math.round((diff / prev) * 100);
+  const sign = diff > 0 ? '+' : '';
+  const arrow = diff > 0 ? '↑' : '↓';
+  return {
+    text: `${arrow} ${sign}${percent}%`,
+    diff: `${sign}${fmtNumber(diff)}`,
+    tone: diff > 0 ? 'good' : 'bad'
+  };
 }
 
 function sourceTypeLabel(value) {
@@ -3381,7 +3434,11 @@ const topSupportCards = computed(() => supportPerformanceRows.value.map((row, in
     company_total: companySummary.total,
     company_active: companySummary.active,
     company_churn: companySummary.churn,
-    company_expiring_soon: companySummary.expiring_soon
+    company_expiring_soon: companySummary.expiring_soon,
+    // Comparison metrics
+    closed_comparison: comparisonEnabled.value ? compareValue(row.closed_requests, row.prev_closed_requests) : null,
+    sla_comparison: comparisonEnabled.value ? compareValue(row.sla, row.prev_close_rate) : null,
+    avg_comparison: comparisonEnabled.value ? compareValue(row.prev_avg_close_minutes, row.avg_close_minutes) : null
   };
 }));
 watch(topSupportCards, rows => {
@@ -3712,10 +3769,10 @@ const supportPerformanceColumns = [
   { key: 'rank', label: 'O‘rin', slot: 'rank', action: 'employeeCompanies' },
   { key: 'full_name', label: 'Hodim', slot: 'employeeIdentity', action: 'employeeCompanies' },
   { key: 'company_total', label: 'Kompaniya', format: fmtNumber, action: 'employeeCompanies' },
-  { key: 'closed_requests', label: 'Yopilgan', format: fmtNumber, action: 'employeeCompanies' },
+  { key: 'closed_requests', label: 'Yopilgan', slot: 'closedRequests', action: 'employeeCompanies' },
   { key: 'open_requests', label: 'Ochiq qolgan', slot: 'openRequests', action: 'employeeCompanies' },
   { key: 'close_rate', label: 'Yopish foizi', slot: 'closeRate', action: 'employeeCompanies' },
-  { key: 'avg_close_minutes', label: 'O‘rtacha vaqt', format: fmtMinutes, action: 'employeeCompanies' },
+  { key: 'avg_close_minutes', label: 'O‘rtacha vaqt', slot: 'avgTime', action: 'employeeCompanies' },
   { key: 'sla', label: 'SLA ⓘ', slot: 'sla', action: 'employeeCompanies', tooltip: 'SLA har bir xodim uchun alohida: yopilgan ticketlar / (yopilgan + xodimga biriktirilgan ochiq ticketlar).' }
 ];
 
