@@ -6,3 +6,4 @@ webapp/dist
 *.log
 .env.example
 .DS_Store
+.env.development
