@@ -5194,7 +5194,7 @@ input:checked + .slider:before {
 .ranking-header-area {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   flex-wrap: wrap;
   gap: 12px;
   padding: 12px 20px;
