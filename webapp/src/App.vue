@@ -195,80 +195,55 @@
                   <div class="card-title">Hodimlar reytingi</div>
                   <div class="card-note">Ticketlarni yopish, ochiq qoldiqlar va SLA bo‘yicha support natijasi</div>
                 </div>
+                <div class="ranking-actions" ref="rankingMenuRef">
+                  <button class="btn small icon-btn" @click="rankingMenuOpen = !rankingMenuOpen">•••</button>
+                  <Transition name="fade">
+                    <div v-if="rankingMenuOpen" class="ranking-menu">
+                      <div class="comp-section" style="padding: 4px 8px 8px;">
+                        <div class="comp-label" style="margin-bottom: 8px;">Davrni tanlang</div>
+                        <select v-model="selectedStatsPeriod" class="select mini-select" @change="handleStatsPeriodChange(); rankingMenuOpen = false" style="width: 100%;">
+                          <option v-for="opt in periodOptions" :key="opt.key" :value="opt.key">{{ opt.label }}</option>
+                        </select>
+                      </div>
+                      <div class="switch-row plain">
+                        <span>Taqqoslash</span>
+                        <label class="switch">
+                          <input type="checkbox" v-model="comparisonEnabled">
+                          <span class="slider"></span>
+                        </label>
+                      </div>
+                    </div>
+                  </Transition>
+                </div>
               </div>
 
-              <!-- New: Comparison Bar -->
-              <div class="comparison-bar">
-                <div class="comp-section">
-                  <span class="comp-label">Davr</span>
-                  <div class="comp-select-wrapper">
-                    <select v-model="selectedStatsPeriod" class="select small" @change="handleStatsPeriodChange">
-                      <option v-for="period in periodOptions" :key="period.key" :value="period.key">
-                        {{ period.label }}
-                      </option>
-                    </select>
-                  </div>
+              <!-- Top Performer Summary -->
+              <div v-if="topPerformer" class="top-performer-summary" style="margin: 0 20px 16px;">
+                <div class="top-perf-avatar">🏆</div>
+                <div class="top-perf-info">
+                  <span>Top hodim</span>
+                  <b>{{ topPerformer.full_name || topPerformer.name }}</b>
                 </div>
-
-                <div class="comp-section">
-                  <span class="comp-label">Taqqoslashni yoqish</span>
-                  <div class="comp-toggle-wrapper">
-                    <label class="switch">
-                      <input v-model="comparisonEnabled" type="checkbox" />
-                      <span class="slider"></span>
-                    </label>
-                    <span class="comp-toggle-label">{{ comparisonEnabled ? 'Yoqilgan' : 'O‘chirilgan' }}</span>
-                  </div>
-                </div>
-
-                <Transition name="fade">
-                  <div v-if="comparisonEnabled" class="comp-dates">
-                    <div class="comp-date-card">
-                      <div class="comp-date-dot current"></div>
-                      <div class="comp-date-info">
-                        <span>Joriy davr</span>
-                        <b>{{ currentPeriodDates.current || '—' }}</b>
-                      </div>
-                    </div>
-                    <div class="comp-vs">VS</div>
-                    <div class="comp-date-card">
-                      <div class="comp-date-dot prev"></div>
-                      <div class="comp-date-info">
-                        <span>Oldingi davr</span>
-                        <b>{{ currentPeriodDates.prev || '—' }}</b>
-                      </div>
+                <div class="top-perf-metrics">
+                  <div class="top-perf-metric">
+                    <span>Yopilgan</span>
+                    <b>{{ fmtNumber(topPerformer.closed_requests) }}</b>
+                    <div v-if="comparisonEnabled && topPerformer.closed_comparison" class="trend-label"
+                      :class="topPerformer.closed_comparison.tone">
+                      {{ topPerformer.closed_comparison.text }}
                     </div>
                   </div>
-                </Transition>
-
-                <!-- Top Performer Summary (matches Image 2 right side) -->
-                <div v-if="topPerformer" class="top-performer-summary">
-                  <div class="top-perf-avatar">🏆</div>
-                  <div class="top-perf-info">
-                    <span>Top hodim</span>
-                    <b>{{ topPerformer.full_name || topPerformer.name }}</b>
+                  <div class="top-perf-metric">
+                    <span>SLA</span>
+                    <b>{{ fmtPercent(topPerformer.close_rate) }}</b>
+                    <div v-if="comparisonEnabled && topPerformer.sla_comparison" class="trend-label"
+                      :class="topPerformer.sla_comparison.tone">
+                      {{ topPerformer.sla_comparison.text }}
+                    </div>
                   </div>
-                  <div class="top-perf-metrics">
-                    <div class="top-perf-metric">
-                      <span>Yopilgan</span>
-                      <b>{{ fmtNumber(topPerformer.closed_requests) }}</b>
-                      <div v-if="comparisonEnabled && topPerformer.closed_comparison" class="trend-label"
-                        :class="topPerformer.closed_comparison.tone">
-                        {{ topPerformer.closed_comparison.text }}
-                      </div>
-                    </div>
-                    <div class="top-perf-metric">
-                      <span>SLA</span>
-                      <b>{{ fmtPercent(topPerformer.close_rate) }}</b>
-                      <div v-if="comparisonEnabled && topPerformer.sla_comparison" class="trend-label"
-                        :class="topPerformer.sla_comparison.tone">
-                        {{ topPerformer.sla_comparison.text }}
-                      </div>
-                    </div>
-                    <div class="top-perf-metric">
-                      <span>Guruh/Chat</span>
-                      <b>{{ fmtNumber(topPerformer.handled_chats) }}</b>
-                    </div>
+                  <div class="top-perf-metric">
+                    <span>Guruh/Chat</span>
+                    <b>{{ fmtNumber(topPerformer.handled_chats) }}</b>
                   </div>
                 </div>
               </div>
@@ -2255,6 +2230,7 @@ const aiIntegrationStatus = computed(() => {
   return 'Tekshirilmagan';
 });
 const periodOptions = [
+  { key: 'today', label: 'Bugun' },
   { key: 'week', label: '7 kun' },
   { key: 'month', label: '1 oy' },
   { key: 'custom', label: 'Ixtiyoriy' }
@@ -2657,6 +2633,7 @@ function handleDocumentKeydown(event) {
   if (event.key === 'Escape') {
     actionMenuOpen.value = false;
     rankingMenuOpen.value = false;
+    if (modal.value) closeModal();
   }
 }
 
