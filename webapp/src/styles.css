@@ -5250,6 +5250,12 @@ input:checked + .slider:before {
   }
 }
 
+.top-performer-summary {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
 .top-perf-avatar {
   font-size: 20px;
 }
@@ -5262,7 +5268,7 @@ input:checked + .slider:before {
 
 .top-perf-metrics {
   display: flex;
-  gap: 12px;
+  gap: 18px;
 }
 
 .top-perf-metric {
