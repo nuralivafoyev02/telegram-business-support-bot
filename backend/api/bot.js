@@ -885,46 +885,30 @@ async function handleGroupRegistrationCommand(message, tracking) {
     registered = false;
     logBackgroundError('register-group', error);
   });
-  const deleteResult = await deleteCommandMessage(chat.id, message.message_id, {
-    attempts: registered ? 3 : 1,
+
+  if (registered) {
+    await deleteCommandMessage(chat.id, message.message_id, {
+      attempts: 3,
+      delayMs: 150
+    });
+    return;
+  }
+
+  await deleteCommandMessage(chat.id, message.message_id, {
+    attempts: 1,
     delayMs: 150
   });
-  const diagnostics = [];
+
   try {
-    const info = await getWebhookInfo();
-    const allowedUpdates = Array.isArray(info && info.allowed_updates) ? info.allowed_updates : [];
-    if (allowedUpdates.length && !allowedUpdates.includes('message')) {
-      diagnostics.push('Webhook `allowed_updates` ichida `message` yo‘q.');
+    const settings = await getBotSettings();
+    const mainGroupId = await resolveMainNotificationChat(settings);
+    if (mainGroupId) {
+      const groupName = chatDisplayName(message);
+      await sendMessage(mainGroupId, `⚠️ <b>${escapeHtml(groupName)}</b> ni ro'yxatdan o'tkazishda xatolik yuz berdi.`);
     }
-    if (allowedUpdates.length && !allowedUpdates.includes('my_chat_member')) {
-      diagnostics.push('Webhook `allowed_updates` ichida `my_chat_member` yo‘q.');
-    }
-  } catch (error) {
-    logBackgroundError('register-group-webhook-diagnostics', error);
+  } catch (err) {
+    logBackgroundError('register-group-error-notify', err);
   }
-  if (!deleteResult.deleted) {
-    diagnostics.push([
-      `Command o‘chirilmadi: ${deleteResult.reason || 'Telegram deleteMessage rad etdi.'}`,
-      deleteResult.permissionDiagnostic || 'Bot guruhda admin va delete permissionga ega ekanini tekshiring.'
-    ].filter(Boolean).join(' '));
-  }
-  const registrationText = registered
-    ? [
-      '✅ Guruh ro‘yxatga olindi.',
-      deleteResult.deleted ? '🧹 Command xabari o‘chirildi.' : '',
-      'Agar oddiy guruh xabarlari baribir ko‘rinmasa:',
-      '1) BotFather -> `/setprivacy` -> `Disable` qiling.',
-      '2) Webhookda `allowed_updates` ichida `message` bo‘lishini tekshiring.',
-      diagnostics.length ? `⚠️ Aniqlangan muammo: ${diagnostics.join(' ')}` : ''
-    ].filter(Boolean).join('\n')
-    : '⚠️ Guruhni ro‘yxatga olishda xatolik bo‘ldi. Iltimos, keyinroq qayta urinib ko‘ring.';
-  await sendTrackedBotReply({
-    message,
-    text: registrationText,
-    options: deleteResult.deleted ? {} : { reply_to_message_id: message.message_id },
-    updateKind: 'bot_register_group',
-    rawSource: 'bot_register_group'
-  }).catch(error => logBackgroundError('register-group-reply', error));
 }
 
 async function handleHelp(message) {
