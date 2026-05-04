@@ -5,6 +5,7 @@ const supabase = require('./supabase');
 
 const DEFAULT_COMPANY_INFO_URL = 'https://backend.app.uyqur.uz/dev/company/info-for-bot';
 const EXPIRING_SOON_DAYS = 30;
+const COMPANY_INFO_CACHE_KEY = 'uyqur_company_info_cache';
 const COMPANY_INFO_FIELDS = Object.freeze([
   'id',
   'name',
@@ -205,6 +206,44 @@ async function syncSupportEmployees(companies = []) {
   }
 }
 
+function companyInfoSnapshot(result = {}) {
+  const fetchedAt = result.fetched_at || new Date().toISOString();
+  return {
+    summary: result.summary || buildSummary(result.companies || []),
+    companies: Array.isArray(result.companies) ? result.companies : [],
+    support_employee_sync: result.support_employee_sync || null,
+    fetched_at: fetchedAt,
+    cached_at: new Date().toISOString(),
+    source: result.source || '',
+    message: result.message || null
+  };
+}
+
+async function saveCompanyInfoSnapshot(result = {}) {
+  const snapshot = companyInfoSnapshot(result);
+  await supabase.insert('bot_settings', [{
+    key: COMPANY_INFO_CACHE_KEY,
+    value: snapshot,
+    updated_at: snapshot.cached_at
+  }], { upsert: true, onConflict: 'key', prefer: 'return=minimal' });
+  return snapshot;
+}
+
+async function getCachedCompanyInfo() {
+  const rows = await supabase.select('bot_settings', {
+    select: 'key,value,updated_at',
+    key: supabase.eq(COMPANY_INFO_CACHE_KEY),
+    limit: '1'
+  }).catch(() => []);
+  const row = rows[0] || null;
+  if (!row || !row.value || typeof row.value !== 'object') return null;
+  return {
+    ...row.value,
+    cached_at: row.value.cached_at || row.updated_at || null,
+    from_cache: true
+  };
+}
+
 function extractCompanyRows(payload = {}) {
   if (Array.isArray(payload)) return payload;
   if (Array.isArray(payload.data)) return payload.data;
@@ -255,7 +294,7 @@ function shouldRetryUnscoped(error = {}) {
   return [400, 404, 405, 422].includes(Number(error.status || 0));
 }
 
-async function fetchCompanyInfo() {
+async function fetchCompanyInfo(options = {}) {
   const baseUrl = companyInfoUrl();
   const url = scopedCompanyInfoUrl(baseUrl);
   const auth = companyInfoAuth();
@@ -273,7 +312,7 @@ async function fetchCompanyInfo() {
 
   const companies = extractCompanyRows(payload).map(sanitizeCompanyRow).map(normalizeCompany);
   const supportEmployeeSync = await syncSupportEmployees(companies);
-  return {
+  const result = {
     summary: buildSummary(companies),
     companies,
     support_employee_sync: supportEmployeeSync,
@@ -281,6 +320,27 @@ async function fetchCompanyInfo() {
     source,
     message: safePayloadMessage(payload)
   };
+
+  if (options.persist !== false) {
+    const snapshot = await saveCompanyInfoSnapshot(result);
+    return { ...result, persisted: true, cached_at: snapshot.cached_at };
+  }
+
+  return result;
 }
 
-module.exports = { fetchCompanyInfo, normalizeCompany, buildSummary, syncSupportEmployees, scopedCompanyInfoUrl };
+async function syncCompanyInfo(options = {}) {
+  return fetchCompanyInfo({ ...options, persist: true });
+}
+
+module.exports = {
+  COMPANY_INFO_CACHE_KEY,
+  fetchCompanyInfo,
+  syncCompanyInfo,
+  getCachedCompanyInfo,
+  saveCompanyInfoSnapshot,
+  normalizeCompany,
+  buildSummary,
+  syncSupportEmployees,
+  scopedCompanyInfoUrl
+};

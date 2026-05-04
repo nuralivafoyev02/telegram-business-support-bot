@@ -4,7 +4,7 @@ Node.js + Vercel serverless backend, Supabase SQL schema va Vite/Vue dark admin 
 
 ## Nimalar tayyor
 
-- `backend/api/bot.js` — Telegram webhook: `message`, `business_message`, `business_connection`, `my_chat_member` update turlarini qabul qiladi.
+- `backend/api/bot.js` — Telegram webhook: `message`, `channel_post`, `business_message`, `business_connection`, `my_chat_member` update turlarini qabul qiladi.
 - `backend/api/admin.js` — webapp uchun admin REST API.
 - `webapp/src/` — Vite + Vue admin panel.
 - `supabase/*.sql` — SQL Editor uchun migration fayllari.
@@ -84,7 +84,15 @@ UYQUR_COMPANY_INFO_AUTH=company-info-x-auth-token
 
 `SUPABASE_SERVICE_ROLE_KEY` faqat backend environmentda turishi kerak. Webappga chiqarilmagan.
 
-`UYQUR_COMPANY_INFO_AUTH` ham faqat backend environmentda turadi. Webapp `Company Activity` paneli ma’lumotni `/api/admin?action=companyInfo` orqali oladi, token browserga yuborilmaydi. Backend bu URLga faqat kompaniya paneli uchun kerakli maydonlar (`fields`, `include=status_histories`, `scope=companies`) bilan so‘rov yuboradi va javobni allowlist orqali tozalab webappga qaytaradi.
+`UYQUR_COMPANY_INFO_AUTH` ham faqat backend environmentda turadi. Webapp `Company Activity` paneli ma’lumotni `/api/admin?action=companyInfo` orqali oladi, token browserga yuborilmaydi. Backend bu URLga faqat kompaniya paneli uchun kerakli maydonlar (`fields`, `include=status_histories`, `scope=companies`) bilan so‘rov yuboradi, javobni allowlist orqali tozalaydi va `bot_settings` ichidagi `uyqur_company_info_cache` snapshotiga saqlaydi. Bu oqim Telegram webhookdan alohida ishlaydi.
+
+UYQUR company info syncni webhookga tegmasdan serverdan ishga tushirish:
+
+```bash
+curl "$WEBAPP_URL/api/cron?action=companyInfo&secret=$CRON_SECRET"
+```
+
+Sync xato bersa backend main guruhga operational error yuborishga urinadi. Agar oldingi snapshot bo‘lsa, admin panel cached ma’lumotni `stale: true` belgisi bilan qaytaradi.
 
 `MAIN_GROUP_ID` noto‘g‘ri bo‘lsa `Telegram sendMessage: Bad Request: chat not found` chiqadi. Buni webappdagi `Sozlamalar → Bot sozlamalari → Main guruh chat ID` orqali ham sozlash mumkin. Chat ID `-100...` formatida bo‘ladi; bot shu guruhda bo‘lishi va xabar yuborish huquqiga ega bo‘lishi kerak.
 
@@ -124,7 +132,7 @@ curl -X POST "https://api.telegram.org/bot$BOT_TOKEN/setWebhook" \
   -d "{\
     \"url\": \"$APP_URL/api/bot?secret=$WEBHOOK_SECRET\",\
     \"secret_token\": \"$WEBHOOK_SECRET\",\
-    \"allowed_updates\": [\"message\", \"edited_message\", \"business_message\", \"edited_business_message\", \"business_connection\", \"my_chat_member\", \"chat_member\", \"callback_query\"]\
+    \"allowed_updates\": [\"message\", \"edited_message\", \"channel_post\", \"edited_channel_post\", \"callback_query\", \"my_chat_member\", \"chat_member\", \"business_connection\", \"business_message\", \"edited_business_message\"]\
   }"
 ```
 

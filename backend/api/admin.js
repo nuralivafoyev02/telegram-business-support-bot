@@ -11,7 +11,7 @@ const { normalizeAiIntegration, mergeAiIntegration, sanitizeAiIntegration, isAiI
 const { testAiIntegration } = require('../lib/ai');
 const { extractTextFromUpload } = require('../lib/document-text');
 const { resolveMainStatsChatId, sendMainStatsReport } = require('../lib/report');
-const { fetchCompanyInfo } = require('../lib/company-info');
+const { syncCompanyInfo, getCachedCompanyInfo } = require('../lib/company-info');
 const { notifyOperationalLog, notifyOperationalError } = require('../lib/log-notifier');
 const stats = require('../lib/stats');
 const botHandler = require('./bot');
@@ -1602,6 +1602,30 @@ async function listCompanies(query) {
   });
 }
 
+async function getCompanyInfo(query = {}) {
+  const cachedOnly = ['1', 'true', 'yes'].includes(String(query.cached || query.cache || '').toLowerCase());
+  if (cachedOnly) {
+    const cached = await getCachedCompanyInfo();
+    if (cached) return cached;
+  }
+
+  try {
+    return await syncCompanyInfo();
+  } catch (error) {
+    await notifyOperationalError('company-info:sync', error, {
+      source: 'admin',
+      action: 'companyInfo'
+    }).catch(logError => console.error('[admin:company-info:notify-error]', logError));
+    const cached = await getCachedCompanyInfo();
+    if (!cached) throw error;
+    return {
+      ...cached,
+      stale: true,
+      last_error: error.message
+    };
+  }
+}
+
 async function listEmployees(query) {
   const [employees, requests, chats, messages] = await Promise.all([
     supabase.select('employees', {
@@ -2184,9 +2208,9 @@ function sanitizeWebhookInfo(info = {}) {
 
 function getAppUrl(body = {}) {
   const vercelUrl = optionalEnv('VERCEL_URL', '');
-  const url = optionalEnv('WEBAPP_URL', '')
+  const url = body.app_url
+    || optionalEnv('WEBAPP_URL', '')
     || optionalEnv('APP_URL', '')
-    || body.app_url
     || (vercelUrl ? `https://${vercelUrl}` : '');
   return String(url || '').trim().replace(/\/$/, '');
 }
@@ -3108,7 +3132,7 @@ async function handleGet(action, query) {
     case 'chatDetail': return getChatDetail(query);
     case 'companyGroupActivity': return getCompanyGroupActivity(query);
     case 'companies': return listCompanies(query);
-    case 'companyInfo': return fetchCompanyInfo();
+    case 'companyInfo': return getCompanyInfo(query);
     case 'employees': return listEmployees(query);
     case 'employeeActivity': return getEmployeeActivity(query);
     case 'settings': return listSettings();

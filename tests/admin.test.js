@@ -1642,7 +1642,7 @@ async function testSetWebhookRejectsCompanyInfoUrl() {
   }
 }
 
-async function testSetWebhookPrefersConfiguredAppUrl() {
+async function testSetWebhookPrefersExplicitAppUrl() {
   const originalFetch = global.fetch;
   const originalWebappUrl = process.env.WEBAPP_URL;
   const originalAppUrl = process.env.APP_URL;
@@ -1661,7 +1661,7 @@ async function testSetWebhookPrefersConfiguredAppUrl() {
         json: async () => ({
           ok: true,
           result: {
-            url: 'https://primary.example.app/api/bot',
+            url: 'https://preview-right.example.app/api/bot',
             pending_update_count: 0,
             allowed_updates: ['message', 'my_chat_member', 'chat_member', 'callback_query']
           }
@@ -1674,11 +1674,11 @@ async function testSetWebhookPrefersConfiguredAppUrl() {
   try {
     const result = await callAdmin('setTelegramWebhook', {
       method: 'POST',
-      body: { app_url: 'https://preview-wrong.example.app' }
+      body: { app_url: 'https://preview-right.example.app' }
     });
     assert.strictEqual(result.status, 200);
     assert.strictEqual(result.payload.data.connected, true);
-    assert.strictEqual(calls[0].body.url, 'https://primary.example.app/api/bot');
+    assert.strictEqual(calls[0].body.url, 'https://preview-right.example.app/api/bot');
   } finally {
     global.fetch = originalFetch;
     if (originalWebappUrl === undefined) delete process.env.WEBAPP_URL;
@@ -2325,6 +2325,7 @@ async function testCompanyInfoProxyNormalizesExternalRows() {
     assert.strictEqual(result.payload.data.summary.total, 1);
     assert.strictEqual(result.payload.data.summary.active, 1);
     assert.strictEqual(result.payload.data.summary.support_assigned, 1);
+    assert.strictEqual(result.payload.data.persisted, true);
     assert.strictEqual(result.payload.data.support_employee_sync.created, 1);
     assert.strictEqual(insertedEmployees[0].username, 'uyqur_nurali');
     assert.strictEqual(insertedEmployees[0].role, 'support');
@@ -2341,6 +2342,76 @@ async function testCompanyInfoProxyNormalizesExternalRows() {
     else process.env.UYQUR_COMPANY_INFO_AUTH = originalAuth;
     if (originalUrl === undefined) delete process.env.UYQUR_COMPANY_INFO_URL;
     else process.env.UYQUR_COMPANY_INFO_URL = originalUrl;
+  }
+}
+
+async function testCompanyInfoProxyReturnsCachedSnapshotAndNotifiesOnFetchError() {
+  const originalFetch = global.fetch;
+  const originalSelect = supabase.select;
+  const originalInsert = supabase.insert;
+  const originalAuth = process.env.UYQUR_COMPANY_INFO_AUTH;
+  const originalUrl = process.env.UYQUR_COMPANY_INFO_URL;
+  process.env.UYQUR_COMPANY_INFO_AUTH = 'test-company-auth';
+  process.env.UYQUR_COMPANY_INFO_URL = 'https://example.test/company-info';
+  const telegramCalls = [];
+  clearBotSettingsCache();
+
+  supabase.select = async (table, query = {}) => {
+    if (table !== 'bot_settings') return [];
+    if (String(query.key || '').includes('uyqur_company_info_cache')) {
+      return [{
+        key: 'uyqur_company_info_cache',
+        updated_at: '2026-05-04T04:00:00.000Z',
+        value: {
+          summary: { total: 1, active: 1 },
+          companies: [{ id: 3, name: 'Cached Company' }],
+          fetched_at: '2026-05-04T03:59:00.000Z',
+          cached_at: '2026-05-04T04:00:00.000Z',
+          source: 'https://example.test/company-info'
+        }
+      }];
+    }
+    return [
+      { key: 'log_notifications', value: { enabled: true, levels: ['error'], target: 'main_group' } },
+      { key: 'main_group', value: { chat_id: '-100777' } }
+    ];
+  };
+  supabase.insert = async (_table, rows) => rows;
+  global.fetch = async (url, options = {}) => {
+    if (/api\.telegram\.org/.test(url)) {
+      telegramCalls.push({ url, body: JSON.parse(options.body) });
+      return {
+        ok: true,
+        json: async () => ({ ok: true, result: { message_id: 711 } })
+      };
+    }
+    return {
+      ok: false,
+      status: 500,
+      statusText: 'Server Error',
+      json: async () => ({ message: 'Company API down' })
+    };
+  };
+
+  try {
+    const result = await callAdmin('companyInfo');
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.data.from_cache, true);
+    assert.strictEqual(result.payload.data.stale, true);
+    assert.match(result.payload.data.last_error, /Company API down/);
+    assert.strictEqual(result.payload.data.companies[0].name, 'Cached Company');
+    assert.strictEqual(telegramCalls.length, 1);
+    assert.match(telegramCalls[0].body.text, /ERROR log/);
+    assert.match(telegramCalls[0].body.text, /company-info:sync/);
+  } finally {
+    supabase.select = originalSelect;
+    supabase.insert = originalInsert;
+    global.fetch = originalFetch;
+    if (originalAuth === undefined) delete process.env.UYQUR_COMPANY_INFO_AUTH;
+    else process.env.UYQUR_COMPANY_INFO_AUTH = originalAuth;
+    if (originalUrl === undefined) delete process.env.UYQUR_COMPANY_INFO_URL;
+    else process.env.UYQUR_COMPANY_INFO_URL = originalUrl;
+    clearBotSettingsCache();
   }
 }
 
@@ -2492,7 +2563,7 @@ async function run() {
   await testWebhookInfoWarnsWhenMessageUpdatesMissing();
   await testWebhookInfoWarnsWhenPointingToCompanyInfoUrl();
   await testSetWebhookRejectsCompanyInfoUrl();
-  await testSetWebhookPrefersConfiguredAppUrl();
+  await testSetWebhookPrefersExplicitAppUrl();
   await testSyncTelegramUpdatesDeletesActiveWebhookThenProcessesUpdates();
   await testSyncTelegramUpdatesIgnoresStaleOffsetAndAcknowledgesFetchedUpdates();
   await testSendToChatStoresOutgoingAdminMessage();
@@ -2503,6 +2574,7 @@ async function run() {
   await testEmployeeActivityIsolatesSelectedEmployeeChats();
   await testLogNotificationsCanSendSelectedLevels();
   await testCompanyInfoProxyNormalizesExternalRows();
+  await testCompanyInfoProxyReturnsCachedSnapshotAndNotifiesOnFetchError();
   await testCompanyInfoProxyFallsBackWhenScopedQueryUnsupported();
   await testAssignGroupToExternalCompanyCreatesLocalCompany();
   await testAssignGroupCompanyCanBeCleared();

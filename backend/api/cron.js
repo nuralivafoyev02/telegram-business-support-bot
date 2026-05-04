@@ -3,6 +3,7 @@
 const { sendJson, getQuery } = require('../lib/http');
 const { optionalEnv } = require('../lib/env');
 const { sendMainStatsReport } = require('../lib/report');
+const { syncCompanyInfo } = require('../lib/company-info');
 const { notifyOperationalError } = require('../lib/log-notifier');
 
 function verify(req) {
@@ -16,6 +17,11 @@ async function handler(req, res) {
   if (!verify(req)) return sendJson(res, 401, { ok: false, error: 'Invalid cron secret' });
   try {
     const query = getQuery(req);
+    const action = String(query.action || query.job || '').trim();
+    if (['companyInfo', 'company-info', 'uyqurCompanyInfo', 'uyqur-company-info'].includes(action)) {
+      const result = await syncCompanyInfo();
+      return sendJson(res, 200, { ok: true, data: result });
+    }
     const result = await sendMainStatsReport(query.chat_id || undefined);
     return sendJson(res, 200, { ok: true, data: result });
   } catch (error) {
