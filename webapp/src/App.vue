@@ -1275,7 +1275,7 @@
 
           <section class="detail-section metric-chat-panel">
             <Transition name="fade-slide-up" mode="out-in">
-              <div v-if="metricChatDetail.chat" :key="metricChatDetail.chat.chat_id">
+              <div v-if="metricChatDetail.chat" :key="metricChatDetail.chat.chat_id" class="chat-pane-shell">
                 <div class="metric-chat-header">
                   <div>
                     <div class="card-title">{{ metricChatTitle }}</div>
@@ -1459,7 +1459,7 @@
 
             <section class="employee-chat-pane">
               <Transition name="fade-slide-up" mode="out-in">
-                <div v-if="selectedCompanyGroup" :key="companyGroupSelectedChatKey">
+                <div v-if="selectedCompanyGroup" :key="companyGroupSelectedChatKey" class="chat-pane-shell">
                   <div class="employee-chat-pane-head">
                     <div>
                       <b>{{ selectedCompanyGroup.title || selectedCompanyGroup.chat_id }}</b>
@@ -1690,7 +1690,7 @@
 
             <section class="employee-chat-pane">
               <Transition name="fade-slide-up" mode="out-in">
-                <div v-if="selectedEmployeeProfileChat" :key="employeeProfileSelectedChatKey">
+                <div v-if="selectedEmployeeProfileChat" :key="employeeProfileSelectedChatKey" class="chat-pane-shell">
                   <div class="employee-chat-pane-head">
                     <div>
                       <b>{{ selectedEmployeeProfileChat.title || selectedEmployeeProfileChat.chat_id }}</b>
@@ -4923,31 +4923,38 @@ function supportMetricSummary(rows = []) {
   ];
 }
 
-async function scrollMetricChatToEnd() {
+function setThreadScrollToEnd(thread) {
+  if (!thread) return;
+  thread.scrollTop = thread.scrollHeight;
+}
+
+async function scrollThreadToEnd(threadRef) {
   await nextTick();
-  const thread = metricChatThreadRef.value;
-  if (thread) thread.scrollTop = thread.scrollHeight;
+  const thread = threadRef.value;
+  setThreadScrollToEnd(thread);
+  if (typeof requestAnimationFrame === 'function') {
+    requestAnimationFrame(() => setThreadScrollToEnd(thread));
+  }
+}
+
+async function scrollMetricChatToEnd() {
+  await scrollThreadToEnd(metricChatThreadRef);
 }
 
 async function scrollChatDetailToEnd() {
-  await nextTick();
-  const thread = chatDetailThreadRef.value;
-  if (thread) thread.scrollTop = thread.scrollHeight;
+  await scrollThreadToEnd(chatDetailThreadRef);
 }
 
 async function scrollEmployeeProfileChatToEnd() {
-  await nextTick();
-  const thread = employeeProfileThreadRef.value;
-  if (thread) thread.scrollTop = thread.scrollHeight;
+  await scrollThreadToEnd(employeeProfileThreadRef);
 }
 
 async function scrollCompanyGroupToEnd() {
-  await nextTick();
-  const thread = companyGroupThreadRef.value;
-  if (thread) thread.scrollTop = thread.scrollHeight;
+  await scrollThreadToEnd(companyGroupThreadRef);
 }
 
 watch(chatConversation, () => scrollChatDetailToEnd(), { flush: 'post' });
+watch(metricChatConversation, () => scrollMetricChatToEnd(), { flush: 'post' });
 watch(employeeProfileConversation, () => scrollEmployeeProfileChatToEnd(), { flush: 'post' });
 watch(companyGroupConversation, () => scrollCompanyGroupToEnd(), { flush: 'post' });
 
