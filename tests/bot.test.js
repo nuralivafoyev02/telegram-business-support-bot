@@ -354,7 +354,7 @@ async function testGroupRegisterSaveFailureNotifiesMainGroup() {
     assert.strictEqual(result.status, 200);
     const notice = telegramCalls.find(call => /sendMessage$/.test(call.url) && String(call.body.chat_id) === '-100999');
     assert.ok(notice);
-    assert.match(notice.body.text, /Guruh xabari saqlanmadi/);
+    assert.match(notice.body.text, /Support group dan malumot olishda\/saqlashda xatolik!/);
     assert.match(notice.body.text, /record_incoming_message/);
     assert.match(notice.body.text, /command message insert failed/);
     assert.strictEqual(inserted.some(item => item.table === 'messages' && item.rows[0].raw?.source === 'bot_message_save_failed_notice'), true);
@@ -533,6 +533,127 @@ async function testCompanyGroupPlainMessageIsStoredAndKeepsCompanyLink() {
   }
 }
 
+async function testGroupMessageSavedNoticeCanBeDisabled() {
+  const originalInsert = supabase.insert;
+  const originalSelect = supabase.select;
+  const originalFetch = global.fetch;
+  const inserted = [];
+  const telegramCalls = [];
+  const chatId = -100459;
+  clearBotSettingsCache();
+
+  supabase.select = async (table) => {
+    if (table === 'bot_settings') return [
+      { key: 'auto_reply', value: { enabled: false } },
+      { key: 'main_group', value: { chat_id: '-100999' } },
+      { key: 'group_message_audit', value: { enabled: false } }
+    ];
+    if (table === 'tg_chats') return [{ chat_id: chatId, business_connection_id: null }];
+    if (table === 'employees') return [];
+    if (table === 'support_requests') return [];
+    return [];
+  };
+  supabase.insert = async (table, rows, options = {}) => {
+    inserted.push({ table, rows, options });
+    return rows.map(row => ({ id: `${table}-row`, ...row }));
+  };
+  global.fetch = async (_url, options) => {
+    telegramCalls.push({ url: _url, body: JSON.parse(options.body) });
+    return {
+      ok: true,
+      json: async () => ({ ok: true, result: { message_id: 705 } })
+    };
+  };
+
+  try {
+    const result = await callHandler({
+      update_id: 35,
+      message: {
+        message_id: 135,
+        date: 1777100000,
+        text: 'Oddiy saqlash sinovi',
+        chat: { id: chatId, type: 'supergroup', title: 'Company support group' },
+        from: { id: 705, first_name: 'Mijoz', is_bot: false }
+      }
+    });
+
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.handled, 'message');
+    assert.strictEqual(inserted.some(item => item.table === 'messages' && item.rows[0].text === 'Oddiy saqlash sinovi'), true);
+    assert.strictEqual(telegramCalls.some(call => /sendMessage$/.test(call.url) && String(call.body.chat_id) === '-100999'), false);
+  } finally {
+    supabase.insert = originalInsert;
+    supabase.select = originalSelect;
+    global.fetch = originalFetch;
+    clearBotSettingsCache();
+  }
+}
+
+async function testGroupReadFailureNotifiesMainGroupEvenWhenLogNotificationsDisabled() {
+  const originalInsert = supabase.insert;
+  const originalSelect = supabase.select;
+  const originalFetch = global.fetch;
+  const originalConsoleError = console.error;
+  const inserted = [];
+  const telegramCalls = [];
+  const chatId = -100460;
+  clearBotSettingsCache();
+
+  supabase.select = async (table) => {
+    if (table === 'bot_settings') return [
+      { key: 'auto_reply', value: { enabled: false } },
+      { key: 'main_group', value: { chat_id: '-100999' } },
+      { key: 'group_message_audit', value: { enabled: false } },
+      { key: 'log_notifications', value: { enabled: false, levels: ['error'], target: 'main_group' } }
+    ];
+    if (table === 'tg_chats') throw new Error('tg_chats read failed');
+    if (table === 'employees') return [];
+    if (table === 'support_requests') return [];
+    return [];
+  };
+  supabase.insert = async (table, rows, options = {}) => {
+    inserted.push({ table, rows, options });
+    return rows.map(row => ({ id: `${table}-row`, ...row }));
+  };
+  console.error = () => {};
+  global.fetch = async (_url, options) => {
+    telegramCalls.push({ url: _url, body: JSON.parse(options.body) });
+    return {
+      ok: true,
+      json: async () => ({ ok: true, result: { message_id: 706 } })
+    };
+  };
+
+  try {
+    const result = await callHandler({
+      update_id: 36,
+      message: {
+        message_id: 136,
+        date: 1777100000,
+        text: 'O‘qish xatosi sinovi',
+        chat: { id: chatId, type: 'supergroup', title: 'Company support group' },
+        from: { id: 706, first_name: 'Mijoz', is_bot: false }
+      }
+    });
+
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.handled, 'message');
+    const notice = telegramCalls.find(call => /sendMessage$/.test(call.url) && String(call.body.chat_id) === '-100999');
+    assert.ok(notice);
+    assert.match(notice.body.text, /Company support group dan malumot olishda\/saqlashda xatolik!/);
+    assert.match(notice.body.text, /Bosqich: <code>tg_chats_read<\/code>/);
+    assert.match(notice.body.text, /tg_chats read failed/);
+    assert.strictEqual(inserted.some(item => item.table === 'messages' && item.rows[0].text === 'O‘qish xatosi sinovi'), true);
+    assert.strictEqual(inserted.some(item => item.table === 'messages' && item.rows[0].raw?.source === 'bot_message_save_failed_notice'), true);
+  } finally {
+    supabase.insert = originalInsert;
+    supabase.select = originalSelect;
+    global.fetch = originalFetch;
+    console.error = originalConsoleError;
+    clearBotSettingsCache();
+  }
+}
+
 async function testCompanyGroupMessageSaveFailureNotifiesMainGroup() {
   const originalInsert = supabase.insert;
   const originalSelect = supabase.select;
@@ -585,7 +706,7 @@ async function testCompanyGroupMessageSaveFailureNotifiesMainGroup() {
     assert.match(result.payload.error, /messages insert failed/);
     const notice = telegramCalls.find(call => /sendMessage$/.test(call.url) && String(call.body.chat_id) === '-100999');
     assert.ok(notice);
-    assert.match(notice.body.text, /Guruh xabari saqlanmadi/);
+    assert.match(notice.body.text, /Company support group dan malumot olishda\/saqlashda xatolik!/);
     assert.match(notice.body.text, /Saqlashga uringan joy: <code>public\.messages<\/code>/);
     assert.match(notice.body.text, /Saqlanmagan sababi: <code>messages insert failed<\/code>/);
     assert.strictEqual(inserted.some(item => item.table === 'messages' && item.rows[0].raw?.source === 'bot_message_save_failed_notice'), true);
@@ -3158,6 +3279,8 @@ async function testConfiguredLogChannelSummarizesLaravelError() {
   await testGroupRegisterReportsDeletePermissionProblem();
   await testBotDiagnosticsChecksSupabaseAndTelegram();
   await testCompanyGroupPlainMessageIsStoredAndKeepsCompanyLink();
+  await testGroupMessageSavedNoticeCanBeDisabled();
+  await testGroupReadFailureNotifiesMainGroupEvenWhenLogNotificationsDisabled();
   await testCompanyGroupMessageSaveFailureNotifiesMainGroup();
   await testPrivateMessageSaveFailureNotifiesMainGroup();
   await testCompanyGroupRequestUsesRegisteredChatCompany();

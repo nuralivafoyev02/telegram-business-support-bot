@@ -811,6 +811,12 @@
                   <label class="label">Asosiy guruh raqami
                     <input v-model.trim="settingsForm.main_group_id" class="input" placeholder="-1001234567890" />
                   </label>
+                  <label class="label">Guruh xabari saqlansa
+                    <select v-model="settingsForm.group_message_audit" class="select">
+                      <option value="true">Main guruhga xabar berish</option>
+                      <option value="false">Xabar bermaslik</option>
+                    </select>
+                  </label>
                   <label class="label">So‘rov aniqlash rejimi
                     <select v-model="settingsForm.request_detection" class="select">
                       <option value="keyword">Kalit so‘z</option>
@@ -2111,7 +2117,7 @@ let telegramAutoSyncTimer = null;
 let telegramAutoSyncBusy = false;
 let modalScrollY = 0;
 
-const settingsForm = reactive({ ai_mode: 'false', auto_reply: 'true', done_tag: '#done', main_group_id: '', request_detection: 'keyword' });
+const settingsForm = reactive({ ai_mode: 'false', auto_reply: 'true', done_tag: '#done', main_group_id: '', group_message_audit: 'true', request_detection: 'keyword' });
 const isManagerMode = computed(() => false);
 const mainTabs = computed(() => tabs.filter(tab => mainTabKeys.includes(tab.key)));
 const otherTabs = computed(() => tabs.filter(tab => otherTabKeys.includes(tab.key)));
@@ -4212,6 +4218,7 @@ async function loadSettings() {
   const ai = data.settings?.find(s => s.key === 'ai_mode')?.value;
   const integration = data.settings?.find(s => s.key === 'ai_integration')?.value;
   const logNotifications = data.settings?.find(s => s.key === 'log_notifications')?.value;
+  const groupMessageAudit = data.settings?.find(s => s.key === 'group_message_audit')?.value;
   const done = data.settings?.find(s => s.key === 'done_tag')?.value;
   const mainGroup = data.settings?.find(s => s.key === 'main_group')?.value;
   const detect = data.settings?.find(s => s.key === 'request_detection')?.value;
@@ -4245,6 +4252,9 @@ async function loadSettings() {
     : 'true';
   settingsForm.done_tag = done?.tag || '#done';
   settingsForm.main_group_id = mainGroup?.chat_id || '';
+  settingsForm.group_message_audit = groupMessageAudit === undefined
+    ? 'true'
+    : String(groupMessageAudit?.enabled !== false);
   settingsForm.request_detection = detect?.mode || 'keyword';
   await checkTelegramWebhook(false);
 }
@@ -5833,6 +5843,7 @@ async function saveSettings() {
         { key: 'auto_reply', value: { enabled: settingsForm.auto_reply === 'true' } },
         { key: 'done_tag', value: { tag: settingsForm.done_tag, auto_reply: true } },
         { key: 'main_group', value: { chat_id: settingsForm.main_group_id } },
+        { key: 'group_message_audit', value: { enabled: settingsForm.group_message_audit === 'true' } },
         { key: 'request_detection', value: { mode: settingsForm.request_detection, min_text_length: 10 } }
       ]
     });

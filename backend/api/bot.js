@@ -341,9 +341,12 @@ function buildGroupSaveAudit({ status, message, chatRow, classification, employe
   const sourceName = chatDisplayName(message, chatRow);
   const isGroup = isGroupChat(chat);
   const sourceLabel = isGroup ? 'guruh' : 'chat';
+  const failedGroupTitle = `${sourceName} dan malumot olishda/saqlashda xatolik!`;
   const title = status === 'saved'
     ? `${isGroup ? 'Guruh' : 'Chat'} xabari saqlandi`
-    : `${isGroup ? 'Guruh' : 'Chat'} xabari saqlanmadi`;
+    : isGroup
+      ? failedGroupTitle
+      : `${isGroup ? 'Guruh' : 'Chat'} xabari saqlanmadi`;
   const rawSource = inferMessageRawSource({ message, employee, savedMessage, classification });
   const savedRowId = savedMessage && savedMessage.id || '';
   const savedTgMessageId = savedMessage && (savedMessage.tg_message_id || savedMessage.message_id) || message.message_id || '';
@@ -418,6 +421,7 @@ async function maybeNotifyMainGroupMessageSaveAudit({ status, updateKind, messag
   const chat = message.chat || {};
   const failed = status === 'failed';
   if (!failed) {
+    if (settings && settings.groupMessageAudit && settings.groupMessageAudit.enabled === false) return;
     if (!isGroupChat(chat)) return;
     if (isConfiguredMainGroup(chat, settings)) return;
     if (String(updateKind || '').includes('edited')) return;
@@ -1164,12 +1168,31 @@ async function handleCallbackQuery(query = {}) {
 async function recordIncomingMessage(updateKind, message, sourceType, classification, employee = null) {
   const chat = message.chat || {};
   const from = message.from || {};
+  const notifyChatReadError = isGroupChat(chat)
+    ? async error => {
+      const resolvedSettings = await getBotSettings().catch(settingsError => {
+        logBackgroundError('record-incoming-read-settings', settingsError);
+        return null;
+      });
+      await maybeNotifyMainGroupMessageSaveFailed({
+        updateKind,
+        message,
+        settings: resolvedSettings,
+        chatRow: null,
+        classification,
+        employee,
+        error,
+        target: 'public.tg_chats',
+        stage: 'tg_chats_read'
+      });
+    }
+    : null;
 
   const [, chatRow] = await Promise.all([
     metrics.upsertTelegramUser(from, {}, { prefer: 'return=minimal' }),
     metrics.upsertChat(chat, sourceType, {
       business_connection_id: message.business_connection_id || null
-    })
+    }, { onReadError: notifyChatReadError })
   ]);
   await metrics.saveMessage({ message, updateKind, sourceType, classification, employee }, { prefer: 'return=minimal' });
   return chatRow;
@@ -1583,12 +1606,25 @@ async function processMessage(updateKind, message) {
   const settings = await getBotSettings();
   let chatRow = null;
   let employee = null;
+  const notifyChatReadError = isGroupChat(chat)
+    ? error => maybeNotifyMainGroupMessageSaveFailed({
+      updateKind,
+      message,
+      settings,
+      chatRow: null,
+      classification: 'read',
+      employee: null,
+      error,
+      target: 'public.tg_chats',
+      stage: 'tg_chats_read'
+    })
+    : null;
   try {
     const [, resolvedChatRow, resolvedEmployee] = await Promise.all([
       metrics.upsertTelegramUser(from, {}, { prefer: 'return=minimal' }),
       metrics.upsertChat(chat, sourceType, {
         business_connection_id: message.business_connection_id || null
-      }),
+      }, { onReadError: notifyChatReadError }),
       metrics.getKnownEmployeeByTelegramId(from.id)
     ]);
     chatRow = resolvedChatRow;

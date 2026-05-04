@@ -2256,6 +2256,49 @@ async function testLogNotificationsCanSendSelectedLevels() {
   }
 }
 
+async function testGroupMessageAuditSettingCanBeSaved() {
+  const originalSelect = supabase.select;
+  const originalInsert = supabase.insert;
+  let settingsRows = [
+    { key: 'main_group', value: { chat_id: '-100777' } },
+    { key: 'group_message_audit', value: { enabled: true } }
+  ];
+
+  supabase.select = async (table) => {
+    if (table === 'bot_settings') return settingsRows;
+    return [];
+  };
+  supabase.insert = async (table, rows) => {
+    assert.strictEqual(table, 'bot_settings');
+    rows.forEach(row => {
+      const index = settingsRows.findIndex(item => item.key === row.key);
+      if (index >= 0) settingsRows[index] = row;
+      else settingsRows.push(row);
+    });
+    return rows;
+  };
+
+  try {
+    const result = await callAdmin('settings', {
+      method: 'POST',
+      body: {
+        settings: [{
+          key: 'group_message_audit',
+          value: { enabled: false }
+        }]
+      }
+    });
+
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.data[0].key, 'group_message_audit');
+    assert.strictEqual(result.payload.data[0].value.enabled, false);
+  } finally {
+    supabase.select = originalSelect;
+    supabase.insert = originalInsert;
+    clearBotSettingsCache();
+  }
+}
+
 async function testCompanyInfoProxyNormalizesExternalRows() {
   const originalFetch = global.fetch;
   const originalSelect = supabase.select;
@@ -2573,6 +2616,7 @@ async function run() {
   await testEmployeeActivityReturnsGroupsAndCustomers();
   await testEmployeeActivityIsolatesSelectedEmployeeChats();
   await testLogNotificationsCanSendSelectedLevels();
+  await testGroupMessageAuditSettingCanBeSaved();
   await testCompanyInfoProxyNormalizesExternalRows();
   await testCompanyInfoProxyReturnsCachedSnapshotAndNotifiesOnFetchError();
   await testCompanyInfoProxyFallsBackWhenScopedQueryUnsupported();
