@@ -213,6 +213,7 @@
                 </div>
               </div>
 
+<<<<<<< HEAD
               <!-- Ranking Controls and Top Performer -->
               <div class="ranking-header-area">
                 <div v-if="topPerformer" class="top-performer-summary">
@@ -220,6 +221,23 @@
                   <div class="top-perf-info">
                     <span>Top hodim</span>
                     <b>{{ topPerformer.full_name || topPerformer.name }}</b>
+=======
+              <!-- Top Performer Summary -->
+              <div v-if="topPerformer" class="top-performer-summary">
+                <div class="top-perf-avatar">🏆</div>
+                <div class="top-perf-info">
+                  <span>Top hodim</span>
+                  <b>{{ topPerformer.full_name || topPerformer.name }}</b>
+                </div>
+                <div class="top-perf-metrics">
+                  <div class="top-perf-metric">
+                    <span>Yopilgan</span>
+                    <b>{{ fmtNumber(topPerformer.closed_requests) }}</b>
+                    <div v-if="comparisonEnabled && topPerformer.closed_comparison" class="trend-label"
+                      :class="topPerformer.closed_comparison.tone">
+                      {{ topPerformer.closed_comparison.text }}
+                    </div>
+>>>>>>> 948d44d (refactor: unify color theme variables and update UI components to use semantic CSS variables)
                   </div>
                   <div class="top-perf-metrics">
                     <div class="top-perf-metric">
