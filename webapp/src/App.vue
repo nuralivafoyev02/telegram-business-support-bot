@@ -128,9 +128,16 @@
                 @click="openSupportSummaryCard(card.action)"
                 @keydown.enter.prevent="openSupportSummaryCard(card.action)"
                 @keydown.space.prevent="openSupportSummaryCard(card.action)">
-                <div>
+                <div class="support-summary-content">
                   <div class="support-summary-title">{{ card.title }}</div>
-                  <div class="support-summary-value" :class="{ danger: card.tone === 'danger' }">{{ card.value }}</div>
+                  <div class="support-summary-value-row">
+                    <div class="support-summary-value" :class="{ danger: card.tone === 'danger' }">{{ card.value }}</div>
+                    <Transition name="fade">
+                      <div v-if="comparisonEnabled && card.comparison" class="trend-label" :class="card.comparison.tone">
+                        {{ card.comparison.text }}
+                      </div>
+                    </Transition>
+                  </div>
                   <div class="support-summary-note">{{ card.note }}</div>
                 </div>
                 <span class="support-summary-icon" aria-hidden="true">{{ card.icon }}</span>
@@ -188,22 +195,84 @@
                   <div class="card-title">Hodimlar reytingi</div>
                   <div class="card-note">Ticketlarni yopish, ochiq qoldiqlar va SLA bo‘yicha support natijasi</div>
                 </div>
-                <div class="ranking-actions" ref="rankingMenuRef">
-                  <span v-if="topPerformerName" class="success-pill">🏆 Top hodim: {{ topPerformerName }}</span>
-                  <button class="btn small icon-btn" type="button" aria-label="Qo‘shimcha amallar"
-                    :aria-expanded="rankingMenuOpen ? 'true' : 'false'" @click="rankingMenuOpen = !rankingMenuOpen">
-                    •••
-                  </button>
-                  <Transition name="fade">
-                    <div v-if="rankingMenuOpen" class="ranking-menu">
-                      <label class="switch-row compact plain">
-                        <input v-model="comparisonEnabled" type="checkbox" />
-                        <span>Taqqoslash</span>
-                      </label>
+              </div>
+
+              <!-- New: Comparison Bar -->
+              <div class="comparison-bar">
+                <div class="comp-section">
+                  <span class="comp-label">Davr</span>
+                  <div class="comp-select-wrapper">
+                    <select v-model="selectedStatsPeriod" class="select small" @change="handleStatsPeriodChange">
+                      <option v-for="period in periodOptions" :key="period.key" :value="period.key">
+                        {{ period.label }}
+                      </option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="comp-section">
+                  <span class="comp-label">Taqqoslashni yoqish</span>
+                  <div class="comp-toggle-wrapper">
+                    <label class="switch">
+                      <input v-model="comparisonEnabled" type="checkbox" />
+                      <span class="slider"></span>
+                    </label>
+                    <span class="comp-toggle-label">{{ comparisonEnabled ? 'Yoqilgan' : 'O‘chirilgan' }}</span>
+                  </div>
+                </div>
+
+                <Transition name="fade">
+                  <div v-if="comparisonEnabled" class="comp-dates">
+                    <div class="comp-date-card">
+                      <div class="comp-date-dot current"></div>
+                      <div class="comp-date-info">
+                        <span>Joriy davr</span>
+                        <b>{{ currentPeriodDates.current || '—' }}</b>
+                      </div>
                     </div>
-                  </Transition>
+                    <div class="comp-vs">VS</div>
+                    <div class="comp-date-card">
+                      <div class="comp-date-dot prev"></div>
+                      <div class="comp-date-info">
+                        <span>Oldingi davr</span>
+                        <b>{{ currentPeriodDates.prev || '—' }}</b>
+                      </div>
+                    </div>
+                  </div>
+                </Transition>
+
+                <!-- Top Performer Summary (matches Image 2 right side) -->
+                <div v-if="topPerformer" class="top-performer-summary">
+                  <div class="top-perf-avatar">🏆</div>
+                  <div class="top-perf-info">
+                    <span>Top hodim</span>
+                    <b>{{ topPerformer.full_name || topPerformer.name }}</b>
+                  </div>
+                  <div class="top-perf-metrics">
+                    <div class="top-perf-metric">
+                      <span>Yopilgan</span>
+                      <b>{{ fmtNumber(topPerformer.closed_requests) }}</b>
+                      <div v-if="comparisonEnabled && topPerformer.closed_comparison" class="trend-label"
+                        :class="topPerformer.closed_comparison.tone">
+                        {{ topPerformer.closed_comparison.text }}
+                      </div>
+                    </div>
+                    <div class="top-perf-metric">
+                      <span>SLA</span>
+                      <b>{{ fmtPercent(topPerformer.close_rate) }}</b>
+                      <div v-if="comparisonEnabled && topPerformer.sla_comparison" class="trend-label"
+                        :class="topPerformer.sla_comparison.tone">
+                        {{ topPerformer.sla_comparison.text }}
+                      </div>
+                    </div>
+                    <div class="top-perf-metric">
+                      <span>Guruh/Chat</span>
+                      <b>{{ fmtNumber(topPerformer.handled_chats) }}</b>
+                    </div>
+                  </div>
                 </div>
               </div>
+
               <DataTable :columns="supportPerformanceColumns" :rows="topSupportCards"
                 empty="Hozircha natija ma’lumoti yo‘q" :on-cell-action="handleTableCellAction" :page-size="12">
                 <template #rank="{ row }">
@@ -1224,115 +1293,121 @@
           </section>
 
           <section class="detail-section metric-chat-panel">
-            <div class="metric-chat-header">
-              <div>
-                <div class="card-title">{{ metricChatTitle }}</div>
-                <div class="card-note">
-                  {{ metricChatDetail.chat ? fmtNumber(metricChatConversation.length) + ' ta xabar' : 'Chat tanlang' }}
-                </div>
-              </div>
-              <span v-if="metricChatDetail.chat?.source_type" class="badge blue">
-                {{ sourceTypeLabel(metricChatDetail.chat.source_type) }}
-              </span>
-            </div>
-
-            <div v-if="metricChatLoading" class="metric-chat-state">
-              <span class="spinner" aria-hidden="true"></span>
-              <span>Chat yuklanmoqda...</span>
-            </div>
-            <div v-else-if="metricChatError" class="metric-chat-state error">
-              {{ metricChatError }}
-            </div>
-            <div v-else-if="metricChatDetail.chat" class="metric-chat-content">
-              <div class="metric-chat-stats">
-                <div>
-                  <span>So‘rov</span>
-                  <b>{{ fmtNumber(metricChatDetail.chat.total_requests) }}</b>
-                </div>
-                <div>
-                  <span>Ochiq</span>
-                  <b>{{ fmtNumber(metricChatDetail.chat.open_requests) }}</b>
-                </div>
-                <div>
-                  <span>Yopilgan</span>
-                  <b>{{ fmtNumber(metricChatDetail.chat.closed_requests) }}</b>
-                </div>
-              </div>
-
-              <section class="metric-request-strip">
-                <div class="metric-strip-head">
-                  <b>So‘rovlar</b>
-                  <div class="strip-head-actions">
-                    <span>{{ fmtNumber(metricChatDetail.requests?.length) }}</span>
-                    <button class="btn small" type="button" :disabled="!metricChatDetail.requests?.length"
-                      @click="metricChatTicketsOpen = !metricChatTicketsOpen">
-                      {{ ticketToggleLabel(metricChatTicketsOpen, metricChatDetail.requests?.length) }}
-                    </button>
-                  </div>
-                </div>
-                <div v-if="metricChatTicketsOpen && metricChatDetail.requests?.length" class="metric-request-list">
-                  <article v-for="request in metricChatDetail.requests" :key="request.id" class="metric-request-card"
-                    :class="{ open: request.status === 'open' }">
-                    <div class="metric-request-head">
-                      <span class="badge" :class="request.status === 'closed' ? 'green' : 'orange'">
-                        {{ statusLabel(request.status) }}
-                      </span>
-                      <time>{{ fmtDate(request.created_at) }}</time>
+            <Transition name="fade-slide-up" mode="out-in">
+              <div v-if="metricChatDetail.chat" :key="metricChatDetail.chat.chat_id">
+                <div class="metric-chat-header">
+                  <div>
+                    <div class="card-title">{{ metricChatTitle }}</div>
+                    <div class="card-note">
+                      {{ metricChatDetail.chat ? fmtNumber(metricChatConversation.length) + ' ta xabar' : 'Chat tanlang' }}
                     </div>
-                    <p>{{ request.initial_text || 'So‘rov matni yo‘q' }}</p>
-                    <small v-if="request.solution_text">Javob: {{ request.solution_text }}</small>
-                    <template v-if="request.status === 'open'">
-                      <form v-if="isInlineReplyOpen(request)" class="inline-reply-form"
-                        @submit.prevent="sendInlineRequestReply(request)">
-                        <textarea v-model.trim="inlineReplyForm.text" class="textarea"
-                          placeholder="Javob yozing..."></textarea>
-                        <div>
-                          <button class="btn small" type="button" @click="cancelInlineReply">Bekor</button>
-                          <button class="btn small primary" type="submit" :disabled="loadingAction === 'replyRequest'">
-                            Yuborish
-                          </button>
-                        </div>
-                      </form>
-                      <button v-else class="btn small primary" type="button" @click.stop="openInlineReply(request)">
-                        Javob
-                      </button>
-                    </template>
-                  </article>
+                  </div>
+                  <span v-if="metricChatDetail.chat?.source_type" class="badge blue">
+                    {{ sourceTypeLabel(metricChatDetail.chat.source_type) }}
+                  </span>
                 </div>
-                <div v-else class="empty compact">{{ metricChatDetail.requests?.length ? 'Ticketlar yashirilgan' :
-                  'Bu chatda so‘rov yo‘q' }}</div>
-              </section>
 
-              <div v-if="metricChatConversation.length" ref="metricChatThreadRef"
-                class="telegram-thread metric-chat-thread">
-                <article v-for="message in metricChatConversation" :key="chatBubbleKey(message)" class="chat-bubble-row"
-                  :class="{ outbound: message.direction === 'outbound' }">
-                  <div class="chat-bubble" :class="{ 'ticket-message': !!message.request_text }">
-                    <div class="chat-bubble-author">{{ message.actor_name || (message.direction === 'outbound' ? 'Xodim'
-                      : 'Mijoz') }}</div>
-                    <div v-if="message.media" class="chat-media">
-                      <img v-if="message.media.kind === 'photo' && mediaUrl(message.media)" class="chat-media-image"
-                        :src="mediaUrl(message.media)" alt="" />
-                      <video v-else-if="isVideoMedia(message.media) && mediaUrl(message.media)" class="chat-media-video"
-                        :src="mediaUrl(message.media)" controls playsinline></video>
-                      <audio v-else-if="isAudioMedia(message.media) && mediaUrl(message.media)" class="chat-media-audio"
-                        :src="mediaUrl(message.media)" controls></audio>
-                      <div v-else class="chat-media-placeholder">
-                        {{ mediaPlaceholder(message.media) }}
+                <div v-if="metricChatLoading" class="metric-chat-state">
+                  <span class="spinner" aria-hidden="true"></span>
+                  <span>Chat yuklanmoqda...</span>
+                </div>
+                <div v-else-if="metricChatError" class="metric-chat-state error">
+                  {{ metricChatError }}
+                </div>
+                <div v-else class="metric-chat-content">
+                  <div class="metric-chat-stats">
+                    <div>
+                      <span>So‘rov</span>
+                      <b>{{ fmtNumber(metricChatDetail.chat.total_requests) }}</b>
+                    </div>
+                    <div>
+                      <span>Ochiq</span>
+                      <b>{{ fmtNumber(metricChatDetail.chat.open_requests) }}</b>
+                    </div>
+                    <div>
+                      <span>Yopilgan</span>
+                      <b>{{ fmtNumber(metricChatDetail.chat.closed_requests) }}</b>
+                    </div>
+                  </div>
+
+                  <section class="metric-request-strip">
+                    <div class="metric-strip-head">
+                      <b>So‘rovlar</b>
+                      <div class="strip-head-actions">
+                        <span>{{ fmtNumber(metricChatDetail.requests?.length) }}</span>
+                        <button class="btn small" type="button" :disabled="!metricChatDetail.requests?.length"
+                          @click="metricChatTicketsOpen = !metricChatTicketsOpen">
+                          {{ ticketToggleLabel(metricChatTicketsOpen, metricChatDetail.requests?.length) }}
+                        </button>
                       </div>
                     </div>
-                    <p v-if="message.text">{{ message.text }}</p>
-                    <div class="chat-bubble-footer">
-                      <span v-if="message.request_text" class="chat-ticket">So‘rov</span>
-                      <span class="chat-source">{{ messageSourceLabel(message) }}</span>
-                      <time>{{ fmtChatTime(message.created_at) }}</time>
+                    <div v-if="metricChatTicketsOpen && metricChatDetail.requests?.length" class="metric-request-list">
+                      <article v-for="request in metricChatDetail.requests" :key="request.id" class="metric-request-card"
+                        :class="{ open: request.status === 'open' }">
+                        <div class="metric-request-head">
+                          <span class="badge" :class="request.status === 'closed' ? 'green' : 'orange'">
+                            {{ statusLabel(request.status) }}
+                          </span>
+                          <time>{{ fmtDate(request.created_at) }}</time>
+                        </div>
+                        <p>{{ request.initial_text || 'So‘rov matni yo‘q' }}</p>
+                        <small v-if="request.solution_text">Javob: {{ request.solution_text }}</small>
+                        <template v-if="request.status === 'open'">
+                          <form v-if="isInlineReplyOpen(request)" class="inline-reply-form"
+                            @submit.prevent="sendInlineRequestReply(request)">
+                            <textarea v-model.trim="inlineReplyForm.text" class="textarea"
+                              placeholder="Javob yozing..."></textarea>
+                            <div>
+                              <button class="btn small" type="button" @click="cancelInlineReply">Bekor</button>
+                              <button class="btn small primary" type="submit" :disabled="loadingAction === 'replyRequest'">
+                                Yuborish
+                              </button>
+                            </div>
+                          </form>
+                          <button v-else class="btn small primary" type="button" @click.stop="openInlineReply(request)">
+                            Javob
+                          </button>
+                        </template>
+                      </article>
                     </div>
+                    <div v-else class="empty compact">{{ metricChatDetail.requests?.length ? 'Ticketlar yashirilgan' :
+                      'Bu chatda so‘rov yo‘q' }}</div>
+                  </section>
+
+                  <div v-if="metricChatConversation.length" ref="metricChatThreadRef"
+                    class="telegram-thread metric-chat-thread">
+                    <TransitionGroup name="chat-msg">
+                      <article v-for="message in metricChatConversation" :key="chatBubbleKey(message)" class="chat-bubble-row"
+                        :class="{ outbound: message.direction === 'outbound' }">
+                        <div class="chat-bubble" :class="{ 'ticket-message': !!message.request_text }">
+                          <div class="chat-bubble-author">{{ message.actor_name || (message.direction === 'outbound' ? 'Xodim'
+                            : 'Mijoz') }}</div>
+                          <div v-if="message.media" class="chat-media">
+                            <img v-if="message.media.kind === 'photo' && mediaUrl(message.media)" class="chat-media-image"
+                              :src="mediaUrl(message.media)" alt="" />
+                            <video v-else-if="isVideoMedia(message.media) && mediaUrl(message.media)" class="chat-media-video"
+                              :src="mediaUrl(message.media)" controls playsinline></video>
+                            <audio v-else-if="isAudioMedia(message.media) && mediaUrl(message.media)" class="chat-media-audio"
+                              :src="mediaUrl(message.media)" controls></audio>
+                            <div v-else class="chat-media-placeholder">
+                              {{ mediaPlaceholder(message.media) }}
+                            </div>
+                          </div>
+                          <p v-if="message.text">{{ message.text }}</p>
+                          <div class="chat-bubble-footer">
+                            <span v-if="message.request_text" class="chat-ticket">So‘rov</span>
+                            <span class="chat-source">{{ messageSourceLabel(message) }}</span>
+                            <time>{{ fmtChatTime(message.created_at) }}</time>
+                          </div>
+                        </div>
+                      </article>
+                    </TransitionGroup>
                   </div>
-                </article>
+                  <div v-else class="empty compact">Dialog tarixi yo‘q</div>
+                </div>
               </div>
-              <div v-else class="empty compact">Dialog tarixi yo‘q</div>
-            </div>
-            <div v-else class="metric-chat-state">Chapdagi ro‘yxatdan chat tanlang</div>
+              <div v-else :key="'empty'" class="metric-chat-state">Chapdagi ro‘yxatdan chat tanlang</div>
+            </Transition>
           </section>
         </div>
 
@@ -1402,94 +1477,98 @@
             </aside>
 
             <section class="employee-chat-pane">
-              <template v-if="selectedCompanyGroup">
-                <div class="employee-chat-pane-head">
-                  <div>
-                    <b>{{ selectedCompanyGroup.title || selectedCompanyGroup.chat_id }}</b>
-                    <span>{{ fmtNumber(selectedCompanyGroup.total_messages) }} xabar · {{
-                      fmtNumber(selectedCompanyGroup.total_requests) }} ticket · {{
-                        fmtNumber(selectedCompanyGroup.closed_requests) }} yopilgan</span>
-                  </div>
-                  <button class="btn small" type="button" @click="loadChatDetail(selectedCompanyGroup)">
-                    Chat tafsiloti
-                  </button>
-                </div>
-
-                <section class="metric-request-strip company-request-strip">
-                  <div class="metric-strip-head">
-                    <b>Ticketlar</b>
-                    <div class="strip-head-actions">
-                      <span>{{ fmtNumber(companyGroupRequests.length) }}</span>
-                      <button class="btn small" type="button" :disabled="!companyGroupRequests.length"
-                        @click="companyGroupTicketsOpen = !companyGroupTicketsOpen">
-                        {{ ticketToggleLabel(companyGroupTicketsOpen, companyGroupRequests.length) }}
-                      </button>
+              <Transition name="fade-slide-up" mode="out-in">
+                <div v-if="selectedCompanyGroup" :key="companyGroupSelectedChatKey">
+                  <div class="employee-chat-pane-head">
+                    <div>
+                      <b>{{ selectedCompanyGroup.title || selectedCompanyGroup.chat_id }}</b>
+                      <span>{{ fmtNumber(selectedCompanyGroup.total_messages) }} xabar · {{
+                        fmtNumber(selectedCompanyGroup.total_requests) }} ticket · {{
+                          fmtNumber(selectedCompanyGroup.closed_requests) }} yopilgan</span>
                     </div>
+                    <button class="btn small" type="button" @click="loadChatDetail(selectedCompanyGroup)">
+                      Chat tafsiloti
+                    </button>
                   </div>
-                  <div v-if="companyGroupTicketsOpen && companyGroupRequests.length" class="metric-request-list">
-                    <article v-for="request in companyGroupRequests" :key="request.id" class="metric-request-card"
-                      :class="{ open: request.status === 'open' }">
-                      <div class="metric-request-head">
-                        <span class="badge" :class="request.status === 'closed' ? 'green' : 'orange'">
-                          {{ statusLabel(request.status) }}
-                        </span>
-                        <time>{{ fmtDate(request.created_at) }}</time>
-                      </div>
-                      <p>{{ request.initial_text || 'So‘rov matni yo‘q' }}</p>
-                      <small v-if="request.solution_text">Javob: {{ request.solution_text }}</small>
-                      <template v-if="request.status === 'open'">
-                        <form v-if="isInlineReplyOpen(request)" class="inline-reply-form"
-                          @submit.prevent="sendInlineRequestReply(request)">
-                          <textarea v-model.trim="inlineReplyForm.text" class="textarea"
-                            placeholder="Javob yozing..."></textarea>
-                          <div>
-                            <button class="btn small" type="button" @click="cancelInlineReply">Bekor</button>
-                            <button class="btn small primary" type="submit"
-                              :disabled="loadingAction === 'replyRequest'">
-                              Yuborish
-                            </button>
-                          </div>
-                        </form>
-                        <button v-else class="btn small primary" type="button" @click.stop="openInlineReply(request)">
-                          Javob
+
+                  <section class="metric-request-strip company-request-strip">
+                    <div class="metric-strip-head">
+                      <b>Ticketlar</b>
+                      <div class="strip-head-actions">
+                        <span>{{ fmtNumber(companyGroupRequests.length) }}</span>
+                        <button class="btn small" type="button" :disabled="!companyGroupRequests.length"
+                          @click="companyGroupTicketsOpen = !companyGroupTicketsOpen">
+                          {{ ticketToggleLabel(companyGroupTicketsOpen, companyGroupRequests.length) }}
                         </button>
-                      </template>
-                    </article>
-                  </div>
-                  <div v-else class="empty compact">{{ companyGroupRequests.length ? 'Ticketlar yashirilgan' :
-                    'Bu guruhda ticket yo‘q' }}</div>
-                </section>
-
-                <div v-if="companyGroupConversation.length" ref="companyGroupThreadRef"
-                  class="telegram-thread employee-profile-thread">
-                  <article v-for="message in companyGroupConversation" :key="chatBubbleKey(message)"
-                    class="chat-bubble-row" :class="{ outbound: message.direction === 'outbound' }">
-                    <div class="chat-bubble" :class="{ 'ticket-message': !!message.request_text }">
-                      <div class="chat-bubble-author">{{ message.actor_name || (message.direction === 'outbound' ?
-                        'Xodim' : 'Mijoz') }}</div>
-                      <div v-if="message.media" class="chat-media">
-                        <img v-if="message.media.kind === 'photo' && mediaUrl(message.media)" class="chat-media-image"
-                          :src="mediaUrl(message.media)" alt="" />
-                        <video v-else-if="isVideoMedia(message.media) && mediaUrl(message.media)"
-                          class="chat-media-video" :src="mediaUrl(message.media)" controls playsinline></video>
-                        <audio v-else-if="isAudioMedia(message.media) && mediaUrl(message.media)"
-                          class="chat-media-audio" :src="mediaUrl(message.media)" controls></audio>
-                        <div v-else class="chat-media-placeholder">
-                          {{ mediaPlaceholder(message.media) }}
-                        </div>
-                      </div>
-                      <p v-if="message.text">{{ message.text }}</p>
-                      <div class="chat-bubble-footer">
-                        <span v-if="message.request_text" class="chat-ticket">Ticket</span>
-                        <span class="chat-source">{{ messageSourceLabel(message) }}</span>
-                        <time>{{ fmtChatTime(message.created_at) }}</time>
                       </div>
                     </div>
-                  </article>
+                    <div v-if="companyGroupTicketsOpen && companyGroupRequests.length" class="metric-request-list">
+                      <article v-for="request in companyGroupRequests" :key="request.id" class="metric-request-card"
+                        :class="{ open: request.status === 'open' }">
+                        <div class="metric-request-head">
+                          <span class="badge" :class="request.status === 'closed' ? 'green' : 'orange'">
+                            {{ statusLabel(request.status) }}
+                          </span>
+                          <time>{{ fmtDate(request.created_at) }}</time>
+                        </div>
+                        <p>{{ request.initial_text || 'So‘rov matni yo‘q' }}</p>
+                        <small v-if="request.solution_text">Javob: {{ request.solution_text }}</small>
+                        <template v-if="request.status === 'open'">
+                          <form v-if="isInlineReplyOpen(request)" class="inline-reply-form"
+                            @submit.prevent="sendInlineRequestReply(request)">
+                            <textarea v-model.trim="inlineReplyForm.text" class="textarea"
+                              placeholder="Javob yozing..."></textarea>
+                            <div>
+                              <button class="btn small" type="button" @click="cancelInlineReply">Bekor</button>
+                              <button class="btn small primary" type="submit"
+                                :disabled="loadingAction === 'replyRequest'">
+                                Yuborish
+                              </button>
+                            </div>
+                          </form>
+                          <button v-else class="btn small primary" type="button" @click.stop="openInlineReply(request)">
+                            Javob
+                          </button>
+                        </template>
+                      </article>
+                    </div>
+                    <div v-else class="empty compact">{{ companyGroupRequests.length ? 'Ticketlar yashirilgan' :
+                      'Bu guruhda ticket yo‘q' }}</div>
+                  </section>
+
+                  <div v-if="companyGroupConversation.length" ref="companyGroupThreadRef"
+                    class="telegram-thread employee-profile-thread">
+                    <TransitionGroup name="chat-msg">
+                      <article v-for="message in companyGroupConversation" :key="chatBubbleKey(message)"
+                        class="chat-bubble-row" :class="{ outbound: message.direction === 'outbound' }">
+                        <div class="chat-bubble" :class="{ 'ticket-message': !!message.request_text }">
+                          <div class="chat-bubble-author">{{ message.actor_name || (message.direction === 'outbound' ?
+                            'Xodim' : 'Mijoz') }}</div>
+                          <div v-if="message.media" class="chat-media">
+                            <img v-if="message.media.kind === 'photo' && mediaUrl(message.media)" class="chat-media-image"
+                              :src="mediaUrl(message.media)" alt="" />
+                            <video v-else-if="isVideoMedia(message.media) && mediaUrl(message.media)"
+                              class="chat-media-video" :src="mediaUrl(message.media)" controls playsinline></video>
+                            <audio v-else-if="isAudioMedia(message.media) && mediaUrl(message.media)"
+                              class="chat-media-audio" :src="mediaUrl(message.media)" controls></audio>
+                            <div v-else class="chat-media-placeholder">
+                              {{ mediaPlaceholder(message.media) }}
+                            </div>
+                          </div>
+                          <p v-if="message.text">{{ message.text }}</p>
+                          <div class="chat-bubble-footer">
+                            <span v-if="message.request_text" class="chat-ticket">Ticket</span>
+                            <span class="chat-source">{{ messageSourceLabel(message) }}</span>
+                            <time>{{ fmtChatTime(message.created_at) }}</time>
+                          </div>
+                        </div>
+                      </article>
+                    </TransitionGroup>
+                  </div>
+                  <div v-else class="empty compact">Bu guruhda xabar yo‘q</div>
                 </div>
-                <div v-else class="empty compact">Bu guruhda xabar yo‘q</div>
-              </template>
-              <div v-else class="metric-chat-state">Chapdagi ro‘yxatdan guruh tanlang</div>
+                <div v-else :key="'empty'" class="metric-chat-state">Chapdagi ro‘yxatdan guruh tanlang</div>
+              </Transition>
             </section>
           </div>
         </div>
@@ -1629,81 +1708,87 @@
             </aside>
 
             <section class="employee-chat-pane">
-              <template v-if="selectedEmployeeProfileChat">
-                <div class="employee-chat-pane-head">
-                  <div>
-                    <b>{{ selectedEmployeeProfileChat.title || selectedEmployeeProfileChat.chat_id }}</b>
-                    <span>{{ fmtNumber(selectedEmployeeProfileChat.total_requests) }} ticket · {{
-                      fmtNumber(selectedEmployeeProfileChat.open_count) }} ochiq · {{
-                        fmtNumber(selectedEmployeeProfileChat.closed_count) }} yopilgan</span>
-                  </div>
-                  <button class="btn small" type="button" :disabled="!employeeProfileChatRequests.length"
-                    @click="employeeProfileTicketsOpen = !employeeProfileTicketsOpen">
-                    {{ ticketToggleLabel(employeeProfileTicketsOpen, employeeProfileChatRequests.length) }}
-                  </button>
-                </div>
-
-                <div v-if="employeeProfileTicketsOpen && employeeProfileChatRequests.length"
-                  class="employee-ticket-strip">
-                  <article v-for="request in employeeProfileChatRequests" :key="request.id"
-                    :class="{ open: request.status === 'open' }">
+              <Transition name="fade-slide-up" mode="out-in">
+                <div v-if="selectedEmployeeProfileChat" :key="employeeProfileSelectedChatKey">
+                  <div class="employee-chat-pane-head">
                     <div>
-                      <b>Ticket #{{ shortId(request.id) }}</b>
-                      <span>{{ statusLabel(request.status) }}</span>
+                      <b>{{ selectedEmployeeProfileChat.title || selectedEmployeeProfileChat.chat_id }}</b>
+                      <span>{{ fmtNumber(selectedEmployeeProfileChat.total_requests) }} ticket · {{
+                        fmtNumber(selectedEmployeeProfileChat.open_count) }} ochiq · {{
+                          fmtNumber(selectedEmployeeProfileChat.closed_count) }} yopilgan</span>
                     </div>
-                    <p>{{ request.initial_text || 'So‘rov matni yo‘q' }}</p>
-                    <template v-if="request.status === 'open'">
-                      <form v-if="isInlineReplyOpen(request)" class="inline-reply-form"
-                        @submit.prevent="sendInlineRequestReply(request)">
-                        <textarea v-model.trim="inlineReplyForm.text" class="textarea"
-                          placeholder="Javob yozing..."></textarea>
-                        <div>
-                          <button class="btn small" type="button" @click="cancelInlineReply">Bekor</button>
-                          <button class="btn small primary" type="submit" :disabled="loadingAction === 'replyRequest'">
-                            Yuborish
-                          </button>
-                        </div>
-                      </form>
-                      <button v-else class="btn small primary" type="button" @click.stop="openInlineReply(request)">
-                        Javob
-                      </button>
-                    </template>
-                  </article>
-                </div>
+                    <button class="btn small" type="button" :disabled="!employeeProfileChatRequests.length"
+                      @click="employeeProfileTicketsOpen = !employeeProfileTicketsOpen">
+                      {{ ticketToggleLabel(employeeProfileTicketsOpen, employeeProfileChatRequests.length) }}
+                    </button>
+                  </div>
 
-                <div v-if="employeeProfileChatLoading" class="metric-chat-state">Chat yuklanmoqda...</div>
-                <div v-else-if="employeeProfileChatError" class="metric-chat-state error">{{ employeeProfileChatError }}
-                </div>
-                <div v-else-if="employeeProfileConversation.length" ref="employeeProfileThreadRef"
-                  class="telegram-thread employee-profile-thread">
-                  <article v-for="message in employeeProfileConversation" :key="chatBubbleKey(message)"
-                    class="chat-bubble-row" :class="{ outbound: message.direction === 'outbound' }">
-                    <div class="chat-bubble" :class="{ 'ticket-message': !!message.request_text }">
-                      <div class="chat-bubble-author">{{ message.actor_name || (message.direction === 'outbound' ?
-                        employeeProfile.employee?.full_name || 'Xodim' : 'Mijoz') }}</div>
-                      <div v-if="message.media" class="chat-media">
-                        <img v-if="message.media.kind === 'photo' && mediaUrl(message.media)" class="chat-media-image"
-                          :src="mediaUrl(message.media)" alt="" />
-                        <video v-else-if="isVideoMedia(message.media) && mediaUrl(message.media)"
-                          class="chat-media-video" :src="mediaUrl(message.media)" controls playsinline></video>
-                        <audio v-else-if="isAudioMedia(message.media) && mediaUrl(message.media)"
-                          class="chat-media-audio" :src="mediaUrl(message.media)" controls></audio>
-                        <div v-else class="chat-media-placeholder">
-                          {{ mediaPlaceholder(message.media) }}
+                  <div v-if="employeeProfileTicketsOpen && employeeProfileChatRequests.length"
+                    class="employee-ticket-strip">
+                    <article v-for="request in employeeProfileChatRequests" :key="request.id"
+                      :class="{ open: request.status === 'open' }">
+                      <div>
+                        <b>Ticket #{{ shortId(request.id) }}</b>
+                        <span>{{ statusLabel(request.status) }}</span>
+                      </div>
+                      <p>{{ request.initial_text || 'So‘rov matni yo‘q' }}</p>
+                      <template v-if="request.status === 'open'">
+                        <form v-if="isInlineReplyOpen(request)" class="inline-reply-form"
+                          @submit.prevent="sendInlineRequestReply(request)">
+                          <textarea v-model.trim="inlineReplyForm.text" class="textarea"
+                            placeholder="Javob yozing..."></textarea>
+                          <div>
+                            <button class="btn small" type="button" @click="cancelInlineReply">Bekor</button>
+                            <button class="btn small primary" type="submit"
+                              :disabled="loadingAction === 'replyRequest'">
+                              Yuborish
+                            </button>
+                          </div>
+                        </form>
+                        <button v-else class="btn small primary" type="button" @click.stop="openInlineReply(request)">
+                          Javob
+                        </button>
+                      </template>
+                    </article>
+                  </div>
+
+                  <div v-if="employeeProfileChatLoading" class="metric-chat-state">Chat yuklanmoqda...</div>
+                  <div v-else-if="employeeProfileChatError" class="metric-chat-state error">{{ employeeProfileChatError
+                    }}
+                  </div>
+                  <div v-else-if="employeeProfileConversation.length" ref="employeeProfileThreadRef"
+                    class="telegram-thread employee-profile-thread">
+                    <TransitionGroup name="chat-msg">
+                      <article v-for="message in employeeProfileConversation" :key="chatBubbleKey(message)"
+                        class="chat-bubble-row" :class="{ outbound: message.direction === 'outbound' }">
+                        <div class="chat-bubble" :class="{ 'ticket-message': !!message.request_text }">
+                          <div class="chat-bubble-author">{{ message.actor_name || (message.direction === 'outbound' ?
+                            employeeProfile.employee?.full_name || 'Xodim' : 'Mijoz') }}</div>
+                          <div v-if="message.media" class="chat-media">
+                            <img v-if="message.media.kind === 'photo' && mediaUrl(message.media)" class="chat-media-image"
+                              :src="mediaUrl(message.media)" alt="" />
+                            <video v-else-if="isVideoMedia(message.media) && mediaUrl(message.media)"
+                              class="chat-media-video" :src="mediaUrl(message.media)" controls playsinline></video>
+                            <audio v-else-if="isAudioMedia(message.media) && mediaUrl(message.media)"
+                              class="chat-media-audio" :src="mediaUrl(message.media)" controls></audio>
+                            <div v-else class="chat-media-placeholder">
+                              {{ mediaPlaceholder(message.media) }}
+                            </div>
+                          </div>
+                          <p v-if="message.text">{{ message.text }}</p>
+                          <div class="chat-bubble-footer">
+                            <span v-if="message.request_text" class="chat-ticket">So‘rov</span>
+                            <span class="chat-source">{{ messageSourceLabel(message) }}</span>
+                            <time>{{ fmtChatTime(message.created_at) }}</time>
+                          </div>
                         </div>
-                      </div>
-                      <p v-if="message.text">{{ message.text }}</p>
-                      <div class="chat-bubble-footer">
-                        <span v-if="message.request_text" class="chat-ticket">So‘rov</span>
-                        <span class="chat-source">{{ messageSourceLabel(message) }}</span>
-                        <time>{{ fmtChatTime(message.created_at) }}</time>
-                      </div>
-                    </div>
-                  </article>
+                      </article>
+                    </TransitionGroup>
+                  </div>
+                  <div v-else class="empty compact">Bu chatda xodimga tegishli dialog topilmadi</div>
                 </div>
-                <div v-else class="empty compact">Bu chatda xodimga tegishli dialog topilmadi</div>
-              </template>
-              <div v-else class="metric-chat-state">Chapdagi ro‘yxatdan chat tanlang</div>
+                <div v-else :key="'empty'" class="metric-chat-state">Chapdagi ro‘yxatdan chat tanlang</div>
+              </Transition>
             </section>
           </div>
         </div>
@@ -2303,14 +2388,6 @@ const supportSummaryCards = computed(() => {
     }
   ];
 
-  if (comparisonEnabled.value) {
-    cards.forEach(card => {
-      if (card.comparison) {
-        card.note = `${card.note} (${card.comparison.text} oldingi davrdan)`;
-      }
-    });
-  }
-
   return cards;
 });
 const topEmployeeChartRows = computed(() => topEmployeeRows.value.slice(0, 6));
@@ -2484,7 +2561,9 @@ const supportPerformanceRows = computed(() => {
     || b.assigned_company_count - a.assigned_company_count
     || a.full_name.localeCompare(b.full_name));
 });
-const topPerformerName = computed(() => supportPerformanceRows.value[0]?.full_name || '');
+const topPerformer = computed(() => supportPerformanceRows.value[0] || null);
+const topPerformerName = computed(() => topPerformer.value?.full_name || '');
+const currentPeriodDates = computed(() => analytics.value.periodDates?.[selectedStatsPeriod.value] || { current: '', prev: '' });
 const openRequestsTitle = computed(() => `Ochiq so‘rovlar (${fmtNumber((dashboard.openRequests || []).length)})`);
 const unansweredAlerts = computed(() => {
   const grouped = new Map();
