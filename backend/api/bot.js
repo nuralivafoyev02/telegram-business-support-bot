@@ -891,17 +891,33 @@ async function handleGroupRegistrationCommand(message, tracking) {
   });
 
   if (registered) {
-    await deleteCommandMessage(chat.id, message.message_id, {
+    const deleteResult = await deleteCommandMessage(chat.id, message.message_id, {
       attempts: 3,
       delayMs: 150
     });
+    const lines = [
+      '<b>Guruh ro‘yxatga olindi</b>',
+      `Chat ID: <code>${escapeHtml(chat.id)}</code>`,
+      'Oddiy guruh xabarlari to‘liq kelishi uchun BotFather’da <code>/setprivacy</code> → <b>Disable</b> qiling.',
+      deleteResult.deleted
+        ? 'Command xabari o‘chirildi.'
+        : `Command o‘chirilmadi: ${escapeHtml(deleteResult.reason || 'Telegram rad etdi')}`,
+      !deleteResult.deleted && deleteResult.permissionDiagnostic ? escapeHtml(deleteResult.permissionDiagnostic) : ''
+    ].filter(Boolean);
+    await sendMessage(chat.id, lines.join('\n'), deleteResult.deleted ? {} : {
+      reply_to_message_id: message.message_id
+    }).catch(error => logBackgroundError('register-group-reply', error));
     return;
   }
 
-  await deleteCommandMessage(chat.id, message.message_id, {
+  const deleteResult = await deleteCommandMessage(chat.id, message.message_id, {
     attempts: 1,
     delayMs: 150
   });
+
+  await sendMessage(chat.id, '⚠️ Guruhni ro‘yxatga olishda xatolik yuz berdi.', deleteResult.deleted ? {} : {
+    reply_to_message_id: message.message_id
+  }).catch(error => logBackgroundError('register-group-error-reply', error));
 
   try {
     const settings = await getBotSettings();
@@ -1724,11 +1740,26 @@ async function processMessage(updateKind, message) {
   if (await maybeCloseRequestFromEmployeeAnswer(message, classification, employee, text)) return;
 
   if (isSupportRequestClassification(classification)) {
-    await metrics.createSupportRequest({
-      message,
-      sourceType,
-      companyId: chatRow ? chatRow.company_id : null
-    });
+    try {
+      await metrics.createSupportRequest({
+        message,
+        sourceType,
+        companyId: chatRow ? chatRow.company_id : null
+      });
+    } catch (error) {
+      await maybeNotifyMainGroupMessageSaveFailed({
+        updateKind,
+        message,
+        settings,
+        chatRow,
+        classification,
+        employee,
+        error,
+        target: 'public.support_requests / public.request_events',
+        stage: 'support_request_create'
+      });
+      throw error;
+    }
     const fallbackText = autoReplyFallbackText({ updateKind, chat, settings });
     if (await maybeSendAiAutoReply({ updateKind, message, sourceType, text, settings, fallbackText })) return;
     await maybeReplyPrivateFallback(updateKind, message, classification);

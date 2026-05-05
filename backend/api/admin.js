@@ -779,6 +779,7 @@ function messagePreviewText(message = {}) {
 
 function mediaPlaceholderLabel(kind = '') {
   return ({
+    sticker: 'Stikerli xabar',
     photo: 'Rasm',
     video: 'Video',
     voice: 'Ovozli xabar',
@@ -988,6 +989,15 @@ function extractMessageMedia(raw = {}) {
   if (!raw || typeof raw !== 'object' || raw.source === 'admin_send') return null;
   const photo = bestPhotoSize(raw.photo || []);
   if (photo) return buildMediaPayload('photo', photo);
+  if (raw.sticker) {
+    return buildMediaPayload('sticker', raw.sticker, {
+      emoji: raw.sticker.emoji || null,
+      set_name: raw.sticker.set_name || null,
+      sticker_type: raw.sticker.type || null,
+      custom_emoji_id: raw.sticker.custom_emoji_id || null,
+      thumbnail_file_id: raw.sticker.thumbnail && raw.sticker.thumbnail.file_id || null
+    });
+  }
   if (raw.video) {
     return buildMediaPayload('video', raw.video, {
       thumbnail_file_id: raw.video.thumbnail && raw.video.thumbnail.file_id || null
@@ -1857,7 +1867,7 @@ async function listEmployees(query) {
       limit: '5000'
     }).catch(() => []),
     supabase.select('messages', {
-      select: 'id,tg_message_id,chat_id,from_tg_user_id,from_name,from_username,employee_id,business_connection_id,source_type,classification,text,created_at',
+      select: 'id,tg_message_id,chat_id,from_tg_user_id,from_name,from_username,employee_id,business_connection_id,source_type,classification,text,raw,created_at',
       order: supabase.order('created_at', false),
       limit: '5000'
     }).catch(() => [])
@@ -1882,12 +1892,19 @@ async function listEmployees(query) {
     created_at: request.created_at || null,
     closed_at: request.closed_at || null
   });
-  const messageSummary = message => ({
+  const messageSummary = (message, employee = null) => ({
     id: message.id || null,
     message_id: message.tg_message_id || null,
     chat_id: message.chat_id,
     chat_title: chatTitle(message.chat_id),
+    from_tg_user_id: message.from_tg_user_id || null,
+    from_name: message.from_name || '',
+    from_username: message.from_username || '',
+    employee_id: message.employee_id || null,
+    source_type: message.source_type || '',
+    origin_type: message.employee_id || telegramIdKey(message.from_tg_user_id) === telegramIdKey(employee && employee.tg_user_id) ? 'employee' : 'customer',
     text: message.text || '',
+    media: extractMessageMedia(message.raw),
     created_at: message.created_at || null,
     classification: message.classification || ''
   });
@@ -1938,7 +1955,12 @@ async function listEmployees(query) {
           .filter(message => telegramIdKey(message.chat_id) === chatId)
           .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))
           .slice(0, 20)
-          .map(messageSummary);
+          .map(message => messageSummary(message, employee));
+        const groupChatMessages = messages
+          .filter(message => telegramIdKey(message.chat_id) === chatId && isToday(message.created_at))
+          .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))
+          .slice(0, 120)
+          .map(message => messageSummary(message, employee));
         const groupClosed = todayClosed
           .filter(request => telegramIdKey(request.chat_id) === chatId)
           .sort((a, b) => String(b.closed_at || '').localeCompare(String(a.closed_at || '')))
@@ -1951,9 +1973,11 @@ async function listEmployees(query) {
           chat_id: chatId,
           title: chatTitle(chatId),
           message_count: groupMessages.length,
+          chat_message_count: groupChatMessages.length,
           closed_count: groupClosed.length,
           open_count: groupOpen.length,
           messages: groupMessages,
+          chat_messages: groupChatMessages,
           closed_requests: groupClosed,
           open_requests: groupOpen
         };
@@ -2164,8 +2188,7 @@ async function getEmployeeActivity(query = {}) {
   const visibleChatMessages = uniqueRowsBy(allChatMessages, message => `${message.chat_id}:${message.tg_message_id || message.id}`)
     .filter(message => visibleChatIdKeys.has(telegramIdKey(message.chat_id)))
     .filter(message => inCurrentPeriod(message.created_at, periodKey, keys))
-    .filter(message => !isEmployeePrivateChatId(message.chat_id))
-    .filter(isRelevantEmployeeChatMessage);
+    .filter(message => !isEmployeePrivateChatId(message.chat_id));
   const visibleRequestIds = [...new Set([
     ...visibleClosedRequests,
     ...visibleOpenRequests
@@ -2439,6 +2462,9 @@ function sanitizeWebhookInfo(info = {}) {
   }
   if (missingAllowedUpdates.includes('message')) {
     diagnostics.push('allowed_updates ichida message yo‘q: guruhdagi oddiy xabarlar botga kelmaydi.');
+  }
+  if (!missingAllowedUpdates.includes('message') && !companyInfoWebhook) {
+    diagnostics.push('Agar guruhdagi oddiy xabarlar baribir kelmasa, BotFather’da /setprivacy → Disable qiling va bot guruhda admin ekanini tekshiring.');
   }
   if (missingAllowedUpdates.includes('edited_message')) {
     diagnostics.push('allowed_updates ichida edited_message yo‘q: tahrirlangan guruh xabarlari kelmaydi.');

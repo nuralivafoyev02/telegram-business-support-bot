@@ -131,10 +131,11 @@
                 <div class="support-summary-content">
                   <div class="support-summary-title">{{ card.title }}</div>
                   <div class="support-summary-value-row">
-                    <div class="support-summary-value" :class="{ danger: card.tone === 'danger' }">{{ card.value }}</div>
+                    <div class="support-summary-value" :class="{ danger: card.tone === 'danger' }">{{ card.value }}
+                    </div>
                     <Transition name="fade">
-                      <div v-if="comparisonEnabled && card.comparison" class="trend-label"
-                        :class="card.comparison.tone" :title="card.comparison.title || card.comparison.text">
+                      <div v-if="comparisonEnabled && card.comparison" class="trend-label" :class="card.comparison.tone"
+                        :title="card.comparison.title || card.comparison.text">
                         {{ card.comparison.text }}
                       </div>
                     </Transition>
@@ -248,7 +249,7 @@
               </div>
 
               <DataTable :columns="supportPerformanceColumns" :rows="topSupportCards"
-                empty="Hozircha natija ma’lumoti yo‘q" :on-cell-action="handleTableCellAction" 
+                empty="Hozircha natija ma’lumoti yo‘q" :on-cell-action="handleTableCellAction"
                 :row-class="supportPerformanceRowClass" :page-size="12">
                 <template #rank="{ row }">
                   <b class="rank-number">{{ row.rank }}</b>
@@ -266,7 +267,8 @@
                 <template #closedRequests="{ row }">
                   <div class="trend-cell">
                     <b class="table-strong">{{ fmtNumber(row.closed_requests || 0) }} ta</b>
-                    <span v-if="comparisonEnabled && row.closed_comparison" class="trend-label" :class="row.closed_comparison.tone">
+                    <span v-if="comparisonEnabled && row.closed_comparison" class="trend-label"
+                      :class="row.closed_comparison.tone">
                       {{ row.closed_comparison.percentText }} ({{ row.closed_comparison.diff }})
                     </span>
                   </div>
@@ -276,7 +278,8 @@
                     <b class="table-strong" :class="{ 'text-muted': !row.open_requests }">
                       {{ fmtNumber(row.open_requests || 0) }} ta
                     </b>
-                    <span v-if="comparisonEnabled && row.open_comparison" class="trend-label" :class="row.open_comparison.tone">
+                    <span v-if="comparisonEnabled && row.open_comparison" class="trend-label"
+                      :class="row.open_comparison.tone">
                       {{ row.open_comparison.percentText }} ({{ row.open_comparison.diff }})
                     </span>
                   </div>
@@ -284,7 +287,8 @@
                 <template #closeRate="{ row }">
                   <div class="trend-cell">
                     <b class="table-strong">{{ pct(row) }}</b>
-                    <span v-if="comparisonEnabled && row.sla_comparison" class="trend-label" :class="row.sla_comparison.tone">
+                    <span v-if="comparisonEnabled && row.sla_comparison" class="trend-label"
+                      :class="row.sla_comparison.tone">
                       {{ row.sla_comparison.percentText }}
                     </span>
                   </div>
@@ -292,7 +296,8 @@
                 <template #avgTime="{ row }">
                   <div class="trend-cell">
                     <b class="table-strong">{{ fmtMinutes(row.avg_close_minutes) }}</b>
-                    <span v-if="comparisonEnabled && row.avg_comparison" class="trend-label" :class="row.avg_comparison.tone">
+                    <span v-if="comparisonEnabled && row.avg_comparison" class="trend-label"
+                      :class="row.avg_comparison.tone">
                       {{ row.avg_comparison.percentText }} ({{ row.avg_comparison.diff }})
                     </span>
                   </div>
@@ -303,7 +308,8 @@
                       :data-tooltip="employeeSlaTooltip(row)" tabindex="0">
                       {{ fmtPercent(row.sla) }}
                     </div>
-                    <span v-if="comparisonEnabled && row.sla_comparison" class="trend-label" :class="row.sla_comparison.tone">
+                    <span v-if="comparisonEnabled && row.sla_comparison" class="trend-label"
+                      :class="row.sla_comparison.tone">
                       {{ row.sla_comparison.percentText }}
                     </span>
                   </div>
@@ -516,7 +522,7 @@
                       </div>
                       <div class="timeline-status">
                         <span class="status-pill mini" :class="expiryStatusClass(row)">{{ expiryStatusLabel(row)
-                          }}</span>
+                        }}</span>
                         <small>{{ businessStatusLabel(row.business_status) }}</small>
                       </div>
                     </article>
@@ -783,8 +789,7 @@
                     <input v-model.trim="adminForm.full_name" class="input" placeholder="Tizim admini" />
                   </label>
                   <label class="label">Yangi parol
-                    <input v-model="adminForm.new_password" class="input" type="password"
-                      autocomplete="new-password"
+                    <input v-model="adminForm.new_password" class="input" type="password" autocomplete="new-password"
                       placeholder="Bo‘sh qoldirilsa o‘zgarmaydi" />
                   </label>
                   <button class="btn primary" :disabled="loadingAction === 'saveAdmin'">{{ loadingAction === 'saveAdmin'
@@ -883,8 +888,7 @@
                     <input v-model.trim="integrationForm.model" class="input" placeholder="gpt-4o-mini" />
                   </label>
                   <label class="label">API kalit
-                    <input v-model="integrationForm.api_key" class="input" type="password"
-                      autocomplete="new-password"
+                    <input v-model="integrationForm.api_key" class="input" type="password" autocomplete="new-password"
                       :placeholder="integrationForm.has_api_key ? 'Saqlangan kalitni almashtirish' : 'sk-...'" />
                   </label>
                   <label class="label">Holat
@@ -1287,7 +1291,8 @@
                   <div>
                     <div class="card-title">{{ metricChatTitle }}</div>
                     <div class="card-note">
-                      {{ metricChatDetail.chat ? fmtNumber(metricChatConversation.length) + ' ta xabar' : 'Chat tanlang' }}
+                      {{ metricChatDetail.chat ? fmtNumber(metricChatConversation.length) + ' ta xabar' : 'Chat tanlang'
+                      }}
                     </div>
                   </div>
                   <span v-if="metricChatDetail.chat?.source_type" class="badge blue">
@@ -1330,8 +1335,8 @@
                       </div>
                     </div>
                     <div v-if="metricChatTicketsOpen && metricChatDetail.requests?.length" class="metric-request-list">
-                      <article v-for="request in metricChatDetail.requests" :key="request.id" class="metric-request-card"
-                        :class="{ open: request.status === 'open' }">
+                      <article v-for="request in metricChatDetail.requests" :key="request.id"
+                        class="metric-request-card" :class="{ open: request.status === 'open' }">
                         <div class="metric-request-head">
                           <span class="badge" :class="request.status === 'closed' ? 'green' : 'orange'">
                             {{ statusLabel(request.status) }}
@@ -1347,7 +1352,8 @@
                               placeholder="Javob yozing..."></textarea>
                             <div>
                               <button class="btn small" type="button" @click="cancelInlineReply">Bekor</button>
-                              <button class="btn small primary" type="submit" :disabled="loadingAction === 'replyRequest'">
+                              <button class="btn small primary" type="submit"
+                                :disabled="loadingAction === 'replyRequest'">
                                 Yuborish
                               </button>
                             </div>
@@ -1365,27 +1371,30 @@
                   <div v-if="metricChatConversation.length" ref="metricChatThreadRef"
                     class="telegram-thread metric-chat-thread">
                     <TransitionGroup name="chat-msg">
-                      <article v-for="message in metricChatConversation" :key="chatBubbleKey(message)" class="chat-bubble-row"
+                      <article v-for="message in metricChatConversation" :key="chatBubbleKey(message)"
+                        class="chat-bubble-row"
                         :class="{ outbound: message.direction === 'outbound', system: isSystemMessage(message) }">
                         <div v-if="isSystemMessage(message)" class="chat-system-pill">
                           <span>{{ message.text }}</span>
                           <time>{{ fmtChatTime(message.created_at) }}</time>
                         </div>
                         <div v-else class="chat-bubble" :class="{ 'ticket-message': !!message.request_text }">
-                          <div class="chat-bubble-author">{{ message.actor_name || (message.direction === 'outbound' ? 'Xodim'
+                          <div class="chat-bubble-author">{{ message.actor_name || (message.direction === 'outbound' ?
+                            'Xodim'
                             : 'Mijoz') }}</div>
                           <div v-if="message.media" class="chat-media">
-                            <img v-if="message.media.kind === 'photo' && mediaUrl(message.media)" class="chat-media-image"
-                              :src="mediaUrl(message.media)" alt="" />
-                            <video v-else-if="isVideoMedia(message.media) && mediaUrl(message.media)" class="chat-media-video"
-                              :src="mediaUrl(message.media)" controls playsinline></video>
-                            <audio v-else-if="isAudioMedia(message.media) && mediaUrl(message.media)" class="chat-media-audio"
-                              :src="mediaUrl(message.media)" controls></audio>
-                            <div v-else class="chat-media-placeholder">
+                            <img v-if="message.media.kind === 'photo' && mediaUrl(message.media)"
+                              class="chat-media-image" :src="mediaUrl(message.media)" alt="" />
+                            <video v-else-if="isVideoMedia(message.media) && mediaUrl(message.media)"
+                              class="chat-media-video" :src="mediaUrl(message.media)" controls playsinline></video>
+                            <audio v-else-if="isAudioMedia(message.media) && mediaUrl(message.media)"
+                              class="chat-media-audio" :src="mediaUrl(message.media)" controls></audio>
+                            <div v-else class="chat-media-placeholder"
+                              :class="{ sticker: message.media.kind === 'sticker' }">
                               {{ mediaPlaceholder(message.media) }}
                             </div>
                           </div>
-                          <p v-if="message.text">{{ message.text }}</p>
+                          <p v-if="chatMessageBodyText(message)">{{ chatMessageBodyText(message) }}</p>
                           <div class="chat-bubble-footer">
                             <span v-if="message.request_text" class="chat-ticket">So‘rov</span>
                             <span class="chat-source">{{ messageSourceLabel(message) }}</span>
@@ -1427,17 +1436,17 @@
             <div>
               <span>Xabarlar</span>
               <b>{{ fmtNumber(companyGroupDetail.company?.total_messages || companyGroupDetail.summary?.total_messages)
-                }}</b>
+              }}</b>
             </div>
             <div>
               <span>Ticketlar</span>
               <b>{{ fmtNumber(companyGroupDetail.company?.total_requests || companyGroupDetail.summary?.total_requests)
-                }}</b>
+              }}</b>
             </div>
             <div>
               <span>Ochiq</span>
               <b>{{ fmtNumber(companyGroupDetail.company?.open_requests || companyGroupDetail.summary?.open_requests)
-                }}</b>
+              }}</b>
             </div>
           </section>
 
@@ -1457,8 +1466,8 @@
                   </span>
                   <span>
                     <b>{{ group.title || group.chat_id }}</b>
-                    <small>{{ group.conversation?.[0]?.text || group.requests?.[0]?.initial_text || 'Yozishma tarixi'
-                      }}</small>
+                    <small>{{ chatMessageText(group.conversation?.[0]) || group.requests?.[0]?.initial_text ||
+                      'Yozishma tarixi' }}</small>
                     <em>{{ fmtNumber(group.total_messages) }} xabar · {{ fmtNumber(group.total_requests) }} ticket · {{
                       fmtNumber(group.open_requests) }} ochiq</em>
                   </span>
@@ -1542,17 +1551,18 @@
                           <div class="chat-bubble-author">{{ message.actor_name || (message.direction === 'outbound' ?
                             'Xodim' : 'Mijoz') }}</div>
                           <div v-if="message.media" class="chat-media">
-                            <img v-if="message.media.kind === 'photo' && mediaUrl(message.media)" class="chat-media-image"
-                              :src="mediaUrl(message.media)" alt="" />
+                            <img v-if="message.media.kind === 'photo' && mediaUrl(message.media)"
+                              class="chat-media-image" :src="mediaUrl(message.media)" alt="" />
                             <video v-else-if="isVideoMedia(message.media) && mediaUrl(message.media)"
                               class="chat-media-video" :src="mediaUrl(message.media)" controls playsinline></video>
                             <audio v-else-if="isAudioMedia(message.media) && mediaUrl(message.media)"
                               class="chat-media-audio" :src="mediaUrl(message.media)" controls></audio>
-                            <div v-else class="chat-media-placeholder">
+                            <div v-else class="chat-media-placeholder"
+                              :class="{ sticker: message.media.kind === 'sticker' }">
                               {{ mediaPlaceholder(message.media) }}
                             </div>
                           </div>
-                          <p v-if="message.text">{{ message.text }}</p>
+                          <p v-if="chatMessageBodyText(message)">{{ chatMessageBodyText(message) }}</p>
                           <div class="chat-bubble-footer">
                             <span v-if="message.request_text" class="chat-ticket">Ticket</span>
                             <span class="chat-source">{{ messageSourceLabel(message) }}</span>
@@ -1580,7 +1590,9 @@
               <div>
                 <div class="card-title">{{ group.title || group.chat_id }}</div>
                 <div class="card-note">
-                  {{ fmtNumber(group.message_count) }} xabar · {{ fmtNumber(group.closed_count) }} yopilgan · {{
+                  {{ fmtNumber(group.chat_message_count || group.message_count) }} xabar · {{
+                    fmtNumber(group.closed_count)
+                  }} yopilgan · {{
                     fmtNumber(group.open_count) }} ochiq
                 </div>
               </div>
@@ -1595,11 +1607,12 @@
 
             <div class="drilldown-columns">
               <div class="drilldown-panel">
-                <div class="drilldown-label">Yozgan xabarlari</div>
-                <div v-if="group.messages?.length" class="mini-list">
-                  <article v-for="message in group.messages"
+                <div class="drilldown-label">Dialog</div>
+                <div v-if="groupChatMessages(group).length" class="mini-list">
+                  <article v-for="message in groupChatMessages(group)"
                     :key="message.id || message.message_id || message.created_at" class="mini-item">
-                    <p>{{ message.text || 'Matn yo‘q' }}</p>
+                    <b>{{ message.from_name || message.actor_name || message.source_label || 'Mijoz' }}</b>
+                    <p>{{ chatMessageText(message) || 'Matn yo‘q' }}</p>
                     <time>{{ fmtDate(message.created_at) }}</time>
                   </article>
                 </div>
@@ -1636,7 +1649,8 @@
                 :src="employeeAvatarUrl(employeeProfile.employee)" alt="" />
               <span v-else class="employee-profile-avatar fallback"
                 :class="{ premium: isEmployeePremium(employeeProfile.employee) }"
-                :data-tooltip="employeePremiumTooltip(employeeProfile.employee) || null">{{ employeeInitials(employeeProfile.employee)
+                :data-tooltip="employeePremiumTooltip(employeeProfile.employee) || null">{{
+                  employeeInitials(employeeProfile.employee)
                 }}</span>
             </span>
             <div class="employee-profile-title">
@@ -1652,10 +1666,11 @@
                   <small>Ochiq</small>
                   <b>{{ fmtNumber(employeeProfile.summary?.open_requests) }}</b>
                 </span>
-                <span>
+                <button type="button" class="employee-profile-stat-card"
+                  :disabled="!employeeCompanyDetail.companies?.length" @click="openEmployeeCompanyList">
                   <small>Kompaniya</small>
                   <b>{{ fmtNumber(employeeProfile.summary?.company_total) }}</b>
-                </span>
+                </button>
                 <span>
                   <small>O‘rtacha</small>
                   <b>{{ fmtMinutes(employeeProfile.summary?.avg_close_minutes) }}</b>
@@ -1665,7 +1680,7 @@
             <div class="employee-profile-pills">
               <span class="profile-pill">🛡️ SLA <b>{{ fmtPercent(employeeProfile.summary?.sla) }}</b></span>
               <span class="profile-pill">✅ Yopish foizi <b>{{ fmtPercent(employeeProfile.summary?.close_rate)
-                  }}</b></span>
+              }}</b></span>
               <span class="profile-pill">⭐ Reyting <b>#{{ employeeProfile.rank || '—' }}</b></span>
             </div>
           </header>
@@ -1755,7 +1770,7 @@
 
                   <div v-if="employeeProfileChatLoading" class="metric-chat-state">Chat yuklanmoqda...</div>
                   <div v-else-if="employeeProfileChatError" class="metric-chat-state error">{{ employeeProfileChatError
-                    }}
+                  }}
                   </div>
                   <div v-else-if="employeeProfileConversation.length" ref="employeeProfileThreadRef"
                     class="telegram-thread employee-profile-thread">
@@ -1771,17 +1786,18 @@
                           <div class="chat-bubble-author">{{ message.actor_name || (message.direction === 'outbound' ?
                             employeeProfile.employee?.full_name || 'Xodim' : 'Mijoz') }}</div>
                           <div v-if="message.media" class="chat-media">
-                            <img v-if="message.media.kind === 'photo' && mediaUrl(message.media)" class="chat-media-image"
-                              :src="mediaUrl(message.media)" alt="" />
+                            <img v-if="message.media.kind === 'photo' && mediaUrl(message.media)"
+                              class="chat-media-image" :src="mediaUrl(message.media)" alt="" />
                             <video v-else-if="isVideoMedia(message.media) && mediaUrl(message.media)"
                               class="chat-media-video" :src="mediaUrl(message.media)" controls playsinline></video>
                             <audio v-else-if="isAudioMedia(message.media) && mediaUrl(message.media)"
                               class="chat-media-audio" :src="mediaUrl(message.media)" controls></audio>
-                            <div v-else class="chat-media-placeholder">
+                            <div v-else class="chat-media-placeholder"
+                              :class="{ sticker: message.media.kind === 'sticker' }">
                               {{ mediaPlaceholder(message.media) }}
                             </div>
                           </div>
-                          <p v-if="message.text">{{ message.text }}</p>
+                          <p v-if="chatMessageBodyText(message)">{{ chatMessageBodyText(message) }}</p>
                           <div class="chat-bubble-footer">
                             <span v-if="message.request_text" class="chat-ticket">So‘rov</span>
                             <span class="chat-source">{{ messageSourceLabel(message) }}</span>
@@ -1802,6 +1818,32 @@
     </Transition>
 
     <Transition name="modal-fade">
+      <Modal v-if="modal === 'employeeCompanyList'" :title="employeeCompanyTitle" wide @close="closeModal">
+        <div class="detail-stack">
+          <section class="detail-summary">
+            <div><span>Kompaniya</span><b>{{ fmtNumber(employeeCompanyDetail.summary?.total) }}</b></div>
+            <div><span>Aktiv</span><b>{{ fmtNumber(employeeCompanyDetail.summary?.active) }}</b></div>
+            <div><span>Obuna xavfi</span><b>{{ fmtNumber(employeeCompanyDetail.summary?.expiring_soon) }}</b></div>
+            <div><span>Churn/Pauza</span><b>{{ fmtNumber(employeeCompanyDetail.summary?.churn) }}</b></div>
+          </section>
+          <DataTable :columns="employeeCompanyColumns" :rows="employeeCompanyDetail.companies || []"
+            empty="Bu xodimga biriktirilgan kompaniya topilmadi" :page-size="12">
+            <template #businessStatus="{ row }">
+              <span class="status-pill mini" :class="businessStatusClass(row.business_status)">{{
+                businessStatusLabel(row.business_status) }}</span>
+            </template>
+            <template #usageScore="{ row }">
+              <span class="usage-score-cell">
+                <b>{{ fmtPercent(row.usage_score || 0) }}</b>
+                <small>{{ row.usage_level || '—' }}</small>
+              </span>
+            </template>
+          </DataTable>
+        </div>
+      </Modal>
+    </Transition>
+
+    <Transition name="modal-fade">
       <Modal v-if="modal === 'employeeActivity'" :title="employeeDrilldownTitle" wide @close="closeModal">
         <div class="detail-stack">
           <div class="detail-summary">
@@ -1817,7 +1859,8 @@
                 <div>
                   <div class="card-title">{{ group.title || group.chat_id }}</div>
                   <div class="card-note">
-                    {{ fmtNumber(group.message_count) }} xabar · {{ fmtNumber(group.closed_count) }} yopilgan ·
+                    {{ fmtNumber(group.chat_message_count || group.message_count) }} xabar · {{
+                      fmtNumber(group.closed_count) }} yopilgan ·
                     {{ fmtNumber(group.customer_count) }} mijoz
                   </div>
                 </div>
@@ -1838,11 +1881,12 @@
                 </div>
 
                 <div class="drilldown-panel">
-                  <div class="drilldown-label">Yozgan xabarlari</div>
-                  <div v-if="group.messages?.length" class="mini-list">
-                    <article v-for="message in group.messages"
+                  <div class="drilldown-label">Dialog</div>
+                  <div v-if="groupChatMessages(group).length" class="mini-list">
+                    <article v-for="message in groupChatMessages(group)"
                       :key="message.id || message.message_id || message.created_at" class="mini-item">
-                      <p>{{ message.text || 'Matn yo‘q' }}</p>
+                      <b>{{ message.from_name || message.actor_name || message.source_label || 'Mijoz' }}</b>
+                      <p>{{ chatMessageText(message) || 'Matn yo‘q' }}</p>
                       <time>{{ fmtDate(message.created_at) }}</time>
                     </article>
                   </div>
@@ -1959,11 +2003,11 @@
                         :src="mediaUrl(message.media)" controls playsinline></video>
                       <audio v-else-if="isAudioMedia(message.media) && mediaUrl(message.media)" class="chat-media-audio"
                         :src="mediaUrl(message.media)" controls></audio>
-                      <div v-else class="chat-media-placeholder">
+                      <div v-else class="chat-media-placeholder" :class="{ sticker: message.media.kind === 'sticker' }">
                         {{ mediaPlaceholder(message.media) }}
                       </div>
                     </div>
-                    <p v-if="message.text">{{ message.text }}</p>
+                    <p v-if="chatMessageBodyText(message)">{{ chatMessageBodyText(message) }}</p>
                     <div class="chat-bubble-footer">
                       <span v-if="message.request_text" class="chat-ticket">So‘rov</span>
                       <span class="chat-source">{{ messageSourceLabel(message) }}</span>
@@ -3052,11 +3096,11 @@ function compareValue(current, previous, options = {}) {
   const { invert = false, isPercentage = false, unit = '' } = options;
   const curr = Number(current || 0);
   const prev = Number(previous || 0);
-  
+
   const diff = curr - prev;
   const diffAbs = Math.abs(diff);
   const arrow = diff > 0 ? '↑' : (diff < 0 ? '↓' : '');
-  
+
   const diffFormatted = diff > 0 ? `+${fmtNumber(diffAbs)}` : (diff < 0 ? `-${fmtNumber(diffAbs)}` : '0');
   const diffWithUnit = unit ? `${diffFormatted} ${unit}` : diffFormatted;
 
@@ -3943,27 +3987,8 @@ function employeeChatMessageConversationItem(message = {}, employee = {}) {
   };
 }
 
-function employeeScopedMessageVisible(message = {}, employee = {}, requests = [], includeGroupContext = false) {
-  if (isSystemMessage(message)) return true;
-  if (messageBelongsToEmployee(message, employee)) return true;
-
-  const origin = String(message.origin_type || message.actor_type || '').toLowerCase();
-  const classification = String(message.classification || '').toLowerCase();
-  const looksLikeOtherEmployee = origin === 'employee' || classification === 'employee_message';
-  if (looksLikeOtherEmployee) return false;
-  if (!includeGroupContext) return message.direction === 'inbound';
-
-  const customerIds = new Set((Array.isArray(requests) ? requests : [])
-    .map(request => String(request.customer_tg_id || request.actor_tg_user_id || '').trim())
-    .filter(Boolean));
-  if (!customerIds.size) return message.direction === 'inbound';
-  const actorId = String(message.actor_tg_user_id || message.from_tg_user_id || '').trim();
-  return message.direction === 'inbound' && (!actorId || customerIds.has(actorId));
-}
-
 function employeeScopedConversation(row = {}, employee = {}) {
-  const chatId = Number(row.chat_id || 0);
-  const includeFullGroupThread = row.source_type === 'group' || chatId < 0;
+  const includeFullGroupThread = row.source_type === 'group';
   const requestRows = [
     ...(Array.isArray(row.open_requests) ? row.open_requests : []).map(request => ({ ...request, status: request.status || 'open' })),
     ...(Array.isArray(row.closed_requests) ? row.closed_requests : []).map(request => ({ ...request, status: request.status || 'closed' }))
@@ -3973,7 +3998,6 @@ function employeeScopedConversation(row = {}, employee = {}) {
   const messages = Array.isArray(row.chat_messages)
     ? row.chat_messages
       .map(message => employeeChatMessageConversationItem(message, employee))
-      .filter(message => employeeScopedMessageVisible(message, employee, requestRows, includeFullGroupThread))
     : (Array.isArray(row.messages) ? row.messages : [])
       .map(message => employeeMessageConversationItem(message, employee))
       .filter(message => messageBelongsToEmployee(message, employee));
@@ -3994,8 +4018,7 @@ const employeeProfileConversation = computed(() => {
   if (!chat) return [];
   const employee = employeeProfile.value.employee || {};
   const conversation = Array.isArray(employeeProfileChatDetail.value.conversation) ? employeeProfileChatDetail.value.conversation : [];
-  const chatId = Number(chat.chat_id || 0);
-  const includeFullGroupThread = chat.source_type === 'group' || chatId < 0;
+  const includeFullGroupThread = chat.source_type === 'group';
   return (conversation.length ? conversation : employeeScopedConversation(chat, employee))
     .filter(message => employeeScopedMessageVisible(message, employee, employeeProfileChatRequests.value, includeFullGroupThread));
 });
@@ -4305,6 +4328,7 @@ function mediaPlaceholder(media) {
   if (mediaErrors.value[media.file_id]) return 'Fayl yuklanmadi';
   if (mediaLoading.value[media.file_id]) return 'Fayl yuklanmoqda...';
   return ({
+    sticker: 'Stikerli xabar',
     photo: 'Rasm',
     video: 'Video',
     video_note: 'Video xabar',
@@ -4313,6 +4337,19 @@ function mediaPlaceholder(media) {
     audio: 'Audio',
     document: media.file_name || 'Fayl'
   }[media.kind] || 'Fayl');
+}
+
+function chatMessageText(message = {}) {
+  const text = String(message?.text || '').trim();
+  if (text) return text;
+  if (message?.media?.kind === 'sticker') return 'Stikerli xabar';
+  return '';
+}
+
+function chatMessageBodyText(message = {}) {
+  const text = String(message?.text || '').trim();
+  if (message?.media?.kind === 'sticker' && text === 'Stikerli xabar') return '';
+  return text;
 }
 
 function clearMediaUrls() {
@@ -4844,7 +4881,14 @@ function chatPreview(row = {}) {
   const openRequest = Array.isArray(row.open_requests) ? row.open_requests[0] : null;
   const closedRequest = Array.isArray(row.closed_requests) ? row.closed_requests[0] : null;
   const message = Array.isArray(row.chat_messages) ? row.chat_messages[0] : (Array.isArray(row.messages) ? row.messages[0] : null);
-  return openRequest?.initial_text || closedRequest?.initial_text || message?.text || 'Yozishma tarixi';
+  return openRequest?.initial_text || closedRequest?.initial_text || chatMessageText(message) || 'Yozishma tarixi';
+}
+
+function groupChatMessages(group = {}) {
+  const rows = Array.isArray(group.chat_messages) && group.chat_messages.length
+    ? group.chat_messages
+    : (Array.isArray(group.messages) ? group.messages : []);
+  return rows;
 }
 
 function shortId(value = '') {
@@ -4897,6 +4941,11 @@ function resetEmployeeProfileChat() {
   employeeProfileChatError.value = '';
   employeeProfileTicketsOpen.value = false;
   employeeProfileChatToken += 1;
+}
+
+function openEmployeeCompanyList() {
+  if (!employeeCompanyDetail.value.companies?.length) return showToast('Bu xodimga biriktirilgan kompaniya topilmadi');
+  modal.value = 'employeeCompanyList';
 }
 
 function setEmployeeProfileTab(tab) {

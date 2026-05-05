@@ -846,6 +846,71 @@ async function testCompanyGroupRequestUsesRegisteredChatCompany() {
   }
 }
 
+async function testGroupStickerMessageStoresReadablePlaceholder() {
+  const originalInsert = supabase.insert;
+  const originalSelect = supabase.select;
+  const originalFetch = global.fetch;
+  const inserted = [];
+  const telegramCalls = [];
+  const chatId = -100461;
+  clearBotSettingsCache();
+
+  supabase.select = async (table) => {
+    if (table === 'bot_settings') return [
+      { key: 'auto_reply', value: { enabled: false } },
+      { key: 'main_group', value: { chat_id: '-100999' } }
+    ];
+    if (table === 'tg_chats') return [{ chat_id: chatId, business_connection_id: null }];
+    if (table === 'employees') return [];
+    if (table === 'support_requests') return [];
+    return [];
+  };
+  supabase.insert = async (table, rows, options = {}) => {
+    inserted.push({ table, rows, options });
+    return rows.map(row => ({ id: `${table}-row`, ...row }));
+  };
+  global.fetch = async (_url, options) => {
+    telegramCalls.push({ url: _url, body: JSON.parse(options.body) });
+    return {
+      ok: true,
+      json: async () => ({ ok: true, result: { message_id: 707 } })
+    };
+  };
+
+  try {
+    const result = await callHandler({
+      update_id: 37,
+      message: {
+        message_id: 137,
+        date: 1777100000,
+        sticker: {
+          file_id: 'sticker-file-id',
+          file_unique_id: 'sticker-unique',
+          type: 'regular',
+          emoji: 'OK'
+        },
+        chat: { id: chatId, type: 'supergroup', title: 'Company support group' },
+        from: { id: 707, first_name: 'Mijoz', is_bot: false }
+      }
+    });
+
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.handled, 'message');
+    const messageInsert = inserted.find(item => item.table === 'messages' && item.rows[0].tg_message_id === 137);
+    assert.ok(messageInsert);
+    assert.strictEqual(messageInsert.rows[0].text, 'Stikerli xabar');
+    assert.strictEqual(messageInsert.rows[0].raw.sticker.file_id, 'sticker-file-id');
+    const notice = telegramCalls.find(call => /sendMessage$/.test(call.url) && String(call.body.chat_id) === '-100999');
+    assert.ok(notice);
+    assert.match(notice.body.text, /Guruh xabari saqlandi/);
+  } finally {
+    supabase.insert = originalInsert;
+    supabase.select = originalSelect;
+    global.fetch = originalFetch;
+    clearBotSettingsCache();
+  }
+}
+
 async function testGroupDoneDoesNotReplyToGroup() {
   const originalInsert = supabase.insert;
   const originalSelect = supabase.select;
@@ -3284,6 +3349,7 @@ async function testConfiguredLogChannelSummarizesLaravelError() {
   await testCompanyGroupMessageSaveFailureNotifiesMainGroup();
   await testPrivateMessageSaveFailureNotifiesMainGroup();
   await testCompanyGroupRequestUsesRegisteredChatCompany();
+  await testGroupStickerMessageStoresReadablePlaceholder();
   await testGroupDoneDoesNotReplyToGroup();
   await testRequestMessageAppendsToExistingOpenRequest();
   await testPrivateGreetingRepliesWithGreeting();

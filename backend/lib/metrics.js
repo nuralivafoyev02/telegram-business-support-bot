@@ -3,12 +3,37 @@
 const supabase = require('./supabase');
 const { tgUserName } = require('./telegram');
 
+const MEDIA_TEXT = Object.freeze({
+  sticker: 'Stikerli xabar',
+  photo: 'Rasmli xabar',
+  video: 'Videoli xabar',
+  voice: 'Ovozli xabar',
+  audio: 'Audio xabar',
+  video_note: 'Video xabar',
+  animation: 'Animatsiyali xabar',
+  document: 'Faylli xabar'
+});
+
 function nowIso() {
   return new Date().toISOString();
 }
 
 function messageDateIso(message = {}) {
   return message.date ? new Date(message.date * 1000).toISOString() : nowIso();
+}
+
+function messageDisplayText(message = {}) {
+  const text = String(message.text || message.caption || '').trim();
+  if (text) return text;
+  if (message.sticker) return MEDIA_TEXT.sticker;
+  if (Array.isArray(message.photo) && message.photo.length) return MEDIA_TEXT.photo;
+  if (message.video) return MEDIA_TEXT.video;
+  if (message.voice) return MEDIA_TEXT.voice;
+  if (message.audio) return MEDIA_TEXT.audio;
+  if (message.video_note) return MEDIA_TEXT.video_note;
+  if (message.animation) return MEDIA_TEXT.animation;
+  if (message.document) return MEDIA_TEXT.document;
+  return '';
 }
 
 function chatTitle(chat = {}, fallback = '') {
@@ -130,7 +155,7 @@ async function saveBusinessConnection(connection = {}) {
 async function saveMessage({ message, updateKind, sourceType, classification, employee }, options = {}) {
   const from = message.from || {};
   const chat = message.chat || {};
-  const text = message.text || message.caption || '';
+  const text = messageDisplayText(message);
   const messageSource = from.is_bot
     ? 'bot_message'
     : employee
@@ -181,7 +206,7 @@ async function findMergeableOpenRequest({ message, sourceType }) {
 async function addRequestNote({ request, message }) {
   const from = message.from || {};
   const chat = message.chat || {};
-  const text = message.text || message.caption || '';
+  const text = messageDisplayText(message);
   const createdAt = messageDateIso(message);
   await supabase.insert('request_events', [{
     request_id: request.id,
@@ -200,7 +225,7 @@ async function addRequestNote({ request, message }) {
 async function createSupportRequest({ message, sourceType, companyId = null }) {
   const from = message.from || {};
   const chat = message.chat || {};
-  const text = message.text || message.caption || '';
+  const text = messageDisplayText(message);
   const createdAt = messageDateIso(message);
 
   const existing = await findMergeableOpenRequest({ message, sourceType });
@@ -304,7 +329,7 @@ async function closeRequestRecord({ request, message, employee }) {
     actor_tg_id: from.id || null,
     actor_name: tgUserName(from),
     employee_id: employee ? employee.id : null,
-    text: message.text || message.caption || '',
+    text: messageDisplayText(message),
     raw: message,
     created_at: closedAt
   }], { prefer: 'return=minimal' }).catch(() => null);
@@ -334,7 +359,7 @@ async function closeLatestRequest({ message, employee, recordMissing = true }) {
       actor_tg_id: from.id || null,
       actor_name: tgUserName(from),
       employee_id: employee ? employee.id : null,
-      text: message.text || message.caption || '',
+      text: messageDisplayText(message),
       raw: message,
       created_at: messageDateIso(message)
     }], { prefer: 'return=minimal' }).catch(() => null);

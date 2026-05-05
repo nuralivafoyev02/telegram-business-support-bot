@@ -1372,6 +1372,14 @@ tbody tr:hover {
   font-weight: 800;
 }
 
+.chat-media-placeholder.sticker {
+  min-width: 150px;
+  min-height: 54px;
+  border-style: solid;
+  color: #d6f7ff;
+  background: rgba(52, 211, 153, .12);
+}
+
 .chat-bubble-footer {
   display: flex;
   align-items: center;
@@ -3655,6 +3663,22 @@ tbody tr:hover {
   font-size: 12px;
 }
 
+.usage-score-cell {
+  display: grid;
+  gap: 2px;
+}
+
+.usage-score-cell b {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.usage-score-cell small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
 .status-pill.new {
   color: var(--warning-text);
   background: var(--warning-soft-bg);
@@ -4070,7 +4094,8 @@ tbody tr:hover {
   margin-top: 7px;
 }
 
-.employee-profile-mini-stats span {
+.employee-profile-mini-stats span,
+.employee-profile-stat-card {
   display: inline-grid;
   grid-template-columns: auto auto;
   align-items: baseline;
@@ -4081,6 +4106,22 @@ tbody tr:hover {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--surface-soft);
+}
+
+.employee-profile-stat-card {
+  color: inherit;
+  cursor: pointer;
+}
+
+.employee-profile-stat-card:hover:not(:disabled),
+.employee-profile-stat-card:focus-visible:not(:disabled) {
+  border-color: rgba(142, 199, 255, .6);
+  background: rgba(142, 199, 255, .12);
+}
+
+.employee-profile-stat-card:disabled {
+  cursor: default;
+  opacity: .72;
 }
 
 .employee-profile-mini-stats small {
