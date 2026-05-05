@@ -2029,6 +2029,7 @@ async function testEmployeesIncludeDailyWorkStats() {
 
   supabase.select = async (table) => {
     if (table === 'employees') return [{ id: 'emp-1', tg_user_id: 777, full_name: 'Ali', username: 'ali', is_active: true }];
+    if (table === 'tg_users') return [{ tg_user_id: 777, raw: { is_premium: true } }];
     if (table === 'support_requests') {
       return [
         { id: 'r1', closed_by_employee_id: 'emp-1', status: 'closed', chat_id: -1001, customer_name: 'Mijoz A', initial_text: 'A', created_at: today, closed_at: closedAt },
@@ -2044,6 +2045,7 @@ async function testEmployeesIncludeDailyWorkStats() {
     const result = await callAdmin('employees');
     assert.strictEqual(result.status, 200);
     const employee = result.payload.data[0];
+    assert.strictEqual(employee.telegram_is_premium, true);
     assert.strictEqual(employee.avg_close_minutes, 10);
     assert.strictEqual(employee.today_received_requests, 2);
     assert.strictEqual(employee.today_answered_requests, 1);
@@ -2113,6 +2115,7 @@ async function testEmployeeActivityReturnsGroupsAndCustomers() {
         { id: 'emp-2', tg_user_id: 888, full_name: 'Vali', username: 'vali', is_active: true }
       ];
     }
+    if (table === 'tg_users') return [{ tg_user_id: 777, raw: { is_premium: true } }];
     if (table === 'support_requests') {
       return [
         {
@@ -2160,6 +2163,7 @@ async function testEmployeeActivityReturnsGroupsAndCustomers() {
   try {
     const result = await callAdmin('employeeActivity', { query: { employee_id: 'emp-1', period: 'all' } });
     assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.data.employee.telegram_is_premium, true);
     assert.strictEqual(result.payload.data.summary.handled_chats, 1);
     assert.strictEqual(result.payload.data.summary.closed_requests, 1);
     assert.strictEqual(result.payload.data.summary.avg_close_minutes, 7);

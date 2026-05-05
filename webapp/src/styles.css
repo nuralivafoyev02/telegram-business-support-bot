@@ -2905,6 +2905,11 @@ body {
   font-weight: 900;
 }
 
+.employee-avatar.premium {
+  border: 2px solid #facc15;
+  box-shadow: 0 0 0 3px rgba(250, 204, 21, .24), 0 0 18px rgba(250, 204, 21, .22);
+}
+
 .employee-cell b,
 .table-strong {
   color: var(--text);
@@ -4023,6 +4028,11 @@ tbody tr:hover {
   background: var(--primary);
   font-size: 26px;
   font-weight: 900;
+}
+
+.employee-profile-avatar.premium {
+  border: 3px solid #facc15;
+  box-shadow: 0 0 0 5px rgba(250, 204, 21, .24), 0 0 24px rgba(250, 204, 21, .24);
 }
 
 .employee-profile-title {

@@ -736,6 +736,27 @@ async function getEmployeeLookup() {
   };
 }
 
+function jsonObject(value) {
+  if (!value || typeof value !== 'object') return {};
+  return value;
+}
+
+function isTelegramPremiumUser(row = {}) {
+  const raw = jsonObject(row.raw);
+  return raw.is_premium === true || raw.is_premium === 'true';
+}
+
+async function getTelegramPremiumMap(tgUserIds = []) {
+  const ids = [...new Set(tgUserIds.map(telegramIdKey).filter(Boolean))];
+  if (!ids.length) return new Map();
+  const rows = await supabase.select('tg_users', {
+    select: 'tg_user_id,raw',
+    tg_user_id: supabase.inList(ids),
+    limit: String(Math.min(Math.max(ids.length, 1), 5000))
+  }).catch(() => []);
+  return new Map(rows.map(row => [telegramIdKey(row.tg_user_id), isTelegramPremiumUser(row)]));
+}
+
 function excludeEmployeeChats(rows = [], employeeTgIds = new Set()) {
   if (!employeeTgIds.size) return rows;
   return rows.filter(row => !(isPrivateLikeChat(row) && employeeTgIds.has(telegramIdKey(row.chat_id))));
@@ -1844,6 +1865,7 @@ async function listEmployees(query) {
 
   const today = tashkentDateKey();
   const chatMap = new Map(chats.map(chat => [telegramIdKey(chat.chat_id), chat]));
+  const premiumByTgId = await getTelegramPremiumMap(employees.map(employee => employee.tg_user_id));
   const isToday = value => value && tashkentDateKey(value) === today;
   const chatTitle = chatId => {
     const chat = chatMap.get(telegramIdKey(chatId));
@@ -1940,6 +1962,7 @@ async function listEmployees(query) {
       .sort((a, b) => (b.message_count + b.closed_count + b.open_count) - (a.message_count + a.closed_count + a.open_count));
     return {
       ...employee,
+      telegram_is_premium: premiumByTgId.get(telegramIdKey(employee.tg_user_id)) === true,
       received_requests: related.length,
       closed_requests: closed.length,
       avg_close_minutes: average(closeMinutes),
@@ -2000,6 +2023,11 @@ async function getEmployeeActivity(query = {}) {
 
   const employee = employeeRows[0] || null;
   if (!employee) throw new Error('Xodim topilmadi');
+  const premiumByTgId = await getTelegramPremiumMap([employee.tg_user_id]);
+  const enrichedEmployee = {
+    ...employee,
+    telegram_is_premium: premiumByTgId.get(telegramIdKey(employee.tg_user_id)) === true
+  };
 
   const keys = currentPeriodKeys();
   const requestSelect = 'id,source_type,chat_id,customer_tg_id,customer_name,customer_username,initial_message_id,initial_text,status,closed_at,closed_by_employee_id,closed_by_tg_id,closed_by_name,done_message_id,created_at';
@@ -2065,9 +2093,9 @@ async function getEmployeeActivity(query = {}) {
     if (!messagesByChat.has(key)) messagesByChat.set(key, []);
     messagesByChat.get(key).push(message);
   });
-  const employeeMaps = buildEmployeeMaps(allEmployees.length ? allEmployees : [employee]);
-  const selectedEmployeeId = String(employee.id || '').trim();
-  const selectedTgUserId = telegramIdKey(employee.tg_user_id);
+  const employeeMaps = buildEmployeeMaps(allEmployees.length ? allEmployees : [enrichedEmployee]);
+  const selectedEmployeeId = String(enrichedEmployee.id || '').trim();
+  const selectedTgUserId = telegramIdKey(enrichedEmployee.tg_user_id);
   const isEmployeePrivateChatId = chatId => {
     const key = telegramIdKey(chatId);
     const chat = chatMap.get(key) || {};
@@ -2282,7 +2310,7 @@ async function getEmployeeActivity(query = {}) {
     .sort((a, b) => (b.closed_count + b.open_count + b.message_count) - (a.closed_count + a.open_count + a.message_count));
 
   return {
-    employee,
+    employee: enrichedEmployee,
     period: periodKey,
     summary: {
       handled_chats: groups.length,
@@ -2981,12 +3009,18 @@ async function upsertEmployee(body) {
   if (tgUserId) values.tg_user_id = tgUserId;
 
   if (tgUserId) {
+    const existingTgUsers = await supabase.select('tg_users', {
+      select: 'raw',
+      tg_user_id: supabase.eq(tgUserId),
+      limit: '1'
+    }).catch(() => []);
+    const existingRaw = jsonObject(existingTgUsers[0]?.raw);
     await supabase.insert('tg_users', [{
       tg_user_id: tgUserId,
       username: values.username,
       first_name: values.full_name,
       last_seen_at: nowIso(),
-      raw: { source: 'admin_employee_bind' }
+      raw: { ...existingRaw, source: 'admin_employee_bind' }
     }], { upsert: true, onConflict: 'tg_user_id' });
   }
 

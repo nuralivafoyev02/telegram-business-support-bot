@@ -253,8 +253,11 @@
                 </template>
                 <template #employeeIdentity="{ row }">
                   <span class="employee-cell">
-                    <img v-if="employeeAvatarUrl(row)" class="employee-avatar" :src="employeeAvatarUrl(row)" alt="" />
-                    <span v-else class="employee-avatar fallback">{{ employeeInitials(row) }}</span>
+                    <img v-if="employeeAvatarUrl(row)" class="employee-avatar"
+                      :class="{ premium: isEmployeePremium(row) }" :data-tooltip="employeePremiumTooltip(row) || null"
+                      :src="employeeAvatarUrl(row)" alt="" />
+                    <span v-else class="employee-avatar fallback" :class="{ premium: isEmployeePremium(row) }"
+                      :data-tooltip="employeePremiumTooltip(row) || null">{{ employeeInitials(row) }}</span>
                     <b>{{ row.full_name || 'Xodim' }}</b>
                   </span>
                 </template>
@@ -1620,8 +1623,12 @@
           <header class="employee-support-head">
             <span class="employee-profile-avatar-wrap">
               <img v-if="employeeAvatarUrl(employeeProfile.employee)" class="employee-profile-avatar"
+                :class="{ premium: isEmployeePremium(employeeProfile.employee) }"
+                :data-tooltip="employeePremiumTooltip(employeeProfile.employee) || null"
                 :src="employeeAvatarUrl(employeeProfile.employee)" alt="" />
-              <span v-else class="employee-profile-avatar fallback">{{ employeeInitials(employeeProfile.employee)
+              <span v-else class="employee-profile-avatar fallback"
+                :class="{ premium: isEmployeePremium(employeeProfile.employee) }"
+                :data-tooltip="employeePremiumTooltip(employeeProfile.employee) || null">{{ employeeInitials(employeeProfile.employee)
                 }}</span>
             </span>
             <div class="employee-profile-title">
@@ -2507,6 +2514,7 @@ function mergeSupportCandidate(map, row = {}, source = 'identity') {
     phone: current.phone || phone || '',
     role: current.role || row.role || 'support',
     full_name: current.full_name || row.full_name || row.closed_by_name || (username ? `@${username}` : '') || phone || 'Xodim',
+    telegram_is_premium: current.telegram_is_premium === true || row.telegram_is_premium === true,
     period_closed_requests: Number(current.period_closed_requests || 0) + periodClosed,
     stats_closed_requests: Number(current.stats_closed_requests || 0) + statsClosed,
     period_open_requests: Number(current.period_open_requests || 0) + periodOpen,
@@ -2561,6 +2569,7 @@ const supportPerformanceRows = computed(() => {
       phone: row.phone || stat.phone || '',
       role: row.role || stat.role || '',
       full_name: row.full_name || stat.full_name || 'Xodim',
+      telegram_is_premium: row.telegram_is_premium === true || stat.telegram_is_premium === true,
       handled_chats: Math.max(
         Number(row.period_handled_chats || row.stats_handled_chats || row.handled_chats || stat.handled_chats || stat.today_written_groups_count || 0),
         Number(openSummary?.chat_keys?.size || 0)
@@ -2784,6 +2793,15 @@ function employeeAvatarUrl(row = {}) {
   row = row || {};
   const key = employeeAvatarKey(row);
   return key ? employeeAvatarUrls.value[key] || '' : '';
+}
+
+function isEmployeePremium(row = {}) {
+  row = row || {};
+  return row.telegram_is_premium === true || row.telegram_premium === true || row.is_premium === true;
+}
+
+function employeePremiumTooltip(row = {}) {
+  return isEmployeePremium(row) ? 'Telegram Premium' : '';
 }
 
 function employeeInitials(row = {}) {
@@ -4926,7 +4944,7 @@ async function openEmployeeCompanies(row = {}) {
     if (loadToken !== employeeProfileLoadToken) return;
     const summary = data.summary || {};
     employeeProfile.value = {
-      employee: data.employee || employee,
+      employee: { ...employee, ...(data.employee || {}) },
       rank: row.rank || null,
       companies,
       summary: {
