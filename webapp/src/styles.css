@@ -3994,8 +3994,9 @@ tbody tr:hover {
 .employee-support-modal {
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr);
-  gap: 12px;
-  max-height: calc(100dvh - 148px);
+  gap: 10px;
+  height: min(760px, calc(100dvh - 148px));
+  max-height: calc(100dvh - 132px);
   min-height: 0;
   overflow: hidden;
 }
@@ -4004,7 +4005,7 @@ tbody tr:hover {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 18px;
+  gap: 14px;
 }
 
 .employee-profile-avatar-wrap {
@@ -4013,8 +4014,8 @@ tbody tr:hover {
 
 .employee-profile-avatar,
 .employee-profile-avatar.fallback {
-  width: 92px;
-  height: 92px;
+  width: 76px;
+  height: 76px;
   border-radius: var(--radius);
   border: 1px solid var(--line);
   object-fit: cover;
@@ -4032,7 +4033,7 @@ tbody tr:hover {
 
 .employee-profile-avatar.premium {
   border: 3px solid #facc15;
-  box-shadow: 0 0 0 5px rgba(250, 204, 21, .24), 0 0 24px rgba(250, 204, 21, .24);
+  box-shadow: 0 0 0 4px rgba(250, 204, 21, .22), 0 0 20px rgba(250, 204, 21, .22);
 }
 
 .employee-profile-title {
@@ -4042,7 +4043,7 @@ tbody tr:hover {
 .employee-profile-title h2 {
   margin: 0;
   color: var(--text);
-  font-size: 26px;
+  font-size: 22px;
   line-height: 1.15;
   font-weight: 900;
 }
@@ -4050,9 +4051,9 @@ tbody tr:hover {
 .employee-profile-title p,
 .employee-profile-title span {
   display: block;
-  margin: 7px 0 0;
+  margin: 4px 0 0;
   color: var(--muted-strong);
-  font-size: 16px;
+  font-size: 14px;
 }
 
 .employee-profile-title span {
@@ -4065,18 +4066,18 @@ tbody tr:hover {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 10px;
+  gap: 6px;
+  margin-top: 7px;
 }
 
 .employee-profile-mini-stats span {
   display: inline-grid;
   grid-template-columns: auto auto;
   align-items: baseline;
-  gap: 7px;
-  min-height: 30px;
+  gap: 6px;
+  min-height: 26px;
   margin: 0;
-  padding: 5px 9px;
+  padding: 3px 8px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--surface-soft);
@@ -4098,16 +4099,16 @@ tbody tr:hover {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
 .profile-pill {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  min-height: 36px;
-  padding: 7px 12px;
+  gap: 6px;
+  min-height: 32px;
+  padding: 5px 10px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   color: var(--muted-strong);
@@ -4152,21 +4153,21 @@ tbody tr:hover {
 .employee-chat-tabs {
   display: flex;
   align-items: center;
-  gap: 26px;
+  gap: 18px;
   border-bottom: 1px solid var(--line);
 }
 
 .employee-chat-tabs button {
   display: inline-flex;
   align-items: center;
-  gap: 9px;
-  min-height: 44px;
+  gap: 7px;
+  min-height: 36px;
   border: 0;
   border-bottom: 3px solid transparent;
   border-radius: var(--radius);
   color: var(--muted-strong);
   background: transparent;
-  padding: 0 16px;
+  padding: 0 12px;
   font-weight: 900;
 }
 
@@ -4178,8 +4179,8 @@ tbody tr:hover {
 .employee-chat-tabs span {
   display: inline-grid;
   place-items: center;
-  min-width: 24px;
-  height: 24px;
+  min-width: 22px;
+  height: 22px;
   border-radius: var(--radius);
   background: #e8f1ff;
   color: var(--primary);
@@ -4196,6 +4197,11 @@ tbody tr:hover {
   overflow: hidden;
 }
 
+.employee-support-modal .employee-chat-layout {
+  height: auto;
+  min-height: 0;
+}
+
 .employee-chat-list-panel {
   display: flex;
   flex-direction: column;
@@ -4208,20 +4214,20 @@ tbody tr:hover {
 
 .employee-chat-list-head {
   display: grid;
-  gap: 6px;
-  padding: 18px 20px;
+  gap: 4px;
+  padding: 12px 16px;
   border-bottom: 1px solid var(--line);
 }
 
 .employee-chat-list-head b {
   color: var(--text);
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 900;
 }
 
 .employee-chat-list-head span {
   color: var(--muted);
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .employee-chat-list {
@@ -4238,16 +4244,16 @@ tbody tr:hover {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   width: 100%;
-  height: 112px;
-  min-height: 112px;
+  height: 78px;
+  min-height: 78px;
   border: 0;
   border-bottom: 1px solid var(--line);
   border-radius: var(--radius);
   color: var(--text);
   background: transparent;
-  padding: 12px 18px;
+  padding: 8px 14px;
   overflow: hidden;
   text-align: left;
 }
@@ -4270,8 +4276,8 @@ tbody tr:hover {
 .employee-chat-mini-avatar {
   display: inline-grid;
   place-items: center;
-  width: 48px;
-  height: 48px;
+  width: 40px;
+  height: 40px;
   border: 1px solid color-mix(in srgb, var(--primary) 28%, var(--line));
   border-radius: 50%;
   color: var(--primary-contrast);
@@ -4311,19 +4317,19 @@ tbody tr:hover {
 
 .employee-chat-list b {
   color: var(--text);
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 900;
   white-space: nowrap;
 }
 
 .employee-chat-list small {
-  margin-top: 6px;
+  margin-top: 3px;
   color: var(--muted-strong);
   display: -webkit-box;
-  line-height: 1.35;
-  max-height: 38px;
+  line-height: 1.25;
+  max-height: 18px;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 1;
   white-space: normal;
   overflow-wrap: anywhere;
   word-break: break-word;
@@ -4331,9 +4337,9 @@ tbody tr:hover {
 }
 
 .employee-chat-list em {
-  margin-top: 6px;
+  margin-top: 3px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
   font-style: normal;
   white-space: nowrap;
 }
@@ -4341,12 +4347,12 @@ tbody tr:hover {
 .employee-chat-list strong {
   display: inline-grid;
   place-items: center;
-  min-width: 30px;
-  height: 30px;
+  min-width: 26px;
+  height: 26px;
   border-radius: var(--radius);
   color: #fff;
   background: var(--primary);
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .employee-chat-pane {
@@ -4363,7 +4369,7 @@ tbody tr:hover {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 16px 20px;
+  padding: 10px 14px;
   border-bottom: 1px solid var(--line);
 }
 
@@ -4380,15 +4386,15 @@ tbody tr:hover {
 
 .employee-chat-pane-head b {
   color: var(--text);
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 900;
   white-space: nowrap;
 }
 
 .employee-chat-pane-head span {
-  margin-top: 5px;
+  margin-top: 3px;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .employee-chat-pane-head .btn {
@@ -4397,12 +4403,12 @@ tbody tr:hover {
 
 .employee-ticket-strip {
   display: grid;
-  gap: 10px;
+  gap: 8px;
   flex: 0 0 auto;
-  max-height: 190px;
+  max-height: 150px;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 14px 20px;
+  padding: 10px 14px;
   border-bottom: 1px solid var(--line);
   background: var(--surface-soft);
 }
@@ -4410,8 +4416,8 @@ tbody tr:hover {
 .employee-ticket-strip article {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 8px 12px;
-  padding: 12px;
+  gap: 6px 10px;
+  padding: 9px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--surface);
@@ -4449,7 +4455,7 @@ tbody tr.open-ticket-row:hover {
   grid-column: 1 / -1;
   margin: 0;
   color: var(--muted-strong);
-  line-height: 1.45;
+  line-height: 1.35;
   overflow-wrap: anywhere;
 }
 
@@ -4483,6 +4489,17 @@ tbody tr.open-ticket-row:hover {
   max-height: none;
   overflow-y: auto;
   overscroll-behavior: contain;
+}
+
+.employee-profile-thread.telegram-thread {
+  gap: 6px;
+  padding: 12px;
+}
+
+.employee-profile-thread .chat-media-image,
+.employee-profile-thread .chat-media-video {
+  width: min(320px, 100%);
+  max-height: min(300px, 42vh);
 }
 
 tbody tr.selected-row,
