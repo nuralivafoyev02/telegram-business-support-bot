@@ -2080,7 +2080,7 @@ async function getEmployeeActivity(query = {}) {
       selectPagedByChunks('messages', {
         select: 'id,tg_message_id,chat_id,from_tg_user_id,from_name,from_username,employee_id,source_type,classification,text,raw,created_at',
         order: supabase.order('created_at', false)
-      }, 'chat_id', chatIds, { maxRows: 40000 }),
+      }, 'chat_id', chatIds, { maxRows: 80000 }),
       selectPaged('employees', {
         select: 'id,tg_user_id,full_name,username,role,is_active',
       }, { maxRows: 10000 })
@@ -2318,6 +2318,7 @@ async function getEmployeeActivity(query = {}) {
       closed_requests: visibleClosedRequests.length,
       open_requests: visibleOpenRequests.length,
       avg_close_minutes: average(visibleCloseMinutes),
+      company_total: new Set(chats.map(chat => chat.company_id).filter(Boolean)).size,
       customer_count: new Set([...visibleClosedRequests, ...visibleOpenRequests].map(request => request.customer_tg_id || request.customer_name).filter(Boolean)).size
     },
     groups,

@@ -3962,7 +3962,8 @@ function employeeScopedMessageVisible(message = {}, employee = {}, requests = []
 }
 
 function employeeScopedConversation(row = {}, employee = {}) {
-  const includeFullGroupThread = row.source_type === 'group';
+  const chatId = Number(row.chat_id || 0);
+  const includeFullGroupThread = row.source_type === 'group' || chatId < 0;
   const requestRows = [
     ...(Array.isArray(row.open_requests) ? row.open_requests : []).map(request => ({ ...request, status: request.status || 'open' })),
     ...(Array.isArray(row.closed_requests) ? row.closed_requests : []).map(request => ({ ...request, status: request.status || 'closed' }))
@@ -3993,7 +3994,8 @@ const employeeProfileConversation = computed(() => {
   if (!chat) return [];
   const employee = employeeProfile.value.employee || {};
   const conversation = Array.isArray(employeeProfileChatDetail.value.conversation) ? employeeProfileChatDetail.value.conversation : [];
-  const includeFullGroupThread = chat.source_type === 'group';
+  const chatId = Number(chat.chat_id || 0);
+  const includeFullGroupThread = chat.source_type === 'group' || chatId < 0;
   return (conversation.length ? conversation : employeeScopedConversation(chat, employee))
     .filter(message => employeeScopedMessageVisible(message, employee, employeeProfileChatRequests.value, includeFullGroupThread));
 });
