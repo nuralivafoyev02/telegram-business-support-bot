@@ -260,21 +260,26 @@
                 </template>
                 <template #closedRequests="{ row }">
                   <div class="trend-cell">
-                    <b class="table-strong">{{ fmtNumber(row.closed_requests) }}</b>
+                    <b class="table-strong">{{ (comparisonEnabled && row.closed_comparison) ? row.closed_comparison.percentText : fmtNumber(row.closed_requests) }}</b>
                     <span v-if="comparisonEnabled && row.closed_comparison" class="trend-label" :class="row.closed_comparison.tone">
                       {{ row.closed_comparison.text }}
                     </span>
                   </div>
                 </template>
                 <template #openRequests="{ row }">
-                  <span class="open-count"
-                    :class="{ warn: Number(row.open_requests || 0) >= 5, danger: Number(row.open_requests || 0) >= 8 }">
-                    {{ fmtNumber(row.open_requests) }}
-                  </span>
+                  <div class="trend-cell">
+                    <span class="open-count"
+                      :class="{ warn: Number(row.open_requests || 0) >= 5, danger: Number(row.open_requests || 0) >= 8 }">
+                      {{ (comparisonEnabled && row.open_comparison) ? row.open_comparison.percentText : fmtNumber(row.open_requests) }}
+                    </span>
+                    <span v-if="comparisonEnabled && row.open_comparison" class="trend-label" :class="row.open_comparison.tone">
+                      {{ row.open_comparison.text }}
+                    </span>
+                  </div>
                 </template>
                 <template #closeRate="{ row }">
                   <div class="trend-cell">
-                    <b class="table-strong">{{ fmtPercent(row.close_rate) }}</b>
+                    <b class="table-strong">{{ (comparisonEnabled && row.sla_comparison) ? row.sla_comparison.percentText : fmtPercent(row.close_rate) }}</b>
                     <span v-if="comparisonEnabled && row.sla_comparison" class="trend-label" :class="row.sla_comparison.tone">
                       {{ row.sla_comparison.text }}
                     </span>
@@ -282,7 +287,7 @@
                 </template>
                 <template #avgTime="{ row }">
                   <div class="trend-cell">
-                    <span>{{ fmtMinutes(row.avg_close_minutes) }}</span>
+                    <b class="table-strong">{{ (comparisonEnabled && row.avg_comparison) ? row.avg_comparison.percentText : fmtMinutes(row.avg_close_minutes) }}</b>
                     <span v-if="comparisonEnabled && row.avg_comparison" class="trend-label" :class="row.avg_comparison.tone">
                       {{ row.avg_comparison.text }}
                     </span>
@@ -2326,8 +2331,8 @@ const supportSummaryCards = computed(() => {
     {
       key: 'requests',
       title: selectedStatsPeriod.value === 'today' ? 'Bugungi so‘rovlar' : `${selectedPeriodLabel.value} so‘rovlar`,
-      value: fmtNumber(stats.total_requests),
-      note: `${fmtNumber(stats.unique_customers)} ta mijozdan kelgan`,
+      value: comparisonEnabled.value ? (compareValue(stats.total_requests, stats.prev_total_requests)?.percentText || fmtNumber(stats.total_requests)) : fmtNumber(stats.total_requests),
+      note: comparisonEnabled.value ? `Oldingi: ${fmtNumber(stats.prev_total_requests || 0)}` : `${fmtNumber(stats.unique_customers)} ta mijozdan kelgan`,
       icon: '🎫',
       action: 'requests',
       comparison: comparisonEnabled.value ? compareValue(stats.total_requests, stats.prev_total_requests) : null
@@ -2335,8 +2340,8 @@ const supportSummaryCards = computed(() => {
     {
       key: 'closed',
       title: 'Javob berilgan',
-      value: fmtNumber(stats.closed_requests),
-      note: `${fmtPercent(stats.close_rate)} so‘rov yopilgan`,
+      value: comparisonEnabled.value ? (compareValue(stats.closed_requests, stats.prev_closed_requests)?.percentText || fmtNumber(stats.closed_requests)) : fmtNumber(stats.closed_requests),
+      note: comparisonEnabled.value ? `Oldingi: ${fmtNumber(stats.prev_closed_requests || 0)}` : `${fmtPercent(stats.close_rate)} so‘rov yopilgan`,
       icon: '✅',
       action: 'closed',
       comparison: comparisonEnabled.value ? compareValue(stats.closed_requests, stats.prev_closed_requests) : null
@@ -2344,20 +2349,21 @@ const supportSummaryCards = computed(() => {
     {
       key: 'open',
       title: 'Javobsiz',
-      value: fmtNumber(stats.open_requests),
-      note: `${fmtNumber(overdueOpenRequestsTotal.value)} tasi 30 daqiqadan oshgan`,
+      value: comparisonEnabled.value ? (compareValue(stats.open_requests, stats.prev_open_requests)?.percentText || fmtNumber(stats.open_requests)) : fmtNumber(stats.open_requests),
+      note: comparisonEnabled.value ? `Oldingi: ${fmtNumber(stats.prev_open_requests || 0)}` : `${fmtNumber(overdueOpenRequestsTotal.value)} tasi 30 daqiqadan oshgan`,
       icon: '⚠️',
       tone: 'danger',
-      action: 'open'
+      action: 'open',
+      comparison: comparisonEnabled.value ? compareValue(stats.open_requests, stats.prev_open_requests, true) : null
     },
     {
       key: 'avg',
       title: 'O‘rtacha javob',
-      value: fmtMinutes(stats.avg_close_minutes),
-      note: `SLA: ${fmtPercent(stats.close_rate)}`,
+      value: comparisonEnabled.value ? (compareValue(stats.avg_close_minutes, stats.prev_avg_close_minutes, true)?.percentText || fmtMinutes(stats.avg_close_minutes)) : fmtMinutes(stats.avg_close_minutes),
+      note: comparisonEnabled.value ? `Oldingi: ${fmtMinutes(stats.prev_avg_close_minutes || 0)}` : `SLA: ${fmtPercent(stats.close_rate)}`,
       icon: '⏱️',
       action: 'avg',
-      comparison: comparisonEnabled.value ? compareValue(stats.prev_avg_close_minutes, stats.avg_close_minutes) : null // Lower is better for time
+      comparison: comparisonEnabled.value ? compareValue(stats.avg_close_minutes, stats.prev_avg_close_minutes, true) : null // Lower is better for time
     }
   ];
 
@@ -2927,6 +2933,8 @@ function compareValue(current, previous, invert = false) {
     return {
       text: `${arrow} ${diffText}`,
       diff: diffText,
+      percent: 100,
+      percentText: diff > 0 ? '+100%' : (diff < 0 ? '-100%' : '0%'),
       tone
     };
   }
@@ -2936,6 +2944,8 @@ function compareValue(current, previous, invert = false) {
   return {
     text: `${arrow} ${sign}${percent}% (${diffText})`,
     diff: diffText,
+    percent: percent,
+    percentText: `${sign}${percent}%`,
     tone
   };
 }
@@ -3504,6 +3514,7 @@ const topSupportCards = computed(() => supportPerformanceRows.value.map((row, in
     company_expiring_soon: companySummary.expiring_soon,
     // Comparison metrics
     closed_comparison: comparisonEnabled.value ? compareValue(row.closed_requests, row.prev_closed_requests) : null,
+    open_comparison: comparisonEnabled.value ? compareValue(row.open_requests, row.prev_open_requests, true) : null,
     sla_comparison: comparisonEnabled.value ? compareValue(row.sla, row.prev_close_rate) : null,
     avg_comparison: comparisonEnabled.value ? compareValue(row.avg_close_minutes, row.prev_avg_close_minutes, true) : null
   };
