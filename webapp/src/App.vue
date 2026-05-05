@@ -247,10 +247,10 @@
               </div>
 
               <DataTable :columns="supportPerformanceColumns" :rows="topSupportCards"
-                empty="Hozircha natija ma’muoti yo‘q" :on-cell-action="handleTableCellAction" 
+                empty="Hozircha natija ma’lumoti yo‘q" :on-cell-action="handleTableCellAction" 
                 :row-class="supportPerformanceRowClass" :page-size="12">
                 <template #rank="{ row }">
-                  <span class="rank-number">{{ row.rank }}</span>
+                  <b class="rank-number">{{ row.rank }}</b>
                 </template>
                 <template #employeeIdentity="{ row }">
                   <span class="employee-cell">
@@ -261,45 +261,45 @@
                 </template>
                 <template #closedRequests="{ row }">
                   <div class="trend-cell">
-                    <b class="table-strong">{{ (comparisonEnabled && row.closed_comparison) ? row.closed_comparison.percentText : fmtNumber(row.closed_requests) }}</b>
+                    <b class="table-strong">{{ fmtNumber(row.closed_requests || 0) }} ta</b>
                     <span v-if="comparisonEnabled && row.closed_comparison" class="trend-label" :class="row.closed_comparison.tone">
-                      {{ row.closed_comparison.text }}
+                      {{ row.closed_comparison.percentText }} ({{ row.closed_comparison.diff }})
                     </span>
                   </div>
                 </template>
                 <template #openRequests="{ row }">
                   <div class="trend-cell">
-                    <span class="table-strong" :class="{ 'text-muted': !row.open_requests }">
-                      {{ (comparisonEnabled && row.open_comparison) ? row.open_comparison.percentText : fmtNumber(row.open_requests) }}
-                    </span>
+                    <b class="table-strong" :class="{ 'text-muted': !row.open_requests }">
+                      {{ fmtNumber(row.open_requests || 0) }} ta
+                    </b>
                     <span v-if="comparisonEnabled && row.open_comparison" class="trend-label" :class="row.open_comparison.tone">
-                      {{ row.open_comparison.diff }}
+                      {{ row.open_comparison.percentText }} ({{ row.open_comparison.diff }})
                     </span>
                   </div>
                 </template>
                 <template #closeRate="{ row }">
                   <div class="trend-cell">
-                    <b class="table-strong">{{ (comparisonEnabled && row.sla_comparison) ? row.sla_comparison.percentText : pct(row) }}</b>
+                    <b class="table-strong">{{ pct(row) }}</b>
                     <span v-if="comparisonEnabled && row.sla_comparison" class="trend-label" :class="row.sla_comparison.tone">
-                      {{ row.sla_comparison.diff }}
+                      {{ row.sla_comparison.percentText }}
                     </span>
                   </div>
                 </template>
                 <template #avgTime="{ row }">
                   <div class="trend-cell">
-                    <b class="table-strong">{{ (comparisonEnabled && row.avg_comparison) ? row.avg_comparison.percentText : fmtMinutes(row.avg_close_minutes) }}</b>
+                    <b class="table-strong">{{ fmtMinutes(row.avg_close_minutes) }}</b>
                     <span v-if="comparisonEnabled && row.avg_comparison" class="trend-label" :class="row.avg_comparison.tone">
-                      {{ fmtMinutes(row.avg_close_minutes) }} ({{ row.avg_comparison.diff }})
+                      {{ row.avg_comparison.percentText }} ({{ row.avg_comparison.diff }})
                     </span>
                   </div>
                 </template>
                 <template #sla="{ row }">
                   <div class="trend-cell">
                     <div class="sla-badge" :class="slaClass(row.sla)">
-                      {{ (comparisonEnabled && row.sla_comparison) ? row.sla_comparison.percentText : fmtPercent(row.sla) }}
+                      {{ fmtPercent(row.sla) }}
                     </div>
                     <span v-if="comparisonEnabled && row.sla_comparison" class="trend-label" :class="row.sla_comparison.tone">
-                      {{ row.sla_comparison.diff }}
+                      {{ row.sla_comparison.percentText }}
                     </span>
                   </div>
                 </template>
