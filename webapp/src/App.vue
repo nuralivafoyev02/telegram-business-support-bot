@@ -297,6 +297,7 @@
                   </div>
                 </template>
                 <template #sla="{ row }">
+<<<<<<< HEAD
                   <div class="trend-cell">
                     <div class="sla-badge" :class="slaClass(row.sla)">
                       {{ fmtPercent(row.sla) }}
@@ -305,6 +306,10 @@
                       {{ row.sla_comparison.percentText }}
                     </span>
                   </div>
+=======
+                  <span class="sla-badge sla-tooltip" :class="slaClass(row.sla)"
+                    :data-tooltip="employeeSlaTooltip(row)" tabindex="0">{{ fmtPercent(row.sla) }}</span>
+>>>>>>> 8c68077 (refactor: rename slaToneClass to slaClass and add error handling for DataTable slots)
                 </template>
               </DataTable>
             </section>
@@ -331,7 +336,7 @@
                     </div>
                     <b>{{ row.weekday_label }}</b>
                     <span>{{ row.date_label }}</span>
-                    <em class="sla-chip" :class="slaToneClass(row.sla)">SLA {{ fmtPercent(row.sla) }}</em>
+                    <em class="sla-chip" :class="slaClass(row.sla)">SLA {{ fmtPercent(row.sla) }}</em>
                   </article>
                 </div>
                 <div v-else class="empty compact">Bu davr uchun trend ma’lumoti yo‘q</div>
@@ -2896,6 +2901,10 @@ function slaToneClass(value = 0) {
   if (numeric >= 85) return 'good';
   if (numeric >= 75) return 'warn';
   return 'bad';
+}
+
+function slaClass(value = 0) {
+  return slaToneClass(value);
 }
 
 function employeeSlaTooltip(row = {}) {
@@ -6285,8 +6294,7 @@ const DataTable = defineComponent({
       event.preventDefault();
       props.onCellAction({ action, row, column, event });
     };
-    const renderValue = (column, row) => {
-      if (column.slot && slots[column.slot]) return slots[column.slot]({ row });
+    const renderPlainValue = (column, row) => {
       const value = row[column.key];
       const text = column.format ? column.format(value, row) : (value ?? '—');
       if (column.badge) {
@@ -6305,6 +6313,20 @@ const DataTable = defineComponent({
         ]);
       }
       return h('span', text);
+    };
+    const renderValue = (column, row) => {
+      if (column.slot && slots[column.slot]) {
+        try {
+          return slots[column.slot]({ row });
+        } catch (error) {
+          console.error('[webapp:data-table:slot-error]', {
+            slot: column.slot,
+            key: column.key,
+            error: error && error.message ? error.message : String(error || 'Unknown error')
+          });
+        }
+      }
+      return renderPlainValue(column, row);
     };
     const renderHeader = column => {
       if (!column.tooltip) return column.label;
