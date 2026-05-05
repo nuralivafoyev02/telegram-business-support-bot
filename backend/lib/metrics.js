@@ -69,11 +69,22 @@ async function ensureEmployee(user = {}) {
 
 async function upsertChat(chat = {}, sourceType = 'group', extra = {}, options = {}) {
   if (!chat || chat.id === undefined || chat.id === null) return null;
-  const existingRows = await supabase.select('tg_chats', {
-    select: 'chat_id,title,username,type,company_id,business_connection_id',
-    chat_id: supabase.eq(chat.id),
-    limit: '1'
-  }).catch(() => []);
+  let existingRows = [];
+  try {
+    existingRows = await supabase.select('tg_chats', {
+      select: 'chat_id,title,username,type,company_id,business_connection_id',
+      chat_id: supabase.eq(chat.id),
+      limit: '1'
+    });
+  } catch (error) {
+    if (typeof options.onReadError === 'function') {
+      try {
+        await options.onReadError(error);
+      } catch (_notifyError) {
+        // Notification is best-effort; saving the incoming message can still continue.
+      }
+    }
+  }
   const existing = existingRows[0] || {};
   const title = chatTitle(chat, existing.title || '');
   const row = {
