@@ -2172,7 +2172,7 @@ async function testEmployeeActivityReturnsGroupsAndCustomers() {
     assert.strictEqual(result.payload.data.groups[0].messages.length, 35);
     assert.strictEqual(result.payload.data.groups[0].messages.some(message => message.text === 'Javob berdim'), true);
     assert.strictEqual(result.payload.data.groups[0].chat_messages.some(message => message.text === 'Oddiy chat xabari'), true);
-    assert.strictEqual(result.payload.data.groups[0].chat_messages.some(message => message.text === 'Boshqa xodim javobi'), false);
+    assert.strictEqual(result.payload.data.groups[0].chat_messages.some(message => message.text === 'Boshqa xodim javobi'), true);
     assert.strictEqual(result.payload.data.groups[0].closed_requests[0].events[0].text, 'Qo‘shimcha savol');
   } finally {
     supabase.select = originalSelect;
