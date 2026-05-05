@@ -1394,7 +1394,8 @@
                               {{ mediaPlaceholder(message.media) }}
                             </div>
                           </div>
-                          <p v-if="chatMessageBodyText(message)">{{ chatMessageBodyText(message) }}</p>
+                          <div v-if="chatMessageBodyText(message)" class="chat-message-text"
+                            v-html="chatMessageHtml(message)"></div>
                           <div class="chat-bubble-footer">
                             <span v-if="message.request_text" class="chat-ticket">So‘rov</span>
                             <span class="chat-source">{{ messageSourceLabel(message) }}</span>
@@ -1562,7 +1563,8 @@
                               {{ mediaPlaceholder(message.media) }}
                             </div>
                           </div>
-                          <p v-if="chatMessageBodyText(message)">{{ chatMessageBodyText(message) }}</p>
+                          <div v-if="chatMessageBodyText(message)" class="chat-message-text"
+                            v-html="chatMessageHtml(message)"></div>
                           <div class="chat-bubble-footer">
                             <span v-if="message.request_text" class="chat-ticket">Ticket</span>
                             <span class="chat-source">{{ messageSourceLabel(message) }}</span>
@@ -1797,7 +1799,8 @@
                               {{ mediaPlaceholder(message.media) }}
                             </div>
                           </div>
-                          <p v-if="chatMessageBodyText(message)">{{ chatMessageBodyText(message) }}</p>
+                          <div v-if="chatMessageBodyText(message)" class="chat-message-text"
+                            v-html="chatMessageHtml(message)"></div>
                           <div class="chat-bubble-footer">
                             <span v-if="message.request_text" class="chat-ticket">So‘rov</span>
                             <span class="chat-source">{{ messageSourceLabel(message) }}</span>
@@ -2007,7 +2010,8 @@
                         {{ mediaPlaceholder(message.media) }}
                       </div>
                     </div>
-                    <p v-if="chatMessageBodyText(message)">{{ chatMessageBodyText(message) }}</p>
+                    <div v-if="chatMessageBodyText(message)" class="chat-message-text"
+                      v-html="chatMessageHtml(message)"></div>
                     <div class="chat-bubble-footer">
                       <span v-if="message.request_text" class="chat-ticket">So‘rov</span>
                       <span class="chat-source">{{ messageSourceLabel(message) }}</span>
@@ -4347,6 +4351,64 @@ function chatMessageBodyText(message = {}) {
   const text = String(message?.text || '').trim();
   if (message?.media?.kind === 'sticker' && text === 'Stikerli xabar') return '';
   return text;
+}
+
+const allowedChatHtmlTags = new Set(['B', 'STRONG', 'I', 'EM', 'U', 'INS', 'S', 'STRIKE', 'DEL', 'CODE', 'PRE', 'BR', 'A']);
+
+function escapeHtmlText(value = '') {
+  return String(value || '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+function sanitizeChatHtml(raw = '') {
+  const text = String(raw || '');
+  if (typeof document === 'undefined') {
+    return escapeHtmlText(text).replace(/\n/g, '<br>');
+  }
+  const template = document.createElement('template');
+  template.innerHTML = text;
+  const sanitizeNode = node => {
+    if (node.nodeType === Node.TEXT_NODE) return;
+    if (node.nodeType !== Node.ELEMENT_NODE) {
+      node.remove();
+      return;
+    }
+    const tag = node.tagName;
+    if (!allowedChatHtmlTags.has(tag)) {
+      Array.from(node.childNodes).forEach(sanitizeNode);
+      const fragment = document.createDocumentFragment();
+      while (node.firstChild) fragment.appendChild(node.firstChild);
+      node.replaceWith(fragment);
+      return;
+    }
+    Array.from(node.attributes || []).forEach(attribute => {
+      const name = attribute.name.toLowerCase();
+      if (tag === 'A' && name === 'href') {
+        try {
+          const url = new URL(attribute.value, window.location.origin);
+          if (['http:', 'https:', 'mailto:', 'tg:'].includes(url.protocol)) return;
+        } catch (_error) {
+          // Drop unsafe or malformed URLs.
+        }
+      }
+      node.removeAttribute(attribute.name);
+    });
+    if (tag === 'A') {
+      node.setAttribute('target', '_blank');
+      node.setAttribute('rel', 'noopener noreferrer');
+    }
+    Array.from(node.childNodes).forEach(sanitizeNode);
+  };
+  Array.from(template.content.childNodes).forEach(sanitizeNode);
+  return template.innerHTML.replace(/\n/g, '<br>');
+}
+
+function chatMessageHtml(message = {}) {
+  return sanitizeChatHtml(chatMessageBodyText(message));
 }
 
 function clearMediaUrls() {

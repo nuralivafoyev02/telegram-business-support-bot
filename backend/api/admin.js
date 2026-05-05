@@ -828,6 +828,63 @@ async function enrichChatsWithMessageStats(rows = []) {
   });
 }
 
+function externalGroupListRows(snapshot = {}) {
+  return externalCompanyActivityRows(snapshot).flatMap(company => (company.groups || []).map(group => {
+    const lastMessage = (group.conversation || []).slice().sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))[0] || {};
+    return {
+      chat_id: group.chat_id,
+      title: group.title,
+      username: group.username || '',
+      type: 'supergroup',
+      source_type: 'group',
+      company_id: group.company_id || company.company_id || null,
+      company_name: company.name || group.company_name || '',
+      is_active: true,
+      last_message_at: group.last_message_at || lastMessage.created_at || null,
+      message_count: Number(group.total_messages || 0),
+      total_messages: Number(group.total_messages || 0),
+      total_requests: Number(group.total_requests || 0),
+      closed_requests: Number(group.closed_requests || 0),
+      open_requests: Number(group.open_requests || 0),
+      last_message_text: lastMessage.text || '',
+      last_message_from: lastMessage.actor_name || '',
+      external: true
+    };
+  }));
+}
+
+function mergeGroupListRows(localRows = [], externalRows = []) {
+  const rows = new Map();
+  localRows.forEach(row => {
+    const key = telegramIdKey(row.chat_id) || String(row.title || '').trim();
+    if (key) rows.set(key, row);
+  });
+  externalRows.forEach(row => {
+    const key = telegramIdKey(row.chat_id) || String(row.title || '').trim();
+    if (!key) return;
+    const current = rows.get(key);
+    if (!current) {
+      rows.set(key, row);
+      return;
+    }
+    rows.set(key, {
+      ...row,
+      ...current,
+      company_id: current.company_id || row.company_id || null,
+      company_name: current.company_name || row.company_name || '',
+      message_count: Math.max(Number(current.message_count || 0), Number(row.message_count || 0)),
+      total_messages: Math.max(Number(current.total_messages || 0), Number(row.total_messages || 0)),
+      total_requests: Math.max(Number(current.total_requests || 0), Number(row.total_requests || 0)),
+      closed_requests: Math.max(Number(current.closed_requests || 0), Number(row.closed_requests || 0)),
+      open_requests: Math.max(Number(current.open_requests || 0), Number(row.open_requests || 0)),
+      last_message_text: current.last_message_text || row.last_message_text || '',
+      last_message_from: current.last_message_from || row.last_message_from || '',
+      last_message_at: latestTimestamp(current.last_message_at, row.last_message_at)
+    });
+  });
+  return [...rows.values()].sort((a, b) => String(b.last_message_at || '').localeCompare(String(a.last_message_at || '')));
+}
+
 function buildEmployeeMaps(employees = []) {
   return {
     byId: new Map(employees.map(employee => [employee.id, employee]).filter(([id]) => id)),
@@ -1375,7 +1432,14 @@ async function listGroups(query) {
     order: supabase.order(query.orderBy || 'last_message_at', false),
     limit: limitQuery(query)
   });
-  return enrichChatsWithMessageStats(rows);
+  const [enrichedRows, cachedCompanyInfo] = await Promise.all([
+    enrichChatsWithMessageStats(rows),
+    getCachedCompanyInfo().catch(() => null)
+  ]);
+  const mergedRows = cachedCompanyInfo
+    ? mergeGroupListRows(enrichedRows, externalGroupListRows(cachedCompanyInfo))
+    : enrichedRows;
+  return mergedRows.slice(0, parseIntSafe(limitQuery(query), 500));
 }
 
 async function listPrivateChats(query) {
@@ -1538,6 +1602,221 @@ function queryPeriodContext(query = {}) {
       customEnd: customPeriod?.end || ''
     }
   };
+}
+
+function normalizeExternalActivityMessage(message = {}, group = {}) {
+  const origin = String(message.origin_type || message.actor_type || '').trim() || (message.direction === 'outbound' ? 'employee' : 'customer');
+  return {
+    id: message.id || null,
+    message_id: message.message_id || message.tg_message_id || null,
+    chat_id: message.chat_id || group.chat_id,
+    direction: message.direction || (['admin', 'ai', 'bot', 'employee'].includes(origin) ? 'outbound' : 'inbound'),
+    actor_type: origin,
+    origin_type: origin,
+    source_label: message.source_label || messageOriginLabel(origin),
+    actor_name: message.actor_name || message.from_name || message.sender_name || messageOriginLabel(origin),
+    actor_username: message.actor_username || message.from_username || message.username || '',
+    actor_tg_user_id: message.actor_tg_user_id || message.from_tg_user_id || null,
+    employee_id: message.employee_id || null,
+    text: message.text || '',
+    media: message.media || null,
+    request_id: message.request_id || null,
+    request_text: message.request_text || '',
+    status: message.status || null,
+    classification: message.classification || '',
+    created_at: message.created_at || null
+  };
+}
+
+function normalizeExternalActivityRequest(request = {}, group = {}, company = {}) {
+  return {
+    id: request.id || request.request_id || null,
+    source_type: 'group',
+    chat_id: request.chat_id || group.chat_id,
+    chat_title: group.title || '',
+    company_id: request.company_id || group.company_id || company.company_id || company.id || null,
+    customer_tg_id: request.customer_tg_id || null,
+    customer_name: request.customer_name || request.actor_name || 'Mijoz',
+    customer_username: request.customer_username || '',
+    initial_message_id: request.initial_message_id || request.message_id || null,
+    initial_text: request.initial_text || request.text || '',
+    status: request.status || 'open',
+    closed_by_employee_id: request.closed_by_employee_id || null,
+    closed_by_tg_id: request.closed_by_tg_id || null,
+    closed_by_name: request.closed_by_name || '',
+    done_message_id: request.done_message_id || null,
+    solution_text: request.solution_text || '',
+    solution_by: request.solution_by || '',
+    solution_at: request.solution_at || request.closed_at || null,
+    created_at: request.created_at || null,
+    closed_at: request.closed_at || null,
+    events: Array.isArray(request.events) ? request.events : []
+  };
+}
+
+function externalCompanyActivityRows(snapshot = {}) {
+  const companies = Array.isArray(snapshot.companies) ? snapshot.companies : [];
+  const rootGroups = Array.isArray(snapshot.groups) ? snapshot.groups : [];
+  const rowsByKey = new Map();
+  const ensureCompany = (company = {}) => {
+    const key = String(company.id || company.company_id || company.name || '').trim();
+    if (!key) return null;
+    if (!rowsByKey.has(key)) {
+      rowsByKey.set(key, {
+        company_id: company.id || company.company_id || key,
+        name: company.name || company.company_name || 'Kompaniya',
+        brand: company.brand || company.legal_name || '',
+        is_active: company.is_active !== false,
+        groups: [],
+        group_count: 0,
+        total_messages: 0,
+        total_requests: 0,
+        closed_requests: 0,
+        open_requests: 0,
+        unique_customers: 0,
+        last_message_at: null,
+        external_source: snapshot.source || '',
+        external_cached_at: snapshot.cached_at || snapshot.fetched_at || null
+      });
+    }
+    return rowsByKey.get(key);
+  };
+  const addGroup = (company = {}, group = {}) => {
+    const row = ensureCompany(company);
+    if (!row || !group.chat_id) return;
+    const conversationRows = (Array.isArray(group.conversation) ? group.conversation : [])
+      .map(message => normalizeExternalActivityMessage(message, group))
+      .filter(message => message.text || message.media || message.created_at)
+      .sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')));
+    const requestRows = (Array.isArray(group.requests) ? group.requests : [])
+      .map(request => normalizeExternalActivityRequest(request, group, company))
+      .filter(request => request.id || request.initial_text || request.created_at)
+      .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
+    const conversationPreview = conversationRows.slice(-COMPANY_GROUP_ACTIVITY_CONVERSATION_LIMIT);
+    const requestPreview = requestRows.slice(0, COMPANY_GROUP_ACTIVITY_REQUEST_LIMIT);
+    const normalizedGroup = {
+      chat_id: group.chat_id,
+      title: group.title || String(group.chat_id),
+      username: group.username || '',
+      source_type: 'group',
+      company_id: group.company_id || row.company_id,
+      company_name: row.name,
+      last_message_at: group.last_message_at || conversationRows.at(-1)?.created_at || null,
+      total_messages: Math.max(Number(group.total_messages || 0), conversationRows.length),
+      total_requests: Math.max(Number(group.total_requests || 0), requestRows.length),
+      closed_requests: Math.max(Number(group.closed_requests || 0), requestRows.filter(request => request.status === 'closed').length),
+      open_requests: Math.max(Number(group.open_requests || 0), requestRows.filter(request => request.status !== 'closed').length),
+      unique_customers: Number(group.unique_customers || 0),
+      requests: requestPreview,
+      conversation: conversationPreview,
+      requests_truncated: requestRows.length > requestPreview.length || !!group.requests_truncated,
+      conversation_truncated: conversationRows.length > conversationPreview.length || !!group.conversation_truncated,
+      external: true
+    };
+    row.groups.push(normalizedGroup);
+    row.group_count += 1;
+    row.total_messages += normalizedGroup.total_messages;
+    row.total_requests += normalizedGroup.total_requests;
+    row.closed_requests += normalizedGroup.closed_requests;
+    row.open_requests += normalizedGroup.open_requests;
+    if (normalizedGroup.last_message_at && (!row.last_message_at || String(normalizedGroup.last_message_at) > String(row.last_message_at))) {
+      row.last_message_at = normalizedGroup.last_message_at;
+    }
+  };
+  companies.forEach(company => {
+    ensureCompany(company);
+    (Array.isArray(company.groups) ? company.groups : []).forEach(group => addGroup(company, group));
+  });
+  rootGroups.forEach(group => {
+    const company = companies.find(row => {
+      const groupCompanyId = String(group.company_id || '').trim();
+      return groupCompanyId && String(row.id || row.company_id || '') === groupCompanyId;
+    }) || { id: group.company_id || group.company_name || group.title, name: group.company_name || 'Kompaniya' };
+    addGroup(company, group);
+  });
+  return [...rowsByKey.values()]
+    .filter(company => company.groups.length)
+    .map(company => ({
+      ...company,
+      close_rate: percent(company.closed_requests, company.total_requests),
+      groups: company.groups.sort((a, b) => String(b.last_message_at || '').localeCompare(String(a.last_message_at || '')))
+    }));
+}
+
+function mergeConversationRows(localRows = [], externalRows = []) {
+  return uniqueRowsBy([...localRows, ...externalRows]
+    .sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || ''))), row => {
+      return `${row.chat_id || ''}:${telegramIdKey(row.message_id) || row.id || ''}:${row.created_at || ''}:${row.text || ''}`;
+    });
+}
+
+function mergeRequestRows(localRows = [], externalRows = []) {
+  return uniqueRowsBy([...localRows, ...externalRows]
+    .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || ''))), row => {
+      return `${row.id || ''}:${telegramIdKey(row.initial_message_id) || ''}:${row.created_at || ''}:${row.initial_text || ''}`;
+    });
+}
+
+function mergeActivityGroups(localGroup = {}, externalGroup = {}) {
+  const conversationRows = mergeConversationRows(localGroup.conversation || [], externalGroup.conversation || []);
+  const requestRows = mergeRequestRows(localGroup.requests || [], externalGroup.requests || []);
+  const conversationPreview = conversationRows.slice(-COMPANY_GROUP_ACTIVITY_CONVERSATION_LIMIT);
+  const requestPreview = requestRows.slice(0, COMPANY_GROUP_ACTIVITY_REQUEST_LIMIT);
+  return {
+    ...localGroup,
+    ...externalGroup,
+    title: localGroup.title || externalGroup.title,
+    company_id: localGroup.company_id || externalGroup.company_id || null,
+    last_message_at: [localGroup.last_message_at, externalGroup.last_message_at, conversationRows.at(-1)?.created_at].filter(Boolean).sort().at(-1) || null,
+    total_messages: Math.max(Number(localGroup.total_messages || 0), Number(externalGroup.total_messages || 0), conversationRows.length),
+    total_requests: Math.max(Number(localGroup.total_requests || 0), Number(externalGroup.total_requests || 0), requestRows.length),
+    closed_requests: Math.max(Number(localGroup.closed_requests || 0), Number(externalGroup.closed_requests || 0), requestRows.filter(request => request.status === 'closed').length),
+    open_requests: Math.max(Number(localGroup.open_requests || 0), Number(externalGroup.open_requests || 0), requestRows.filter(request => request.status !== 'closed').length),
+    requests: requestPreview,
+    conversation: conversationPreview,
+    requests_truncated: requestRows.length > requestPreview.length || localGroup.requests_truncated || externalGroup.requests_truncated,
+    conversation_truncated: conversationRows.length > conversationPreview.length || localGroup.conversation_truncated || externalGroup.conversation_truncated
+  };
+}
+
+function mergeCompanyActivityRows(localRows = [], externalRows = []) {
+  const rowsByKey = new Map();
+  const keyForCompany = company => String(company.company_id || company.id || company.name || '').trim().toLowerCase();
+  [...localRows, ...externalRows].forEach(company => {
+    const key = keyForCompany(company);
+    if (!key) return;
+    const current = rowsByKey.get(key);
+    if (!current) {
+      rowsByKey.set(key, {
+        ...company,
+        groups: [...(company.groups || [])]
+      });
+      return;
+    }
+    const groupMap = new Map((current.groups || []).map(group => [String(group.chat_id || group.title || '').trim(), group]).filter(([groupKey]) => groupKey));
+    (company.groups || []).forEach(group => {
+      const groupKey = String(group.chat_id || group.title || '').trim();
+      groupMap.set(groupKey, groupMap.has(groupKey) ? mergeActivityGroups(groupMap.get(groupKey), group) : group);
+    });
+    const groups = [...groupMap.values()].sort((a, b) => String(b.last_message_at || '').localeCompare(String(a.last_message_at || '')));
+    rowsByKey.set(key, {
+      ...current,
+      ...company,
+      name: current.name || company.name,
+      brand: current.brand || company.brand || '',
+      groups,
+      group_count: groups.length,
+      total_messages: groups.reduce((sum, group) => sum + Number(group.total_messages || 0), 0),
+      total_requests: groups.reduce((sum, group) => sum + Number(group.total_requests || 0), 0),
+      closed_requests: groups.reduce((sum, group) => sum + Number(group.closed_requests || 0), 0),
+      open_requests: groups.reduce((sum, group) => sum + Number(group.open_requests || 0), 0),
+      unique_customers: Math.max(Number(current.unique_customers || 0), Number(company.unique_customers || 0)),
+      last_message_at: groups.map(group => group.last_message_at).filter(Boolean).sort().at(-1) || current.last_message_at || company.last_message_at || null
+    });
+  });
+  return [...rowsByKey.values()]
+    .map(company => ({ ...company, close_rate: percent(company.closed_requests, company.total_requests) }))
+    .filter(company => (company.groups || []).length);
 }
 
 async function getCompanyGroupActivity(query = {}) {
@@ -1787,6 +2066,12 @@ async function getCompanyGroupActivity(query = {}) {
     }))
     .filter(company => company.groups.length)
     .sort((a, b) => b.total_requests - a.total_requests || b.total_messages - a.total_messages || a.name.localeCompare(b.name));
+
+  const cachedCompanyInfo = await getCachedCompanyInfo().catch(() => null);
+  if (cachedCompanyInfo) {
+    rows = mergeCompanyActivityRows(rows, externalCompanyActivityRows(cachedCompanyInfo))
+      .sort((a, b) => b.total_requests - a.total_requests || b.total_messages - a.total_messages || a.name.localeCompare(b.name));
+  }
 
   if (companyIdFilter || companyNameFilter) {
     const normalize = value => String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
