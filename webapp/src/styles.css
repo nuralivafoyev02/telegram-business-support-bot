@@ -2906,35 +2906,8 @@ body {
 }
 
 .employee-avatar.premium {
-  position: relative;
-  border: 2px solid transparent;
-  background:
-    linear-gradient(#fff, #fff) padding-box,
-    linear-gradient(135deg, #2aabee, #8b5cf6, #facc15) border-box;
-  box-shadow:
-    0 0 0 3px rgba(42, 171, 238, 0.18),
-    0 0 18px rgba(139, 92, 246, 0.32),
-    0 0 28px rgba(250, 204, 21, 0.22);
-}
-
-/* Premium belgisi */
-.employee-avatar.premium::after {
-  content: "★";
-  position: absolute;
-  right: -5px;
-  bottom: -5px;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #2aabee, #8b5cf6);
-  color: #fff;
-  font-size: 12px;
-  font-weight: 800;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 2px solid #fff;
-  box-shadow: 0 4px 12px rgba(42, 171, 238, 0.45);
+  border: 2px solid #facc15;
+  box-shadow: 0 0 0 3px rgba(250, 204, 21, .24), 0 0 18px rgba(250, 204, 21, .22);
 }
 
 .employee-cell b,
