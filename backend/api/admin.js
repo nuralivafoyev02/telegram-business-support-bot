@@ -300,8 +300,10 @@ function buildPeriodSummary(requests, periodKey, label, keys) {
     // Previous period stats
     prev_total_requests: prevCreated.length,
     prev_closed_requests: prevClosed.length,
+    prev_open_requests: prevCreated.filter(request => request.status === 'open').length,
     prev_close_rate: percent(prevClosed.length, prevCreated.length),
-    prev_avg_close_minutes: average(prevCloseMinutes)
+    prev_avg_close_minutes: average(prevCloseMinutes),
+    prev_unique_customers: new Set(prevCreated.map(request => request.customer_tg_id).filter(Boolean)).size
   };
 }
 
@@ -346,6 +348,7 @@ function buildEmployeePerformance({ requests, employees, messages = [], periodKe
         prev_open_requests: 0,
         prev_close_minutes: [],
         handled_chats: new Set(),
+        prev_handled_chats: new Set(),
         last_closed_at: null
       });
     }
@@ -375,6 +378,7 @@ function buildEmployeePerformance({ requests, employees, messages = [], periodKe
     const employee = employeeMap.get(request.closed_by_employee_id) || employeeByTgId.get(telegramIdKey(request.closed_by_tg_id));
     const current = ensureEmployeeTotal({ employee, employeeId: request.closed_by_employee_id, tgUserId: request.closed_by_tg_id, name: request.closed_by_name });
     current.prev_closed_requests += 1;
+    if (request.chat_id) current.prev_handled_chats.add(String(request.chat_id));
     const closeMinute = minutesBetween(request.created_at, request.closed_at);
     if (closeMinute !== null) current.prev_close_minutes.push(closeMinute);
   });
@@ -385,6 +389,7 @@ function buildEmployeePerformance({ requests, employees, messages = [], periodKe
     const employee = employeeMap.get(responsible.employee_id) || employeeByTgId.get(telegramIdKey(responsible.tg_user_id));
     const current = ensureEmployeeTotal({ employee, employeeId: responsible.employee_id, tgUserId: responsible.tg_user_id, name: responsible.full_name });
     current.prev_open_requests += 1;
+    if (request.chat_id) current.prev_handled_chats.add(String(request.chat_id));
   });
 
   return [...totals.values()]
@@ -405,7 +410,9 @@ function buildEmployeePerformance({ requests, employees, messages = [], periodKe
       last_closed_at: row.last_closed_at,
       // Previous stats for comparison
       prev_closed_requests: row.prev_closed_requests,
+      prev_open_requests: row.prev_open_requests,
       prev_total_requests: row.prev_closed_requests + row.prev_open_requests,
+      prev_handled_chats: row.prev_handled_chats.size,
       prev_close_rate: percent(row.prev_closed_requests, row.prev_closed_requests + row.prev_open_requests),
       prev_avg_close_minutes: average(row.prev_close_minutes)
     }))
