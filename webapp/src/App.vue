@@ -133,7 +133,8 @@
                   <div class="support-summary-value-row">
                     <div class="support-summary-value" :class="{ danger: card.tone === 'danger' }">{{ card.value }}</div>
                     <Transition name="fade">
-                      <div v-if="comparisonEnabled && card.comparison" class="trend-label" :class="card.comparison.tone">
+                      <div v-if="comparisonEnabled && card.comparison" class="trend-label"
+                        :class="card.comparison.tone" :title="card.comparison.title || card.comparison.text">
                         {{ card.comparison.text }}
                       </div>
                     </Transition>
@@ -297,19 +298,15 @@
                   </div>
                 </template>
                 <template #sla="{ row }">
-<<<<<<< HEAD
                   <div class="trend-cell">
-                    <div class="sla-badge" :class="slaClass(row.sla)">
+                    <div class="sla-badge sla-tooltip" :class="slaClass(row.sla)"
+                      :data-tooltip="employeeSlaTooltip(row)" tabindex="0">
                       {{ fmtPercent(row.sla) }}
                     </div>
                     <span v-if="comparisonEnabled && row.sla_comparison" class="trend-label" :class="row.sla_comparison.tone">
                       {{ row.sla_comparison.percentText }}
                     </span>
                   </div>
-=======
-                  <span class="sla-badge sla-tooltip" :class="slaClass(row.sla)"
-                    :data-tooltip="employeeSlaTooltip(row)" tabindex="0">{{ fmtPercent(row.sla) }}</span>
->>>>>>> 8c68077 (refactor: rename slaToneClass to slaClass and add error handling for DataTable slots)
                 </template>
               </DataTable>
             </section>
@@ -2382,12 +2379,18 @@ const companyTicketRows = computed(() => {
 const companyTicketMax = computed(() => Math.max(1, ...companyTicketRows.value.map(row => Number(row.total_requests || 0))));
 const supportSummaryCards = computed(() => {
   const stats = selectedPeriodStats.value;
+  const previousLabel = currentPeriodDates.value.prev || 'oldingi davr';
+  const attachPreviousLabel = comparison => comparison ? {
+    ...comparison,
+    title: `${previousLabel} bilan taqqoslash: ${comparison.text}`
+  } : null;
   const cards = [
     {
       key: 'requests',
       title: selectedStatsPeriod.value === 'today' ? 'Bugungi so‘rovlar' : `${selectedPeriodLabel.value} so‘rovlar`,
       value: fmtNumber(stats.total_requests),
       note: `${fmtNumber(stats.unique_customers)} ta mijozdan kelgan`,
+      comparison: attachPreviousLabel(compareValue(stats.total_requests, stats.prev_total_requests, { unit: 'ta' })),
       icon: '🎫',
       action: 'requests'
     },
@@ -2396,6 +2399,7 @@ const supportSummaryCards = computed(() => {
       title: 'Javob berilgan',
       value: fmtNumber(stats.closed_requests),
       note: `${fmtPercent(stats.close_rate)} so‘rov yopilgan`,
+      comparison: attachPreviousLabel(compareValue(stats.closed_requests, stats.prev_closed_requests, { unit: 'ta' })),
       icon: '✅',
       action: 'closed'
     },
@@ -2404,6 +2408,7 @@ const supportSummaryCards = computed(() => {
       title: 'Javobsiz',
       value: fmtNumber(stats.open_requests),
       note: `${fmtNumber(overdueOpenRequestsTotal.value)} tasi 30 daqiqadan oshgan`,
+      comparison: attachPreviousLabel(compareValue(stats.open_requests, stats.prev_open_requests, { invert: true, unit: 'ta' })),
       icon: '⚠️',
       tone: 'danger',
       action: 'open'
@@ -2413,6 +2418,7 @@ const supportSummaryCards = computed(() => {
       title: 'O‘rtacha javob',
       value: fmtMinutes(stats.avg_close_minutes),
       note: `SLA: ${fmtPercent(stats.close_rate)}`,
+      comparison: attachPreviousLabel(compareValue(stats.avg_close_minutes, stats.prev_avg_close_minutes, { invert: true, unit: 'min' })),
       icon: '⏱️',
       action: 'avg'
     }
