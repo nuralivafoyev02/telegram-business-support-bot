@@ -247,7 +247,8 @@
               </div>
 
               <DataTable :columns="supportPerformanceColumns" :rows="topSupportCards"
-                empty="Hozircha natija ma’lumoti yo‘q" :on-cell-action="handleTableCellAction" :page-size="12">
+                empty="Hozircha natija ma’muoti yo‘q" :on-cell-action="handleTableCellAction" 
+                :row-class="supportPerformanceRowClass" :page-size="12">
                 <template #rank="{ row }">
                   <span class="rank-number">{{ row.rank }}</span>
                 </template>
@@ -271,20 +272,19 @@
                 </template>
                 <template #openRequests="{ row }">
                   <div class="trend-cell">
-                    <span class="open-count"
-                      :class="{ warn: Number(row.open_requests || 0) >= 5, danger: Number(row.open_requests || 0) >= 8 }">
+                    <span class="table-strong" :class="{ 'text-muted': !row.open_requests }">
                       {{ (comparisonEnabled && row.open_comparison) ? row.open_comparison.percentText : fmtNumber(row.open_requests) }}
                     </span>
                     <span v-if="comparisonEnabled && row.open_comparison" class="trend-label" :class="row.open_comparison.tone">
-                      {{ row.open_comparison.text }}
+                      {{ row.open_comparison.diff }}
                     </span>
                   </div>
                 </template>
                 <template #closeRate="{ row }">
                   <div class="trend-cell">
-                    <b class="table-strong">{{ (comparisonEnabled && row.sla_comparison) ? row.sla_comparison.percentText : fmtPercent(row.close_rate) }}</b>
+                    <b class="table-strong">{{ (comparisonEnabled && row.sla_comparison) ? row.sla_comparison.percentText : pct(row) }}</b>
                     <span v-if="comparisonEnabled && row.sla_comparison" class="trend-label" :class="row.sla_comparison.tone">
-                      {{ row.sla_comparison.text }}
+                      {{ row.sla_comparison.diff }}
                     </span>
                   </div>
                 </template>
@@ -292,13 +292,19 @@
                   <div class="trend-cell">
                     <b class="table-strong">{{ (comparisonEnabled && row.avg_comparison) ? row.avg_comparison.percentText : fmtMinutes(row.avg_close_minutes) }}</b>
                     <span v-if="comparisonEnabled && row.avg_comparison" class="trend-label" :class="row.avg_comparison.tone">
-                      {{ row.avg_comparison.text }}
+                      {{ fmtMinutes(row.avg_close_minutes) }} ({{ row.avg_comparison.diff }})
                     </span>
                   </div>
                 </template>
                 <template #sla="{ row }">
-                  <span class="sla-badge sla-tooltip" :class="slaToneClass(row.sla)"
-                    :data-tooltip="employeeSlaTooltip(row)" tabindex="0">{{ fmtPercent(row.sla) }}</span>
+                  <div class="trend-cell">
+                    <div class="sla-badge" :class="slaClass(row.sla)">
+                      {{ (comparisonEnabled && row.sla_comparison) ? row.sla_comparison.percentText : fmtPercent(row.sla) }}
+                    </div>
+                    <span v-if="comparisonEnabled && row.sla_comparison" class="trend-label" :class="row.sla_comparison.tone">
+                      {{ row.sla_comparison.diff }}
+                    </span>
+                  </div>
                 </template>
               </DataTable>
             </section>
@@ -2375,39 +2381,35 @@ const supportSummaryCards = computed(() => {
     {
       key: 'requests',
       title: selectedStatsPeriod.value === 'today' ? 'Bugungi so‘rovlar' : `${selectedPeriodLabel.value} so‘rovlar`,
-      value: comparisonEnabled.value ? (compareValue(stats.total_requests, stats.prev_total_requests)?.percentText || fmtNumber(stats.total_requests)) : fmtNumber(stats.total_requests),
-      note: comparisonEnabled.value ? `Oldingi: ${fmtNumber(stats.prev_total_requests || 0)}` : `${fmtNumber(stats.unique_customers)} ta mijozdan kelgan`,
+      value: fmtNumber(stats.total_requests),
+      note: `${fmtNumber(stats.unique_customers)} ta mijozdan kelgan`,
       icon: '🎫',
-      action: 'requests',
-      comparison: comparisonEnabled.value ? compareValue(stats.total_requests, stats.prev_total_requests) : null
+      action: 'requests'
     },
     {
       key: 'closed',
       title: 'Javob berilgan',
-      value: comparisonEnabled.value ? (compareValue(stats.closed_requests, stats.prev_closed_requests)?.percentText || fmtNumber(stats.closed_requests)) : fmtNumber(stats.closed_requests),
-      note: comparisonEnabled.value ? `Oldingi: ${fmtNumber(stats.prev_closed_requests || 0)}` : `${fmtPercent(stats.close_rate)} so‘rov yopilgan`,
+      value: fmtNumber(stats.closed_requests),
+      note: `${fmtPercent(stats.close_rate)} so‘rov yopilgan`,
       icon: '✅',
-      action: 'closed',
-      comparison: comparisonEnabled.value ? compareValue(stats.closed_requests, stats.prev_closed_requests) : null
+      action: 'closed'
     },
     {
       key: 'open',
       title: 'Javobsiz',
-      value: comparisonEnabled.value ? (compareValue(stats.open_requests, stats.prev_open_requests)?.percentText || fmtNumber(stats.open_requests)) : fmtNumber(stats.open_requests),
-      note: comparisonEnabled.value ? `Oldingi: ${fmtNumber(stats.prev_open_requests || 0)}` : `${fmtNumber(overdueOpenRequestsTotal.value)} tasi 30 daqiqadan oshgan`,
+      value: fmtNumber(stats.open_requests),
+      note: `${fmtNumber(overdueOpenRequestsTotal.value)} tasi 30 daqiqadan oshgan`,
       icon: '⚠️',
       tone: 'danger',
-      action: 'open',
-      comparison: comparisonEnabled.value ? compareValue(stats.open_requests, stats.prev_open_requests, true) : null
+      action: 'open'
     },
     {
       key: 'avg',
       title: 'O‘rtacha javob',
-      value: comparisonEnabled.value ? (compareValue(stats.avg_close_minutes, stats.prev_avg_close_minutes, true)?.percentText || fmtMinutes(stats.avg_close_minutes)) : fmtMinutes(stats.avg_close_minutes),
-      note: comparisonEnabled.value ? `Oldingi: ${fmtMinutes(stats.prev_avg_close_minutes || 0)}` : `SLA: ${fmtPercent(stats.close_rate)}`,
+      value: fmtMinutes(stats.avg_close_minutes),
+      note: `SLA: ${fmtPercent(stats.close_rate)}`,
       icon: '⏱️',
-      action: 'avg',
-      comparison: comparisonEnabled.value ? compareValue(stats.avg_close_minutes, stats.prev_avg_close_minutes, true) : null // Lower is better for time
+      action: 'avg'
     }
   ];
 
@@ -3031,25 +3033,47 @@ function pct(row) {
   return total ? `${Math.round((closed / total) * 100)}%` : '0%';
 }
 
-function compareValue(current, previous, invert = false) {
+function compareValue(current, previous, options = {}) {
+  const { invert = false, isPercentage = false, unit = '' } = options;
   const curr = Number(current || 0);
   const prev = Number(previous || 0);
-  if (curr === prev) return null;
   
   const diff = curr - prev;
-  const arrow = diff > 0 ? '↑' : '↓';
   const diffAbs = Math.abs(diff);
-  const diffText = diff > 0 ? `+${fmtNumber(diffAbs)}` : `-${fmtNumber(diffAbs)}`;
+  const arrow = diff > 0 ? '↑' : (diff < 0 ? '↓' : '');
+  
+  const diffFormatted = diff > 0 ? `+${fmtNumber(diffAbs)}` : (diff < 0 ? `-${fmtNumber(diffAbs)}` : '0');
+  const diffWithUnit = unit ? `${diffFormatted} ${unit}` : diffFormatted;
 
-  let tone = diff > 0 ? 'good' : 'bad';
-  if (invert) tone = diff > 0 ? 'bad' : 'good';
+  let tone = 'neutral';
+  if (diff > 0) tone = invert ? 'bad' : 'good';
+  else if (diff < 0) tone = invert ? 'good' : 'bad';
+
+  if (isPercentage) {
+    const pDiff = Math.abs(Math.round(diff));
+    const sign = diff > 0 ? '+' : (diff < 0 ? '-' : '');
+    return {
+      text: `${arrow} ${sign}${pDiff}%`,
+      diff: diffWithUnit,
+      percentText: `${sign}${pDiff}%`,
+      tone
+    };
+  }
+
+  if (curr === prev) {
+    return {
+      text: 'o‘zgarish yo‘q',
+      diff: unit ? `0 ${unit}` : '0',
+      percentText: '0%',
+      tone: 'neutral'
+    };
+  }
 
   if (prev === 0) {
     return {
-      text: `${arrow} ${diffText}`,
-      diff: diffText,
-      percent: 100,
-      percentText: diff > 0 ? '+100%' : (diff < 0 ? '-100%' : '0%'),
+      text: `${arrow} ${diffWithUnit}`,
+      diff: diffWithUnit,
+      percentText: diff > 0 ? '+100%' : '-100%',
       tone
     };
   }
@@ -3057,8 +3081,8 @@ function compareValue(current, previous, invert = false) {
   const percent = Math.round((diffAbs / prev) * 100);
   const sign = diff > 0 ? '+' : '-';
   return {
-    text: `${arrow} ${sign}${percent}% (${diffText})`,
-    diff: diffText,
+    text: `${arrow} ${sign}${percent}% (${diffWithUnit})`,
+    diff: diffWithUnit,
     percent: percent,
     percentText: `${sign}${percent}%`,
     tone
@@ -3645,10 +3669,10 @@ const topSupportCards = computed(() => supportPerformanceRows.value.map((row, in
     company_churn: companySummary.churn,
     company_expiring_soon: companySummary.expiring_soon,
     // Comparison metrics
-    closed_comparison: comparisonEnabled.value ? compareValue(row.closed_requests, row.prev_closed_requests) : null,
-    open_comparison: comparisonEnabled.value ? compareValue(row.open_requests, row.prev_open_requests, true) : null,
-    sla_comparison: comparisonEnabled.value ? compareValue(row.sla, row.prev_close_rate) : null,
-    avg_comparison: comparisonEnabled.value ? compareValue(row.avg_close_minutes, row.prev_avg_close_minutes, true) : null
+    closed_comparison: comparisonEnabled.value ? compareValue(row.closed_requests, row.prev_closed_requests, { unit: 'ta' }) : null,
+    open_comparison: comparisonEnabled.value ? compareValue(row.open_requests, row.prev_open_requests, { invert: true, unit: 'ta' }) : null,
+    sla_comparison: comparisonEnabled.value ? compareValue(row.sla, row.prev_close_rate, { isPercentage: true }) : null,
+    avg_comparison: comparisonEnabled.value ? compareValue(row.avg_close_minutes, row.prev_avg_close_minutes, { invert: true, unit: 'min' }) : null
   };
 }));
 watch(topSupportCards, rows => {
@@ -5451,6 +5475,10 @@ function ticketMatchesStatus(row = {}, status = 'all') {
 
 function requestRowClass(row = {}) {
   return row.status === 'open' ? 'open-ticket-row' : '';
+}
+
+function supportPerformanceRowClass(row = {}) {
+  return Number(row.sla || 0) >= 100 ? 'top-performer-row' : '';
 }
 
 function ticketListSort(left = {}, right = {}) {

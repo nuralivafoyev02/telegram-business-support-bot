@@ -4490,7 +4490,8 @@ tbody tr.selected-row:hover {
   background: rgba(15, 23, 42, .08);
 }
 
-tbody tr.selected-row .cell-action {
+tbody tr.selected-row .cell-action,
+tbody tr.top-performer-row td:first-child {
   color: var(--text);
   box-shadow: inset 3px 0 0 var(--primary);
 }
