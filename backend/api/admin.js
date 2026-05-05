@@ -4,7 +4,7 @@ const { Readable } = require('stream');
 const supabase = require('../lib/supabase');
 const { allowCors, sendJson, readBody, getQuery } = require('../lib/http');
 const { login, requireAdmin, hashPassword } = require('../lib/auth');
-const { sendMessage, sendBusinessMessage, getWebhookInfo, setWebhook, deleteWebhook, getUpdates, getFile, getUserProfilePhotos, downloadFile } = require('../lib/telegram');
+const { sendMessage, sendBusinessMessage, getWebhookInfo, setWebhook, deleteWebhook, getUpdates, getFile, getUserProfilePhotos, downloadFile, tgUserName } = require('../lib/telegram');
 const { optionalEnv } = require('../lib/env');
 const { normalizeSettings, clearBotSettingsCache } = require('../lib/bot-settings');
 const { normalizeAiIntegration, mergeAiIntegration, sanitizeAiIntegration, isAiIntegrationReady, isAiIntegrationConfigured, aiIntegrationSignature } = require('../lib/ai-config');
@@ -1007,6 +1007,91 @@ function messageOrigin({ message = {}, employee = null } = {}) {
   return 'customer';
 }
 
+function chatServiceEvent(message = {}) {
+  const raw = message.raw || {};
+  if (!raw || typeof raw !== 'object') return null;
+
+  if (raw.left_chat_member) {
+    const user = raw.left_chat_member;
+    return {
+      service_type: 'left_chat_member',
+      user_ids: [telegramIdKey(user.id)].filter(Boolean),
+      text: `${tgUserName(user)} guruhdan chiqdi`
+    };
+  }
+
+  if (Array.isArray(raw.new_chat_members) && raw.new_chat_members.length) {
+    const users = raw.new_chat_members.filter(Boolean);
+    const names = users.map(user => tgUserName(user)).filter(Boolean).join(', ');
+    return {
+      service_type: 'new_chat_members',
+      user_ids: users.map(user => telegramIdKey(user.id)).filter(Boolean),
+      text: `${names || 'Foydalanuvchi'} guruhga qo‘shildi`
+    };
+  }
+
+  if (raw.new_chat_title) {
+    return {
+      service_type: 'new_chat_title',
+      user_ids: [],
+      text: `Guruh nomi "${raw.new_chat_title}" ga o‘zgardi`
+    };
+  }
+
+  if (raw.delete_chat_photo) {
+    return {
+      service_type: 'delete_chat_photo',
+      user_ids: [],
+      text: 'Guruh rasmi olib tashlandi'
+    };
+  }
+
+  if (raw.group_chat_created || raw.supergroup_chat_created) {
+    return {
+      service_type: 'group_chat_created',
+      user_ids: [],
+      text: 'Guruh yaratildi'
+    };
+  }
+
+  if (raw.migrate_to_chat_id) {
+    return {
+      service_type: 'migrate_to_chat_id',
+      user_ids: [],
+      text: `Guruh superguruhga o‘tdi: ${raw.migrate_to_chat_id}`
+    };
+  }
+
+  return null;
+}
+
+function serviceConversationItem(message = {}) {
+  const service = chatServiceEvent(message);
+  if (!service) return null;
+  return {
+    id: message.id || `service:${message.chat_id || ''}:${message.tg_message_id || message.created_at || ''}`,
+    type: 'service',
+    service_type: service.service_type,
+    service_user_ids: service.user_ids,
+    message_id: message.tg_message_id || null,
+    direction: 'system',
+    actor_type: 'system',
+    origin_type: 'system',
+    source_label: 'Telegram',
+    actor_name: 'Telegram',
+    actor_username: '',
+    actor_tg_user_id: null,
+    employee_id: null,
+    text: service.text,
+    media: null,
+    request_id: null,
+    request_text: '',
+    status: null,
+    classification: message.classification || 'service',
+    created_at: message.created_at || null
+  };
+}
+
 function messageOriginLabel(origin = '') {
   return ({
     customer: 'Mijoz',
@@ -1162,6 +1247,8 @@ function buildChatDetail({ chat, requests, events, messages, employeesById, empl
   const conversationRows = [
     ...eventConversation,
     ...messages.map(message => {
+      const serviceItem = serviceConversationItem(message);
+      if (serviceItem) return serviceItem;
       const employee = message.employee_id ? employeesById.get(message.employee_id) : employeesByTgId.get(telegramIdKey(message.from_tg_user_id));
       const rawSource = message.raw && message.raw.source;
       const relatedRequest = requestByInitialMessageId.get(telegramIdKey(message.tg_message_id))
@@ -1365,7 +1452,7 @@ async function getChatDetail(query) {
 
   const [chatRows, requests, messages, employeeLookup] = await Promise.all([
     supabase.select('tg_chats', {
-      select: 'chat_id,title,username,type,source_type,company_id,business_connection_id,is_active,last_message_at,first_seen_at',
+      select: 'chat_id,title,username,type,source_type,company_id,business_connection_id,member_status,is_active,last_message_at,first_seen_at,last_member_update_at',
       chat_id: supabase.eq(chatId),
       limit: '1'
     }).catch(() => []),
@@ -1431,7 +1518,7 @@ async function getCompanyGroupActivity(query = {}) {
       select: 'id,name,legal_name,is_active,notes'
     }, { maxRows: 10000 }),
     selectPaged('tg_chats', {
-      select: 'chat_id,title,username,type,source_type,company_id,business_connection_id,is_active,last_message_at,first_seen_at',
+      select: 'chat_id,title,username,type,source_type,company_id,business_connection_id,member_status,is_active,last_message_at,first_seen_at,last_member_update_at',
       source_type: 'eq.group',
       is_active: 'eq.true',
       order: supabase.order('last_message_at', false)
@@ -1552,6 +1639,8 @@ async function getCompanyGroupActivity(query = {}) {
   };
 
   const messageSummary = message => {
+    const serviceItem = serviceConversationItem(message);
+    if (serviceItem) return { ...serviceItem, chat_id: message.chat_id };
     const employee = message.employee_id ? employeesById.get(message.employee_id) : employeesByTgId.get(telegramIdKey(message.from_tg_user_id));
     const relatedRequest = requestByInitialMessageId.get(telegramIdKey(message.tg_message_id))
       || requestByDoneMessageId.get(telegramIdKey(message.tg_message_id))
@@ -1998,10 +2087,6 @@ async function getEmployeeActivity(query = {}) {
     const messageEmployee = employeeMaps.byId.get(message.employee_id) || employeeMaps.byTgId.get(telegramIdKey(message.from_tg_user_id));
     return Boolean(messageEmployee && !isSelectedEmployeeMessage(message));
   }
-  function isGroupMessageChat(message = {}) {
-    const chat = chatMap.get(telegramIdKey(message.chat_id)) || {};
-    return (chat.source_type || message.source_type) === 'group';
-  }
   const periodOpenRequests = openRequestCandidates
     .filter(request => request.status === 'open' && inCurrentPeriod(request.created_at, periodKey, keys))
     .filter(requestResponsibleMatchesEmployee);
@@ -2016,11 +2101,43 @@ async function getEmployeeActivity(query = {}) {
     ...visibleOpenRequests,
     ...visibleMessages
   ].map(item => telegramIdKey(item.chat_id)).filter(Boolean));
+  const visibleRequestScopeByChat = new Map();
+  [...visibleClosedRequests, ...visibleOpenRequests].forEach(request => {
+    const key = telegramIdKey(request.chat_id);
+    if (!key) return;
+    const current = visibleRequestScopeByChat.get(key) || { customerIds: new Set(), messageIds: new Set() };
+    const customerId = telegramIdKey(request.customer_tg_id);
+    const initialMessageId = telegramIdKey(request.initial_message_id);
+    const doneMessageId = telegramIdKey(request.done_message_id);
+    if (customerId) current.customerIds.add(customerId);
+    if (initialMessageId) current.messageIds.add(initialMessageId);
+    if (doneMessageId) current.messageIds.add(doneMessageId);
+    visibleRequestScopeByChat.set(key, current);
+  });
+  function isRelevantEmployeeChatMessage(message = {}) {
+    if (isSelectedEmployeeMessage(message)) return true;
+    if (isOtherEmployeeMessage(message)) return false;
+
+    const chatKey = telegramIdKey(message.chat_id);
+    const scope = visibleRequestScopeByChat.get(chatKey);
+    const service = chatServiceEvent(message);
+    if (service) {
+      if (selectedTgUserId && service.user_ids.includes(selectedTgUserId)) return true;
+      if (!scope) return false;
+      return !service.user_ids.length || service.user_ids.some(userId => scope.customerIds.has(userId));
+    }
+
+    if (!scope) return false;
+    const messageId = telegramIdKey(message.tg_message_id);
+    if (messageId && scope.messageIds.has(messageId)) return true;
+    const fromId = telegramIdKey(message.from_tg_user_id);
+    return Boolean(fromId && scope.customerIds.has(fromId));
+  }
   const visibleChatMessages = uniqueRowsBy(allChatMessages, message => `${message.chat_id}:${message.tg_message_id || message.id}`)
     .filter(message => visibleChatIdKeys.has(telegramIdKey(message.chat_id)))
     .filter(message => inCurrentPeriod(message.created_at, periodKey, keys))
     .filter(message => !isEmployeePrivateChatId(message.chat_id))
-    .filter(message => isGroupMessageChat(message) || !isOtherEmployeeMessage(message));
+    .filter(isRelevantEmployeeChatMessage);
   const visibleRequestIds = [...new Set([
     ...visibleClosedRequests,
     ...visibleOpenRequests
@@ -2085,6 +2202,8 @@ async function getEmployeeActivity(query = {}) {
     events: (eventsByRequestId.get(request.id) || []).map(eventSummary)
   });
   const messageSummary = message => {
+    const serviceItem = serviceConversationItem(message);
+    if (serviceItem) return { ...serviceItem, chat_id: message.chat_id, chat_title: chatTitle(message.chat_id) };
     const messageEmployee = employeeMaps.byId.get(message.employee_id) || employeeMaps.byTgId.get(telegramIdKey(message.from_tg_user_id));
     const origin = messageOrigin({ message, employee: messageEmployee });
     return {

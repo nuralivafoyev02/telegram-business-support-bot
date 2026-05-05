@@ -1355,8 +1355,12 @@
                     class="telegram-thread metric-chat-thread">
                     <TransitionGroup name="chat-msg">
                       <article v-for="message in metricChatConversation" :key="chatBubbleKey(message)" class="chat-bubble-row"
-                        :class="{ outbound: message.direction === 'outbound' }">
-                        <div class="chat-bubble" :class="{ 'ticket-message': !!message.request_text }">
+                        :class="{ outbound: message.direction === 'outbound', system: isSystemMessage(message) }">
+                        <div v-if="isSystemMessage(message)" class="chat-system-pill">
+                          <span>{{ message.text }}</span>
+                          <time>{{ fmtChatTime(message.created_at) }}</time>
+                        </div>
+                        <div v-else class="chat-bubble" :class="{ 'ticket-message': !!message.request_text }">
                           <div class="chat-bubble-author">{{ message.actor_name || (message.direction === 'outbound' ? 'Xodim'
                             : 'Mijoz') }}</div>
                           <div v-if="message.media" class="chat-media">
@@ -1517,8 +1521,13 @@
                     class="telegram-thread employee-profile-thread">
                     <TransitionGroup name="chat-msg">
                       <article v-for="message in companyGroupConversation" :key="chatBubbleKey(message)"
-                        class="chat-bubble-row" :class="{ outbound: message.direction === 'outbound' }">
-                        <div class="chat-bubble" :class="{ 'ticket-message': !!message.request_text }">
+                        class="chat-bubble-row"
+                        :class="{ outbound: message.direction === 'outbound', system: isSystemMessage(message) }">
+                        <div v-if="isSystemMessage(message)" class="chat-system-pill">
+                          <span>{{ message.text }}</span>
+                          <time>{{ fmtChatTime(message.created_at) }}</time>
+                        </div>
+                        <div v-else class="chat-bubble" :class="{ 'ticket-message': !!message.request_text }">
                           <div class="chat-bubble-author">{{ message.actor_name || (message.direction === 'outbound' ?
                             'Xodim' : 'Mijoz') }}</div>
                           <div v-if="message.media" class="chat-media">
@@ -1737,8 +1746,13 @@
                     class="telegram-thread employee-profile-thread">
                     <TransitionGroup name="chat-msg">
                       <article v-for="message in employeeProfileConversation" :key="chatBubbleKey(message)"
-                        class="chat-bubble-row" :class="{ outbound: message.direction === 'outbound' }">
-                        <div class="chat-bubble" :class="{ 'ticket-message': !!message.request_text }">
+                        class="chat-bubble-row"
+                        :class="{ outbound: message.direction === 'outbound', system: isSystemMessage(message) }">
+                        <div v-if="isSystemMessage(message)" class="chat-system-pill">
+                          <span>{{ message.text }}</span>
+                          <time>{{ fmtChatTime(message.created_at) }}</time>
+                        </div>
+                        <div v-else class="chat-bubble" :class="{ 'ticket-message': !!message.request_text }">
                           <div class="chat-bubble-author">{{ message.actor_name || (message.direction === 'outbound' ?
                             employeeProfile.employee?.full_name || 'Xodim' : 'Mijoz') }}</div>
                           <div v-if="message.media" class="chat-media">
@@ -1878,6 +1892,11 @@
               <span>Oxirgi aktivlik</span>
               <b>{{ fmtDate(chatDetail.chat?.last_message_at || chatDetail.chat?.last_request_at) }}</b>
             </div>
+            <div v-if="chatMembershipLabel(chatDetail.chat)" class="chat-status-summary"
+              :class="chatMembershipTone(chatDetail.chat)">
+              <span>Telegram holati</span>
+              <b>{{ chatMembershipLabel(chatDetail.chat) }}</b>
+            </div>
           </section>
 
           <div class="chat-detail-layout">
@@ -1909,8 +1928,12 @@
               </div>
               <div v-if="chatConversation.length" ref="chatDetailThreadRef" class="telegram-thread">
                 <article v-for="message in chatConversation" :key="chatBubbleKey(message)" class="chat-bubble-row"
-                  :class="{ outbound: message.direction === 'outbound' }">
-                  <div class="chat-bubble" :class="{ 'ticket-message': !!message.request_text }">
+                  :class="{ outbound: message.direction === 'outbound', system: isSystemMessage(message) }">
+                  <div v-if="isSystemMessage(message)" class="chat-system-pill">
+                    <span>{{ message.text }}</span>
+                    <time>{{ fmtChatTime(message.created_at) }}</time>
+                  </div>
+                  <div v-else class="chat-bubble" :class="{ 'ticket-message': !!message.request_text }">
                     <div class="chat-bubble-author">{{ message.actor_name || (message.direction === 'outbound' ? 'Xodim'
                       :
                       'Mijoz') }}</div>
@@ -1958,6 +1981,13 @@
           </section> -->
         </div>
       </Modal>
+    </Transition>
+
+    <Transition name="fade">
+      <div v-if="floatingTooltip.visible" class="floating-tooltip" :class="floatingTooltip.placement"
+        :style="floatingTooltipStyle">
+        {{ floatingTooltip.text }}
+      </div>
     </Transition>
 
     <Transition name="fade">
@@ -2112,6 +2142,13 @@ let durationTimer = null;
 let telegramAutoSyncTimer = null;
 let telegramAutoSyncBusy = false;
 let modalScrollY = 0;
+let activeTooltipTarget = null;
+const floatingTooltip = ref({ visible: false, text: '', x: 0, y: 0, placement: 'top' });
+const floatingTooltipStyle = computed(() => ({
+  left: `${floatingTooltip.value.x}px`,
+  top: `${floatingTooltip.value.y}px`,
+  transform: floatingTooltip.value.placement === 'top' ? 'translate(-50%, -100%)' : 'translate(-50%, 0)'
+}));
 
 const settingsForm = reactive({ ai_mode: 'false', auto_reply: 'true', done_tag: '#done', main_group_id: '', group_message_audit: 'true', request_detection: 'keyword' });
 const isManagerMode = computed(() => false);
@@ -2636,8 +2673,68 @@ function handleDocumentKeydown(event) {
   if (event.key === 'Escape') {
     actionMenuOpen.value = false;
     rankingMenuOpen.value = false;
+    hideFloatingTooltip();
     if (modal.value) closeModal();
   }
+}
+
+function tooltipTargetFromEventTarget(target) {
+  return target && typeof target.closest === 'function' ? target.closest('[data-tooltip]') : null;
+}
+
+function positionFloatingTooltip(target) {
+  if (!target || typeof window === 'undefined') return;
+  const text = String(target.getAttribute('data-tooltip') || '').trim();
+  if (!text) return hideFloatingTooltip();
+
+  const rect = target.getBoundingClientRect();
+  const maxWidth = Math.min(380, Math.max(260, window.innerWidth - 24));
+  const half = maxWidth / 2;
+  const center = rect.left + rect.width / 2;
+  const x = Math.min(Math.max(center, half + 12), window.innerWidth - half - 12);
+  const hasTopSpace = rect.top > 96;
+  floatingTooltip.value = {
+    visible: true,
+    text,
+    x,
+    y: hasTopSpace ? rect.top - 10 : rect.bottom + 10,
+    placement: hasTopSpace ? 'top' : 'bottom'
+  };
+}
+
+function showFloatingTooltip(target) {
+  activeTooltipTarget = target;
+  positionFloatingTooltip(target);
+}
+
+function hideFloatingTooltip() {
+  activeTooltipTarget = null;
+  floatingTooltip.value = { ...floatingTooltip.value, visible: false };
+}
+
+function handleDocumentTooltipOver(event) {
+  const target = tooltipTargetFromEventTarget(event.target);
+  if (target) showFloatingTooltip(target);
+}
+
+function handleDocumentTooltipMove() {
+  if (activeTooltipTarget) positionFloatingTooltip(activeTooltipTarget);
+}
+
+function handleDocumentTooltipOut(event) {
+  if (!activeTooltipTarget) return;
+  const nextTarget = event.relatedTarget;
+  if (nextTarget && activeTooltipTarget.contains(nextTarget)) return;
+  hideFloatingTooltip();
+}
+
+function handleDocumentTooltipFocusIn(event) {
+  const target = tooltipTargetFromEventTarget(event.target);
+  if (target) showFloatingTooltip(target);
+}
+
+function handleDocumentTooltipFocusOut() {
+  hideFloatingTooltip();
 }
 
 function clearLoginFeedback() {
@@ -2965,6 +3062,23 @@ function statusLabel(value) {
     closed: 'Yopilgan',
     pending: 'Kutilmoqda'
   }[String(value || '').toLowerCase()] || value || '—');
+}
+
+function chatMembershipLabel(chat = {}) {
+  const sourceType = String(chat?.source_type || '').toLowerCase();
+  if (sourceType !== 'group') return '';
+  const status = String(chat.member_status || '').toLowerCase();
+  if (status === 'left') return 'Bot guruhdan chiqqan';
+  if (status === 'kicked') return 'Bot guruhdan chiqarilgan';
+  if (status === 'hidden') return 'Webapp ro‘yxatidan yashirilgan';
+  if (chat.is_active === false) return 'Guruh faol emas';
+  if (status) return `Bot holati: ${status}`;
+  return 'Guruh faol';
+}
+
+function chatMembershipTone(chat = {}) {
+  const status = String(chat?.member_status || '').toLowerCase();
+  return chat?.is_active === false || ['left', 'kicked', 'hidden'].includes(status) ? 'inactive' : 'active';
 }
 
 function companyStatusLabel(value) {
@@ -3720,6 +3834,9 @@ function employeeRequestEventConversationItems(request = {}, employee = {}) {
 }
 
 function employeeMessageConversationItem(message = {}, employee = {}) {
+  if (isSystemMessage(message)) {
+    return { ...message, direction: 'system', type: message.type || 'service', text: message.text || '', created_at: message.created_at || null };
+  }
   return {
     id: message.id || `message-${message.chat_id || ''}-${message.message_id || message.created_at || ''}`,
     type: 'employee_reply',
@@ -3742,6 +3859,9 @@ function employeeMessageConversationItem(message = {}, employee = {}) {
 }
 
 function employeeChatMessageConversationItem(message = {}, employee = {}) {
+  if (isSystemMessage(message)) {
+    return { ...message, direction: 'system', type: message.type || 'service', text: message.text || '', created_at: message.created_at || null };
+  }
   const outbound = messageBelongsToEmployee(message, employee)
     || ['employee_message', 'admin_reply', 'ai_reply', 'bot_reply', 'bot_broadcast', 'bot_notification', 'bot_message'].includes(message.classification || '');
   const origin = message.origin_type || message.actor_type || (outbound ? 'employee' : 'customer');
@@ -3766,6 +3886,24 @@ function employeeChatMessageConversationItem(message = {}, employee = {}) {
   };
 }
 
+function employeeScopedMessageVisible(message = {}, employee = {}, requests = [], includeGroupContext = false) {
+  if (isSystemMessage(message)) return true;
+  if (messageBelongsToEmployee(message, employee)) return true;
+
+  const origin = String(message.origin_type || message.actor_type || '').toLowerCase();
+  const classification = String(message.classification || '').toLowerCase();
+  const looksLikeOtherEmployee = origin === 'employee' || classification === 'employee_message';
+  if (looksLikeOtherEmployee) return false;
+  if (!includeGroupContext) return message.direction === 'inbound';
+
+  const customerIds = new Set((Array.isArray(requests) ? requests : [])
+    .map(request => String(request.customer_tg_id || request.actor_tg_user_id || '').trim())
+    .filter(Boolean));
+  if (!customerIds.size) return message.direction === 'inbound';
+  const actorId = String(message.actor_tg_user_id || message.from_tg_user_id || '').trim();
+  return message.direction === 'inbound' && (!actorId || customerIds.has(actorId));
+}
+
 function employeeScopedConversation(row = {}, employee = {}) {
   const includeFullGroupThread = row.source_type === 'group';
   const requestRows = [
@@ -3777,7 +3915,7 @@ function employeeScopedConversation(row = {}, employee = {}) {
   const messages = Array.isArray(row.chat_messages)
     ? row.chat_messages
       .map(message => employeeChatMessageConversationItem(message, employee))
-      .filter(message => includeFullGroupThread || message.direction === 'inbound' || messageBelongsToEmployee(message, employee))
+      .filter(message => employeeScopedMessageVisible(message, employee, requestRows, includeFullGroupThread))
     : (Array.isArray(row.messages) ? row.messages : [])
       .map(message => employeeMessageConversationItem(message, employee))
       .filter(message => messageBelongsToEmployee(message, employee));
@@ -3800,7 +3938,7 @@ const employeeProfileConversation = computed(() => {
   const conversation = Array.isArray(employeeProfileChatDetail.value.conversation) ? employeeProfileChatDetail.value.conversation : [];
   const includeFullGroupThread = chat.source_type === 'group';
   return (conversation.length ? conversation : employeeScopedConversation(chat, employee))
-    .filter(message => includeFullGroupThread || message.direction === 'inbound' || messageBelongsToEmployee(message, employee));
+    .filter(message => employeeScopedMessageVisible(message, employee, employeeProfileChatRequests.value, includeFullGroupThread));
 });
 
 const employeeStatColumns = [
@@ -4072,6 +4210,7 @@ function fmtChatTime(value) {
 function messageSourceLabel(message = {}) {
   const label = String(message.source_label || '').trim();
   if (label) return label;
+  if (isSystemMessage(message)) return 'Telegram';
   const origin = String(message.origin_type || message.actor_type || '').trim().toLowerCase();
   if (origin === 'admin') return 'Admin';
   if (origin === 'bot') return 'Bot';
@@ -4080,6 +4219,10 @@ function messageSourceLabel(message = {}) {
   if (origin === 'customer') return 'Mijoz';
   if (message.direction === 'outbound') return 'Xodim';
   return 'Mijoz';
+}
+
+function isSystemMessage(message = {}) {
+  return message.direction === 'system' || message.type === 'service' || message.origin_type === 'system';
 }
 
 function chatBubbleKey(message) {
@@ -5352,6 +5495,7 @@ function openAlertRequests(row = {}) {
 }
 
 function closeModal() {
+  hideFloatingTooltip();
   if (modal.value === 'chatDetail' || modal.value === 'metricDetail' || modal.value === 'employeeCompanies' || modal.value === 'companyGroupActivity') clearMediaUrls();
   if (modal.value === 'metricDetail') resetMetricChatDetail();
   if (modal.value === 'employeeCompanies') resetEmployeeProfileChat();
@@ -5981,6 +6125,11 @@ onMounted(async () => {
   if (typeof document !== 'undefined') {
     document.addEventListener('pointerdown', handleDocumentPointerDown);
     document.addEventListener('keydown', handleDocumentKeydown);
+    document.addEventListener('pointerover', handleDocumentTooltipOver);
+    document.addEventListener('pointermove', handleDocumentTooltipMove);
+    document.addEventListener('pointerout', handleDocumentTooltipOut);
+    document.addEventListener('focusin', handleDocumentTooltipFocusIn);
+    document.addEventListener('focusout', handleDocumentTooltipFocusOut);
   }
   durationTimer = setInterval(() => {
     nowTick.value = Date.now();
@@ -5996,6 +6145,11 @@ onUnmounted(() => {
   if (typeof document !== 'undefined') {
     document.removeEventListener('pointerdown', handleDocumentPointerDown);
     document.removeEventListener('keydown', handleDocumentKeydown);
+    document.removeEventListener('pointerover', handleDocumentTooltipOver);
+    document.removeEventListener('pointermove', handleDocumentTooltipMove);
+    document.removeEventListener('pointerout', handleDocumentTooltipOut);
+    document.removeEventListener('focusin', handleDocumentTooltipFocusIn);
+    document.removeEventListener('focusout', handleDocumentTooltipFocusOut);
   }
   if (durationTimer) clearInterval(durationTimer);
   stopTelegramAutoSync();

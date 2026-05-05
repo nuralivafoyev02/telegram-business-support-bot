@@ -954,6 +954,55 @@ async function testChatDetailIncludesTicketSolutionAndTimeline() {
   }
 }
 
+async function testChatDetailShowsTelegramMemberServiceMessages() {
+  const originalSelect = supabase.select;
+  const chatId = -100700;
+
+  supabase.select = async (table) => {
+    if (table === 'tg_chats') {
+      return [{
+        chat_id: chatId,
+        title: 'Support guruhi',
+        source_type: 'group',
+        member_status: 'administrator',
+        is_active: true,
+        last_message_at: '2026-05-02T08:10:00.000Z'
+      }];
+    }
+    if (table === 'messages') {
+      return [{
+        id: 'service-message-1',
+        tg_message_id: 77,
+        chat_id: chatId,
+        from_tg_user_id: 501,
+        from_name: 'Mijoz A',
+        source_type: 'group',
+        text: '',
+        classification: 'message',
+        employee_id: null,
+        raw: {
+          message_id: 77,
+          left_chat_member: { id: 601, first_name: 'Vali', last_name: 'Karimov', username: 'vali' }
+        },
+        created_at: '2026-05-02T08:10:00.000Z'
+      }];
+    }
+    if (table === 'support_requests' || table === 'request_events' || table === 'employees') return [];
+    return [];
+  };
+
+  try {
+    const result = await callAdmin('chatDetail', { query: { chat_id: chatId } });
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.data.chat.member_status, 'administrator');
+    assert.strictEqual(result.payload.data.conversation.length, 1);
+    assert.strictEqual(result.payload.data.conversation[0].direction, 'system');
+    assert.match(result.payload.data.conversation[0].text, /Vali Karimov guruhdan chiqdi/);
+  } finally {
+    supabase.select = originalSelect;
+  }
+}
+
 async function testCompanyGroupActivityReturnsLinkedGroupMessagesWithTickets() {
   const originalSelect = supabase.select;
   const chatId = -100700;
@@ -2119,8 +2168,7 @@ async function testEmployeeActivityReturnsGroupsAndCustomers() {
     assert.strictEqual(result.payload.data.groups[0].messages.length, 35);
     assert.strictEqual(result.payload.data.groups[0].messages.some(message => message.text === 'Javob berdim'), true);
     assert.strictEqual(result.payload.data.groups[0].chat_messages.some(message => message.text === 'Oddiy chat xabari'), true);
-    assert.strictEqual(result.payload.data.groups[0].chat_messages.some(message => message.text === 'Boshqa xodim javobi'), true);
-    assert.strictEqual(result.payload.data.groups[0].chat_messages.find(message => message.text === 'Boshqa xodim javobi').source_label, 'Xodim');
+    assert.strictEqual(result.payload.data.groups[0].chat_messages.some(message => message.text === 'Boshqa xodim javobi'), false);
     assert.strictEqual(result.payload.data.groups[0].closed_requests[0].events[0].text, 'Qo‘shimcha savol');
   } finally {
     supabase.select = originalSelect;
@@ -2595,6 +2643,7 @@ async function run() {
   await testPrivateChatsExcludeEmployees();
   await testGroupsIncludeMessageStatsForChatPreview();
   await testChatDetailIncludesTicketSolutionAndTimeline();
+  await testChatDetailShowsTelegramMemberServiceMessages();
   await testCompanyGroupActivityReturnsLinkedGroupMessagesWithTickets();
   await testCompanyGroupActivityLimitsLargeConversationPayload();
   await testDashboardCompanyTicketsUseRegisteredGroupCompany();
