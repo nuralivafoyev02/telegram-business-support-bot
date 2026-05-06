@@ -77,6 +77,16 @@ async function requestBlob(action, { query = {} } = {}) {
   return response.blob();
 }
 
+function telegramFileQuery(mediaOrFileId) {
+  if (typeof mediaOrFileId === 'string') return { file_id: mediaOrFileId };
+  const media = mediaOrFileId || {};
+  return safeQuery({
+    file_id: media.file_id,
+    mime_type: media.mime_type,
+    file_name: media.file_name
+  });
+}
+
 export const api = {
   async login(username, password) {
     const data = await request('login', { method: 'POST', body: { username, password } });
@@ -93,7 +103,7 @@ export const api = {
   requests: query => request('requests', { query }).then(r => r.data),
   chatDetail: query => request('chatDetail', { query }).then(r => r.data),
   companyGroupActivity: query => request('companyGroupActivity', { query }).then(r => r.data),
-  telegramFile: fileId => requestBlob('telegramFile', { query: { file_id: fileId } }),
+  telegramFile: mediaOrFileId => requestBlob('telegramFile', { query: telegramFileQuery(mediaOrFileId) }),
   telegramProfilePhoto: tgUserId => requestBlob('telegramProfilePhoto', { query: { tg_user_id: tgUserId } }),
   settings: () => request('settings').then(r => r.data),
   sendMessage: payload => request('sendMessage', { method: 'POST', body: payload }).then(r => r.data),

@@ -1359,6 +1359,40 @@ tbody tr:hover {
   width: min(330px, 100%);
 }
 
+.chat-media-file {
+  display: flex;
+  align-items: center;
+  width: min(360px, 100%);
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  color: var(--chat-text);
+  background: var(--chat-chip-bg);
+  font-size: 13px;
+  font-weight: 800;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.chat-media-file:hover,
+.chat-media-link:hover {
+  border-color: var(--brand-blue);
+  color: var(--brand-blue);
+}
+
+.chat-media-link {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  max-width: 100%;
+  margin-top: 6px;
+  color: var(--chat-muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
 .chat-media-placeholder {
   display: grid;
   place-items: center;

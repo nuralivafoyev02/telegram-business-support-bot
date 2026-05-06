@@ -1395,10 +1395,16 @@
                               class="chat-media-video" :src="mediaUrl(message.media)" controls playsinline></video>
                             <audio v-else-if="isAudioMedia(message.media) && mediaUrl(message.media)"
                               class="chat-media-audio" :src="mediaUrl(message.media)" controls></audio>
+                            <a v-else-if="isDocumentMedia(message.media) && mediaUrl(message.media)"
+                              class="chat-media-file" :href="mediaUrl(message.media)" target="_blank"
+                              rel="noopener noreferrer">{{ mediaPlaceholder(message.media) }}</a>
                             <div v-else class="chat-media-placeholder"
                               :class="{ sticker: message.media.kind === 'sticker' }">
                               {{ mediaPlaceholder(message.media) }}
                             </div>
+                            <a v-if="showMediaOpenLink(message.media)" class="chat-media-link"
+                              :href="mediaUrl(message.media)" target="_blank" rel="noopener noreferrer">{{
+                                mediaOpenLabel(message.media) }}</a>
                           </div>
                           <div v-if="chatMessageBodyText(message)" class="chat-message-text"
                             v-html="chatMessageHtml(message)"></div>
@@ -1564,10 +1570,16 @@
                               class="chat-media-video" :src="mediaUrl(message.media)" controls playsinline></video>
                             <audio v-else-if="isAudioMedia(message.media) && mediaUrl(message.media)"
                               class="chat-media-audio" :src="mediaUrl(message.media)" controls></audio>
+                            <a v-else-if="isDocumentMedia(message.media) && mediaUrl(message.media)"
+                              class="chat-media-file" :href="mediaUrl(message.media)" target="_blank"
+                              rel="noopener noreferrer">{{ mediaPlaceholder(message.media) }}</a>
                             <div v-else class="chat-media-placeholder"
                               :class="{ sticker: message.media.kind === 'sticker' }">
                               {{ mediaPlaceholder(message.media) }}
                             </div>
+                            <a v-if="showMediaOpenLink(message.media)" class="chat-media-link"
+                              :href="mediaUrl(message.media)" target="_blank" rel="noopener noreferrer">{{
+                                mediaOpenLabel(message.media) }}</a>
                           </div>
                           <div v-if="chatMessageBodyText(message)" class="chat-message-text"
                             v-html="chatMessageHtml(message)"></div>
@@ -1800,10 +1812,16 @@
                               class="chat-media-video" :src="mediaUrl(message.media)" controls playsinline></video>
                             <audio v-else-if="isAudioMedia(message.media) && mediaUrl(message.media)"
                               class="chat-media-audio" :src="mediaUrl(message.media)" controls></audio>
+                            <a v-else-if="isDocumentMedia(message.media) && mediaUrl(message.media)"
+                              class="chat-media-file" :href="mediaUrl(message.media)" target="_blank"
+                              rel="noopener noreferrer">{{ mediaPlaceholder(message.media) }}</a>
                             <div v-else class="chat-media-placeholder"
                               :class="{ sticker: message.media.kind === 'sticker' }">
                               {{ mediaPlaceholder(message.media) }}
                             </div>
+                            <a v-if="showMediaOpenLink(message.media)" class="chat-media-link"
+                              :href="mediaUrl(message.media)" target="_blank" rel="noopener noreferrer">{{
+                                mediaOpenLabel(message.media) }}</a>
                           </div>
                           <div v-if="chatMessageBodyText(message)" class="chat-message-text"
                             v-html="chatMessageHtml(message)"></div>
@@ -2012,9 +2030,15 @@
                         :src="mediaUrl(message.media)" controls playsinline></video>
                       <audio v-else-if="isAudioMedia(message.media) && mediaUrl(message.media)" class="chat-media-audio"
                         :src="mediaUrl(message.media)" controls></audio>
+                      <a v-else-if="isDocumentMedia(message.media) && mediaUrl(message.media)" class="chat-media-file"
+                        :href="mediaUrl(message.media)" target="_blank" rel="noopener noreferrer">{{
+                          mediaPlaceholder(message.media) }}</a>
                       <div v-else class="chat-media-placeholder" :class="{ sticker: message.media.kind === 'sticker' }">
                         {{ mediaPlaceholder(message.media) }}
                       </div>
+                      <a v-if="showMediaOpenLink(message.media)" class="chat-media-link"
+                        :href="mediaUrl(message.media)" target="_blank" rel="noopener noreferrer">{{
+                          mediaOpenLabel(message.media) }}</a>
                     </div>
                     <div v-if="chatMessageBodyText(message)" class="chat-message-text"
                       v-html="chatMessageHtml(message)"></div>
@@ -4330,6 +4354,20 @@ function isAudioMedia(media) {
   return ['voice', 'audio'].includes(media?.kind);
 }
 
+function isDocumentMedia(media) {
+  return media?.kind === 'document';
+}
+
+function showMediaOpenLink(media) {
+  return !!mediaUrl(media) && ['voice', 'audio'].includes(media?.kind);
+}
+
+function mediaOpenLabel(media) {
+  if (media?.kind === 'voice') return 'Ovozli xabarni alohida ochish';
+  if (media?.kind === 'audio') return 'Audioni alohida ochish';
+  return 'Faylni ochish';
+}
+
 function mediaPlaceholder(media) {
   if (!media) return 'Fayl';
   if (mediaErrors.value[media.file_id]) return 'Fayl yuklanmadi';
@@ -4440,7 +4478,7 @@ async function loadConversationMedia(messages = []) {
   await Promise.all(uniqueMedia.map(async media => {
     mediaLoading.value = { ...mediaLoading.value, [media.file_id]: true };
     try {
-      const blob = await api.telegramFile(media.file_id);
+      const blob = await api.telegramFile(media);
       const url = URL.createObjectURL(blob);
       if (loadToken !== mediaLoadToken) {
         URL.revokeObjectURL(url);

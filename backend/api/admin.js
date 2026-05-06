@@ -2834,7 +2834,54 @@ function contentTypeFromPath(filePath = '') {
   if (lower.endsWith('.m4a')) return 'audio/mp4';
   if (lower.endsWith('.wav')) return 'audio/wav';
   if (lower.endsWith('.pdf')) return 'application/pdf';
+  if (lower.endsWith('.txt')) return 'text/plain; charset=utf-8';
+  if (lower.endsWith('.csv')) return 'text/csv; charset=utf-8';
+  if (lower.endsWith('.doc')) return 'application/msword';
+  if (lower.endsWith('.docx')) return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  if (lower.endsWith('.xls')) return 'application/vnd.ms-excel';
+  if (lower.endsWith('.xlsx')) return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  if (lower.endsWith('.ppt')) return 'application/vnd.ms-powerpoint';
+  if (lower.endsWith('.pptx')) return 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+  if (lower.endsWith('.zip')) return 'application/zip';
+  if (lower.endsWith('.rar')) return 'application/vnd.rar';
   return 'application/octet-stream';
+}
+
+function safeMimeType(value = '') {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  const [type, ...params] = raw.split(';').map(part => part.trim()).filter(Boolean);
+  const lowerType = String(type || '').toLowerCase();
+  if (!/^[a-z0-9][a-z0-9.+-]*\/[a-z0-9][a-z0-9.+-]*$/i.test(lowerType)) return '';
+  const safeParams = params.filter(param => /^[a-z0-9!#$&^_.+-]+=(?:"[^"\r\n]*"|[a-z0-9!#$&^_.+-]+)$/i.test(param));
+  return [lowerType, ...safeParams].join('; ');
+}
+
+function isGenericContentType(value = '') {
+  const type = safeMimeType(value).split(';')[0];
+  return !type || type === 'application/octet-stream' || type === 'binary/octet-stream';
+}
+
+function fileNameFromPath(filePath = '') {
+  const name = String(filePath || '').split('/').pop() || '';
+  return name || 'telegram-file';
+}
+
+function safeHeaderFileName(value = '') {
+  return String(value || '')
+    .split(/[\\/]/).pop()
+    .replace(/["\r\n]/g, '_')
+    .trim() || 'telegram-file';
+}
+
+function contentDispositionFor(contentType = '', fileName = '') {
+  const type = safeMimeType(contentType).split(';')[0];
+  const disposition = /^(image|audio|video)\//.test(type) || type === 'application/pdf' || type.startsWith('text/')
+    ? 'inline'
+    : 'attachment';
+  const name = safeHeaderFileName(fileName);
+  const asciiName = name.replace(/[^\x20-\x7e]/g, '_') || 'telegram-file';
+  return `${disposition}; filename="${asciiName}"; filename*=UTF-8''${encodeURIComponent(name)}`;
 }
 
 async function sendTelegramFile(query, res) {
@@ -2844,8 +2891,14 @@ async function sendTelegramFile(query, res) {
   if (!file || !file.file_path) throw new Error('Telegram fayl topilmadi');
 
   const response = await downloadFile(file.file_path);
+  const requestedType = safeMimeType(query.mime_type);
+  const pathType = contentTypeFromPath(query.file_name || file.file_path);
+  const upstreamType = safeMimeType(response.headers.get('content-type'));
+  const contentType = isGenericContentType(upstreamType) ? (requestedType || pathType || upstreamType) : upstreamType;
+  const fileName = query.file_name || fileNameFromPath(file.file_path);
   res.statusCode = 200;
-  res.setHeader('Content-Type', response.headers.get('content-type') || contentTypeFromPath(file.file_path));
+  res.setHeader('Content-Type', contentType);
+  res.setHeader('Content-Disposition', contentDispositionFor(contentType, fileName));
   res.setHeader('Cache-Control', 'private, max-age=86400');
   const contentLength = response.headers.get('content-length');
   if (contentLength) res.setHeader('Content-Length', contentLength);

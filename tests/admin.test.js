@@ -70,6 +70,13 @@ async function callAdmin(action, { method = 'GET', query = {}, body = null } = {
   return { status: res.statusCode, payload: JSON.parse(res.body) };
 }
 
+async function callAdminRaw(action, { method = 'GET', query = {}, body = null } = {}) {
+  const res = createRes();
+  const token = createToken({ id: 'admin-1', username: 'admin', role: 'owner' });
+  await handler(createAdminReq({ action, method, query, body, token }), res);
+  return res;
+}
+
 async function testAiModeEnableSendsMainGroupNotice() {
   const originalSelect = supabase.select;
   const originalInsert = supabase.insert;
@@ -1742,6 +1749,64 @@ async function testSetWebhookPrefersExplicitAppUrl() {
   }
 }
 
+async function testTelegramFileUsesPlayableMimeTypeAndFilename() {
+  const originalFetch = global.fetch;
+  const filePayloads = {
+    'voice-file': {
+      path: 'voice/file_10.oga',
+      body: 'voice-bytes',
+      headers: { 'content-type': 'application/octet-stream', 'content-length': '11' }
+    },
+    'pdf-file': {
+      path: 'documents/file_20',
+      body: 'pdf-bytes',
+      headers: { 'content-type': 'application/octet-stream', 'content-length': '9' }
+    }
+  };
+
+  global.fetch = async (url, options = {}) => {
+    if (/\/getFile$/.test(url)) {
+      const body = JSON.parse(options.body || '{}');
+      const payload = filePayloads[body.file_id];
+      return {
+        ok: true,
+        json: async () => ({ ok: true, result: { file_id: body.file_id, file_path: payload.path } })
+      };
+    }
+    const payload = Object.values(filePayloads).find(item => String(url).includes(item.path));
+    return {
+      ok: true,
+      headers: { get: key => payload.headers[String(key).toLowerCase()] || null },
+      arrayBuffer: async () => {
+        const buffer = Buffer.from(payload.body);
+        return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
+      }
+    };
+  };
+
+  try {
+    const voice = await callAdminRaw('telegramFile', {
+      query: { file_id: 'voice-file', mime_type: 'audio/ogg', file_name: 'support.oga' }
+    });
+    assert.strictEqual(voice.statusCode, 200);
+    assert.strictEqual(voice.headers['content-type'], 'audio/ogg');
+    assert.match(voice.headers['content-disposition'], /^inline;/);
+    assert.match(voice.headers['content-disposition'], /support\.oga/);
+    assert.strictEqual(voice.body, 'voice-bytes');
+
+    const pdf = await callAdminRaw('telegramFile', {
+      query: { file_id: 'pdf-file', file_name: 'hisobot.pdf' }
+    });
+    assert.strictEqual(pdf.statusCode, 200);
+    assert.strictEqual(pdf.headers['content-type'], 'application/pdf');
+    assert.match(pdf.headers['content-disposition'], /^inline;/);
+    assert.match(pdf.headers['content-disposition'], /hisobot\.pdf/);
+    assert.strictEqual(pdf.body, 'pdf-bytes');
+  } finally {
+    global.fetch = originalFetch;
+  }
+}
+
 async function testSyncTelegramUpdatesDeletesActiveWebhookThenProcessesUpdates() {
   const originalSelect = supabase.select;
   const originalInsert = supabase.insert;
@@ -2665,6 +2730,7 @@ async function run() {
   await testWebhookInfoWarnsWhenPointingToCompanyInfoUrl();
   await testSetWebhookRejectsCompanyInfoUrl();
   await testSetWebhookPrefersExplicitAppUrl();
+  await testTelegramFileUsesPlayableMimeTypeAndFilename();
   await testSyncTelegramUpdatesDeletesActiveWebhookThenProcessesUpdates();
   await testSyncTelegramUpdatesIgnoresStaleOffsetAndAcknowledgesFetchedUpdates();
   await testSendToChatStoresOutgoingAdminMessage();
