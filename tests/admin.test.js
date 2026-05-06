@@ -1118,7 +1118,7 @@ async function testCompanyGroupActivityLimitsLargeConversationPayload() {
   const originalSelect = supabase.select;
   const chatId = -100799;
   const companyId = 'company-heavy';
-  const messages = Array.from({ length: 760 }, (_, index) => ({
+  const messages = Array.from({ length: 1760 }, (_, index) => ({
     id: `m${index + 1}`,
     tg_message_id: 2000 + index,
     chat_id: chatId,
@@ -1133,7 +1133,7 @@ async function testCompanyGroupActivityLimitsLargeConversationPayload() {
     created_at: new Date(Date.parse('2026-04-30T08:00:00.000Z') + index * 1000).toISOString()
   }));
 
-  supabase.select = async (table) => {
+  supabase.select = async (table, query = {}) => {
     if (table === 'companies') return [{ id: companyId, name: 'Heavy Co', brand: 'HV', is_active: true }];
     if (table === 'employees') return [{ id: 'emp-1', tg_user_id: 901, full_name: 'Ali', username: 'ali', role: 'support', is_active: true }];
     if (table === 'tg_chats') return [{
@@ -1145,7 +1145,12 @@ async function testCompanyGroupActivityLimitsLargeConversationPayload() {
       last_message_at: messages[messages.length - 1].created_at
     }];
     if (table === 'support_requests') return [];
-    if (table === 'messages') return messages;
+    if (table === 'messages') {
+      const orderedMessages = query.order === 'created_at.desc' ? messages.slice().reverse() : messages;
+      const offset = Number.parseInt(query.offset || '0', 10);
+      const limit = Number.parseInt(query.limit || String(orderedMessages.length), 10);
+      return orderedMessages.slice(offset, offset + limit);
+    }
     if (table === 'request_events') return [];
     return [];
   };
@@ -1154,11 +1159,11 @@ async function testCompanyGroupActivityLimitsLargeConversationPayload() {
     const result = await callAdmin('companyGroupActivity', { query: { period: 'all', company_id: companyId } });
     assert.strictEqual(result.status, 200);
     const group = result.payload.data.companies[0].groups[0];
-    assert.strictEqual(group.total_messages, 760);
-    assert.strictEqual(group.conversation.length, 500);
+    assert.strictEqual(group.total_messages, 1760);
+    assert.strictEqual(group.conversation.length, 1500);
     assert.strictEqual(group.conversation_truncated, true);
     assert.strictEqual(group.conversation[0].text, 'Message 261');
-    assert.strictEqual(group.conversation[group.conversation.length - 1].text, 'Message 760');
+    assert.strictEqual(group.conversation[group.conversation.length - 1].text, 'Message 1760');
   } finally {
     supabase.select = originalSelect;
   }

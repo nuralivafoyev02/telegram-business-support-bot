@@ -284,6 +284,7 @@ async function testRequestMessageAppendsToExistingOpenRequest() {
         chat_id: 777,
         source_type: 'private',
         customer_tg_id: 777,
+        initial_text: 'Login qilolmayapman, yordam bering',
         status: 'open',
         created_at: new Date().toISOString()
       }];
