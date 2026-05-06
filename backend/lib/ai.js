@@ -685,5 +685,6 @@ module.exports = {
   testAiIntegration,
   classifyWithAi,
   generateSupportReply,
-  generateLocalSupportReply
+  generateLocalSupportReply,
+  scoreTextMatch
 };
