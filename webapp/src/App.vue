@@ -2686,21 +2686,6 @@ const supportPerformanceRows = computed(() => {
     || b.assigned_company_count - a.assigned_company_count
     || a.full_name.localeCompare(b.full_name));
 });
-const filteredTicketListRows = computed(() => {
-  const rows = Array.isArray(ticketList.value.rows) ? ticketList.value.rows : [];
-  return rows.filter(row => {
-    const matchesStatus = ticketMatchesStatus(row, ticketList.value.active);
-    if (!matchesStatus) return false;
-    
-    const source = ticketList.value.source;
-    if (source === 'all') return true;
-    const type = String(row.source_type || '').toLowerCase();
-    if (source === 'group') return type === 'group';
-    if (source === 'private') return type === 'private' || type === 'personal' || type === 'business';
-    return true;
-  }).sort(ticketListSort);
-});
-
 const filteredMetricDetailRows = computed(() => {
   const rows = Array.isArray(metricDetail.value.rows) ? metricDetail.value.rows : [];
   return rows.filter(row => {
@@ -3836,6 +3821,7 @@ const ticketListSupportOptions = computed(() => {
 const filteredTicketListRows = computed(() => {
   const searchText = ticketListSearch.value.toLowerCase().trim();
   return (ticketList.value.rows || [])
+    .filter(row => ticketMatchesSource(row, ticketList.value.source))
     .filter(row => ticketMatchesStatus(row, ticketList.value.active))
     .filter(row => ticketListSupport.value === 'all' || [row.responsible_employee_name, row.support_name, row.closed_by_name].includes(ticketListSupport.value))
     .filter(row => {
@@ -5694,6 +5680,14 @@ function ticketFilterFromAction(action = 'requests') {
 function ticketMatchesStatus(row = {}, status = 'all') {
   if (status === 'open') return row.status === 'open';
   if (status === 'closed') return row.status === 'closed';
+  return true;
+}
+
+function ticketMatchesSource(row = {}, source = 'all') {
+  if (source === 'all') return true;
+  const type = String(row.source_type || row.chat_source_type || '').toLowerCase();
+  if (source === 'group') return type === 'group';
+  if (source === 'private') return type === 'private' || type === 'personal' || type === 'business';
   return true;
 }
 
