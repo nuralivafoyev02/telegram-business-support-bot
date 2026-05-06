@@ -13,6 +13,7 @@ const DEFAULT_SETTINGS = Object.freeze({
   aiIntegration: normalizeAiIntegration({}),
   logNotifications: Object.freeze({ enabled: false, levels: ['error'], target: 'main_group' }),
   groupMessageAudit: Object.freeze({ enabled: true }),
+  messageReactions: Object.freeze({ enabled: false, ticketClose: true, emoji: '\u26a1' }),
   autoReply: true,
   doneTag: DEFAULT_DONE_TAG,
   requestDetectionMode: 'keyword',
@@ -76,11 +77,20 @@ function normalizeGroupMessageAudit(value = {}) {
   };
 }
 
+function normalizeMessageReactions(value = {}) {
+  return {
+    enabled: normalizeBoolean(value.enabled, DEFAULT_SETTINGS.messageReactions.enabled),
+    ticketClose: normalizeBoolean(value.ticket_close ?? value.ticketClose, DEFAULT_SETTINGS.messageReactions.ticketClose),
+    emoji: String(value.emoji || DEFAULT_SETTINGS.messageReactions.emoji).trim() || DEFAULT_SETTINGS.messageReactions.emoji
+  };
+}
+
 function normalizeSettings(rows = []) {
   const ai = settingValue(rows, 'ai_mode');
   const integration = normalizeAiIntegration(settingValue(rows, 'ai_integration'));
   const logNotifications = normalizeLogNotifications(settingValue(rows, 'log_notifications'));
   const groupMessageAudit = normalizeGroupMessageAudit(settingValue(rows, 'group_message_audit'));
+  const messageReactions = normalizeMessageReactions(settingValue(rows, 'message_reactions'));
   const autoReply = settingValue(rows, 'auto_reply');
   const done = settingValue(rows, 'done_tag');
   const detection = settingValue(rows, 'request_detection');
@@ -97,6 +107,7 @@ function normalizeSettings(rows = []) {
     aiIntegration: integration,
     logNotifications,
     groupMessageAudit,
+    messageReactions,
     autoReply: normalizeBoolean(autoReply.enabled, DEFAULT_SETTINGS.autoReply),
     doneTag: String(done.tag || DEFAULT_SETTINGS.doneTag).trim() || DEFAULT_SETTINGS.doneTag,
     requestDetectionMode: String(detection.mode || DEFAULT_SETTINGS.requestDetectionMode).trim() || DEFAULT_SETTINGS.requestDetectionMode,
@@ -112,7 +123,7 @@ async function getBotSettings({ force = false } = {}) {
   try {
     const rows = await supabase.select('bot_settings', {
       select: 'key,value',
-      key: 'in.(ai_mode,ai_integration,log_notifications,group_message_audit,auto_reply,done_tag,request_detection,main_group)'
+      key: 'in.(ai_mode,ai_integration,log_notifications,group_message_audit,message_reactions,auto_reply,done_tag,request_detection,main_group)'
     });
     cachedSettings = normalizeSettings(rows || []);
     cachedAt = now;
@@ -134,6 +145,7 @@ module.exports = {
   DEFAULT_SETTINGS,
   normalizeLogNotifications,
   normalizeGroupMessageAudit,
+  normalizeMessageReactions,
   normalizeSettings,
   getBotSettings,
   clearBotSettingsCache

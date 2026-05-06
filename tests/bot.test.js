@@ -1106,7 +1106,84 @@ async function testEmployeePlainAnswerClosesLatestOpenRequest() {
     assert.strictEqual(closePatch.values.done_message_id, 42);
     assert.strictEqual(inserted.some(item => item.table === 'request_events' && item.rows[0].event_type === 'closed'), true);
     assert.strictEqual(inserted.some(item => item.table === 'request_events' && item.rows[0].event_type === 'done_without_request'), false);
+    assert.strictEqual(telegramCalls.length, 0);
+  } finally {
+    supabase.insert = originalInsert;
+    supabase.select = originalSelect;
+    supabase.patch = originalPatch;
+    global.fetch = originalFetch;
+    clearBotSettingsCache();
+  }
+}
+
+async function testMessageReactionSettingEnablesTicketCloseReaction() {
+  const originalInsert = supabase.insert;
+  const originalSelect = supabase.select;
+  const originalPatch = supabase.patch;
+  const originalFetch = global.fetch;
+  const inserted = [];
+  const patched = [];
+  const telegramCalls = [];
+  clearBotSettingsCache();
+
+  supabase.select = async (table, query = {}) => {
+    if (table === 'bot_settings') {
+      return [
+        { key: 'message_reactions', value: { enabled: true, ticket_close: true, emoji: '\u26a1' } }
+      ];
+    }
+    if (table === 'employees') return [{ id: 'employee-1', tg_user_id: 777, full_name: 'Ali', username: 'ali', is_active: true }];
+    if (table === 'support_requests' && query.status === 'eq.open') {
+      return [{
+        id: 'request-1',
+        chat_id: -100200,
+        status: 'open',
+        customer_tg_id: 1001,
+        customer_name: 'Customer',
+        initial_message_id: 40,
+        initial_text: 'Login qilolmayapman',
+        created_at: new Date().toISOString()
+      }];
+    }
+    return [];
+  };
+  supabase.insert = async (table, rows) => {
+    inserted.push({ table, rows });
+    return rows.map(row => ({ id: `${table}-row`, ...row }));
+  };
+  supabase.patch = async (table, query, values) => {
+    patched.push({ table, query, values });
+    return [{ id: 'request-1', ...values }];
+  };
+  global.fetch = async (_url, options) => {
+    telegramCalls.push({ url: _url, body: JSON.parse(options.body) });
+    return {
+      ok: true,
+      json: async () => ({ ok: true, result: true })
+    };
+  };
+
+  try {
+    const result = await callHandler({
+      update_id: 14,
+      message: {
+        message_id: 43,
+        date: 1777100000,
+        text: 'Parolni yangilab berdim, endi kirib ko‘ring',
+        chat: { id: -100200, type: 'supergroup', title: 'Support group' },
+        from: { id: 777, first_name: 'Ali', username: 'ali', is_bot: false }
+      }
+    });
+
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.handled, 'message');
+    assert.strictEqual(patched.some(item => item.table === 'support_requests' && item.values.status === 'closed'), true);
+    assert.strictEqual(inserted.some(item => item.table === 'request_events' && item.rows[0].event_type === 'closed'), true);
     assert.strictEqual(telegramCalls.length, 1);
+    assert.match(telegramCalls[0].url, /setMessageReaction$/);
+    assert.strictEqual(telegramCalls[0].body.chat_id, -100200);
+    assert.strictEqual(telegramCalls[0].body.message_id, 43);
+    assert.deepStrictEqual(telegramCalls[0].body.reaction, [{ type: 'emoji', emoji: '⚡' }]);
   } finally {
     supabase.insert = originalInsert;
     supabase.select = originalSelect;
@@ -1492,6 +1569,7 @@ async function testBotRemovalMarksGroupInactive() {
   await testMainGroupStatsTriggerSendsReport();
   await testReplyToCustomerTicketClosesRequest();
   await testEmployeePlainAnswerClosesLatestOpenRequest();
+  await testMessageReactionSettingEnablesTicketCloseReaction();
   await testMainGroupBroadcastPreview();
   await testMainGroupBroadcastConfirmSendsAndReports();
   await testMainGroupBroadcastDeletePreview();

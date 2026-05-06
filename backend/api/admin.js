@@ -3594,7 +3594,7 @@ async function updateSettings(body) {
   if (!items.length) return [];
   const previousRows = await supabase.select('bot_settings', {
     select: 'key,value',
-    key: 'in.(ai_mode,ai_integration,log_notifications,group_message_audit,auto_reply,done_tag,request_detection,main_group)'
+    key: 'in.(ai_mode,ai_integration,log_notifications,group_message_audit,message_reactions,auto_reply,done_tag,request_detection,main_group)'
   }).catch(() => []);
   const previousSettings = normalizeSettings(previousRows || []);
   const previousAutoReplyExists = hasSetting(previousRows, 'auto_reply');

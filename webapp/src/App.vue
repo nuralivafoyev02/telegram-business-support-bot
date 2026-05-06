@@ -817,6 +817,12 @@
                       <option value="true">AI yoki bot</option>
                     </select>
                   </label>
+                  <label class="label">Telegram reaksiyalari
+                    <select v-model="settingsForm.message_reactions" class="select">
+                      <option value="false">O‘chirilgan</option>
+                      <option value="true">So‘rov yopilganda ⚡ bosish</option>
+                    </select>
+                  </label>
                   <label class="label">Yopish tegi
                     <input v-model.trim="settingsForm.done_tag" class="input" placeholder="#done" />
                   </label>
@@ -2213,7 +2219,7 @@ const floatingTooltipStyle = computed(() => ({
   transform: floatingTooltip.value.placement === 'top' ? 'translate(-50%, -100%)' : 'translate(-50%, 0)'
 }));
 
-const settingsForm = reactive({ ai_mode: 'false', auto_reply: 'true', done_tag: '#done', main_group_id: '', group_message_audit: 'true', request_detection: 'keyword' });
+const settingsForm = reactive({ ai_mode: 'false', auto_reply: 'true', message_reactions: 'false', done_tag: '#done', main_group_id: '', group_message_audit: 'true', request_detection: 'keyword' });
 const isManagerMode = computed(() => false);
 const mainTabs = computed(() => tabs.filter(tab => mainTabKeys.includes(tab.key)));
 const otherTabs = computed(() => tabs.filter(tab => otherTabKeys.includes(tab.key)));
@@ -4533,6 +4539,7 @@ async function loadSettings() {
   const integration = data.settings?.find(s => s.key === 'ai_integration')?.value;
   const logNotifications = data.settings?.find(s => s.key === 'log_notifications')?.value;
   const groupMessageAudit = data.settings?.find(s => s.key === 'group_message_audit')?.value;
+  const messageReactions = data.settings?.find(s => s.key === 'message_reactions')?.value;
   const done = data.settings?.find(s => s.key === 'done_tag')?.value;
   const mainGroup = data.settings?.find(s => s.key === 'main_group')?.value;
   const detect = data.settings?.find(s => s.key === 'request_detection')?.value;
@@ -4564,6 +4571,9 @@ async function loadSettings() {
   settingsForm.auto_reply = autoReplySetting !== undefined
     ? String(!!autoReplySetting.enabled)
     : 'true';
+  settingsForm.message_reactions = messageReactions === undefined
+    ? 'false'
+    : String(!!messageReactions?.enabled);
   settingsForm.done_tag = done?.tag || '#done';
   settingsForm.main_group_id = mainGroup?.chat_id || '';
   settingsForm.group_message_audit = groupMessageAudit === undefined
@@ -6179,6 +6189,7 @@ async function saveSettings() {
           }
         },
         { key: 'auto_reply', value: { enabled: settingsForm.auto_reply === 'true' } },
+        { key: 'message_reactions', value: { enabled: settingsForm.message_reactions === 'true', ticket_close: true, emoji: '⚡' } },
         { key: 'done_tag', value: { tag: settingsForm.done_tag, auto_reply: true } },
         { key: 'main_group', value: { chat_id: settingsForm.main_group_id } },
         { key: 'group_message_audit', value: { enabled: settingsForm.group_message_audit === 'true' } },

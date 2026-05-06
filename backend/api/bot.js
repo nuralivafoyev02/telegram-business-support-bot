@@ -950,10 +950,21 @@ function logBackgroundError(label, error) {
   notifyOperationalError(`bot:${label}`, error).catch(logError => console.error('[bot:notify-log:error]', logError));
 }
 
-async function maybeReplyDone(message, result) {
+async function maybeReactToTicketClose(message, settings = null) {
+  const resolvedSettings = settings || await getBotSettings().catch(error => {
+    logBackgroundError('ticket-close-reaction-settings', error);
+    return null;
+  });
+  const reactions = resolvedSettings && resolvedSettings.messageReactions ? resolvedSettings.messageReactions : {};
+  if (!reactions.enabled || !reactions.ticketClose) return;
+
+  await reactToMessage(message.chat.id, message.message_id, reactions.emoji || '\u26a1')
+    .catch(error => logBackgroundError('ticket-close-reaction', error));
+}
+
+async function maybeReplyDone(message, result, settings = null) {
   if (result.closed) {
-    await reactToMessage(message.chat.id, message.message_id, '⚡')
-      .catch(error => logBackgroundError('ticket-close-reaction', error));
+    await maybeReactToTicketClose(message, settings);
   } else {
     if (isGroupChat(message.chat || {})) return;
     const silent = boolEnv('SILENT_DONE_REPLY', false);
@@ -1261,13 +1272,13 @@ async function classifyIncomingMessage({ text, chat, sourceType, updateKind, mes
   return classification;
 }
 
-async function maybeCloseRequestFromReply(message, classification, employee) {
+async function maybeCloseRequestFromReply(message, classification, employee, settings = null) {
   if (!message.reply_to_message || classification === 'done' || classification === 'command') return false;
   if (message.from && message.from.is_bot) return false;
 
   const result = await metrics.closeRequestByReply({ message, employee });
   if (!result.closed) return false;
-  await maybeReplyDone(message, result);
+  await maybeReplyDone(message, result, settings);
   return true;
 }
 
@@ -1303,7 +1314,7 @@ function isLikelyEmployeeSupportAnswer(message = {}, text = '') {
   return meaningfulTextLength(value) >= 8 || looksLikeEmployeeResolution(value);
 }
 
-async function maybeCloseRequestFromEmployeeAnswer(message, classification, employee, text) {
+async function maybeCloseRequestFromEmployeeAnswer(message, classification, employee, text, settings = null) {
   if (!employee || !employee.id) return false;
   if (message.from && message.from.is_bot) return false;
   if (message.reply_to_message) return false;
@@ -1313,8 +1324,7 @@ async function maybeCloseRequestFromEmployeeAnswer(message, classification, empl
 
   const result = await metrics.closeLatestRequest({ message, employee, recordMissing: false });
   if (result.closed) {
-    await reactToMessage(message.chat.id, message.message_id, '⚡')
-      .catch(error => logBackgroundError('ticket-close-reaction', error));
+    await maybeReactToTicketClose(message, settings);
   }
   return !!result.closed;
 }
@@ -1727,17 +1737,17 @@ async function processMessage(updateKind, message) {
   if (classification === 'done') {
     const closer = employee || await metrics.ensureEmployee(from);
     const result = await metrics.closeLatestRequest({ message, employee: closer });
-    await maybeReplyDone(message, result);
+    await maybeReplyDone(message, result, settings);
     return;
   }
 
   if (await maybeReplyPrivateGreeting(updateKind, message, text)) return;
 
-  if (await maybeCloseRequestFromReply(message, classification, employee)) return;
+  if (await maybeCloseRequestFromReply(message, classification, employee, settings)) return;
 
   if (await maybeAnswerGroupQuestion({ updateKind, message, sourceType, text, settings, employee })) return;
 
-  if (await maybeCloseRequestFromEmployeeAnswer(message, classification, employee, text)) return;
+  if (await maybeCloseRequestFromEmployeeAnswer(message, classification, employee, text, settings)) return;
 
   if (isSupportRequestClassification(classification)) {
     try {
