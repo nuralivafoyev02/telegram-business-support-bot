@@ -2590,14 +2590,22 @@ body {
   background: var(--surface);
   color: var(--text);
   font-weight: 900;
-  transition: border-color .16s ease, background .16s ease, box-shadow .16s ease;
+  transition: border-color .16s ease, background .16s ease, box-shadow .16s ease, color .16s ease;
 }
 
 .ticket-filter-tabs button:hover,
-.ticket-filter-tabs button:focus-visible,
-.ticket-filter-tabs button.active {
+.ticket-filter-tabs button:focus-visible {
+  color: var(--text);
   border-color: var(--primary);
-  background: color-mix(in srgb, var(--primary) 8%, var(--surface));
+  background: color-mix(in srgb, var(--primary) 6%, var(--surface));
+  box-shadow: 0 0 0 3px rgba(31, 144, 255, .14);
+  outline: none;
+}
+
+.ticket-filter-tabs button.active {
+  color: var(--text);
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 10%, var(--surface));
   box-shadow: 0 0 0 3px rgba(31, 144, 255, .14);
   outline: none;
 }
@@ -2610,18 +2618,60 @@ body {
   height: 28px;
   margin-left: 8px;
   border-radius: var(--radius);
-  background: #eaf2ff;
-  color: var(--primary);
+  background: var(--info-bg);
+  color: var(--info-text);
 }
 
 .ticket-filter-tabs span.danger {
-  color: #dc2626;
-  background: #fee2e2;
+  color: var(--danger-text);
+  background: var(--danger-bg);
 }
 
 .ticket-filter-tabs span.success {
-  color: #047857;
-  background: #dcfce7;
+  color: var(--success-text);
+  background: var(--success-bg);
+}
+
+.ticket-filter-tabs.source-tabs {
+  justify-self: start;
+  display: inline-grid;
+  grid-template-columns: repeat(3, minmax(88px, max-content));
+  gap: 4px;
+  width: fit-content;
+  margin-bottom: 4px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-soft);
+  box-shadow: var(--shadow-soft);
+}
+
+.ticket-filter-tabs.source-tabs button {
+  justify-content: center;
+  min-height: 34px;
+  min-width: 88px;
+  padding: 6px 12px;
+  border-color: transparent;
+  border-radius: calc(var(--radius) - 2px);
+  color: var(--muted-strong);
+  background: transparent;
+  box-shadow: none;
+  font-size: 13px;
+}
+
+.ticket-filter-tabs.source-tabs button:hover,
+.ticket-filter-tabs.source-tabs button:focus-visible {
+  color: var(--text);
+  border-color: var(--line);
+  background: var(--surface);
+  box-shadow: none;
+}
+
+.ticket-filter-tabs.source-tabs button.active {
+  color: var(--primary-contrast);
+  border-color: var(--primary);
+  background: var(--primary);
+  box-shadow: var(--shadow-soft);
 }
 
 .ticket-list-toolbar {
@@ -3670,6 +3720,16 @@ tbody tr:hover {
   background: var(--surface-soft);
 }
 
+.cell-action:hover,
+.cell-action:focus {
+  color: var(--text);
+  background: color-mix(in srgb, var(--primary) 8%, var(--surface));
+}
+
+.cell-action:focus-visible {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 52%, transparent);
+}
+
 .badge {
   color: var(--muted-strong);
   background: var(--surface-soft);
@@ -4567,8 +4627,8 @@ tbody tr:hover {
 .metric-request-card.open,
 tbody tr.open-ticket-row,
 tbody tr.open-ticket-row:hover {
-  border-color: #fecdd3;
-  background: #fff1f2;
+  border-color: var(--danger-line);
+  background: color-mix(in srgb, var(--danger) 8%, var(--surface));
 }
 
 .employee-ticket-strip article>div {
@@ -4644,7 +4704,7 @@ tbody tr.open-ticket-row:hover {
 
 tbody tr.selected-row,
 tbody tr.selected-row:hover {
-  background: rgba(15, 23, 42, .08);
+  background: color-mix(in srgb, var(--primary) 10%, var(--surface));
 }
 
 tbody tr.selected-row .cell-action,
@@ -5250,6 +5310,15 @@ tbody tr.top-performer-row td:first-child {
   .ticket-filter-tabs,
   .ticket-list-toolbar {
     grid-template-columns: 1fr;
+  }
+
+  .ticket-filter-tabs.source-tabs {
+    width: 100%;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .ticket-filter-tabs.source-tabs button {
+    min-width: 0;
   }
 
   .ticket-list-meta {
