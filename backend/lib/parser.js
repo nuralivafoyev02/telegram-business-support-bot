@@ -18,21 +18,21 @@ const STRONG_REQUEST_PATTERNS = [
   /\b(so'?rov|sorov|murojaat|ariza|zayavka|заявка|обращение|request|ticket)\b/i,
   /\b(parol|login|kod|sms|kabinet|akkaunt|account|password|otp|код|смс|логин|пароль|аккаунт)\b/i,
   /\b(to'?lov|tolov|pul|summa|hisob|balans|karta|chek|oplata|оплата|платеж|payment|invoice|balance|refund|qaytar)\b/i,
-  /\b(ro'?yxat|registratsiya|aktivatsiya|obuna|tarif|dostavka|yetkazib|buyurtma|zakaz|доставка|заказ|регистрация|активация|тариф|услуга)\b/i,
+  /\b(ro'?yxat|registratsiya|aktivatsiya|obuna|tarif|dostavka|yetkazib|buyurtma|zakaz|доставка|заказ|регистрация|активация|тариф|услуга|admin|operator|administrator|support|manager)\b/i,
   /помощь|ошибка|проблема|не\s+работает|не\s+открывается|не\s+получается|проверь|исправь|помогите|ответьте|заявка|обращение|логин|пароль|аккаунт|оплата|платеж/i
 ];
 
 const SOFT_REQUEST_PATTERNS = [
-  /\b(kerak|kerek|zarur|lozim|iltimos|mumkinmi|bo'?ladimi|qanday|qanaqa|qayerdan|qachon|nega|nima\s+uchun|qancha|narx|price|сколько|почему|как|можно|нужно|please|need)\b/i,
+  /\b(kerak|kerek|zarur|lozim|iltimos|mumkinmi|bo'?ladimi|qanday|qanaqa|qayerdan|qachon|nega|nima|nima\s+uchun|qaysi|kim|qancha|narx|price|сколько|почему|как|можно|нужно|please|need|что|как|где|когда|почему|кто|чей|какой|какая|какое)\b/i,
   /\b(bot|guruh|kanal|xabar|sms|telegram|webhook|admin|operator|support|menedjer|менеджер|админ|оператор|поддержка)\b/i,
-  /\b(status|holat|javob|ma'lumot|malumot|yo'?riqnoma|qo'?llanma|instruksiya|telefon|kontakt|aloqa|сервис|статус|ответ|информация|инструкция)\b/i,
+  /\b(status|holat|javob|ma'lumot|malumot|yo'?riqnoma|qo'?llanma|instruksiya|telefon|kontakt|aloqa|servis|xizmat|statistika|hisob|hisobot|period|kunlik|oylik|haftalik|сервис|статус|ответ|информация|инструкция)\b/i,
   /сколько|почему|можно|нужно|пожалуйста|менеджер|админ|оператор|поддержка/i
 ];
 
 const DOMAIN_CONTEXT_PATTERNS = [
   /\b(uyqur|uygur|uyghur)\b/i,
   /\b(dastur|programma|ilova|platforma|tizim|sistema|modul|funksiya|funktsiya|panel|kabinet|avtomatlashtirish|avtomatlashtiradi)\b/i,
-  /\b(qurilish|obyekt|ob'?ekt|obekt|loyiha|smeta|hisobot|akt|naryad|ombor|sklad|material|qoldiq|kirim|chiqim|xarajat|brigada|ishchi|usta|ustalar|bosqich|etap|grafik|jadval|reja|kalkulyatsiya)\b/i,
+  /\b(qurilish|obyekt|ob'?ekt|obekt|loyiha|smeta|hisobot|akt|naryad|ombor|sklad|material|qoldiq|kirim|chiqim|xarajat|brigada|ishchi|usta|ustalar|bosqich|etap|grafik|jadval|reja|kalkulyatsiya|ta'minot|bo'lim|vazifa|topshiriq|ijro|mas'ul|masul|muddat|kechikish|o'tkazma|mablag'|fond|kassa)\b/i,
   /\b(уйгур|программа|приложение|платформа|система|модуль|функция|кабинет|стройка|строительство|объект|проект|смета|отчет|отчёт|акт|наряд|склад|материал|остаток|приход|расход|затрат\w*|бригада|рабоч\w*|мастер|этап|график|таблица)\b/i,
   /\b(construction|project|estimate|report|warehouse|material|crew|schedule|automation|software|app|platform|module)\b/i
 ];
@@ -176,6 +176,7 @@ function requestScore(value = '') {
   score += actionMatches * 1.5;
   if (domainMatches && (strongMatches || softMatches || actionMatches || question)) score += 1.5;
   if (domainMatches > 1 && actionMatches) score += 0.5;
+  if (question && domainMatches) score += 1; // Domain context + question mark is a strong signal
   if (question && !isSmallTalk(normalized) && !isGreetingOnly(normalized)) score += 1;
   if (GREETING_RE.test(normalized) && (strongMatches || softMatches)) score += 1;
   if (hasCustomerContext && (strongMatches || softMatches || actionMatches || domainMatches)) score += 1;
