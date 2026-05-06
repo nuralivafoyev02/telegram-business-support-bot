@@ -2383,7 +2383,7 @@ async function testGroupMessageAuditSettingCanBeSaved() {
   const originalInsert = supabase.insert;
   let settingsRows = [
     { key: 'main_group', value: { chat_id: '-100777' } },
-    { key: 'group_message_audit', value: { enabled: true } }
+    { key: 'group_message_audit', value: { enabled: true, target: 'main_group', channel_id: '' } }
   ];
 
   supabase.select = async (table) => {
@@ -2406,17 +2406,57 @@ async function testGroupMessageAuditSettingCanBeSaved() {
       body: {
         settings: [{
           key: 'group_message_audit',
-          value: { enabled: false }
+          value: { enabled: true, target: 'channel', channel_id: '-100999' }
         }]
       }
     });
 
     assert.strictEqual(result.status, 200);
     assert.strictEqual(result.payload.data[0].key, 'group_message_audit');
-    assert.strictEqual(result.payload.data[0].value.enabled, false);
+    assert.strictEqual(result.payload.data[0].value.enabled, true);
+    assert.strictEqual(result.payload.data[0].value.target, 'channel');
+    assert.strictEqual(result.payload.data[0].value.channel_id, '-100999');
   } finally {
     supabase.select = originalSelect;
     supabase.insert = originalInsert;
+    clearBotSettingsCache();
+  }
+}
+
+async function testGroupMessageAuditChannelRequiresDestination() {
+  const originalSelect = supabase.select;
+  const originalInsert = supabase.insert;
+  const originalConsoleError = console.error;
+
+  supabase.select = async (table) => {
+    if (table === 'bot_settings') return [
+      { key: 'main_group', value: { chat_id: '-100777' } },
+      { key: 'group_message_audit', value: { enabled: true, target: 'main_group', channel_id: '' } }
+    ];
+    return [];
+  };
+  supabase.insert = async () => {
+    throw new Error('insert should not be called');
+  };
+  console.error = () => {};
+
+  try {
+    const result = await callAdmin('settings', {
+      method: 'POST',
+      body: {
+        settings: [{
+          key: 'group_message_audit',
+          value: { enabled: true, target: 'channel', channel_id: '' }
+        }]
+      }
+    });
+
+    assert.strictEqual(result.status, 400);
+    assert.match(result.payload.error, /kanal ID/i);
+  } finally {
+    supabase.select = originalSelect;
+    supabase.insert = originalInsert;
+    console.error = originalConsoleError;
     clearBotSettingsCache();
   }
 }
@@ -2741,6 +2781,7 @@ async function run() {
   await testEmployeeActivityIsolatesSelectedEmployeeChats();
   await testLogNotificationsCanSendSelectedLevels();
   await testGroupMessageAuditSettingCanBeSaved();
+  await testGroupMessageAuditChannelRequiresDestination();
   await testCompanyInfoProxyNormalizesExternalRows();
   await testCompanyInfoProxyReturnsCachedSnapshotAndNotifiesOnFetchError();
   await testCompanyInfoProxyFallsBackWhenScopedQueryUnsupported();

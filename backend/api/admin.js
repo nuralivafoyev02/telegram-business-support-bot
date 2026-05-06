@@ -3669,6 +3669,11 @@ async function updateSettings(body) {
   const mergedRows = new Map((previousRows || []).map(row => [row.key, row]));
   rows.forEach(row => mergedRows.set(row.key, row));
   const nextSettings = normalizeSettings([...mergedRows.values()]);
+  if (nextSettings.groupMessageAudit?.enabled && nextSettings.groupMessageAudit.target === 'channel' && !nextSettings.groupMessageAudit.channelId) {
+    const error = new Error('Guruh xabari auditi uchun kanal ID yoki username kiritilishi kerak.');
+    error.code = 'AUDIT_CHANNEL_REQUIRED';
+    throw error;
+  }
   if (nextSettings.aiProvider && !isAiIntegrationReady(nextSettings.aiIntegration)) {
     const error = new Error('AI model ishlashi tekshirilmagan. Avval AI integratsiyani to‘g‘ri token, base URL va model bilan saqlang.');
     error.code = 'AI_CONNECTION_FAILED';

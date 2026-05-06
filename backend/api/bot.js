@@ -400,6 +400,12 @@ async function resolveMainNotificationChat(settings = null) {
   return resolveMainStatsChatId().catch(() => '');
 }
 
+async function resolveGroupMessageAuditChat(settings = null) {
+  const audit = settings && settings.groupMessageAudit ? settings.groupMessageAudit : {};
+  if (audit.target === 'channel') return String(audit.channelId || '').trim();
+  return resolveMainNotificationChat(settings);
+}
+
 async function loadChatForBotRecord(chatId) {
   const rows = await supabase.select('tg_chats', {
     select: 'chat_id,title,username,type,source_type,business_connection_id',
@@ -427,34 +433,34 @@ async function maybeNotifyMainGroupMessageSaveAudit({ status, updateKind, messag
     if (String(updateKind || '').includes('edited')) return;
   }
 
-  let mainGroupId = '';
+  let auditChatId = '';
   try {
-    mainGroupId = await resolveMainNotificationChat(settings);
+    auditChatId = await resolveGroupMessageAuditChat(settings);
   } catch (resolveError) {
-    logBackgroundError(`notify-main-message-${status}-resolve`, resolveError);
+    logBackgroundError(`notify-group-audit-${status}-resolve`, resolveError);
     return;
   }
-  if (!mainGroupId) return;
-  if (!failed && sameChatId(mainGroupId, chat.id)) return;
+  if (!auditChatId) return;
+  if (!failed && sameChatId(auditChatId, chat.id)) return;
 
   const audit = buildGroupSaveAudit({ status, message, chatRow, classification, employee, savedMessage, error, target, stage });
   let telegramResult = null;
   try {
-    telegramResult = await sendMessage(mainGroupId, audit.telegramText);
+    telegramResult = await sendMessage(auditChatId, audit.telegramText);
   } catch (sendError) {
-    logBackgroundError(`notify-main-message-${status}`, sendError);
+    logBackgroundError(`notify-group-audit-${status}`, sendError);
     return;
   }
 
-  const mainChat = await loadChatForBotRecord(mainGroupId);
+  const auditChat = await loadChatForBotRecord(auditChatId);
   await saveBotMessageRecord({
     telegramResult,
-    chat: mainChat,
+    chat: auditChat,
     sourceType: 'group',
     text: audit.text,
     classification: 'bot_notification',
     updateKind: status === 'saved' ? 'bot_message_saved_notice' : 'bot_message_save_failed_notice',
-    businessConnectionId: mainChat.business_connection_id || null,
+    businessConnectionId: auditChat.business_connection_id || null,
     raw: {
       source: status === 'saved' ? 'bot_message_saved_notice' : 'bot_message_save_failed_notice',
       audit_status: status,

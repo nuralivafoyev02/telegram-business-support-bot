@@ -12,7 +12,7 @@ const DEFAULT_SETTINGS = Object.freeze({
   aiModelLabel: '',
   aiIntegration: normalizeAiIntegration({}),
   logNotifications: Object.freeze({ enabled: false, levels: ['error'], target: 'main_group' }),
-  groupMessageAudit: Object.freeze({ enabled: true }),
+  groupMessageAudit: Object.freeze({ enabled: true, target: 'main_group', channelId: '' }),
   messageReactions: Object.freeze({ enabled: false, ticketClose: true, emoji: '\u26a1' }),
   autoReply: true,
   doneTag: DEFAULT_DONE_TAG,
@@ -72,8 +72,11 @@ function normalizeLogNotifications(value = {}) {
 }
 
 function normalizeGroupMessageAudit(value = {}) {
+  const target = value.target === 'channel' ? 'channel' : 'main_group';
   return {
-    enabled: normalizeBoolean(value.enabled, DEFAULT_SETTINGS.groupMessageAudit.enabled)
+    enabled: normalizeBoolean(value.enabled, DEFAULT_SETTINGS.groupMessageAudit.enabled),
+    target,
+    channelId: String(value.channel_id || value.channelId || DEFAULT_SETTINGS.groupMessageAudit.channelId).trim()
   };
 }
 

@@ -831,9 +831,14 @@
                   </label>
                   <label class="label">Guruh xabari saqlansa
                     <select v-model="settingsForm.group_message_audit" class="select">
-                      <option value="true">Main guruhga xabar berish</option>
+                      <option value="channel">Kanalga xabar berish</option>
+                      <option value="main_group">Asosiy guruhga xabar berish</option>
                       <option value="false">Xabar bermaslik</option>
                     </select>
+                  </label>
+                  <label v-if="settingsForm.group_message_audit === 'channel'" class="label">Audit kanali
+                    <input v-model.trim="settingsForm.group_message_audit_channel_id" class="input"
+                      placeholder="-1001234567890 yoki @kanal_username" />
                   </label>
                   <label class="label">So‘rov aniqlash rejimi
                     <select v-model="settingsForm.request_detection" class="select">
@@ -2243,7 +2248,7 @@ const floatingTooltipStyle = computed(() => ({
   transform: floatingTooltip.value.placement === 'top' ? 'translate(-50%, -100%)' : 'translate(-50%, 0)'
 }));
 
-const settingsForm = reactive({ ai_mode: 'false', auto_reply: 'true', message_reactions: 'false', done_tag: '#done', main_group_id: '', group_message_audit: 'true', request_detection: 'keyword' });
+const settingsForm = reactive({ ai_mode: 'false', auto_reply: 'true', message_reactions: 'false', done_tag: '#done', main_group_id: '', group_message_audit: 'main_group', group_message_audit_channel_id: '', request_detection: 'keyword' });
 const isManagerMode = computed(() => false);
 const mainTabs = computed(() => tabs.filter(tab => mainTabKeys.includes(tab.key)));
 const otherTabs = computed(() => tabs.filter(tab => otherTabKeys.includes(tab.key)));
@@ -4615,8 +4620,13 @@ async function loadSettings() {
   settingsForm.done_tag = done?.tag || '#done';
   settingsForm.main_group_id = mainGroup?.chat_id || '';
   settingsForm.group_message_audit = groupMessageAudit === undefined
-    ? 'true'
-    : String(groupMessageAudit?.enabled !== false);
+    ? 'main_group'
+    : groupMessageAudit?.enabled === false
+      ? 'false'
+      : groupMessageAudit?.target === 'channel'
+        ? 'channel'
+        : 'main_group';
+  settingsForm.group_message_audit_channel_id = groupMessageAudit?.channel_id || groupMessageAudit?.channelId || '';
   settingsForm.request_detection = detect?.mode || 'keyword';
   await checkTelegramWebhook(false);
 }
@@ -6214,6 +6224,9 @@ async function importKnowledgeFiles(event) {
 async function saveSettings() {
   startLoading('saveSettings');
   try {
+    if (settingsForm.group_message_audit === 'channel' && !settingsForm.group_message_audit_channel_id) {
+      throw new Error('Audit kanali ID yoki username kiriting');
+    }
     const useModel = settingsForm.ai_mode === 'model' && aiIntegrationReady.value;
     await api.saveSettings({
       settings: [
@@ -6230,7 +6243,14 @@ async function saveSettings() {
         { key: 'message_reactions', value: { enabled: settingsForm.message_reactions === 'true', ticket_close: true, emoji: '⚡' } },
         { key: 'done_tag', value: { tag: settingsForm.done_tag, auto_reply: true } },
         { key: 'main_group', value: { chat_id: settingsForm.main_group_id } },
-        { key: 'group_message_audit', value: { enabled: settingsForm.group_message_audit === 'true' } },
+        {
+          key: 'group_message_audit',
+          value: {
+            enabled: settingsForm.group_message_audit !== 'false',
+            target: settingsForm.group_message_audit === 'channel' ? 'channel' : 'main_group',
+            channel_id: settingsForm.group_message_audit_channel_id
+          }
+        },
         { key: 'request_detection', value: { mode: settingsForm.request_detection, min_text_length: 10 } }
       ]
     });

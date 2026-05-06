@@ -191,7 +191,7 @@ on conflict (username) do nothing;
 insert into public.bot_settings (key, value)
 values
   ('ai_mode', '{"enabled": false, "provider": null}'::jsonb),
-  ('group_message_audit', '{"enabled": true}'::jsonb),
+  ('group_message_audit', '{"enabled": true, "target": "main_group", "channel_id": ""}'::jsonb),
   ('message_reactions', '{"enabled": false, "ticket_close": true, "emoji": "\u26a1"}'::jsonb),
   ('done_tag', '{"tag": "#done", "auto_reply": true}'::jsonb),
   ('request_detection', '{"mode": "keyword", "min_text_length": 10}'::jsonb),

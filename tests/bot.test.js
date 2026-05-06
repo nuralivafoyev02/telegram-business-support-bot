@@ -903,6 +903,68 @@ async function testAutoReplyFallbackUsesLocalKnowledge() {
   }
 }
 
+async function testGroupMessageAuditSendsToConfiguredChannel() {
+  const originalInsert = supabase.insert;
+  const originalSelect = supabase.select;
+  const originalFetch = global.fetch;
+  const inserted = [];
+  const telegramCalls = [];
+  clearBotSettingsCache();
+
+  supabase.select = async (table) => {
+    if (table === 'bot_settings') {
+      return [
+        { key: 'main_group', value: { chat_id: '-100777' } },
+        { key: 'group_message_audit', value: { enabled: true, target: 'channel', channel_id: '-100999' } },
+        { key: 'request_detection', value: { mode: 'keyword', min_text_length: 10 } }
+      ];
+    }
+    if (table === 'employees') return [];
+    if (table === 'support_requests') return [];
+    if (table === 'tg_chats') return [];
+    return [];
+  };
+  supabase.insert = async (table, rows) => {
+    inserted.push({ table, rows });
+    return rows.map(row => ({ id: `${table}-row`, ...row }));
+  };
+  global.fetch = async (_url, options) => {
+    telegramCalls.push({ url: _url, body: JSON.parse(options.body) });
+    return {
+      ok: true,
+      json: async () => ({ ok: true, result: { message_id: 901 } })
+    };
+  };
+
+  try {
+    const result = await callHandler({
+      update_id: 90,
+      message: {
+        message_id: 190,
+        date: 1777100000,
+        text: 'Oddiy suhbat xabari',
+        chat: { id: -100300, type: 'supergroup', title: 'Support group' },
+        from: { id: 1001, first_name: 'Customer', is_bot: false }
+      }
+    });
+
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.handled, 'message');
+    assert.strictEqual(inserted.some(item => item.table === 'messages'), true);
+    assert.strictEqual(inserted.some(item => item.table === 'support_requests'), false);
+    assert.strictEqual(telegramCalls.length, 1);
+    assert.match(telegramCalls[0].url, /sendMessage$/);
+    assert.strictEqual(String(telegramCalls[0].body.chat_id), '-100999');
+    assert.match(telegramCalls[0].body.text, /Guruh xabari saqlandi/);
+    assert.doesNotMatch(String(telegramCalls[0].body.chat_id), /-100777/);
+  } finally {
+    supabase.insert = originalInsert;
+    supabase.select = originalSelect;
+    global.fetch = originalFetch;
+    clearBotSettingsCache();
+  }
+}
+
 async function testMainGroupStatsTriggerSendsReport() {
   const originalInsert = supabase.insert;
   const originalSelect = supabase.select;
@@ -1570,6 +1632,7 @@ async function testBotRemovalMarksGroupInactive() {
   await testClassifierJsonIsNotSentAsAutoReply();
   await testAiModeAutoRepliesToGroupRequest();
   await testAutoReplyFallbackUsesLocalKnowledge();
+  await testGroupMessageAuditSendsToConfiguredChannel();
   await testMainGroupStatsTriggerSendsReport();
   await testReplyToCustomerTicketClosesRequest();
   await testEmployeePlainAnswerClosesLatestOpenRequest();
