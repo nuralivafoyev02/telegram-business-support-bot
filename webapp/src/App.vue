@@ -1208,11 +1208,15 @@
         </form>
       </Modal>
     </Transition>
-
     <Transition name="modal-fade">
       <Modal v-if="modal === 'ticketList'" :title="ticketList.title" wide @close="closeModal">
         <div class="ticket-list-modal">
           <p class="modal-subtitle">Tanlangan davr bo‘yicha jami, ochiq va yopilgan ticketlar</p>
+          <div class="ticket-filter-tabs source-tabs">
+            <button :class="{ active: ticketList.source === 'all' }" @click="ticketList.source = 'all'">Umumiy</button>
+            <button :class="{ active: ticketList.source === 'group' }" @click="ticketList.source = 'group'">Guruh</button>
+            <button :class="{ active: ticketList.source === 'private' }" @click="ticketList.source = 'private'">Shaxsiy</button>
+          </div>
           <div class="ticket-filter-tabs">
             <button type="button" :class="{ active: ticketList.active === 'all' }" @click="ticketList.active = 'all'">
               Jami ticketlar <span>{{ fmtNumber(ticketListCounts.all) }}</span>
@@ -1234,14 +1238,6 @@
               </option>
             </select>
           </div>
-          <!-- <div class="ticket-list-meta">
-            <span>Ko‘rsatilmoqda: {{ fmtNumber(filteredTicketListRows.length) }} ta ticket</span>
-            <div>
-              <b>Jami: {{ fmtNumber(ticketListCounts.all) }}</b>
-              <b class="danger">Ochiq: {{ fmtNumber(ticketListCounts.open) }}</b>
-              <b class="success">Yopilgan: {{ fmtNumber(ticketListCounts.closed) }}</b>
-            </div>
-          </div> -->
           <DataTable :columns="ticketListColumns" :rows="filteredTicketListRows" empty="Ticket topilmadi"
             :page-size="10" :on-cell-action="handleTableCellAction" :row-class="requestRowClass">
             <template #requestReply="{ row }">
@@ -1269,15 +1265,18 @@
       <Modal v-if="modal === 'metricDetail'" :title="metricDetail.title" wide @close="closeModal">
         <div v-if="metricDetail.chatPane" class="metric-chat-workspace">
           <section class="metric-table-panel">
-            <div v-if="metricDetail.summary?.length" class="detail-summary metric-detail-summary metric-chat-summary">
-              <div v-for="item in metricDetail.summary" :key="item.label">
-                <span>{{ item.label }}</span>
-                <b>{{ item.value }}</b>
+            <div class="metric-detail-body" :class="{ 'with-chat': metricDetail.chatPane }">
+              <div class="metric-detail-main">
+                <div class="ticket-filter-tabs source-tabs compact-tabs">
+                  <button :class="{ active: metricDetail.source === 'all' }" @click="metricDetail.source = 'all'">Umumiy</button>
+                  <button :class="{ active: metricDetail.source === 'group' }" @click="metricDetail.source = 'group'">Guruh</button>
+                  <button :class="{ active: metricDetail.source === 'private' }" @click="metricDetail.source = 'private'">Shaxsiy</button>
+                </div>
+                <DataTable :columns="metricDetail.columns" :rows="filteredMetricDetailRows" :empty="metricDetail.empty"
+                  :on-cell-action="handleMetricDetailCellAction" :row-class="metricDetailRowClass"
+                  :page-size="metricDetail.pageSize || 12" />
               </div>
             </div>
-            <DataTable :columns="metricDetail.columns" :rows="metricDetail.rows" :empty="metricDetail.empty"
-              :page-size="metricDetail.pageSize || 12" :on-cell-action="handleMetricDetailCellAction"
-              :row-class="metricDetailRowClass" />
           </section>
 
           <section class="detail-section metric-chat-panel">
@@ -1404,13 +1403,18 @@
         </div>
 
         <div v-else class="detail-stack">
+          <div class="ticket-filter-tabs source-tabs">
+            <button :class="{ active: metricDetail.source === 'all' }" @click="metricDetail.source = 'all'">Umumiy</button>
+            <button :class="{ active: metricDetail.source === 'group' }" @click="metricDetail.source = 'group'">Guruh</button>
+            <button :class="{ active: metricDetail.source === 'private' }" @click="metricDetail.source = 'private'">Shaxsiy</button>
+          </div>
           <div v-if="metricDetail.summary?.length" class="detail-summary metric-detail-summary">
             <div v-for="item in metricDetail.summary" :key="item.label">
               <span>{{ item.label }}</span>
               <b>{{ item.value }}</b>
             </div>
           </div>
-          <DataTable :columns="metricDetail.columns" :rows="metricDetail.rows" :empty="metricDetail.empty"
+          <DataTable :columns="metricDetail.columns" :rows="filteredMetricDetailRows" :empty="metricDetail.empty"
             :page-size="metricDetail.pageSize || 12" :on-cell-action="handleTableCellAction" />
         </div>
       </Modal>
@@ -2104,7 +2108,7 @@ const privates = ref([]);
 const employees = ref([]);
 const companyInfo = ref({ summary: {}, companies: [], fetched_at: '', source: '' });
 const requestRows = ref([]);
-const ticketList = ref({ rows: [], active: 'all', mode: 'all', title: 'Ticketlar ro‘yxati' });
+const ticketList = ref({ rows: [], active: 'all', mode: 'all', source: 'all', title: 'Ticketlar ro‘yxati' });
 const ticketListSearch = ref('');
 const ticketListSupport = ref('all');
 const chatDetail = ref({ chat: null, requests: [], timeline: [] });
@@ -2128,7 +2132,7 @@ const employeeProfileChatDetail = ref({ chat: null, requests: [], conversation: 
 const employeeProfileChatLoading = ref(false);
 const employeeProfileChatError = ref('');
 const employeeProfileTicketsOpen = ref(false);
-const metricDetail = ref({ title: '', columns: [], rows: [], empty: 'Ma’lumot yo‘q', pageSize: 12, summary: [] });
+const metricDetail = ref({ title: '', columns: [], rows: [], empty: 'Ma’lumot yo‘q', pageSize: 12, summary: [], source: 'all' });
 const employeeGroupActivity = ref([]);
 const employeeGroupTicketVisibility = ref({});
 const employeeOpenRequests = ref([]);
@@ -2599,6 +2603,33 @@ const supportPerformanceRows = computed(() => {
     || b.assigned_company_count - a.assigned_company_count
     || a.full_name.localeCompare(b.full_name));
 });
+const filteredTicketListRows = computed(() => {
+  const rows = Array.isArray(ticketList.value.rows) ? ticketList.value.rows : [];
+  return rows.filter(row => {
+    const matchesStatus = ticketMatchesStatus(row, ticketList.value.active);
+    if (!matchesStatus) return false;
+    
+    const source = ticketList.value.source;
+    if (source === 'all') return true;
+    const type = String(row.source_type || '').toLowerCase();
+    if (source === 'group') return type === 'group';
+    if (source === 'private') return type === 'private' || type === 'personal' || type === 'business';
+    return true;
+  }).sort(ticketListSort);
+});
+
+const filteredMetricDetailRows = computed(() => {
+  const rows = Array.isArray(metricDetail.value.rows) ? metricDetail.value.rows : [];
+  return rows.filter(row => {
+    const source = metricDetail.value.source;
+    if (source === 'all') return true;
+    const type = String(row.source_type || row.chat_source_type || '').toLowerCase();
+    if (source === 'group') return type === 'group';
+    if (source === 'private') return type === 'private' || type === 'personal' || type === 'business';
+    return true;
+  });
+});
+
 const topPerformer = computed(() => supportPerformanceRows.value[0] || null);
 const topPerformerName = computed(() => topPerformer.value?.full_name || '');
 const currentPeriodDates = computed(() => analytics.value.periodDates?.[selectedStatsPeriod.value] || { current: '', prev: '' });
@@ -5117,7 +5148,7 @@ function resetMetricChatDetail() {
 
 function setMetricDetail({ title, rows, columns, empty = 'Ma’lumot topilmadi', pageSize = 12, summary = [], chatPane = false }) {
   resetMetricChatDetail();
-  metricDetail.value = { title, rows, columns, empty, pageSize, summary, chatPane };
+  metricDetail.value = { title, rows, columns, empty, pageSize, summary, chatPane, source: 'all' };
   modal.value = 'metricDetail';
 }
 
@@ -5524,6 +5555,7 @@ async function openSupportSummaryCard(action = 'requests') {
       rows: Array.isArray(rows) ? rows : [],
       active: ticketFilterFromAction(action),
       mode: action,
+      source: 'all',
       title: titleMap[action] || titleMap.requests
     };
     ticketListSearch.value = '';
