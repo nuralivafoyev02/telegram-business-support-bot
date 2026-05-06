@@ -25,14 +25,14 @@ const STRONG_REQUEST_PATTERNS = [
 const SOFT_REQUEST_PATTERNS = [
   /\b(kerak|kerek|zarur|lozim|iltimos|mumkinmi|bo'?ladimi|qanday|qanaqa|qayerdan|qachon|nega|nima|nima\s+uchun|qaysi|kim|qancha|narx|price|сколько|почему|как|можно|нужно|please|need|что|как|где|когда|почему|кто|чей|какой|какая|какое)\b/i,
   /\b(bot|guruh|kanal|xabar|sms|telegram|webhook|admin|operator|support|menedjer|менеджер|админ|оператор|поддержка)\b/i,
-  /\b(status|holat|javob|ma'lumot|malumot|yo'?riqnoma|qo'?llanma|instruksiya|telefon|kontakt|aloqa|servis|xizmat|statistika|hisob|hisobot|period|kunlik|oylik|haftalik|сервис|статус|ответ|информация|инструкция)\b/i,
+  /\b(status|holat|javob|ma'lumot|malumot|yo'?riqnoma|qo'?llanma|instruksiya|telefon|kontakt|aloqa|servis|xizmat|statistika|hisob|hisobot|period|kunlik|oylik|haftalik|сервис|статус|ответ|информация|инструкция|pochka|m2|metr|kg|tonna|litr|dona|miqdor)\b/i,
   /сколько|почему|можно|нужно|пожалуйста|менеджер|админ|оператор|поддержка/i
 ];
 
 const DOMAIN_CONTEXT_PATTERNS = [
   /\b(uyqur|uygur|uyghur)\b/i,
   /\b(dastur|programma|ilova|platforma|tizim|sistema|modul|funksiya|funktsiya|panel|kabinet|avtomatlashtirish|avtomatlashtiradi)\b/i,
-  /\b(qurilish|obyekt|ob'?ekt|obekt|loyiha|smeta|hisobot|akt|naryad|ombor|sklad|material|qoldiq|kirim|chiqim|xarajat|brigada|ishchi|usta|ustalar|bosqich|etap|grafik|jadval|reja|kalkulyatsiya|ta'minot|bo'lim|vazifa|topshiriq|ijro|mas'ul|masul|muddat|kechikish|o'tkazma|mablag'|fond|kassa)\b/i,
+  /\b(qurilish|obyekt|ob'?ekt|obekt|loyiha|smeta|hisobot|akt|naryad|ombor|sklad|material|qoldiq|kirim|chiqim|xarajat|brigada|ishchi|usta|ustalar|bosqich|etap|grafik|jadval|reja|kalkulyatsiya|ta'minot|bo'lim|vazifa|topshiriq|ijro|mas'ul|masul|muddat|kechikish|o'tkazma|mablag'|fond|kassa|tasdiq|tasdiqlash|qabul|topshirish|prorab|ustaboshi)\b/i,
   /\b(уйгур|программа|приложение|платформа|система|модуль|функция|кабинет|стройка|строительство|объект|проект|смета|отчет|отчёт|акт|наряд|склад|материал|остаток|приход|расход|затрат\w*|бригада|рабоч\w*|мастер|этап|график|таблица)\b/i,
   /\b(construction|project|estimate|report|warehouse|material|crew|schedule|automation|software|app|platform|module)\b/i
 ];
@@ -163,7 +163,7 @@ function requestScore(value = '') {
   if (isNonSupportSalesIntent(normalized)) return 0;
 
   let score = 0;
-  const question = normalized.includes('?');
+  const question = normalized.includes('?') || /\b\w+mi(\s|[?!.]|$)/i.test(normalized);
   const strongMatches = STRONG_REQUEST_PATTERNS.filter(pattern => pattern.test(normalized)).length;
   const softMatches = SOFT_REQUEST_PATTERNS.filter(pattern => pattern.test(normalized)).length;
   const actionMatches = ACTION_REQUEST_PATTERNS.filter(pattern => pattern.test(normalized)).length;
