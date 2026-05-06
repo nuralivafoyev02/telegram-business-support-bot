@@ -4,7 +4,7 @@ const { Readable } = require('stream');
 const supabase = require('../lib/supabase');
 const { allowCors, sendJson, readBody, getQuery } = require('../lib/http');
 const { login, requireAdmin, hashPassword } = require('../lib/auth');
-const { sendMessage, sendBusinessMessage, getWebhookInfo, setWebhook, deleteWebhook, getUpdates, getFile, getUserProfilePhotos, downloadFile } = require('../lib/telegram');
+const { sendMessage, sendBusinessMessage, getWebhookInfo, setWebhook, deleteWebhook, getUpdates, getFile, getUserProfilePhotos, downloadFile, tgUserName } = require('../lib/telegram');
 const { optionalEnv } = require('../lib/env');
 const { normalizeSettings, clearBotSettingsCache } = require('../lib/bot-settings');
 const { normalizeAiIntegration, mergeAiIntegration, sanitizeAiIntegration, isAiIntegrationReady, isAiIntegrationConfigured, aiIntegrationSignature } = require('../lib/ai-config');
@@ -736,6 +736,27 @@ async function getEmployeeLookup() {
   };
 }
 
+function jsonObject(value) {
+  if (!value || typeof value !== 'object') return {};
+  return value;
+}
+
+function isTelegramPremiumUser(row = {}) {
+  const raw = jsonObject(row.raw);
+  return raw.is_premium === true || raw.is_premium === 'true';
+}
+
+async function getTelegramPremiumMap(tgUserIds = []) {
+  const ids = [...new Set(tgUserIds.map(telegramIdKey).filter(Boolean))];
+  if (!ids.length) return new Map();
+  const rows = await supabase.select('tg_users', {
+    select: 'tg_user_id,raw',
+    tg_user_id: supabase.inList(ids),
+    limit: String(Math.min(Math.max(ids.length, 1), 5000))
+  }).catch(() => []);
+  return new Map(rows.map(row => [telegramIdKey(row.tg_user_id), isTelegramPremiumUser(row)]));
+}
+
 function excludeEmployeeChats(rows = [], employeeTgIds = new Set()) {
   if (!employeeTgIds.size) return rows;
   return rows.filter(row => !(isPrivateLikeChat(row) && employeeTgIds.has(telegramIdKey(row.chat_id))));
@@ -1007,6 +1028,91 @@ function messageOrigin({ message = {}, employee = null } = {}) {
   return 'customer';
 }
 
+function chatServiceEvent(message = {}) {
+  const raw = message.raw || {};
+  if (!raw || typeof raw !== 'object') return null;
+
+  if (raw.left_chat_member) {
+    const user = raw.left_chat_member;
+    return {
+      service_type: 'left_chat_member',
+      user_ids: [telegramIdKey(user.id)].filter(Boolean),
+      text: `${tgUserName(user)} guruhdan chiqdi`
+    };
+  }
+
+  if (Array.isArray(raw.new_chat_members) && raw.new_chat_members.length) {
+    const users = raw.new_chat_members.filter(Boolean);
+    const names = users.map(user => tgUserName(user)).filter(Boolean).join(', ');
+    return {
+      service_type: 'new_chat_members',
+      user_ids: users.map(user => telegramIdKey(user.id)).filter(Boolean),
+      text: `${names || 'Foydalanuvchi'} guruhga qo‘shildi`
+    };
+  }
+
+  if (raw.new_chat_title) {
+    return {
+      service_type: 'new_chat_title',
+      user_ids: [],
+      text: `Guruh nomi "${raw.new_chat_title}" ga o‘zgardi`
+    };
+  }
+
+  if (raw.delete_chat_photo) {
+    return {
+      service_type: 'delete_chat_photo',
+      user_ids: [],
+      text: 'Guruh rasmi olib tashlandi'
+    };
+  }
+
+  if (raw.group_chat_created || raw.supergroup_chat_created) {
+    return {
+      service_type: 'group_chat_created',
+      user_ids: [],
+      text: 'Guruh yaratildi'
+    };
+  }
+
+  if (raw.migrate_to_chat_id) {
+    return {
+      service_type: 'migrate_to_chat_id',
+      user_ids: [],
+      text: `Guruh superguruhga o‘tdi: ${raw.migrate_to_chat_id}`
+    };
+  }
+
+  return null;
+}
+
+function serviceConversationItem(message = {}) {
+  const service = chatServiceEvent(message);
+  if (!service) return null;
+  return {
+    id: message.id || `service:${message.chat_id || ''}:${message.tg_message_id || message.created_at || ''}`,
+    type: 'service',
+    service_type: service.service_type,
+    service_user_ids: service.user_ids,
+    message_id: message.tg_message_id || null,
+    direction: 'system',
+    actor_type: 'system',
+    origin_type: 'system',
+    source_label: 'Telegram',
+    actor_name: 'Telegram',
+    actor_username: '',
+    actor_tg_user_id: null,
+    employee_id: null,
+    text: service.text,
+    media: null,
+    request_id: null,
+    request_text: '',
+    status: null,
+    classification: message.classification || 'service',
+    created_at: message.created_at || null
+  };
+}
+
 function messageOriginLabel(origin = '') {
   return ({
     customer: 'Mijoz',
@@ -1162,6 +1268,8 @@ function buildChatDetail({ chat, requests, events, messages, employeesById, empl
   const conversationRows = [
     ...eventConversation,
     ...messages.map(message => {
+      const serviceItem = serviceConversationItem(message);
+      if (serviceItem) return serviceItem;
       const employee = message.employee_id ? employeesById.get(message.employee_id) : employeesByTgId.get(telegramIdKey(message.from_tg_user_id));
       const rawSource = message.raw && message.raw.source;
       const relatedRequest = requestByInitialMessageId.get(telegramIdKey(message.tg_message_id))
@@ -1366,7 +1474,7 @@ async function getChatDetail(query) {
 
   const [chatRows, requests, messages, employeeLookup] = await Promise.all([
     supabase.select('tg_chats', {
-      select: 'chat_id,title,username,type,source_type,company_id,business_connection_id,is_active,last_message_at,first_seen_at',
+      select: 'chat_id,title,username,type,source_type,company_id,business_connection_id,member_status,is_active,last_message_at,first_seen_at,last_member_update_at',
       chat_id: supabase.eq(chatId),
       limit: '1'
     }).catch(() => []),
@@ -1432,7 +1540,7 @@ async function getCompanyGroupActivity(query = {}) {
       select: 'id,name,legal_name,is_active,notes'
     }, { maxRows: 10000 }),
     selectPaged('tg_chats', {
-      select: 'chat_id,title,username,type,source_type,company_id,business_connection_id,is_active,last_message_at,first_seen_at',
+      select: 'chat_id,title,username,type,source_type,company_id,business_connection_id,member_status,is_active,last_message_at,first_seen_at,last_member_update_at',
       source_type: 'eq.group',
       is_active: 'eq.true',
       order: supabase.order('last_message_at', false)
@@ -1553,6 +1661,8 @@ async function getCompanyGroupActivity(query = {}) {
   };
 
   const messageSummary = message => {
+    const serviceItem = serviceConversationItem(message);
+    if (serviceItem) return { ...serviceItem, chat_id: message.chat_id };
     const employee = message.employee_id ? employeesById.get(message.employee_id) : employeesByTgId.get(telegramIdKey(message.from_tg_user_id));
     const relatedRequest = requestByInitialMessageId.get(telegramIdKey(message.tg_message_id))
       || requestByDoneMessageId.get(telegramIdKey(message.tg_message_id))
@@ -1757,6 +1867,7 @@ async function listEmployees(query) {
 
   const today = tashkentDateKey();
   const chatMap = new Map(chats.map(chat => [telegramIdKey(chat.chat_id), chat]));
+  const premiumByTgId = await getTelegramPremiumMap(employees.map(employee => employee.tg_user_id));
   const isToday = value => value && tashkentDateKey(value) === today;
   const chatTitle = chatId => {
     const chat = chatMap.get(telegramIdKey(chatId));
@@ -1853,6 +1964,7 @@ async function listEmployees(query) {
       .sort((a, b) => (b.message_count + b.closed_count + b.open_count) - (a.message_count + a.closed_count + a.open_count));
     return {
       ...employee,
+      telegram_is_premium: premiumByTgId.get(telegramIdKey(employee.tg_user_id)) === true,
       received_requests: related.length,
       closed_requests: closed.length,
       avg_close_minutes: average(closeMinutes),
@@ -1913,6 +2025,11 @@ async function getEmployeeActivity(query = {}) {
 
   const employee = employeeRows[0] || null;
   if (!employee) throw new Error('Xodim topilmadi');
+  const premiumByTgId = await getTelegramPremiumMap([employee.tg_user_id]);
+  const enrichedEmployee = {
+    ...employee,
+    telegram_is_premium: premiumByTgId.get(telegramIdKey(employee.tg_user_id)) === true
+  };
 
   const keys = currentPeriodKeys();
   const requestSelect = 'id,source_type,chat_id,customer_tg_id,customer_name,customer_username,initial_message_id,initial_text,status,closed_at,closed_by_employee_id,closed_by_tg_id,closed_by_name,done_message_id,created_at';
@@ -1978,9 +2095,9 @@ async function getEmployeeActivity(query = {}) {
     if (!messagesByChat.has(key)) messagesByChat.set(key, []);
     messagesByChat.get(key).push(message);
   });
-  const employeeMaps = buildEmployeeMaps(allEmployees.length ? allEmployees : [employee]);
-  const selectedEmployeeId = String(employee.id || '').trim();
-  const selectedTgUserId = telegramIdKey(employee.tg_user_id);
+  const employeeMaps = buildEmployeeMaps(allEmployees.length ? allEmployees : [enrichedEmployee]);
+  const selectedEmployeeId = String(enrichedEmployee.id || '').trim();
+  const selectedTgUserId = telegramIdKey(enrichedEmployee.tg_user_id);
   const isEmployeePrivateChatId = chatId => {
     const key = telegramIdKey(chatId);
     const chat = chatMap.get(key) || {};
@@ -2000,12 +2117,6 @@ async function getEmployeeActivity(query = {}) {
     const messageEmployee = employeeMaps.byId.get(message.employee_id) || employeeMaps.byTgId.get(telegramIdKey(message.from_tg_user_id));
     return Boolean(messageEmployee && !isSelectedEmployeeMessage(message));
   }
-  function isGroupMessageChat(message = {}) {
-    const chat = chatMap.get(telegramIdKey(message.chat_id)) || {};
-    const sourceType = chat.source_type || message.source_type || '';
-    const chatId = Number(message.chat_id || chat.chat_id || 0);
-    return sourceType === 'group' || chatId < 0;
-  }
   const periodOpenRequests = openRequestCandidates
     .filter(request => request.status === 'open' && inCurrentPeriod(request.created_at, periodKey, keys))
     .filter(requestResponsibleMatchesEmployee);
@@ -2020,11 +2131,43 @@ async function getEmployeeActivity(query = {}) {
     ...visibleOpenRequests,
     ...visibleMessages
   ].map(item => telegramIdKey(item.chat_id)).filter(Boolean));
+  const visibleRequestScopeByChat = new Map();
+  [...visibleClosedRequests, ...visibleOpenRequests].forEach(request => {
+    const key = telegramIdKey(request.chat_id);
+    if (!key) return;
+    const current = visibleRequestScopeByChat.get(key) || { customerIds: new Set(), messageIds: new Set() };
+    const customerId = telegramIdKey(request.customer_tg_id);
+    const initialMessageId = telegramIdKey(request.initial_message_id);
+    const doneMessageId = telegramIdKey(request.done_message_id);
+    if (customerId) current.customerIds.add(customerId);
+    if (initialMessageId) current.messageIds.add(initialMessageId);
+    if (doneMessageId) current.messageIds.add(doneMessageId);
+    visibleRequestScopeByChat.set(key, current);
+  });
+  function isRelevantEmployeeChatMessage(message = {}) {
+    if (isSelectedEmployeeMessage(message)) return true;
+    if (isOtherEmployeeMessage(message)) return false;
+
+    const chatKey = telegramIdKey(message.chat_id);
+    const scope = visibleRequestScopeByChat.get(chatKey);
+    const service = chatServiceEvent(message);
+    if (service) {
+      if (selectedTgUserId && service.user_ids.includes(selectedTgUserId)) return true;
+      if (!scope) return false;
+      return !service.user_ids.length || service.user_ids.some(userId => scope.customerIds.has(userId));
+    }
+
+    if (!scope) return false;
+    const messageId = telegramIdKey(message.tg_message_id);
+    if (messageId && scope.messageIds.has(messageId)) return true;
+    const fromId = telegramIdKey(message.from_tg_user_id);
+    return Boolean(fromId && scope.customerIds.has(fromId));
+  }
   const visibleChatMessages = uniqueRowsBy(allChatMessages, message => `${message.chat_id}:${message.tg_message_id || message.id}`)
     .filter(message => visibleChatIdKeys.has(telegramIdKey(message.chat_id)))
     .filter(message => inCurrentPeriod(message.created_at, periodKey, keys))
     .filter(message => !isEmployeePrivateChatId(message.chat_id))
-    .filter(message => isGroupMessageChat(message) || !isOtherEmployeeMessage(message));
+    .filter(isRelevantEmployeeChatMessage);
   const visibleRequestIds = [...new Set([
     ...visibleClosedRequests,
     ...visibleOpenRequests
@@ -2089,6 +2232,8 @@ async function getEmployeeActivity(query = {}) {
     events: (eventsByRequestId.get(request.id) || []).map(eventSummary)
   });
   const messageSummary = message => {
+    const serviceItem = serviceConversationItem(message);
+    if (serviceItem) return { ...serviceItem, chat_id: message.chat_id, chat_title: chatTitle(message.chat_id) };
     const messageEmployee = employeeMaps.byId.get(message.employee_id) || employeeMaps.byTgId.get(telegramIdKey(message.from_tg_user_id));
     const origin = messageOrigin({ message, employee: messageEmployee });
     return {
@@ -2167,7 +2312,7 @@ async function getEmployeeActivity(query = {}) {
     .sort((a, b) => (b.closed_count + b.open_count + b.message_count) - (a.closed_count + a.open_count + a.message_count));
 
   return {
-    employee,
+    employee: enrichedEmployee,
     period: periodKey,
     summary: {
       handled_chats: groups.length,
@@ -2867,12 +3012,18 @@ async function upsertEmployee(body) {
   if (tgUserId) values.tg_user_id = tgUserId;
 
   if (tgUserId) {
+    const existingTgUsers = await supabase.select('tg_users', {
+      select: 'raw',
+      tg_user_id: supabase.eq(tgUserId),
+      limit: '1'
+    }).catch(() => []);
+    const existingRaw = jsonObject(existingTgUsers[0]?.raw);
     await supabase.insert('tg_users', [{
       tg_user_id: tgUserId,
       username: values.username,
       first_name: values.full_name,
       last_seen_at: nowIso(),
-      raw: { source: 'admin_employee_bind' }
+      raw: { ...existingRaw, source: 'admin_employee_bind' }
     }], { upsert: true, onConflict: 'tg_user_id' });
   }
 
@@ -3132,7 +3283,7 @@ async function updateSettings(body) {
   if (!items.length) return [];
   const previousRows = await supabase.select('bot_settings', {
     select: 'key,value',
-    key: 'in.(ai_mode,ai_integration,log_notifications,auto_reply,done_tag,request_detection,main_group)'
+    key: 'in.(ai_mode,ai_integration,log_notifications,group_message_audit,auto_reply,done_tag,request_detection,main_group)'
   }).catch(() => []);
   const previousSettings = normalizeSettings(previousRows || []);
   const previousAutoReplyExists = hasSetting(previousRows, 'auto_reply');

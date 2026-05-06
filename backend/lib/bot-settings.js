@@ -12,6 +12,7 @@ const DEFAULT_SETTINGS = Object.freeze({
   aiModelLabel: '',
   aiIntegration: normalizeAiIntegration({}),
   logNotifications: Object.freeze({ enabled: false, levels: ['error'], target: 'main_group' }),
+  groupMessageAudit: Object.freeze({ enabled: true }),
   autoReply: true,
   doneTag: DEFAULT_DONE_TAG,
   requestDetectionMode: 'keyword',
@@ -69,10 +70,17 @@ function normalizeLogNotifications(value = {}) {
   };
 }
 
+function normalizeGroupMessageAudit(value = {}) {
+  return {
+    enabled: normalizeBoolean(value.enabled, DEFAULT_SETTINGS.groupMessageAudit.enabled)
+  };
+}
+
 function normalizeSettings(rows = []) {
   const ai = settingValue(rows, 'ai_mode');
   const integration = normalizeAiIntegration(settingValue(rows, 'ai_integration'));
   const logNotifications = normalizeLogNotifications(settingValue(rows, 'log_notifications'));
+  const groupMessageAudit = normalizeGroupMessageAudit(settingValue(rows, 'group_message_audit'));
   const autoReply = settingValue(rows, 'auto_reply');
   const done = settingValue(rows, 'done_tag');
   const detection = settingValue(rows, 'request_detection');
@@ -88,6 +96,7 @@ function normalizeSettings(rows = []) {
     aiModelLabel: aiProvider ? String(ai.model_label || ai.modelLabel || integration.label || integration.model || '').trim() : '',
     aiIntegration: integration,
     logNotifications,
+    groupMessageAudit,
     autoReply: normalizeBoolean(autoReply.enabled, DEFAULT_SETTINGS.autoReply),
     doneTag: String(done.tag || DEFAULT_SETTINGS.doneTag).trim() || DEFAULT_SETTINGS.doneTag,
     requestDetectionMode: String(detection.mode || DEFAULT_SETTINGS.requestDetectionMode).trim() || DEFAULT_SETTINGS.requestDetectionMode,
@@ -103,7 +112,7 @@ async function getBotSettings({ force = false } = {}) {
   try {
     const rows = await supabase.select('bot_settings', {
       select: 'key,value',
-      key: 'in.(ai_mode,ai_integration,log_notifications,auto_reply,done_tag,request_detection,main_group)'
+      key: 'in.(ai_mode,ai_integration,log_notifications,group_message_audit,auto_reply,done_tag,request_detection,main_group)'
     });
     cachedSettings = normalizeSettings(rows || []);
     cachedAt = now;
@@ -124,6 +133,7 @@ function clearBotSettingsCache() {
 module.exports = {
   DEFAULT_SETTINGS,
   normalizeLogNotifications,
+  normalizeGroupMessageAudit,
   normalizeSettings,
   getBotSettings,
   clearBotSettingsCache

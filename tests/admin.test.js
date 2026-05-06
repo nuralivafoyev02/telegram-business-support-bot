@@ -954,6 +954,55 @@ async function testChatDetailIncludesTicketSolutionAndTimeline() {
   }
 }
 
+async function testChatDetailShowsTelegramMemberServiceMessages() {
+  const originalSelect = supabase.select;
+  const chatId = -100700;
+
+  supabase.select = async (table) => {
+    if (table === 'tg_chats') {
+      return [{
+        chat_id: chatId,
+        title: 'Support guruhi',
+        source_type: 'group',
+        member_status: 'administrator',
+        is_active: true,
+        last_message_at: '2026-05-02T08:10:00.000Z'
+      }];
+    }
+    if (table === 'messages') {
+      return [{
+        id: 'service-message-1',
+        tg_message_id: 77,
+        chat_id: chatId,
+        from_tg_user_id: 501,
+        from_name: 'Mijoz A',
+        source_type: 'group',
+        text: '',
+        classification: 'message',
+        employee_id: null,
+        raw: {
+          message_id: 77,
+          left_chat_member: { id: 601, first_name: 'Vali', last_name: 'Karimov', username: 'vali' }
+        },
+        created_at: '2026-05-02T08:10:00.000Z'
+      }];
+    }
+    if (table === 'support_requests' || table === 'request_events' || table === 'employees') return [];
+    return [];
+  };
+
+  try {
+    const result = await callAdmin('chatDetail', { query: { chat_id: chatId } });
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.data.chat.member_status, 'administrator');
+    assert.strictEqual(result.payload.data.conversation.length, 1);
+    assert.strictEqual(result.payload.data.conversation[0].direction, 'system');
+    assert.match(result.payload.data.conversation[0].text, /Vali Karimov guruhdan chiqdi/);
+  } finally {
+    supabase.select = originalSelect;
+  }
+}
+
 async function testCompanyGroupActivityReturnsLinkedGroupMessagesWithTickets() {
   const originalSelect = supabase.select;
   const chatId = -100700;
@@ -1980,6 +2029,7 @@ async function testEmployeesIncludeDailyWorkStats() {
 
   supabase.select = async (table) => {
     if (table === 'employees') return [{ id: 'emp-1', tg_user_id: 777, full_name: 'Ali', username: 'ali', is_active: true }];
+    if (table === 'tg_users') return [{ tg_user_id: 777, raw: { is_premium: true } }];
     if (table === 'support_requests') {
       return [
         { id: 'r1', closed_by_employee_id: 'emp-1', status: 'closed', chat_id: -1001, customer_name: 'Mijoz A', initial_text: 'A', created_at: today, closed_at: closedAt },
@@ -1995,6 +2045,7 @@ async function testEmployeesIncludeDailyWorkStats() {
     const result = await callAdmin('employees');
     assert.strictEqual(result.status, 200);
     const employee = result.payload.data[0];
+    assert.strictEqual(employee.telegram_is_premium, true);
     assert.strictEqual(employee.avg_close_minutes, 10);
     assert.strictEqual(employee.today_received_requests, 2);
     assert.strictEqual(employee.today_answered_requests, 1);
@@ -2064,6 +2115,7 @@ async function testEmployeeActivityReturnsGroupsAndCustomers() {
         { id: 'emp-2', tg_user_id: 888, full_name: 'Vali', username: 'vali', is_active: true }
       ];
     }
+    if (table === 'tg_users') return [{ tg_user_id: 777, raw: { is_premium: true } }];
     if (table === 'support_requests') {
       return [
         {
@@ -2111,6 +2163,7 @@ async function testEmployeeActivityReturnsGroupsAndCustomers() {
   try {
     const result = await callAdmin('employeeActivity', { query: { employee_id: 'emp-1', period: 'all' } });
     assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.data.employee.telegram_is_premium, true);
     assert.strictEqual(result.payload.data.summary.handled_chats, 1);
     assert.strictEqual(result.payload.data.summary.closed_requests, 1);
     assert.strictEqual(result.payload.data.summary.avg_close_minutes, 7);
@@ -2119,8 +2172,7 @@ async function testEmployeeActivityReturnsGroupsAndCustomers() {
     assert.strictEqual(result.payload.data.groups[0].messages.length, 35);
     assert.strictEqual(result.payload.data.groups[0].messages.some(message => message.text === 'Javob berdim'), true);
     assert.strictEqual(result.payload.data.groups[0].chat_messages.some(message => message.text === 'Oddiy chat xabari'), true);
-    assert.strictEqual(result.payload.data.groups[0].chat_messages.some(message => message.text === 'Boshqa xodim javobi'), true);
-    assert.strictEqual(result.payload.data.groups[0].chat_messages.find(message => message.text === 'Boshqa xodim javobi').source_label, 'Xodim');
+    assert.strictEqual(result.payload.data.groups[0].chat_messages.some(message => message.text === 'Boshqa xodim javobi'), false);
     assert.strictEqual(result.payload.data.groups[0].closed_requests[0].events[0].text, 'Qo‘shimcha savol');
   } finally {
     supabase.select = originalSelect;
@@ -2252,6 +2304,49 @@ async function testLogNotificationsCanSendSelectedLevels() {
     supabase.select = originalSelect;
     supabase.insert = originalInsert;
     global.fetch = originalFetch;
+    clearBotSettingsCache();
+  }
+}
+
+async function testGroupMessageAuditSettingCanBeSaved() {
+  const originalSelect = supabase.select;
+  const originalInsert = supabase.insert;
+  let settingsRows = [
+    { key: 'main_group', value: { chat_id: '-100777' } },
+    { key: 'group_message_audit', value: { enabled: true } }
+  ];
+
+  supabase.select = async (table) => {
+    if (table === 'bot_settings') return settingsRows;
+    return [];
+  };
+  supabase.insert = async (table, rows) => {
+    assert.strictEqual(table, 'bot_settings');
+    rows.forEach(row => {
+      const index = settingsRows.findIndex(item => item.key === row.key);
+      if (index >= 0) settingsRows[index] = row;
+      else settingsRows.push(row);
+    });
+    return rows;
+  };
+
+  try {
+    const result = await callAdmin('settings', {
+      method: 'POST',
+      body: {
+        settings: [{
+          key: 'group_message_audit',
+          value: { enabled: false }
+        }]
+      }
+    });
+
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.data[0].key, 'group_message_audit');
+    assert.strictEqual(result.payload.data[0].value.enabled, false);
+  } finally {
+    supabase.select = originalSelect;
+    supabase.insert = originalInsert;
     clearBotSettingsCache();
   }
 }
@@ -2552,6 +2647,7 @@ async function run() {
   await testPrivateChatsExcludeEmployees();
   await testGroupsIncludeMessageStatsForChatPreview();
   await testChatDetailIncludesTicketSolutionAndTimeline();
+  await testChatDetailShowsTelegramMemberServiceMessages();
   await testCompanyGroupActivityReturnsLinkedGroupMessagesWithTickets();
   await testCompanyGroupActivityLimitsLargeConversationPayload();
   await testDashboardCompanyTicketsUseRegisteredGroupCompany();
@@ -2573,6 +2669,7 @@ async function run() {
   await testEmployeeActivityReturnsGroupsAndCustomers();
   await testEmployeeActivityIsolatesSelectedEmployeeChats();
   await testLogNotificationsCanSendSelectedLevels();
+  await testGroupMessageAuditSettingCanBeSaved();
   await testCompanyInfoProxyNormalizesExternalRows();
   await testCompanyInfoProxyReturnsCachedSnapshotAndNotifiesOnFetchError();
   await testCompanyInfoProxyFallsBackWhenScopedQueryUnsupported();

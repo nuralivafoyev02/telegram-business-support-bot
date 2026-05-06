@@ -341,9 +341,12 @@ function buildGroupSaveAudit({ status, message, chatRow, classification, employe
   const sourceName = chatDisplayName(message, chatRow);
   const isGroup = isGroupChat(chat);
   const sourceLabel = isGroup ? 'guruh' : 'chat';
+  const failedGroupTitle = `${sourceName} dan malumot olishda/saqlashda xatolik!`;
   const title = status === 'saved'
     ? `${isGroup ? 'Guruh' : 'Chat'} xabari saqlandi`
-    : `${isGroup ? 'Guruh' : 'Chat'} xabari saqlanmadi`;
+    : isGroup
+      ? failedGroupTitle
+      : `${isGroup ? 'Guruh' : 'Chat'} xabari saqlanmadi`;
   const rawSource = inferMessageRawSource({ message, employee, savedMessage, classification });
   const savedRowId = savedMessage && savedMessage.id || '';
   const savedTgMessageId = savedMessage && (savedMessage.tg_message_id || savedMessage.message_id) || message.message_id || '';
@@ -418,6 +421,7 @@ async function maybeNotifyMainGroupMessageSaveAudit({ status, updateKind, messag
   const chat = message.chat || {};
   const failed = status === 'failed';
   if (!failed) {
+    if (settings && settings.groupMessageAudit && settings.groupMessageAudit.enabled === false) return;
     if (!isGroupChat(chat)) return;
     if (isConfiguredMainGroup(chat, settings)) return;
     if (String(updateKind || '').includes('edited')) return;
@@ -885,46 +889,30 @@ async function handleGroupRegistrationCommand(message, tracking) {
     registered = false;
     logBackgroundError('register-group', error);
   });
-  const deleteResult = await deleteCommandMessage(chat.id, message.message_id, {
-    attempts: registered ? 3 : 1,
+
+  if (registered) {
+    await deleteCommandMessage(chat.id, message.message_id, {
+      attempts: 3,
+      delayMs: 150
+    });
+    return;
+  }
+
+  await deleteCommandMessage(chat.id, message.message_id, {
+    attempts: 1,
     delayMs: 150
   });
-  const diagnostics = [];
+
   try {
-    const info = await getWebhookInfo();
-    const allowedUpdates = Array.isArray(info && info.allowed_updates) ? info.allowed_updates : [];
-    if (allowedUpdates.length && !allowedUpdates.includes('message')) {
-      diagnostics.push('Webhook `allowed_updates` ichida `message` yo‘q.');
+    const settings = await getBotSettings();
+    const mainGroupId = await resolveMainNotificationChat(settings);
+    if (mainGroupId) {
+      const groupName = chatDisplayName(message);
+      await sendMessage(mainGroupId, `⚠️ <b>${escapeHtml(groupName)}</b> ni ro'yxatdan o'tkazishda xatolik yuz berdi.`);
     }
-    if (allowedUpdates.length && !allowedUpdates.includes('my_chat_member')) {
-      diagnostics.push('Webhook `allowed_updates` ichida `my_chat_member` yo‘q.');
-    }
-  } catch (error) {
-    logBackgroundError('register-group-webhook-diagnostics', error);
+  } catch (err) {
+    logBackgroundError('register-group-error-notify', err);
   }
-  if (!deleteResult.deleted) {
-    diagnostics.push([
-      `Command o‘chirilmadi: ${deleteResult.reason || 'Telegram deleteMessage rad etdi.'}`,
-      deleteResult.permissionDiagnostic || 'Bot guruhda admin va delete permissionga ega ekanini tekshiring.'
-    ].filter(Boolean).join(' '));
-  }
-  const registrationText = registered
-    ? [
-      '✅ Guruh ro‘yxatga olindi.',
-      deleteResult.deleted ? '🧹 Command xabari o‘chirildi.' : '',
-      'Agar oddiy guruh xabarlari baribir ko‘rinmasa:',
-      '1) BotFather -> `/setprivacy` -> `Disable` qiling.',
-      '2) Webhookda `allowed_updates` ichida `message` bo‘lishini tekshiring.',
-      diagnostics.length ? `⚠️ Aniqlangan muammo: ${diagnostics.join(' ')}` : ''
-    ].filter(Boolean).join('\n')
-    : '⚠️ Guruhni ro‘yxatga olishda xatolik bo‘ldi. Iltimos, keyinroq qayta urinib ko‘ring.';
-  await sendTrackedBotReply({
-    message,
-    text: registrationText,
-    options: deleteResult.deleted ? {} : { reply_to_message_id: message.message_id },
-    updateKind: 'bot_register_group',
-    rawSource: 'bot_register_group'
-  }).catch(error => logBackgroundError('register-group-reply', error));
 }
 
 async function handleHelp(message) {
@@ -1180,12 +1168,31 @@ async function handleCallbackQuery(query = {}) {
 async function recordIncomingMessage(updateKind, message, sourceType, classification, employee = null) {
   const chat = message.chat || {};
   const from = message.from || {};
+  const notifyChatReadError = isGroupChat(chat)
+    ? async error => {
+      const resolvedSettings = await getBotSettings().catch(settingsError => {
+        logBackgroundError('record-incoming-read-settings', settingsError);
+        return null;
+      });
+      await maybeNotifyMainGroupMessageSaveFailed({
+        updateKind,
+        message,
+        settings: resolvedSettings,
+        chatRow: null,
+        classification,
+        employee,
+        error,
+        target: 'public.tg_chats',
+        stage: 'tg_chats_read'
+      });
+    }
+    : null;
 
   const [, chatRow] = await Promise.all([
     metrics.upsertTelegramUser(from, {}, { prefer: 'return=minimal' }),
     metrics.upsertChat(chat, sourceType, {
       business_connection_id: message.business_connection_id || null
-    })
+    }, { onReadError: notifyChatReadError })
   ]);
   await metrics.saveMessage({ message, updateKind, sourceType, classification, employee }, { prefer: 'return=minimal' });
   return chatRow;
@@ -1599,12 +1606,25 @@ async function processMessage(updateKind, message) {
   const settings = await getBotSettings();
   let chatRow = null;
   let employee = null;
+  const notifyChatReadError = isGroupChat(chat)
+    ? error => maybeNotifyMainGroupMessageSaveFailed({
+      updateKind,
+      message,
+      settings,
+      chatRow: null,
+      classification: 'read',
+      employee: null,
+      error,
+      target: 'public.tg_chats',
+      stage: 'tg_chats_read'
+    })
+    : null;
   try {
     const [, resolvedChatRow, resolvedEmployee] = await Promise.all([
       metrics.upsertTelegramUser(from, {}, { prefer: 'return=minimal' }),
       metrics.upsertChat(chat, sourceType, {
         business_connection_id: message.business_connection_id || null
-      }),
+      }, { onReadError: notifyChatReadError }),
       metrics.getKnownEmployeeByTelegramId(from.id)
     ]);
     chatRow = resolvedChatRow;

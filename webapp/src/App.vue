@@ -133,7 +133,8 @@
                   <div class="support-summary-value-row">
                     <div class="support-summary-value" :class="{ danger: card.tone === 'danger' }">{{ card.value }}</div>
                     <Transition name="fade">
-                      <div v-if="comparisonEnabled && card.comparison" class="trend-label" :class="card.comparison.tone">
+                      <div v-if="comparisonEnabled && card.comparison" class="trend-label"
+                        :class="card.comparison.tone" :title="card.comparison.title || card.comparison.text">
                         {{ card.comparison.text }}
                       </div>
                     </Transition>
@@ -254,8 +255,11 @@
                 </template>
                 <template #employeeIdentity="{ row }">
                   <span class="employee-cell">
-                    <img v-if="employeeAvatarUrl(row)" class="employee-avatar" :src="employeeAvatarUrl(row)" alt="" />
-                    <span v-else class="employee-avatar fallback">{{ employeeInitials(row) }}</span>
+                    <img v-if="employeeAvatarUrl(row)" class="employee-avatar"
+                      :class="{ premium: isEmployeePremium(row) }" :data-tooltip="employeePremiumTooltip(row) || null"
+                      :src="employeeAvatarUrl(row)" alt="" />
+                    <span v-else class="employee-avatar fallback" :class="{ premium: isEmployeePremium(row) }"
+                      :data-tooltip="employeePremiumTooltip(row) || null">{{ employeeInitials(row) }}</span>
                     <b>{{ row.full_name || 'Xodim' }}</b>
                   </span>
                 </template>
@@ -295,7 +299,8 @@
                 </template>
                 <template #sla="{ row }">
                   <div class="trend-cell">
-                    <div class="sla-badge" :class="slaClass(row.sla)">
+                    <div class="sla-badge sla-tooltip" :class="slaClass(row.sla)"
+                      :data-tooltip="employeeSlaTooltip(row)" tabindex="0">
                       {{ fmtPercent(row.sla) }}
                     </div>
                     <span v-if="comparisonEnabled && row.sla_comparison" class="trend-label" :class="row.sla_comparison.tone">
@@ -328,7 +333,7 @@
                     </div>
                     <b>{{ row.weekday_label }}</b>
                     <span>{{ row.date_label }}</span>
-                    <em class="sla-chip" :class="slaToneClass(row.sla)">SLA {{ fmtPercent(row.sla) }}</em>
+                    <em class="sla-chip" :class="slaClass(row.sla)">SLA {{ fmtPercent(row.sla) }}</em>
                   </article>
                 </div>
                 <div v-else class="empty compact">Bu davr uchun trend ma’lumoti yo‘q</div>
@@ -813,6 +818,12 @@
                   <label class="label">Asosiy guruh raqami
                     <input v-model.trim="settingsForm.main_group_id" class="input" placeholder="-1001234567890" />
                   </label>
+                  <label class="label">Guruh xabari saqlansa
+                    <select v-model="settingsForm.group_message_audit" class="select">
+                      <option value="true">Main guruhga xabar berish</option>
+                      <option value="false">Xabar bermaslik</option>
+                    </select>
+                  </label>
                   <label class="label">So‘rov aniqlash rejimi
                     <select v-model="settingsForm.request_detection" class="select">
                       <option value="keyword">Kalit so‘z</option>
@@ -1271,7 +1282,7 @@
 
           <section class="detail-section metric-chat-panel">
             <Transition name="fade-slide-up" mode="out-in">
-              <div v-if="metricChatDetail.chat" :key="metricChatDetail.chat.chat_id">
+              <div v-if="metricChatDetail.chat" :key="metricChatDetail.chat.chat_id" class="chat-pane-shell">
                 <div class="metric-chat-header">
                   <div>
                     <div class="card-title">{{ metricChatTitle }}</div>
@@ -1355,8 +1366,12 @@
                     class="telegram-thread metric-chat-thread">
                     <TransitionGroup name="chat-msg">
                       <article v-for="message in metricChatConversation" :key="chatBubbleKey(message)" class="chat-bubble-row"
-                        :class="{ outbound: message.direction === 'outbound' }">
-                        <div class="chat-bubble" :class="{ 'ticket-message': !!message.request_text }">
+                        :class="{ outbound: message.direction === 'outbound', system: isSystemMessage(message) }">
+                        <div v-if="isSystemMessage(message)" class="chat-system-pill">
+                          <span>{{ message.text }}</span>
+                          <time>{{ fmtChatTime(message.created_at) }}</time>
+                        </div>
+                        <div v-else class="chat-bubble" :class="{ 'ticket-message': !!message.request_text }">
                           <div class="chat-bubble-author">{{ message.actor_name || (message.direction === 'outbound' ? 'Xodim'
                             : 'Mijoz') }}</div>
                           <div v-if="message.media" class="chat-media">
@@ -1455,7 +1470,7 @@
 
             <section class="employee-chat-pane">
               <Transition name="fade-slide-up" mode="out-in">
-                <div v-if="selectedCompanyGroup" :key="companyGroupSelectedChatKey">
+                <div v-if="selectedCompanyGroup" :key="companyGroupSelectedChatKey" class="chat-pane-shell">
                   <div class="employee-chat-pane-head">
                     <div>
                       <b>{{ selectedCompanyGroup.title || selectedCompanyGroup.chat_id }}</b>
@@ -1517,8 +1532,13 @@
                     class="telegram-thread employee-profile-thread">
                     <TransitionGroup name="chat-msg">
                       <article v-for="message in companyGroupConversation" :key="chatBubbleKey(message)"
-                        class="chat-bubble-row" :class="{ outbound: message.direction === 'outbound' }">
-                        <div class="chat-bubble" :class="{ 'ticket-message': !!message.request_text }">
+                        class="chat-bubble-row"
+                        :class="{ outbound: message.direction === 'outbound', system: isSystemMessage(message) }">
+                        <div v-if="isSystemMessage(message)" class="chat-system-pill">
+                          <span>{{ message.text }}</span>
+                          <time>{{ fmtChatTime(message.created_at) }}</time>
+                        </div>
+                        <div v-else class="chat-bubble" :class="{ 'ticket-message': !!message.request_text }">
                           <div class="chat-bubble-author">{{ message.actor_name || (message.direction === 'outbound' ?
                             'Xodim' : 'Mijoz') }}</div>
                           <div v-if="message.media" class="chat-media">
@@ -1611,8 +1631,12 @@
           <header class="employee-support-head">
             <span class="employee-profile-avatar-wrap">
               <img v-if="employeeAvatarUrl(employeeProfile.employee)" class="employee-profile-avatar"
+                :class="{ premium: isEmployeePremium(employeeProfile.employee) }"
+                :data-tooltip="employeePremiumTooltip(employeeProfile.employee) || null"
                 :src="employeeAvatarUrl(employeeProfile.employee)" alt="" />
-              <span v-else class="employee-profile-avatar fallback">{{ employeeInitials(employeeProfile.employee)
+              <span v-else class="employee-profile-avatar fallback"
+                :class="{ premium: isEmployeePremium(employeeProfile.employee) }"
+                :data-tooltip="employeePremiumTooltip(employeeProfile.employee) || null">{{ employeeInitials(employeeProfile.employee)
                 }}</span>
             </span>
             <div class="employee-profile-title">
@@ -1686,7 +1710,7 @@
 
             <section class="employee-chat-pane">
               <Transition name="fade-slide-up" mode="out-in">
-                <div v-if="selectedEmployeeProfileChat" :key="employeeProfileSelectedChatKey">
+                <div v-if="selectedEmployeeProfileChat" :key="employeeProfileSelectedChatKey" class="chat-pane-shell">
                   <div class="employee-chat-pane-head">
                     <div>
                       <b>{{ selectedEmployeeProfileChat.title || selectedEmployeeProfileChat.chat_id }}</b>
@@ -1737,8 +1761,13 @@
                     class="telegram-thread employee-profile-thread">
                     <TransitionGroup name="chat-msg">
                       <article v-for="message in employeeProfileConversation" :key="chatBubbleKey(message)"
-                        class="chat-bubble-row" :class="{ outbound: message.direction === 'outbound' }">
-                        <div class="chat-bubble" :class="{ 'ticket-message': !!message.request_text }">
+                        class="chat-bubble-row"
+                        :class="{ outbound: message.direction === 'outbound', system: isSystemMessage(message) }">
+                        <div v-if="isSystemMessage(message)" class="chat-system-pill">
+                          <span>{{ message.text }}</span>
+                          <time>{{ fmtChatTime(message.created_at) }}</time>
+                        </div>
+                        <div v-else class="chat-bubble" :class="{ 'ticket-message': !!message.request_text }">
                           <div class="chat-bubble-author">{{ message.actor_name || (message.direction === 'outbound' ?
                             employeeProfile.employee?.full_name || 'Xodim' : 'Mijoz') }}</div>
                           <div v-if="message.media" class="chat-media">
@@ -1878,6 +1907,11 @@
               <span>Oxirgi aktivlik</span>
               <b>{{ fmtDate(chatDetail.chat?.last_message_at || chatDetail.chat?.last_request_at) }}</b>
             </div>
+            <div v-if="chatMembershipLabel(chatDetail.chat)" class="chat-status-summary"
+              :class="chatMembershipTone(chatDetail.chat)">
+              <span>Telegram holati</span>
+              <b>{{ chatMembershipLabel(chatDetail.chat) }}</b>
+            </div>
           </section>
 
           <div class="chat-detail-layout">
@@ -1909,8 +1943,12 @@
               </div>
               <div v-if="chatConversation.length" ref="chatDetailThreadRef" class="telegram-thread">
                 <article v-for="message in chatConversation" :key="chatBubbleKey(message)" class="chat-bubble-row"
-                  :class="{ outbound: message.direction === 'outbound' }">
-                  <div class="chat-bubble" :class="{ 'ticket-message': !!message.request_text }">
+                  :class="{ outbound: message.direction === 'outbound', system: isSystemMessage(message) }">
+                  <div v-if="isSystemMessage(message)" class="chat-system-pill">
+                    <span>{{ message.text }}</span>
+                    <time>{{ fmtChatTime(message.created_at) }}</time>
+                  </div>
+                  <div v-else class="chat-bubble" :class="{ 'ticket-message': !!message.request_text }">
                     <div class="chat-bubble-author">{{ message.actor_name || (message.direction === 'outbound' ? 'Xodim'
                       :
                       'Mijoz') }}</div>
@@ -1958,6 +1996,13 @@
           </section> -->
         </div>
       </Modal>
+    </Transition>
+
+    <Transition name="fade">
+      <div v-if="floatingTooltip.visible" class="floating-tooltip" :class="floatingTooltip.placement"
+        :style="floatingTooltipStyle">
+        {{ floatingTooltip.text }}
+      </div>
     </Transition>
 
     <Transition name="fade">
@@ -2112,8 +2157,15 @@ let durationTimer = null;
 let telegramAutoSyncTimer = null;
 let telegramAutoSyncBusy = false;
 let modalScrollY = 0;
+let activeTooltipTarget = null;
+const floatingTooltip = ref({ visible: false, text: '', x: 0, y: 0, placement: 'top' });
+const floatingTooltipStyle = computed(() => ({
+  left: `${floatingTooltip.value.x}px`,
+  top: `${floatingTooltip.value.y}px`,
+  transform: floatingTooltip.value.placement === 'top' ? 'translate(-50%, -100%)' : 'translate(-50%, 0)'
+}));
 
-const settingsForm = reactive({ ai_mode: 'false', auto_reply: 'true', done_tag: '#done', main_group_id: '', request_detection: 'keyword' });
+const settingsForm = reactive({ ai_mode: 'false', auto_reply: 'true', done_tag: '#done', main_group_id: '', group_message_audit: 'true', request_detection: 'keyword' });
 const isManagerMode = computed(() => false);
 const mainTabs = computed(() => tabs.filter(tab => mainTabKeys.includes(tab.key)));
 const otherTabs = computed(() => tabs.filter(tab => otherTabKeys.includes(tab.key)));
@@ -2327,12 +2379,18 @@ const companyTicketRows = computed(() => {
 const companyTicketMax = computed(() => Math.max(1, ...companyTicketRows.value.map(row => Number(row.total_requests || 0))));
 const supportSummaryCards = computed(() => {
   const stats = selectedPeriodStats.value;
+  const previousLabel = currentPeriodDates.value.prev || 'oldingi davr';
+  const attachPreviousLabel = comparison => comparison ? {
+    ...comparison,
+    title: `${previousLabel} bilan taqqoslash: ${comparison.text}`
+  } : null;
   const cards = [
     {
       key: 'requests',
       title: selectedStatsPeriod.value === 'today' ? 'Bugungi so‘rovlar' : `${selectedPeriodLabel.value} so‘rovlar`,
       value: fmtNumber(stats.total_requests),
       note: `${fmtNumber(stats.unique_customers)} ta mijozdan kelgan`,
+      comparison: attachPreviousLabel(compareValue(stats.total_requests, stats.prev_total_requests, { unit: 'ta' })),
       icon: '🎫',
       action: 'requests'
     },
@@ -2341,6 +2399,7 @@ const supportSummaryCards = computed(() => {
       title: 'Javob berilgan',
       value: fmtNumber(stats.closed_requests),
       note: `${fmtPercent(stats.close_rate)} so‘rov yopilgan`,
+      comparison: attachPreviousLabel(compareValue(stats.closed_requests, stats.prev_closed_requests, { unit: 'ta' })),
       icon: '✅',
       action: 'closed'
     },
@@ -2349,6 +2408,7 @@ const supportSummaryCards = computed(() => {
       title: 'Javobsiz',
       value: fmtNumber(stats.open_requests),
       note: `${fmtNumber(overdueOpenRequestsTotal.value)} tasi 30 daqiqadan oshgan`,
+      comparison: attachPreviousLabel(compareValue(stats.open_requests, stats.prev_open_requests, { invert: true, unit: 'ta' })),
       icon: '⚠️',
       tone: 'danger',
       action: 'open'
@@ -2358,6 +2418,7 @@ const supportSummaryCards = computed(() => {
       title: 'O‘rtacha javob',
       value: fmtMinutes(stats.avg_close_minutes),
       note: `SLA: ${fmtPercent(stats.close_rate)}`,
+      comparison: attachPreviousLabel(compareValue(stats.avg_close_minutes, stats.prev_avg_close_minutes, { invert: true, unit: 'min' })),
       icon: '⏱️',
       action: 'avg'
     }
@@ -2466,6 +2527,7 @@ function mergeSupportCandidate(map, row = {}, source = 'identity') {
     phone: current.phone || phone || '',
     role: current.role || row.role || 'support',
     full_name: current.full_name || row.full_name || row.closed_by_name || (username ? `@${username}` : '') || phone || 'Xodim',
+    telegram_is_premium: current.telegram_is_premium === true || row.telegram_is_premium === true,
     period_closed_requests: Number(current.period_closed_requests || 0) + periodClosed,
     stats_closed_requests: Number(current.stats_closed_requests || 0) + statsClosed,
     period_open_requests: Number(current.period_open_requests || 0) + periodOpen,
@@ -2520,6 +2582,7 @@ const supportPerformanceRows = computed(() => {
       phone: row.phone || stat.phone || '',
       role: row.role || stat.role || '',
       full_name: row.full_name || stat.full_name || 'Xodim',
+      telegram_is_premium: row.telegram_is_premium === true || stat.telegram_is_premium === true,
       handled_chats: Math.max(
         Number(row.period_handled_chats || row.stats_handled_chats || row.handled_chats || stat.handled_chats || stat.today_written_groups_count || 0),
         Number(openSummary?.chat_keys?.size || 0)
@@ -2632,8 +2695,68 @@ function handleDocumentKeydown(event) {
   if (event.key === 'Escape') {
     actionMenuOpen.value = false;
     rankingMenuOpen.value = false;
+    hideFloatingTooltip();
     if (modal.value) closeModal();
   }
+}
+
+function tooltipTargetFromEventTarget(target) {
+  return target && typeof target.closest === 'function' ? target.closest('[data-tooltip]') : null;
+}
+
+function positionFloatingTooltip(target) {
+  if (!target || typeof window === 'undefined') return;
+  const text = String(target.getAttribute('data-tooltip') || '').trim();
+  if (!text) return hideFloatingTooltip();
+
+  const rect = target.getBoundingClientRect();
+  const maxWidth = Math.min(380, Math.max(260, window.innerWidth - 24));
+  const half = maxWidth / 2;
+  const center = rect.left + rect.width / 2;
+  const x = Math.min(Math.max(center, half + 12), window.innerWidth - half - 12);
+  const hasTopSpace = rect.top > 96;
+  floatingTooltip.value = {
+    visible: true,
+    text,
+    x,
+    y: hasTopSpace ? rect.top - 10 : rect.bottom + 10,
+    placement: hasTopSpace ? 'top' : 'bottom'
+  };
+}
+
+function showFloatingTooltip(target) {
+  activeTooltipTarget = target;
+  positionFloatingTooltip(target);
+}
+
+function hideFloatingTooltip() {
+  activeTooltipTarget = null;
+  floatingTooltip.value = { ...floatingTooltip.value, visible: false };
+}
+
+function handleDocumentTooltipOver(event) {
+  const target = tooltipTargetFromEventTarget(event.target);
+  if (target) showFloatingTooltip(target);
+}
+
+function handleDocumentTooltipMove() {
+  if (activeTooltipTarget) positionFloatingTooltip(activeTooltipTarget);
+}
+
+function handleDocumentTooltipOut(event) {
+  if (!activeTooltipTarget) return;
+  const nextTarget = event.relatedTarget;
+  if (nextTarget && activeTooltipTarget.contains(nextTarget)) return;
+  hideFloatingTooltip();
+}
+
+function handleDocumentTooltipFocusIn(event) {
+  const target = tooltipTargetFromEventTarget(event.target);
+  if (target) showFloatingTooltip(target);
+}
+
+function handleDocumentTooltipFocusOut() {
+  hideFloatingTooltip();
 }
 
 function clearLoginFeedback() {
@@ -2683,6 +2806,15 @@ function employeeAvatarUrl(row = {}) {
   row = row || {};
   const key = employeeAvatarKey(row);
   return key ? employeeAvatarUrls.value[key] || '' : '';
+}
+
+function isEmployeePremium(row = {}) {
+  row = row || {};
+  return row.telegram_is_premium === true || row.telegram_premium === true || row.is_premium === true;
+}
+
+function employeePremiumTooltip(row = {}) {
+  return isEmployeePremium(row) ? 'Telegram Premium' : '';
 }
 
 function employeeInitials(row = {}) {
@@ -2775,6 +2907,10 @@ function slaToneClass(value = 0) {
   if (numeric >= 85) return 'good';
   if (numeric >= 75) return 'warn';
   return 'bad';
+}
+
+function slaClass(value = 0) {
+  return slaToneClass(value);
 }
 
 function employeeSlaTooltip(row = {}) {
@@ -2983,6 +3119,23 @@ function statusLabel(value) {
     closed: 'Yopilgan',
     pending: 'Kutilmoqda'
   }[String(value || '').toLowerCase()] || value || '—');
+}
+
+function chatMembershipLabel(chat = {}) {
+  const sourceType = String(chat?.source_type || '').toLowerCase();
+  if (sourceType !== 'group') return '';
+  const status = String(chat.member_status || '').toLowerCase();
+  if (status === 'left') return 'Bot guruhdan chiqqan';
+  if (status === 'kicked') return 'Bot guruhdan chiqarilgan';
+  if (status === 'hidden') return 'Webapp ro‘yxatidan yashirilgan';
+  if (chat.is_active === false) return 'Guruh faol emas';
+  if (status) return `Bot holati: ${status}`;
+  return 'Guruh faol';
+}
+
+function chatMembershipTone(chat = {}) {
+  const status = String(chat?.member_status || '').toLowerCase();
+  return chat?.is_active === false || ['left', 'kicked', 'hidden'].includes(status) ? 'inactive' : 'active';
 }
 
 function companyStatusLabel(value) {
@@ -3738,6 +3891,9 @@ function employeeRequestEventConversationItems(request = {}, employee = {}) {
 }
 
 function employeeMessageConversationItem(message = {}, employee = {}) {
+  if (isSystemMessage(message)) {
+    return { ...message, direction: 'system', type: message.type || 'service', text: message.text || '', created_at: message.created_at || null };
+  }
   return {
     id: message.id || `message-${message.chat_id || ''}-${message.message_id || message.created_at || ''}`,
     type: 'employee_reply',
@@ -3760,6 +3916,9 @@ function employeeMessageConversationItem(message = {}, employee = {}) {
 }
 
 function employeeChatMessageConversationItem(message = {}, employee = {}) {
+  if (isSystemMessage(message)) {
+    return { ...message, direction: 'system', type: message.type || 'service', text: message.text || '', created_at: message.created_at || null };
+  }
   const outbound = messageBelongsToEmployee(message, employee)
     || ['employee_message', 'admin_reply', 'ai_reply', 'bot_reply', 'bot_broadcast', 'bot_notification', 'bot_message'].includes(message.classification || '');
   const origin = message.origin_type || message.actor_type || (outbound ? 'employee' : 'customer');
@@ -3784,6 +3943,24 @@ function employeeChatMessageConversationItem(message = {}, employee = {}) {
   };
 }
 
+function employeeScopedMessageVisible(message = {}, employee = {}, requests = [], includeGroupContext = false) {
+  if (isSystemMessage(message)) return true;
+  if (messageBelongsToEmployee(message, employee)) return true;
+
+  const origin = String(message.origin_type || message.actor_type || '').toLowerCase();
+  const classification = String(message.classification || '').toLowerCase();
+  const looksLikeOtherEmployee = origin === 'employee' || classification === 'employee_message';
+  if (looksLikeOtherEmployee) return false;
+  if (!includeGroupContext) return message.direction === 'inbound';
+
+  const customerIds = new Set((Array.isArray(requests) ? requests : [])
+    .map(request => String(request.customer_tg_id || request.actor_tg_user_id || '').trim())
+    .filter(Boolean));
+  if (!customerIds.size) return message.direction === 'inbound';
+  const actorId = String(message.actor_tg_user_id || message.from_tg_user_id || '').trim();
+  return message.direction === 'inbound' && (!actorId || customerIds.has(actorId));
+}
+
 function employeeScopedConversation(row = {}, employee = {}) {
   const chatId = Number(row.chat_id || 0);
   const includeFullGroupThread = row.source_type === 'group' || chatId < 0;
@@ -3796,7 +3973,7 @@ function employeeScopedConversation(row = {}, employee = {}) {
   const messages = Array.isArray(row.chat_messages)
     ? row.chat_messages
       .map(message => employeeChatMessageConversationItem(message, employee))
-      .filter(message => includeFullGroupThread || message.direction === 'inbound' || messageBelongsToEmployee(message, employee))
+      .filter(message => employeeScopedMessageVisible(message, employee, requestRows, includeFullGroupThread))
     : (Array.isArray(row.messages) ? row.messages : [])
       .map(message => employeeMessageConversationItem(message, employee))
       .filter(message => messageBelongsToEmployee(message, employee));
@@ -3820,7 +3997,7 @@ const employeeProfileConversation = computed(() => {
   const chatId = Number(chat.chat_id || 0);
   const includeFullGroupThread = chat.source_type === 'group' || chatId < 0;
   return (conversation.length ? conversation : employeeScopedConversation(chat, employee))
-    .filter(message => includeFullGroupThread || message.direction === 'inbound' || messageBelongsToEmployee(message, employee));
+    .filter(message => employeeScopedMessageVisible(message, employee, employeeProfileChatRequests.value, includeFullGroupThread));
 });
 
 const employeeStatColumns = [
@@ -4092,6 +4269,7 @@ function fmtChatTime(value) {
 function messageSourceLabel(message = {}) {
   const label = String(message.source_label || '').trim();
   if (label) return label;
+  if (isSystemMessage(message)) return 'Telegram';
   const origin = String(message.origin_type || message.actor_type || '').trim().toLowerCase();
   if (origin === 'admin') return 'Admin';
   if (origin === 'bot') return 'Bot';
@@ -4100,6 +4278,10 @@ function messageSourceLabel(message = {}) {
   if (origin === 'customer') return 'Mijoz';
   if (message.direction === 'outbound') return 'Xodim';
   return 'Mijoz';
+}
+
+function isSystemMessage(message = {}) {
+  return message.direction === 'system' || message.type === 'service' || message.origin_type === 'system';
 }
 
 function chatBubbleKey(message) {
@@ -4254,6 +4436,7 @@ async function loadSettings() {
   const ai = data.settings?.find(s => s.key === 'ai_mode')?.value;
   const integration = data.settings?.find(s => s.key === 'ai_integration')?.value;
   const logNotifications = data.settings?.find(s => s.key === 'log_notifications')?.value;
+  const groupMessageAudit = data.settings?.find(s => s.key === 'group_message_audit')?.value;
   const done = data.settings?.find(s => s.key === 'done_tag')?.value;
   const mainGroup = data.settings?.find(s => s.key === 'main_group')?.value;
   const detect = data.settings?.find(s => s.key === 'request_detection')?.value;
@@ -4287,6 +4470,9 @@ async function loadSettings() {
     : 'true';
   settingsForm.done_tag = done?.tag || '#done';
   settingsForm.main_group_id = mainGroup?.chat_id || '';
+  settingsForm.group_message_audit = groupMessageAudit === undefined
+    ? 'true'
+    : String(groupMessageAudit?.enabled !== false);
   settingsForm.request_detection = detect?.mode || 'keyword';
   await checkTelegramWebhook(false);
 }
@@ -4799,7 +4985,7 @@ async function openEmployeeCompanies(row = {}) {
     if (loadToken !== employeeProfileLoadToken) return;
     const summary = data.summary || {};
     employeeProfile.value = {
-      employee: data.employee || employee,
+      employee: { ...employee, ...(data.employee || {}) },
       rank: row.rank || null,
       companies,
       summary: {
@@ -4955,31 +5141,38 @@ function supportMetricSummary(rows = []) {
   ];
 }
 
-async function scrollMetricChatToEnd() {
+function setThreadScrollToEnd(thread) {
+  if (!thread) return;
+  thread.scrollTop = thread.scrollHeight;
+}
+
+async function scrollThreadToEnd(threadRef) {
   await nextTick();
-  const thread = metricChatThreadRef.value;
-  if (thread) thread.scrollTop = thread.scrollHeight;
+  const thread = threadRef.value;
+  setThreadScrollToEnd(thread);
+  if (typeof requestAnimationFrame === 'function') {
+    requestAnimationFrame(() => setThreadScrollToEnd(thread));
+  }
+}
+
+async function scrollMetricChatToEnd() {
+  await scrollThreadToEnd(metricChatThreadRef);
 }
 
 async function scrollChatDetailToEnd() {
-  await nextTick();
-  const thread = chatDetailThreadRef.value;
-  if (thread) thread.scrollTop = thread.scrollHeight;
+  await scrollThreadToEnd(chatDetailThreadRef);
 }
 
 async function scrollEmployeeProfileChatToEnd() {
-  await nextTick();
-  const thread = employeeProfileThreadRef.value;
-  if (thread) thread.scrollTop = thread.scrollHeight;
+  await scrollThreadToEnd(employeeProfileThreadRef);
 }
 
 async function scrollCompanyGroupToEnd() {
-  await nextTick();
-  const thread = companyGroupThreadRef.value;
-  if (thread) thread.scrollTop = thread.scrollHeight;
+  await scrollThreadToEnd(companyGroupThreadRef);
 }
 
 watch(chatConversation, () => scrollChatDetailToEnd(), { flush: 'post' });
+watch(metricChatConversation, () => scrollMetricChatToEnd(), { flush: 'post' });
 watch(employeeProfileConversation, () => scrollEmployeeProfileChatToEnd(), { flush: 'post' });
 watch(companyGroupConversation, () => scrollCompanyGroupToEnd(), { flush: 'post' });
 
@@ -5365,6 +5558,7 @@ function openAlertRequests(row = {}) {
 }
 
 function closeModal() {
+  hideFloatingTooltip();
   if (modal.value === 'chatDetail' || modal.value === 'metricDetail' || modal.value === 'employeeCompanies' || modal.value === 'companyGroupActivity') clearMediaUrls();
   if (modal.value === 'metricDetail') resetMetricChatDetail();
   if (modal.value === 'employeeCompanies') resetEmployeeProfileChat();
@@ -5879,6 +6073,7 @@ async function saveSettings() {
         { key: 'auto_reply', value: { enabled: settingsForm.auto_reply === 'true' } },
         { key: 'done_tag', value: { tag: settingsForm.done_tag, auto_reply: true } },
         { key: 'main_group', value: { chat_id: settingsForm.main_group_id } },
+        { key: 'group_message_audit', value: { enabled: settingsForm.group_message_audit === 'true' } },
         { key: 'request_detection', value: { mode: settingsForm.request_detection, min_text_length: 10 } }
       ]
     });
@@ -5993,6 +6188,11 @@ onMounted(async () => {
   if (typeof document !== 'undefined') {
     document.addEventListener('pointerdown', handleDocumentPointerDown);
     document.addEventListener('keydown', handleDocumentKeydown);
+    document.addEventListener('pointerover', handleDocumentTooltipOver);
+    document.addEventListener('pointermove', handleDocumentTooltipMove);
+    document.addEventListener('pointerout', handleDocumentTooltipOut);
+    document.addEventListener('focusin', handleDocumentTooltipFocusIn);
+    document.addEventListener('focusout', handleDocumentTooltipFocusOut);
   }
   durationTimer = setInterval(() => {
     nowTick.value = Date.now();
@@ -6008,6 +6208,11 @@ onUnmounted(() => {
   if (typeof document !== 'undefined') {
     document.removeEventListener('pointerdown', handleDocumentPointerDown);
     document.removeEventListener('keydown', handleDocumentKeydown);
+    document.removeEventListener('pointerover', handleDocumentTooltipOver);
+    document.removeEventListener('pointermove', handleDocumentTooltipMove);
+    document.removeEventListener('pointerout', handleDocumentTooltipOut);
+    document.removeEventListener('focusin', handleDocumentTooltipFocusIn);
+    document.removeEventListener('focusout', handleDocumentTooltipFocusOut);
   }
   if (durationTimer) clearInterval(durationTimer);
   stopTelegramAutoSync();
@@ -6097,8 +6302,7 @@ const DataTable = defineComponent({
       event.preventDefault();
       props.onCellAction({ action, row, column, event });
     };
-    const renderValue = (column, row) => {
-      if (column.slot && slots[column.slot]) return slots[column.slot]({ row });
+    const renderPlainValue = (column, row) => {
       const value = row[column.key];
       const text = column.format ? column.format(value, row) : (value ?? '—');
       if (column.badge) {
@@ -6117,6 +6321,20 @@ const DataTable = defineComponent({
         ]);
       }
       return h('span', text);
+    };
+    const renderValue = (column, row) => {
+      if (column.slot && slots[column.slot]) {
+        try {
+          return slots[column.slot]({ row });
+        } catch (error) {
+          console.error('[webapp:data-table:slot-error]', {
+            slot: column.slot,
+            key: column.key,
+            error: error && error.message ? error.message : String(error || 'Unknown error')
+          });
+        }
+      }
+      return renderPlainValue(column, row);
     };
     const renderHeader = column => {
       if (!column.tooltip) return column.label;
