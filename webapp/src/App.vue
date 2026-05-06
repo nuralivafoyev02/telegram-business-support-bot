@@ -5175,14 +5175,24 @@ function supportMetricSummary(rows = []) {
 function setThreadScrollToEnd(thread) {
   if (!thread) return;
   thread.scrollTop = thread.scrollHeight;
+  if (thread.scrollTo) {
+    thread.scrollTo({ top: thread.scrollHeight, behavior: 'auto' });
+  }
 }
 
 async function scrollThreadToEnd(threadRef) {
   await nextTick();
   const thread = threadRef.value;
+  if (!thread) return;
+  
   setThreadScrollToEnd(thread);
+  
   if (typeof requestAnimationFrame === 'function') {
-    requestAnimationFrame(() => setThreadScrollToEnd(thread));
+    requestAnimationFrame(() => {
+      setThreadScrollToEnd(thread);
+      setTimeout(() => setThreadScrollToEnd(thread), 100);
+      setTimeout(() => setThreadScrollToEnd(thread), 300);
+    });
   }
 }
 
