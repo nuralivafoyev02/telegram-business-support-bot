@@ -28,7 +28,7 @@ const TELEGRAM_ALLOWED_UPDATES = [
   'chat_member',
   'callback_query'
 ];
-const COMPANY_GROUP_ACTIVITY_CONVERSATION_LIMIT = 500;
+const COMPANY_GROUP_ACTIVITY_CONVERSATION_LIMIT = 1500;
 const COMPANY_GROUP_ACTIVITY_REQUEST_LIMIT = 300;
 
 function parseIntSafe(value, fallback = 0) {
@@ -1318,6 +1318,7 @@ function buildChatDetail({ chat, requests, events, messages, employeesById, empl
       seenConversation.add(key);
       return true;
     })
+    .slice(-COMPANY_GROUP_ACTIVITY_CONVERSATION_LIMIT)
     .sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')));
 
   return {
@@ -1737,6 +1738,7 @@ async function getCompanyGroupActivity(query = {}) {
       .filter(request => String(request.company_id || chat.company_id || '') === companyId)
       .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
     const chatMessages = (messagesByChat.get(chatKey) || [])
+      .slice(0, COMPANY_GROUP_ACTIVITY_CONVERSATION_LIMIT)
       .sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')));
 
     const requestRows = chatRequests.map(requestSummary);
