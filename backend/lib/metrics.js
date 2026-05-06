@@ -2,6 +2,7 @@
 
 const supabase = require('./supabase');
 const { tgUserName } = require('./telegram');
+const { scoreTextMatch } = require('./ai');
 
 const MEDIA_TEXT = Object.freeze({
   sticker: 'Stikerli xabar',
@@ -188,19 +189,27 @@ async function saveMessage({ message, updateKind, sourceType, classification, em
 async function findMergeableOpenRequest({ message, sourceType }) {
   const from = message.from || {};
   const chat = message.chat || {};
-  if (!chat.id) return null;
+  const text = (message.text || message.caption || '').trim().toLowerCase();
+  if (!chat.id || !from.id || !text) return null;
 
   const rows = await supabase.select('support_requests', {
     select: 'id,source_type,chat_id,company_id,customer_tg_id,customer_name,initial_message_id,initial_text,status,created_at',
     chat_id: supabase.eq(chat.id),
+    customer_tg_id: supabase.eq(from.id),
     status: 'eq.open',
     order: supabase.order('created_at', false),
-    limit: sourceType === 'group' ? '10' : '1'
+    limit: '1'
   }).catch(() => []);
 
-  if (sourceType !== 'group') return rows[0] || null;
-  if (!from.id) return null;
-  return rows.find(row => String(row.customer_tg_id || '') === String(from.id)) || null;
+  const existing = rows[0];
+  if (!existing) return null;
+
+  // Rule: Merge if the text is highly similar (semantic match)
+  const existingText = (existing.initial_text || '').trim();
+  const similarity = scoreTextMatch(existingText, text);
+  if (similarity >= 0.7) return existing;
+
+  return null;
 }
 
 async function addRequestNote({ request, message }) {
@@ -228,8 +237,8 @@ async function createSupportRequest({ message, sourceType, companyId = null }) {
   const text = messageDisplayText(message);
   const createdAt = messageDateIso(message);
 
-  // const existing = await findMergeableOpenRequest({ message, sourceType });
-  // if (existing) return addRequestNote({ request: existing, message });
+  const existing = await findMergeableOpenRequest({ message, sourceType });
+  if (existing) return addRequestNote({ request: existing, message });
 
   const rows = await supabase.insert('support_requests', [{
     source_type: sourceType,
