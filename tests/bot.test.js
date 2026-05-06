@@ -130,15 +130,15 @@ async function testChatMemberUpdateRegistersGroup() {
   }
 }
 
-async function testGroupStartRegistersGroupAndDeletesCommand() {
+async function testGroupStartAndRegisterDeleteCommandWithoutReply() {
   const originalInsert = supabase.insert;
   const originalSelect = supabase.select;
   const originalFetch = global.fetch;
   const telegramCalls = [];
-  let chatRow = null;
+  const chatRows = [];
 
   supabase.insert = async (table, rows) => {
-    if (table === 'tg_chats') chatRow = rows[0];
+    if (table === 'tg_chats') chatRows.push(rows[0]);
     return rows;
   };
   supabase.select = async () => [];
@@ -151,29 +151,32 @@ async function testGroupStartRegistersGroupAndDeletesCommand() {
   };
 
   try {
-    const result = await callHandler({
-      update_id: 4,
-      message: {
-        message_id: 12,
-        date: 1777100000,
-        text: '/start',
-        chat: { id: -100777, type: 'supergroup', title: 'Support group' },
-        from: { id: 777, first_name: 'Ali', is_bot: false }
-      }
-    });
+    const commands = ['/start', '/register'];
+    for (let index = 0; index < commands.length; index += 1) {
+      const result = await callHandler({
+        update_id: 4 + index,
+        message: {
+          message_id: 12 + index,
+          date: 1777100000,
+          text: commands[index],
+          chat: { id: -100777, type: 'supergroup', title: 'Support group' },
+          from: { id: 777, first_name: 'Ali', is_bot: false }
+        }
+      });
 
-    assert.strictEqual(result.status, 200);
-    assert.strictEqual(result.payload.handled, 'message');
-    assert.strictEqual(chatRow.chat_id, -100777);
-    assert.strictEqual(chatRow.source_type, 'group');
+      assert.strictEqual(result.status, 200);
+      assert.strictEqual(result.payload.handled, 'message');
+    }
+
+    assert.strictEqual(chatRows.length, 2);
+    assert.strictEqual(chatRows.every(row => row.chat_id === -100777 && row.source_type === 'group'), true);
     assert.strictEqual(telegramCalls.length, 2);
-    assert.match(telegramCalls[0].url, /deleteMessage$/);
-    assert.strictEqual(String(telegramCalls[0].body.chat_id), '-100777');
-    assert.strictEqual(telegramCalls[0].body.message_id, 12);
-    assert.strictEqual(telegramCalls[0].body.text, undefined);
-    assert.match(telegramCalls[1].url, /sendMessage$/);
-    assert.strictEqual(String(telegramCalls[1].body.chat_id), '-100777');
-    assert.ok(telegramCalls[1].body.text.includes('Guruh ro‘yxatga olindi'));
+    telegramCalls.forEach((call, index) => {
+      assert.match(call.url, /deleteMessage$/);
+      assert.strictEqual(String(call.body.chat_id), '-100777');
+      assert.strictEqual(call.body.message_id, 12 + index);
+      assert.strictEqual(call.body.text, undefined);
+    });
   } finally {
     supabase.insert = originalInsert;
     supabase.select = originalSelect;
@@ -1555,7 +1558,7 @@ async function testBotRemovalMarksGroupInactive() {
 (async () => {
   await testStartRepliesWhenDbTrackingFails();
   await testChatMemberUpdateRegistersGroup();
-  await testGroupStartRegistersGroupAndDeletesCommand();
+  await testGroupStartAndRegisterDeleteCommandWithoutReply();
   await testGroupRegisterDbFailureStillDeletesCommand();
   await testGroupDoneDoesNotReplyToGroup();
   await testRequestMessageAppendsToExistingOpenRequest();

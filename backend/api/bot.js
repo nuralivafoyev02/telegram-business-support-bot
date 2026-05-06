@@ -891,22 +891,10 @@ async function handleGroupRegistrationCommand(message, tracking) {
   });
 
   if (registered) {
-    const deleteResult = await deleteCommandMessage(chat.id, message.message_id, {
+    await deleteCommandMessage(chat.id, message.message_id, {
       attempts: 3,
       delayMs: 150
     });
-    const lines = [
-      '<b>Guruh ro‘yxatga olindi</b>',
-      `Chat ID: <code>${escapeHtml(chat.id)}</code>`,
-      'Oddiy guruh xabarlari to‘liq kelishi uchun BotFather’da <code>/setprivacy</code> → <b>Disable</b> qiling.',
-      deleteResult.deleted
-        ? 'Command xabari o‘chirildi.'
-        : `Command o‘chirilmadi: ${escapeHtml(deleteResult.reason || 'Telegram rad etdi')}`,
-      !deleteResult.deleted && deleteResult.permissionDiagnostic ? escapeHtml(deleteResult.permissionDiagnostic) : ''
-    ].filter(Boolean);
-    await sendMessage(chat.id, lines.join('\n'), deleteResult.deleted ? {} : {
-      reply_to_message_id: message.message_id
-    }).catch(error => logBackgroundError('register-group-reply', error));
     return;
   }
 
