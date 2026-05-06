@@ -228,8 +228,8 @@ async function createSupportRequest({ message, sourceType, companyId = null }) {
   const text = messageDisplayText(message);
   const createdAt = messageDateIso(message);
 
-  const existing = await findMergeableOpenRequest({ message, sourceType });
-  if (existing) return addRequestNote({ request: existing, message });
+  // const existing = await findMergeableOpenRequest({ message, sourceType });
+  // if (existing) return addRequestNote({ request: existing, message });
 
   const rows = await supabase.insert('support_requests', [{
     source_type: sourceType,
