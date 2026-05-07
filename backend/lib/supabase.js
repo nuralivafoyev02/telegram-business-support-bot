@@ -89,6 +89,10 @@ async function patch(table, query, values, prefer = 'return=representation') {
   return request(table, { method: 'PATCH', query, body: values, prefer });
 }
 
+async function remove(table, query, prefer = 'return=representation') {
+  return request(table, { method: 'DELETE', query, prefer });
+}
+
 async function rpc(name, body = {}) {
   return request(`rpc/${name}`, { method: 'POST', body });
 }
@@ -105,4 +109,4 @@ function order(column, ascending = false) {
   return `${column}.${ascending ? 'asc' : 'desc'}`;
 }
 
-module.exports = { select, insert, patch, rpc, eq, inList, order };
+module.exports = { select, insert, patch, remove, rpc, eq, inList, order };

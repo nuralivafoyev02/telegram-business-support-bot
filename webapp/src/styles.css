@@ -840,6 +840,68 @@ tbody tr:hover {
   max-width: 760px;
 }
 
+.settings-layout {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+  max-width: 1100px;
+}
+
+.settings-menu {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.settings-menu button {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 2px 10px;
+  align-items: center;
+  width: 100%;
+  padding: 11px 12px;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  color: var(--text);
+  background: transparent;
+  text-align: left;
+}
+
+.settings-menu button.active,
+.settings-menu button:hover {
+  border-color: rgba(142, 199, 255, .22);
+  background: rgba(142, 199, 255, .13);
+}
+
+.settings-menu button>span {
+  grid-row: span 2;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  aspect-ratio: 1;
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, .07);
+}
+
+.settings-menu b {
+  min-width: 0;
+  font-size: 14px;
+}
+
+.settings-menu small {
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.settings-panel {
+  min-width: 0;
+}
+
 .settings-card {
   background: var(--panel-strong);
 }
@@ -855,6 +917,22 @@ tbody tr:hover {
 
 .settings-form {
   grid-template-columns: 1fr;
+}
+
+.settings-form-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.settings-form-grid .wide,
+.settings-actions {
+  grid-column: 1 / -1;
+}
+
+.settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
 }
 
 .integration-stack {
@@ -911,7 +989,7 @@ tbody tr:hover {
 
 .webhook-actions {
   justify-content: flex-start;
-  display: hidden;
+  display: flex;
 }
 
 .login-screen {
@@ -1747,6 +1825,15 @@ tbody tr:hover {
     max-width: none;
   }
 
+  .settings-layout {
+    grid-template-columns: 1fr;
+    max-width: none;
+  }
+
+  .settings-menu {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
   .integration-form {
     grid-template-columns: 1fr;
   }
@@ -1813,6 +1900,15 @@ tbody tr:hover {
 
   .form.two {
     grid-template-columns: 1fr;
+  }
+
+  .settings-menu,
+  .settings-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-actions .btn {
+    width: 100%;
   }
 
   .detail-summary {

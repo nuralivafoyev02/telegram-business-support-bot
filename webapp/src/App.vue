@@ -768,42 +768,34 @@
                 <template #actions="{ row }">
                   <button class="btn small" @click="openEmployee(row)">Tahrirlash</button>
                   <button class="btn small" @click="openEmployeeMessage(row)">Yozish</button>
+                  <button class="btn small danger" :disabled="deletingEmployeeId === employeeKey(row)"
+                    @click="deleteEmployee(row)">
+                    {{ deletingEmployeeId === employeeKey(row) ? 'O‘chirilmoqda...' : 'O‘chirish' }}
+                  </button>
                 </template>
               </DataTable>
             </section>
           </template>
 
           <template v-if="activeTab === 'settings'">
-            <div class="settings-stack">
-              <section class="card pad settings-card">
-                <div class="settings-head">
-                  <div>
-                    <div class="card-title">Admin profili</div>
-                  </div>
-                </div>
-                <form class="form settings-form" @submit.prevent="saveAdmin">
-                  <label class="label">Kirish nomi
-                    <input v-model.trim="adminForm.username" class="input" placeholder="admin" />
-                  </label>
-                  <label class="label">Ism
-                    <input v-model.trim="adminForm.full_name" class="input" placeholder="Tizim admini" />
-                  </label>
-                  <label class="label">Yangi parol
-                    <input v-model="adminForm.new_password" class="input" type="password" autocomplete="new-password"
-                      placeholder="Bo‘sh qoldirilsa o‘zgarmaydi" />
-                  </label>
-                  <button class="btn primary" :disabled="loadingAction === 'saveAdmin'">{{ loadingAction === 'saveAdmin'
-                    ? 'Saqlamoqda...' : 'Saqlash' }}</button>
-                </form>
-              </section>
+            <div class="settings-layout">
+              <aside class="settings-menu" aria-label="Sozlamalar menyusi">
+                <button v-for="section in settingsSections" :key="section.key"
+                  :class="{ active: activeSettingsSection === section.key }" type="button"
+                  @click="activeSettingsSection = section.key">
+                  <span>{{ section.icon }}</span>
+                  <b>{{ section.label }}</b>
+                  <small>{{ section.note }}</small>
+                </button>
+              </aside>
 
-              <section class="card pad settings-card">
+              <section v-if="activeSettingsSection === 'bot'" class="card pad settings-card settings-panel">
                 <div class="settings-head">
                   <div>
                     <div class="card-title">Bot sozlamalari</div>
                   </div>
                 </div>
-                <form class="form settings-form" @submit.prevent="saveSettings">
+                <form class="form settings-form settings-form-grid" @submit.prevent="saveSettings">
                   <label class="label">AI rejimi
                     <select v-model="settingsForm.ai_mode" class="select">
                       <option value="false">O‘chirilgan</option>
@@ -836,37 +828,68 @@
                       <option value="false">Xabar bermaslik</option>
                     </select>
                   </label>
-                  <label v-if="settingsForm.group_message_audit === 'channel'" class="label">Audit kanali
+                  <label v-if="settingsForm.group_message_audit === 'channel'" class="label wide">Audit kanali
                     <input v-model.trim="settingsForm.group_message_audit_channel_id" class="input"
                       placeholder="-1001234567890 yoki @kanal_username" />
                   </label>
-                  <label class="label">So‘rov aniqlash rejimi
+                  <label class="label wide">So‘rov aniqlash rejimi
                     <select v-model="settingsForm.request_detection" class="select">
                       <option value="keyword">Kalit so‘z</option>
                       <option value="all_private_keyword_group">Shaxsiy chatlar hammasi, guruhlar kalit so‘z bilan
                       </option>
                     </select>
                   </label>
-                  <button class="btn primary" :disabled="loadingAction === 'saveSettings'">{{ loadingAction ===
-                    'saveSettings' ? 'Saqlamoqda...' : 'Sozlamani saqlash' }}</button>
+                  <div class="settings-actions wide">
+                    <button class="btn primary" :disabled="loadingAction === 'saveSettings'">{{ loadingAction ===
+                      'saveSettings' ? 'Saqlamoqda...' : 'Sozlamani saqlash' }}</button>
+                    <button class="btn" type="button" :disabled="loadingAction === 'auditStats'"
+                      @click="sendGroupAuditStats">
+                      {{ loadingAction === 'auditStats' ? 'Yuborilmoqda...' : 'Audit kanaliga statistika yuborish' }}
+                    </button>
+                  </div>
                 </form>
-                <div class="webhook-panel">
+              </section>
+
+              <section v-else-if="activeSettingsSection === 'telegram'" class="card pad settings-card settings-panel">
+                <div class="settings-head">
                   <div>
                     <div class="card-title">Telegram ulanishi</div>
                   </div>
-                  <div class="actions webhook-actions">
-                    <button class="btn" :disabled="loadingAction === 'webhookInfo'" @click="checkTelegramWebhook">{{
-                      loadingAction === 'webhookInfo' ? 'Tekshirilmoqda...' : 'Holatni ko‘rish' }}</button>
-                    <button class="btn primary" :disabled="loadingAction === 'webhookConnect'"
-                      @click="reconnectTelegramWebhook">{{ loadingAction === 'webhookConnect' ? 'Ulanmoqda...' :
-                        'Telegram ulanishini yangilash' }}</button>
-                    <button class="btn" :disabled="loadingAction === 'webhookSync'" @click="syncTelegramUpdates">{{
-                      loadingAction === 'webhookSync' ? 'Olinmoqda...' : 'Webhooksiz sinxronlash' }}</button>
-                  </div>
+                </div>
+                <div class="actions webhook-actions">
+                  <button class="btn" :disabled="loadingAction === 'webhookInfo'" @click="checkTelegramWebhook">{{
+                    loadingAction === 'webhookInfo' ? 'Tekshirilmoqda...' : 'Holatni ko‘rish' }}</button>
+                  <button class="btn primary" :disabled="loadingAction === 'webhookConnect'"
+                    @click="reconnectTelegramWebhook">{{ loadingAction === 'webhookConnect' ? 'Ulanmoqda...' :
+                      'Telegram ulanishini yangilash' }}</button>
+                  <button class="btn" :disabled="loadingAction === 'webhookSync'" @click="syncTelegramUpdates">{{
+                    loadingAction === 'webhookSync' ? 'Olinmoqda...' : 'Webhooksiz sinxronlash' }}</button>
                 </div>
                 <Transition name="fade">
                   <pre v-if="webhookStatusText" class="webhook-status">{{ webhookStatusText }}</pre>
                 </Transition>
+              </section>
+
+              <section v-else class="card pad settings-card settings-panel">
+                <div class="settings-head">
+                  <div>
+                    <div class="card-title">Admin profili</div>
+                  </div>
+                </div>
+                <form class="form settings-form" @submit.prevent="saveAdmin">
+                  <label class="label">Kirish nomi
+                    <input v-model.trim="adminForm.username" class="input" placeholder="admin" />
+                  </label>
+                  <label class="label">Ism
+                    <input v-model.trim="adminForm.full_name" class="input" placeholder="Tizim admini" />
+                  </label>
+                  <label class="label">Yangi parol
+                    <input v-model="adminForm.new_password" class="input" type="password" autocomplete="new-password"
+                      placeholder="Bo‘sh qoldirilsa o‘zgarmaydi" />
+                  </label>
+                  <button class="btn primary" :disabled="loadingAction === 'saveAdmin'">{{ loadingAction === 'saveAdmin'
+                    ? 'Saqlamoqda...' : 'Saqlash' }}</button>
+                </form>
               </section>
             </div>
           </template>
@@ -2172,6 +2195,7 @@ const search = ref('');
 const modal = ref('');
 const selectedTarget = ref(null);
 const deletingGroupId = ref('');
+const deletingEmployeeId = ref('');
 const selectedSendType = ref('groups');
 const selectedStatsPeriod = ref('week');
 const previousStatsPeriod = ref('week');
@@ -2184,6 +2208,7 @@ const themeMode = ref(getStoredThemeMode());
 applyThemeMode(themeMode.value);
 const selectedGroups = ref([]);
 const selectedEmployees = ref([]);
+const activeSettingsSection = ref('bot');
 const otherMenuOpen = ref(otherTabKeys.includes(activeTab.value));
 const dashboard = reactive({ summary: {}, employeeStats: [], chatStats: [], openRequests: [], analytics: {} });
 const groups = ref([]);
@@ -2320,6 +2345,11 @@ const savedIntegrationSignature = ref('');
 
 const current = computed(() => tabs.find(t => t.key === activeTab.value) || tabs[0]);
 const currentTitle = computed(() => current.value.label);
+const settingsSections = [
+  { key: 'bot', label: 'Bot sozlamalari', icon: '⚙️', note: 'AI, audit va so‘rov aniqlash' },
+  { key: 'telegram', label: 'Telegram ulanishi', icon: '🔗', note: 'Webhook va sinxronlash' },
+  { key: 'admin', label: 'Admin profili', icon: '👤', note: 'Login va parol' }
+];
 const userInitials = computed(() => {
   const source = adminForm.full_name || adminForm.username || 'Uyqur';
   return String(source).split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]?.toUpperCase()).join('') || 'UQ';
@@ -2743,6 +2773,7 @@ const loadingText = computed(() => ({
   broadcast: 'Yuborilmoqda...',
   saveEmployee: 'Saqlamoqda...',
   deleteGroup: 'O‘chirilmoqda...',
+  deleteEmployee: 'Xodim o‘chirilmoqda...',
   employeeSend: 'Yuborilmoqda...',
   selectedSend: 'Yuborilmoqda...',
   assignCompany: 'Kompaniya biriktirilmoqda...',
@@ -2750,6 +2781,7 @@ const loadingText = computed(() => ({
   replyRequest: 'Javob yuborilmoqda...',
   saveAdmin: 'Saqlamoqda...',
   mainStats: 'Yuborilmoqda...',
+  auditStats: 'Audit statistikasi yuborilmoqda...',
   webhookInfo: 'Tekshirilmoqda...',
   webhookConnect: 'Ulanmoqda...',
   webhookSync: 'Telegram yangilanishlari olinmoqda...',
@@ -5826,6 +5858,26 @@ async function saveEmployee() {
   }
 }
 
+async function deleteEmployee(row) {
+  const key = employeeKey(row);
+  if (!key) return showToast('Xodim tanlanmagan');
+  const ok = window.confirm(`${row.full_name || row.username || row.tg_user_id || 'Xodim'} ro‘yxatdan o‘chirilsinmi?`);
+  if (!ok) return;
+  deletingEmployeeId.value = key;
+  startLoading('deleteEmployee');
+  try {
+    await api.deleteEmployee({ id: row.id || row.employee_id, tg_user_id: row.tg_user_id });
+    employees.value = employees.value.filter(employee => employeeKey(employee) !== key);
+    selectedEmployees.value = selectedEmployees.value.filter(employee => employeeKey(employee) !== key);
+    showToast('Xodim o‘chirildi');
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    deletingEmployeeId.value = '';
+    stopLoading('deleteEmployee');
+  }
+}
+
 async function deleteGroup(row) {
   if (!row?.chat_id) return showToast('Guruh tanlanmagan');
   const ok = window.confirm(`${row.title || row.chat_id} guruhini webapp ro‘yxatidan o‘chirasizmi?`);
@@ -6129,6 +6181,18 @@ async function sendMainStats() {
     showToast(error.message);
   } finally {
     stopLoading('mainStats');
+  }
+}
+
+async function sendGroupAuditStats() {
+  startLoading('auditStats');
+  try {
+    const result = await api.sendGroupAuditStats({});
+    showToast(`Audit statistikasi yuborildi: ${result.chat_id} · ${fmtNumber(result.saved_groups_count || 0)} guruh`);
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    stopLoading('auditStats');
   }
 }
 

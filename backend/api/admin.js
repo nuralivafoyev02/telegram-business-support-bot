@@ -4,7 +4,7 @@ const { Readable } = require('stream');
 const supabase = require('../lib/supabase');
 const { allowCors, sendJson, readBody, getQuery } = require('../lib/http');
 const { login, requireAdmin, hashPassword } = require('../lib/auth');
-const { sendMessage, sendBusinessMessage, getWebhookInfo, setWebhook, deleteWebhook, getUpdates, getFile, getUserProfilePhotos, downloadFile, tgUserName } = require('../lib/telegram');
+const { sendMessage, sendBusinessMessage, getWebhookInfo, setWebhook, deleteWebhook, getUpdates, getFile, getUserProfilePhotos, downloadFile, tgUserName, escapeHtml } = require('../lib/telegram');
 const { optionalEnv } = require('../lib/env');
 const { normalizeSettings, clearBotSettingsCache } = require('../lib/bot-settings');
 const { normalizeAiIntegration, mergeAiIntegration, sanitizeAiIntegration, isAiIntegrationReady, isAiIntegrationConfigured, aiIntegrationSignature } = require('../lib/ai-config');
@@ -626,6 +626,165 @@ function buildCompanyTicketPerformance({ requests, chats = [], companies, messag
     .filter(row => Number(row.total_requests || 0) > 0)
     .sort((a, b) => b.total_requests - a.total_requests || b.closed_requests - a.closed_requests || b.message_count - a.message_count || a.name.localeCompare(b.name))
     .slice(0, 30);
+}
+
+function isBotAdminStatus(status = '') {
+  return ['administrator', 'creator'].includes(String(status || '').trim().toLowerCase());
+}
+
+function isAuditNoticeMessage(row = {}) {
+  const source = String(row.raw && row.raw.source || '').trim();
+  return ['bot_message_saved_notice', 'bot_message_save_failed_notice'].includes(source);
+}
+
+function auditStatsDateLabel(value = new Date()) {
+  const parts = new Intl.DateTimeFormat('uz-UZ', {
+    timeZone: 'Asia/Tashkent',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23'
+  }).formatToParts(new Date(value));
+  const dict = Object.fromEntries(parts.filter(part => part.type !== 'literal').map(part => [part.type, part.value]));
+  return `${dict.day}.${dict.month}.${dict.year} ${dict.hour}:${dict.minute}`;
+}
+
+function auditStatsChatTitle(chat = {}) {
+  return chat.title || chat.username || telegramIdKey(chat.chat_id) || 'Guruh';
+}
+
+function buildGroupAuditStatsText({ groups = [], messages = [], requests = [] }) {
+  const groupMap = new Map(groups.map(group => [telegramIdKey(group.chat_id), group]).filter(([id]) => id));
+  const messageCounts = new Map();
+  const lastMessageByChat = new Map();
+  messages.filter(message => !isAuditNoticeMessage(message)).forEach(message => {
+    const key = telegramIdKey(message.chat_id);
+    if (!key) return;
+    messageCounts.set(key, Number(messageCounts.get(key) || 0) + 1);
+    if (!lastMessageByChat.get(key) || String(message.created_at || '') > String(lastMessageByChat.get(key) || '')) {
+      lastMessageByChat.set(key, message.created_at || '');
+    }
+  });
+
+  const requestStats = new Map();
+  requests.forEach(request => {
+    const key = telegramIdKey(request.chat_id);
+    if (!key) return;
+    const current = requestStats.get(key) || { total: 0, open: 0, closed: 0 };
+    current.total += 1;
+    if (request.status === 'open') current.open += 1;
+    if (request.status === 'closed') current.closed += 1;
+    requestStats.set(key, current);
+  });
+
+  const activeGroups = groups.filter(group => group.is_active !== false);
+  const rows = activeGroups.map(group => {
+    const key = telegramIdKey(group.chat_id);
+    const tickets = requestStats.get(key) || { total: 0, open: 0, closed: 0 };
+    return {
+      chat_id: group.chat_id,
+      title: auditStatsChatTitle(group),
+      member_status: group.member_status || '',
+      is_admin: isBotAdminStatus(group.member_status),
+      message_count: Number(messageCounts.get(key) || 0),
+      ticket_total: tickets.total,
+      ticket_open: tickets.open,
+      ticket_closed: tickets.closed,
+      last_message_at: latestTimestamp(group.last_message_at, lastMessageByChat.get(key))
+    };
+  }).sort((a, b) => b.message_count - a.message_count
+    || b.ticket_total - a.ticket_total
+    || String(b.last_message_at || '').localeCompare(String(a.last_message_at || ''))
+    || a.title.localeCompare(b.title));
+
+  const savedRows = rows.filter(row => row.message_count > 0);
+  const adminRows = rows.filter(row => row.is_admin);
+  const totalMessages = rows.reduce((sum, row) => sum + row.message_count, 0);
+  const totalTickets = rows.reduce((sum, row) => sum + row.ticket_total, 0);
+  const openTickets = rows.reduce((sum, row) => sum + row.ticket_open, 0);
+  const closedTickets = rows.reduce((sum, row) => sum + row.ticket_closed, 0);
+
+  const lines = [
+    '📋 <b>Guruhlar auditi statistikasi</b>',
+    `🕒 ${escapeHtml(auditStatsDateLabel())}`,
+    '━━━━━━━━━━━━━━━━',
+    `• Faol guruhlar: <b>${activeGroups.length}</b>`,
+    `• Bot admin bo‘lgan guruhlar: <b>${adminRows.length}</b>`,
+    `• Ma’lumot saqlangan guruhlar: <b>${savedRows.length}</b>`,
+    `• Saqlangan xabarlar: <b>${totalMessages}</b>`,
+    `• Ticketlar: <b>${totalTickets}</b> · ochiq <b>${openTickets}</b> · yopilgan <b>${closedTickets}</b>`,
+    '',
+    '🧾 <b>Guruhlar ro‘yxati</b>'
+  ];
+
+  const maxRows = 25;
+  rows.slice(0, maxRows).forEach((row, index) => {
+    const adminLabel = row.is_admin ? `✅ ${row.member_status || 'admin'}` : `— ${row.member_status || 'noma’lum'}`;
+    const lastLabel = row.last_message_at ? auditStatsDateLabel(row.last_message_at) : '—';
+    lines.push(`${index + 1}. <b>${escapeHtml(row.title)}</b>`);
+    lines.push(`   Admin: ${escapeHtml(adminLabel)} · Xabar: <b>${row.message_count}</b> · Ticket: <b>${row.ticket_total}</b> · Oxirgi: ${escapeHtml(lastLabel)}`);
+  });
+  if (rows.length > maxRows) lines.push(`... yana ${rows.length - maxRows} ta guruh bor.`);
+  if (!rows.length) lines.push('Faol guruh topilmadi.');
+
+  return {
+    text: lines.join('\n'),
+    summary: {
+      groups_count: activeGroups.length,
+      admin_groups_count: adminRows.length,
+      saved_groups_count: savedRows.length,
+      saved_messages_count: totalMessages,
+      total_requests: totalTickets,
+      open_requests: openTickets,
+      closed_requests: closedTickets
+    },
+    rows
+  };
+}
+
+async function resolveGroupAuditStatsTarget() {
+  const rows = await supabase.select('bot_settings', {
+    select: 'key,value',
+    key: 'in.(group_message_audit,main_group)',
+    limit: '10'
+  }).catch(() => []);
+  const settings = normalizeSettings(rows || []);
+  if (settings.groupMessageAudit?.target === 'channel') {
+    const target = String(settings.groupMessageAudit.channelId || '').trim();
+    if (!target) throw new Error('Audit kanali kiritilmagan. Avval kanal ID yoki @username ni saqlang.');
+    return target;
+  }
+  return resolveMainStatsChatId(settings.mainGroupId);
+}
+
+async function sendGroupAuditStats() {
+  const [groups, messages, requests] = await Promise.all([
+    selectPaged('tg_chats', {
+      select: 'chat_id,title,username,type,source_type,member_status,is_active,last_message_at',
+      source_type: 'eq.group',
+      order: supabase.order('last_message_at', false)
+    }, { maxRows: 5000 }),
+    selectPaged('messages', {
+      select: 'id,chat_id,source_type,classification,raw,created_at',
+      source_type: 'eq.group',
+      order: supabase.order('created_at', false)
+    }, { maxRows: 50000 }),
+    selectPaged('support_requests', {
+      select: 'id,chat_id,source_type,status,created_at',
+      source_type: 'eq.group',
+      order: supabase.order('created_at', false)
+    }, { maxRows: 50000 })
+  ]);
+  const target = await resolveGroupAuditStatsTarget();
+  const report = buildGroupAuditStatsText({ groups, messages, requests });
+  const result = await sendMessage(target, report.text);
+  return {
+    chat_id: target,
+    message_id: result.message_id,
+    ...report.summary
+  };
 }
 
 function requestedAnalyticsPeriods(query = {}, customPeriod = null) {
@@ -3485,6 +3644,22 @@ async function upsertEmployee(body) {
   return rows[0];
 }
 
+async function deleteEmployee(body = {}) {
+  const employeeId = String(body.id || body.employee_id || '').trim();
+  const query = {};
+  if (employeeId) {
+    query.id = supabase.eq(employeeId);
+  } else {
+    const tgUserId = normalizeTelegramId(body.tg_user_id);
+    if (!tgUserId) throw new Error('Xodim tanlanmagan');
+    query.tg_user_id = supabase.eq(tgUserId);
+  }
+
+  const rows = await supabase.remove('employees', query);
+  if (!Array.isArray(rows) || !rows.length) throw new Error('Xodim topilmadi');
+  return { deleted: true, employee: rows[0] };
+}
+
 async function getEmployeeByBody(body) {
   if (body.employee_id) {
     const rows = await supabase.select('employees', {
@@ -3861,6 +4036,7 @@ async function handlePost(action, body, currentAdmin) {
     case 'broadcast': return broadcast({ ...body, created_by: currentAdmin.username });
     case 'company': return upsertCompany(body);
     case 'employee': return upsertEmployee(body);
+    case 'deleteEmployee': return deleteEmployee(body);
     case 'deleteGroup': return deactivateGroup(body);
     case 'sendEmployeeMessage': return sendToEmployee({ ...body, created_by: currentAdmin.username });
     case 'sendEmployeesMessage': return sendToEmployees({ ...body, created_by: currentAdmin.username });
@@ -3869,6 +4045,7 @@ async function handlePost(action, body, currentAdmin) {
     case 'aiKnowledgeExtract': return extractAiKnowledge(body);
     case 'adminProfile': return updateAdmin(body, currentAdmin);
     case 'sendMainStats': return sendMainStatsReport(body.chat_id || body.main_group_id);
+    case 'sendGroupAuditStats': return sendGroupAuditStats();
     case 'testLogNotification': return sendTestLogNotification(body, currentAdmin);
     case 'setTelegramWebhook': return connectTelegramWebhook(body);
     case 'syncTelegramUpdates': return syncTelegramUpdates(body);

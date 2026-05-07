@@ -2131,6 +2131,30 @@ async function testEmployeesIncludeDailyWorkStats() {
   }
 }
 
+async function testDeleteEmployeeRemovesEmployeeRow() {
+  const originalRemove = supabase.remove;
+  const deleted = [];
+
+  supabase.remove = async (table, query) => {
+    deleted.push({ table, query });
+    return [{ id: 'emp-1', full_name: 'Ali' }];
+  };
+
+  try {
+    const result = await callAdmin('deleteEmployee', {
+      method: 'POST',
+      body: { id: 'emp-1' }
+    });
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.data.deleted, true);
+    assert.strictEqual(deleted.length, 1);
+    assert.strictEqual(deleted[0].table, 'employees');
+    assert.strictEqual(deleted[0].query.id, 'eq.emp-1');
+  } finally {
+    supabase.remove = originalRemove;
+  }
+}
+
 async function testEmployeeActivityReturnsGroupsAndCustomers() {
   const originalSelect = supabase.select;
   const today = new Date().toISOString();
@@ -2461,6 +2485,56 @@ async function testGroupMessageAuditChannelRequiresDestination() {
   }
 }
 
+async function testSendGroupAuditStatsSendsConfiguredChannelReport() {
+  const originalSelect = supabase.select;
+  const originalFetch = global.fetch;
+  const telegramCalls = [];
+
+  supabase.select = async (table) => {
+    if (table === 'bot_settings') return [
+      { key: 'main_group', value: { chat_id: '-100777' } },
+      { key: 'group_message_audit', value: { enabled: true, target: 'channel', channel_id: '-100999' } }
+    ];
+    if (table === 'tg_chats') return [
+      { chat_id: -1001, title: 'Support A', source_type: 'group', member_status: 'administrator', is_active: true, last_message_at: '2026-05-07T04:00:00.000Z' },
+      { chat_id: -1002, title: 'Support B', source_type: 'group', member_status: 'member', is_active: true, last_message_at: '2026-05-07T03:00:00.000Z' }
+    ];
+    if (table === 'messages') return [
+      { id: 'm1', chat_id: -1001, source_type: 'group', raw: { source: 'customer_message' }, created_at: '2026-05-07T04:00:00.000Z' },
+      { id: 'm2', chat_id: -1001, source_type: 'group', raw: { source: 'employee_message' }, created_at: '2026-05-07T04:01:00.000Z' },
+      { id: 'm3', chat_id: -100999, source_type: 'group', raw: { source: 'bot_message_saved_notice' }, created_at: '2026-05-07T04:02:00.000Z' }
+    ];
+    if (table === 'support_requests') return [
+      { id: 'r1', chat_id: -1001, source_type: 'group', status: 'open', created_at: '2026-05-07T04:03:00.000Z' },
+      { id: 'r2', chat_id: -1001, source_type: 'group', status: 'closed', created_at: '2026-05-07T04:04:00.000Z' }
+    ];
+    return [];
+  };
+  global.fetch = async (url, options = {}) => {
+    telegramCalls.push({ url, body: JSON.parse(options.body) });
+    return {
+      ok: true,
+      json: async () => ({ ok: true, result: { message_id: 901 } })
+    };
+  };
+
+  try {
+    const result = await callAdmin('sendGroupAuditStats', { method: 'POST', body: {} });
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.data.chat_id, '-100999');
+    assert.strictEqual(result.payload.data.admin_groups_count, 1);
+    assert.strictEqual(result.payload.data.saved_groups_count, 1);
+    assert.strictEqual(result.payload.data.saved_messages_count, 2);
+    assert.strictEqual(telegramCalls.length, 1);
+    assert.strictEqual(telegramCalls[0].body.chat_id, '-100999');
+    assert.match(telegramCalls[0].body.text, /Guruhlar auditi statistikasi/);
+    assert.match(telegramCalls[0].body.text, /Support A/);
+  } finally {
+    supabase.select = originalSelect;
+    global.fetch = originalFetch;
+  }
+}
+
 async function testCompanyInfoProxyNormalizesExternalRows() {
   const originalFetch = global.fetch;
   const originalSelect = supabase.select;
@@ -2777,11 +2851,13 @@ async function run() {
   await testReplyRequestSendsMessageAndClosesTicket();
   await testReplyRequestFallsBackWhenBusinessPeerInvalid();
   await testEmployeesIncludeDailyWorkStats();
+  await testDeleteEmployeeRemovesEmployeeRow();
   await testEmployeeActivityReturnsGroupsAndCustomers();
   await testEmployeeActivityIsolatesSelectedEmployeeChats();
   await testLogNotificationsCanSendSelectedLevels();
   await testGroupMessageAuditSettingCanBeSaved();
   await testGroupMessageAuditChannelRequiresDestination();
+  await testSendGroupAuditStatsSendsConfiguredChannelReport();
   await testCompanyInfoProxyNormalizesExternalRows();
   await testCompanyInfoProxyReturnsCachedSnapshotAndNotifiesOnFetchError();
   await testCompanyInfoProxyFallsBackWhenScopedQueryUnsupported();
