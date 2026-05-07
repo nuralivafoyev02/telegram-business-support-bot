@@ -1066,7 +1066,7 @@ function assistantPreviewText({ action, adminName, sourceText = '', targetCount 
 
 function assistantUnsupportedText(text = '') {
   return [
-    '🤖 <b>Uyqur AI vazifani ko‘rib chiqdi</b>',
+    '<b>Uyqur AI ⚡ vazifani ko‘rib chiqdi</b>',
     '',
     `<b>So‘rov:</b> ${escapeHtml(clipText(text, 700)) || 'Matn topilmadi.'}`,
     '',
