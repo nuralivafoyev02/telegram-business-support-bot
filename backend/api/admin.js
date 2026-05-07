@@ -184,6 +184,18 @@ function currentPeriodKeys(now = new Date()) {
   };
 }
 
+function isoFromTashkentDateStart(dateKey) {
+  const normalized = normalizeDateKey(dateKey);
+  if (!normalized) return '';
+  return new Date(`${normalized}T00:00:00+05:00`).toISOString();
+}
+
+function isoAfterTashkentDate(dateKey) {
+  const normalized = normalizeDateKey(dateKey);
+  if (!normalized) return '';
+  return isoFromTashkentDateStart(addDaysToDateKey(normalized, 1));
+}
+
 function previousPeriodKeys(now = new Date()) {
   const today = tashkentDateKey(now);
   const yesterday = addDaysToDateKey(today, -1);
@@ -616,6 +628,80 @@ function buildCompanyTicketPerformance({ requests, chats = [], companies, messag
     .slice(0, 30);
 }
 
+function requestedAnalyticsPeriods(query = {}, customPeriod = null) {
+  if (customPeriod) return [['custom', customPeriod.label || 'Ixtiyoriy']];
+  if (query.period) {
+    const requested = normalizePeriodKey(query.period);
+    return [[requested, { today: 'Bugun', week: 'Hafta', month: 'Oy', all: 'Jami' }[requested] || 'Hafta']];
+  }
+  return [
+    ['today', 'Bugun'],
+    ['week', 'Hafta'],
+    ['month', 'Oy'],
+    ['all', 'Jami']
+  ];
+}
+
+function analyticsWindow(periods = [], keys = {}) {
+  const periodKeys = periods.map(([key]) => key);
+  if (!periodKeys.length || periodKeys.includes('all')) return null;
+
+  const starts = [];
+  const ends = [];
+  if (periodKeys.includes('today')) {
+    starts.push(keys.yesterday);
+    ends.push(keys.today);
+  }
+  if (periodKeys.includes('week')) {
+    starts.push(keys.prevWeekStart);
+    ends.push(keys.today);
+  }
+  if (periodKeys.includes('month')) {
+    starts.push(`${keys.prevMonth}-01`);
+    ends.push(keys.today);
+  }
+  if (periodKeys.includes('custom') && keys.customStart && keys.customEnd) {
+    starts.push(keys.prevCustomStart || keys.customStart);
+    ends.push(keys.customEnd);
+  }
+
+  const startKey = starts.filter(Boolean).sort()[0] || '';
+  const endKey = ends.filter(Boolean).sort().at(-1) || '';
+  if (!startKey || !endKey) return null;
+  return {
+    start: isoFromTashkentDateStart(startKey),
+    end: isoAfterTashkentDate(endKey)
+  };
+}
+
+function rangeQuery(field, window) {
+  if (!window || !window.start || !window.end) return {};
+  return { [field]: [`gte.${window.start}`, `lt.${window.end}`] };
+}
+
+async function selectAnalyticsRequests(window) {
+  const baseQuery = {
+    select: 'id,source_type,chat_id,company_id,customer_tg_id,customer_name,status,closed_by_employee_id,closed_by_tg_id,closed_by_name,created_at,closed_at',
+    order: supabase.order('created_at', false),
+    limit: '10000'
+  };
+
+  if (!window) return supabase.select('support_requests', baseQuery).catch(() => []);
+
+  const [createdRows, closedRows] = await Promise.all([
+    supabase.select('support_requests', {
+      ...baseQuery,
+      ...rangeQuery('created_at', window)
+    }).catch(() => []),
+    supabase.select('support_requests', {
+      ...baseQuery,
+      status: 'eq.closed',
+      ...rangeQuery('closed_at', window)
+    }).catch(() => [])
+  ]);
+  return uniqueRowsBy([...createdRows, ...closedRows], row => row.id || `${row.chat_id}:${row.initial_message_id || row.created_at || row.closed_at}`);
+}
+
 
 async function getDashboardAnalytics(query = {}) {
   const customPeriod = normalizeCustomPeriod(query);
@@ -628,13 +714,11 @@ async function getDashboardAnalytics(query = {}) {
     prevCustomStart: prevCustomPeriod?.start || '',
     prevCustomEnd: prevCustomPeriod?.end || ''
   };
+  const periods = requestedAnalyticsPeriods(query, customPeriod);
+  const window = analyticsWindow(periods, keys);
 
   const [requests, chats, employees, companies] = await Promise.all([
-    supabase.select('support_requests', {
-      select: 'id,source_type,chat_id,company_id,customer_tg_id,customer_name,status,closed_by_employee_id,closed_by_tg_id,closed_by_name,created_at,closed_at',
-      order: supabase.order('created_at', false),
-      limit: '10000'
-    }).catch(() => []),
+    selectAnalyticsRequests(window),
     stats.selectChatStatistics({ select: '*', is_active: 'eq.true', limit: '5000' }).catch(() => []),
     supabase.select('employees', { select: 'id,tg_user_id,full_name,username,role,is_active', limit: '5000' }).catch(() => []),
     supabase.select('companies', { select: 'id,name,is_active', limit: '5000' }).catch(() => [])
@@ -647,16 +731,9 @@ async function getDashboardAnalytics(query = {}) {
   ].filter(value => value !== undefined && value !== null))];
   const messages = chatIds.length ? await selectPagedByChunks('messages', {
     select: 'id,tg_message_id,chat_id,from_tg_user_id,from_name,from_username,employee_id,source_type,classification,text,created_at',
-    order: supabase.order('created_at', false)
-  }, 'chat_id', chatIds, { maxRows: 40000 }) : [];
-
-  const periods = [
-    ['today', 'Bugun'],
-    ['week', 'Hafta'],
-    ['month', 'Oy'],
-    ['all', 'Jami']
-  ];
-  if (customPeriod) periods.push(['custom', customPeriod.label || 'Ixtiyoriy']);
+    order: supabase.order('created_at', false),
+    ...rangeQuery('created_at', window)
+  }, 'chat_id', chatIds, { maxRows: window ? 15000 : 40000 }) : [];
 
   const periodContext = periods.map(([key, label]) => {
     const summary = buildPeriodSummary(requests, key, label, keys);
@@ -796,7 +873,7 @@ async function enrichChatsWithMessageStats(rows = []) {
   const messages = await selectPagedByChunks('messages', {
     select: 'id,tg_message_id,chat_id,from_name,text,raw,created_at',
     order: supabase.order('created_at', false)
-  }, 'chat_id', chatIds, { maxRows: Math.min(Math.max(chatIds.length * 250, 1000), 80000) });
+  }, 'chat_id', chatIds, { maxRows: Math.min(Math.max(chatIds.length * 80, 1000), 20000) });
   const statsByChat = new Map();
   messages.forEach(message => {
     const key = telegramIdKey(message.chat_id);
@@ -981,6 +1058,10 @@ async function getOpenRequestInsights() {
   }).catch(() => []);
 
   const chatIds = [...new Set(requests.map(request => request.chat_id).filter(value => value !== undefined && value !== null))];
+  const oldestOpenCreatedAt = requests
+    .map(request => request.created_at)
+    .filter(Boolean)
+    .sort()[0] || '';
   const [chats, messages, employees] = await Promise.all([
     chatIds.length ? supabase.select('tg_chats', {
       select: 'chat_id,title,username,source_type,business_connection_id,last_message_at',
@@ -990,6 +1071,7 @@ async function getOpenRequestInsights() {
     chatIds.length ? supabase.select('messages', {
       select: 'id,tg_message_id,chat_id,from_tg_user_id,from_name,from_username,employee_id,source_type,classification,text,created_at',
       chat_id: supabase.inList(chatIds),
+      ...(oldestOpenCreatedAt ? { created_at: [`gte.${oldestOpenCreatedAt}`, `lt.${nowIso()}`] } : {}),
       order: supabase.order('created_at', false),
       limit: '5000'
     }).catch(() => []) : Promise.resolve([]),
@@ -1406,7 +1488,8 @@ async function getDashboard(query = {}) {
     stats.selectTodaySummary({ select: '*' }),
     getDashboardAnalytics(query)
   ]);
-  const allPeriod = analytics.periods?.all || {};
+  const selectedPeriod = normalizeCustomPeriod(query) ? 'custom' : normalizePeriodKey(query.period || 'all');
+  const allPeriod = analytics.periods?.all || analytics.periods?.[selectedPeriod] || {};
   return {
     summary: today[0] || stats.DEFAULT_SUMMARY,
     employeeStats,

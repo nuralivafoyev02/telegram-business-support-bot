@@ -28,6 +28,12 @@ function buildQuery(params = {}) {
   const usp = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {
     if (value === undefined || value === null) return;
+    if (Array.isArray(value)) {
+      value.forEach(item => {
+        if (item !== undefined && item !== null) usp.append(key, item);
+      });
+      return;
+    }
     usp.append(key, value);
   });
   const query = usp.toString();

@@ -2230,6 +2230,7 @@ const mediaUrls = ref({});
 const mediaLoading = ref({});
 const mediaErrors = ref({});
 let mediaLoadToken = 0;
+let dashboardLoadToken = 0;
 let employeeProfileLoadToken = 0;
 let employeeProfileChatToken = 0;
 const settingsRaw = ref({ settings: [], admins: [] });
@@ -4526,7 +4527,7 @@ async function refresh() {
     if (activeTab.value === 'groups') {
       await Promise.all([
         api.groups().then(rows => { groups.value = rows; }),
-        loadCompanyInfoOptional()
+        loadCompanyInfoOptional({ cached: true })
       ]);
     }
     if (activeTab.value === 'privates') privates.value = await api.privates();
@@ -4535,6 +4536,7 @@ async function refresh() {
     if (activeTab.value === 'integrations') await loadSettings();
     if (activeTab.value === 'knowledgeBase') await loadSettings();
     if (activeTab.value === 'settings') await loadSettings();
+    if (activeTab.value === 'settings') checkTelegramWebhook(false).catch(() => null);
   } catch (error) {
     showToast(error.message);
     if (/token/i.test(error.message)) logout();
@@ -4544,17 +4546,21 @@ async function refresh() {
 }
 
 async function loadDashboard() {
+  const loadToken = ++dashboardLoadToken;
   const data = await api.dashboard(dashboardPeriodQuery());
+  if (loadToken !== dashboardLoadToken) return;
   Object.assign(dashboard, data);
 }
 
-async function loadCompanyInfo() {
-  companyInfo.value = await api.companyInfo();
+async function loadCompanyInfo(query = {}) {
+  const data = await api.companyInfo(query);
+  companyInfo.value = data;
+  return data;
 }
 
-async function loadCompanyInfoOptional() {
+async function loadCompanyInfoOptional(query = {}) {
   try {
-    await loadCompanyInfo();
+    await loadCompanyInfo(query);
   } catch (error) {
     showToast(error.message);
   }
@@ -4569,22 +4575,24 @@ async function loadEmployeesOptional() {
 }
 
 async function loadSupportPerformance() {
-  await Promise.all([
-    loadDashboard(),
-    loadCompanyInfoOptional(),
-    loadEmployeesOptional()
-  ]);
+  await loadDashboard();
+  const secondaryLoads = [];
+  if (!companyInfo.value?.companies?.length) secondaryLoads.push(loadCompanyInfoOptional({ cached: true }));
+  if (!employees.value.length) secondaryLoads.push(loadEmployeesOptional());
+  if (secondaryLoads.length) Promise.all(secondaryLoads).catch(() => null);
 }
 
 async function loadProductAnalytics() {
-  await loadCompanyInfo();
+  const data = await loadCompanyInfo({ cached: true });
+  if (data?.from_cache) loadCompanyInfo().catch(error => showToast(error.message));
 }
 
 async function loadCompanyActivity() {
-  await Promise.all([
-    loadCompanyInfo(),
+  const [data] = await Promise.all([
+    loadCompanyInfo({ cached: true }),
     loadDashboard()
   ]);
+  if (data?.from_cache) loadCompanyInfo().catch(error => showToast(error.message));
 }
 
 async function loadSettings() {
@@ -4645,7 +4653,6 @@ async function loadSettings() {
         : 'main_group';
   settingsForm.group_message_audit_channel_id = groupMessageAudit?.channel_id || groupMessageAudit?.channelId || '';
   settingsForm.request_detection = detect?.mode || 'keyword';
-  await checkTelegramWebhook(false);
 }
 
 function setThemeMode(mode) {
@@ -4673,12 +4680,20 @@ function openCustomPeriodModal() {
   modal.value = 'customPeriod';
 }
 
-function handleStatsPeriodChange() {
+async function handleStatsPeriodChange() {
   if (selectedStatsPeriod.value === 'custom') {
     openCustomPeriodModal();
     return;
   }
   previousStatsPeriod.value = selectedStatsPeriod.value;
+  startLoading('period');
+  try {
+    await loadDashboard();
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    stopLoading('period');
+  }
 }
 
 function cancelCustomPeriod() {
@@ -4690,7 +4705,8 @@ function cancelCustomPeriod() {
 }
 
 function dashboardPeriodQuery() {
-  if (selectedStatsPeriod.value !== 'custom' || !customPeriodForm.appliedStart || !customPeriodForm.appliedEnd) return {};
+  if (selectedStatsPeriod.value !== 'custom') return { period: selectedStatsPeriod.value };
+  if (!customPeriodForm.appliedStart || !customPeriodForm.appliedEnd) return { period: previousStatsPeriod.value || 'week' };
   return {
     period: 'custom',
     start_date: customPeriodForm.appliedStart,
@@ -4737,7 +4753,7 @@ async function setTab(key) {
     if (activeTab.value === 'groups') {
       await Promise.all([
         api.groups().then(rows => { groups.value = rows; }),
-        loadCompanyInfoOptional()
+        loadCompanyInfoOptional({ cached: true })
       ]);
     }
     if (activeTab.value === 'privates') privates.value = await api.privates();
@@ -4746,6 +4762,7 @@ async function setTab(key) {
     if (activeTab.value === 'integrations') await loadSettings();
     if (activeTab.value === 'knowledgeBase') await loadSettings();
     if (activeTab.value === 'settings') await loadSettings();
+    if (activeTab.value === 'settings') checkTelegramWebhook(false).catch(() => null);
   } catch (error) {
     showToast(error.message);
     if (/token/i.test(error.message)) logout();
@@ -4771,11 +4788,11 @@ async function submitLogin() {
     loginStatusType.value = 'success';
     token.value = data.token;
     showToast(data.fallback ? 'Kirdingiz. DB admin yarating yoki parolni o‘zgartiring.' : 'Xush kelibsiz!');
-    await loadSettings().catch(error => showToast(error.message));
+    loadSettings().catch(error => showToast(error.message));
     if (activeTab.value === 'stats') await loadSupportPerformance();
     else if (activeTab.value === 'productAnalytics') await loadProductAnalytics();
     else await refresh();
-    await checkTelegramWebhook(false);
+    checkTelegramWebhook(false).catch(() => null);
   } catch (error) {
     loginError.value = /login|parol/i.test(error.message)
       ? 'Kirish nomi yoki parol noto‘g‘ri.'
@@ -6411,9 +6428,9 @@ onMounted(async () => {
     nowTick.value = Date.now();
   }, 60_000);
   if (token.value) {
-    await loadSettings().catch(error => showToast(error.message));
+    loadSettings().catch(error => showToast(error.message));
     await refresh();
-    await checkTelegramWebhook(false);
+    checkTelegramWebhook(false).catch(() => null);
   }
 });
 
