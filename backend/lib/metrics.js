@@ -71,7 +71,7 @@ async function upsertTelegramUser(user = {}, extra = {}, options = {}) {
 async function getKnownEmployeeByTelegramId(tgUserId) {
   if (!tgUserId) return null;
   const rows = await supabase.select('employees', {
-    select: 'id,tg_user_id,full_name,username,is_active',
+    select: 'id,tg_user_id,full_name,username,clickup_user_id,is_active',
     tg_user_id: supabase.eq(tgUserId),
     is_active: 'eq.true',
     limit: '1'
@@ -86,6 +86,7 @@ async function ensureEmployee(user = {}) {
     tg_user_id: user.id,
     full_name: fullName,
     username: user.username || null,
+    clickup_user_id: null,
     role: 'support',
     is_active: true,
     last_activity_at: nowIso()
@@ -385,6 +386,27 @@ async function closeRequestByReply({ message, employee }) {
   return closeRequestRecord({ request, message, employee: closer });
 }
 
+async function findOpenRequestByMessage({ chatId, messageId }) {
+  if (!chatId || !messageId) return null;
+  const rows = await supabase.select('support_requests', {
+    select: 'id,chat_id,status,created_at,initial_text,customer_tg_id,customer_name,initial_message_id',
+    chat_id: supabase.eq(chatId),
+    initial_message_id: supabase.eq(messageId),
+    status: 'eq.open',
+    order: supabase.order('created_at', false),
+    limit: '1'
+  }).catch(() => []);
+  return rows[0] || null;
+}
+
+async function closeRequestByMessage({ message, targetMessageId, employee }) {
+  const chat = message.chat || {};
+  const request = await findOpenRequestByMessage({ chatId: chat.id, messageId: targetMessageId || message.message_id });
+  if (!request) return { closed: false, request: null };
+  const closer = employee || await ensureEmployee(message.from || {});
+  return closeRequestRecord({ request, message, employee: closer });
+}
+
 async function registerChatMemberUpdate(update = {}) {
   const memberUpdate = update.my_chat_member || update.chat_member;
   if (!memberUpdate || !memberUpdate.chat) return null;
@@ -410,5 +432,6 @@ module.exports = {
   createSupportRequest,
   closeLatestRequest,
   closeRequestByReply,
+  closeRequestByMessage,
   registerChatMemberUpdate
 };

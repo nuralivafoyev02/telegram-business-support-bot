@@ -9,6 +9,17 @@ const { optionalEnv } = require('../lib/env');
 const { normalizeSettings, clearBotSettingsCache } = require('../lib/bot-settings');
 const { normalizeAiIntegration, mergeAiIntegration, sanitizeAiIntegration, isAiIntegrationReady, isAiIntegrationConfigured, aiIntegrationSignature } = require('../lib/ai-config');
 const { testAiIntegration } = require('../lib/ai');
+const {
+  normalizeClickUpIntegration,
+  mergeClickUpIntegration,
+  sanitizeClickUpIntegration,
+  isClickUpIntegrationConfigured,
+  isClickUpIntegrationReady,
+  clickUpIntegrationSignature,
+  testClickUpIntegration,
+  updateClickUpTaskStatus,
+  getClickUpTask
+} = require('../lib/clickup');
 const { extractTextFromUpload } = require('../lib/document-text');
 const { resolveMainStatsChatId, sendMainStatsReport } = require('../lib/report');
 const { syncCompanyInfo, getCachedCompanyInfo } = require('../lib/company-info');
@@ -26,6 +37,8 @@ const TELEGRAM_ALLOWED_UPDATES = [
   'business_connection',
   'my_chat_member',
   'chat_member',
+  'message_reaction',
+  'message_reaction_count',
   'callback_query'
 ];
 const COMPANY_GROUP_ACTIVITY_CONVERSATION_LIMIT = 1500;
@@ -961,7 +974,7 @@ function latestBy(rows, field) {
 
 async function getEmployeeLookup() {
   const employees = await supabase.select('employees', {
-    select: 'id,tg_user_id,full_name,username,role,is_active',
+    select: 'id,tg_user_id,full_name,username,role,clickup_user_id,is_active',
     limit: '5000'
   }).catch(() => []);
   return {
@@ -2383,7 +2396,7 @@ async function getCompanyInfo(query = {}) {
 async function listEmployees(query) {
   const [employees, requests, chats, messages] = await Promise.all([
     supabase.select('employees', {
-      select: 'id,tg_user_id,full_name,username,phone,role,is_active,last_activity_at,created_at',
+      select: 'id,tg_user_id,full_name,username,phone,role,clickup_user_id,is_active,last_activity_at,created_at',
       order: supabase.order(query.orderBy || 'created_at', false),
       limit: limitQuery(query)
     }),
@@ -2888,9 +2901,11 @@ async function listSettings() {
     supabase.select('admins', { select: 'id,username,full_name,role,is_active,last_login_at,created_at', order: 'created_at.asc', limit: '20' }).catch(() => [])
   ]);
   return {
-    settings: settings.map(row => row.key === 'ai_integration'
-      ? { ...row, value: sanitizeAiIntegration(row.value) }
-      : row),
+    settings: settings.map(row => {
+      if (row.key === 'ai_integration') return { ...row, value: sanitizeAiIntegration(row.value) };
+      if (row.key === 'clickup_integration') return { ...row, value: sanitizeClickUpIntegration(row.value) };
+      return row;
+    }),
     admins
   };
 }
@@ -3612,6 +3627,7 @@ async function upsertEmployee(body) {
     username: body.username ? String(body.username).replace(/^@/, '') : null,
     phone: body.phone || null,
     role: body.role || 'support',
+    clickup_user_id: body.clickup_user_id ? String(body.clickup_user_id).trim() : null,
     is_active: body.is_active !== false,
     last_activity_at: nowIso()
   };
@@ -3663,7 +3679,7 @@ async function deleteEmployee(body = {}) {
 async function getEmployeeByBody(body) {
   if (body.employee_id) {
     const rows = await supabase.select('employees', {
-      select: 'id,tg_user_id,full_name,username,phone,role,is_active',
+      select: 'id,tg_user_id,full_name,username,phone,role,clickup_user_id,is_active',
       id: supabase.eq(body.employee_id),
       limit: '1'
     });
@@ -3672,7 +3688,7 @@ async function getEmployeeByBody(body) {
   const tgUserId = normalizeTelegramId(body.tg_user_id);
   if (!tgUserId) throw new Error('employee_id yoki tg_user_id majburiy');
   const rows = await supabase.select('employees', {
-    select: 'id,tg_user_id,full_name,username,phone,role,is_active',
+    select: 'id,tg_user_id,full_name,username,phone,role,clickup_user_id,is_active',
     tg_user_id: supabase.eq(tgUserId),
     limit: '1'
   });
@@ -3800,6 +3816,94 @@ async function assignChatCompany(body) {
   return { ...(rows[0] || { chat_id: chatId }), assigned_company: company, company_id: company.id };
 }
 
+function normalizeJsonArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+async function listClickUpTasks(query = {}) {
+  const limit = Math.min(parseIntSafe(query.limit, 100), 500);
+  const rows = await supabase.select('clickup_tasks', {
+    select: 'id,source_type,chat_id,tg_message_id,support_request_id,clickup_task_id,clickup_task_url,clickup_list_id,clickup_list_key,title,description,status,assignee_clickup_ids,mentioned_usernames,message_link,media,reaction_emoji,created_by_tg_user_id,error,raw,created_at,updated_at',
+    order: supabase.order(query.orderBy || 'created_at', false),
+    limit: String(limit)
+  }).catch(() => []);
+  const chatIds = [...new Set(rows.map(row => telegramIdKey(row.chat_id)).filter(Boolean))];
+  const userIds = [...new Set(rows.map(row => telegramIdKey(row.created_by_tg_user_id)).filter(Boolean))];
+  const [chats, users] = await Promise.all([
+    chatIds.length ? supabase.select('tg_chats', {
+      select: 'chat_id,title,username,source_type',
+      chat_id: supabase.inList(chatIds),
+      limit: String(chatIds.length)
+    }).catch(() => []) : [],
+    userIds.length ? supabase.select('tg_users', {
+      select: 'tg_user_id,first_name,last_name,username',
+      tg_user_id: supabase.inList(userIds),
+      limit: String(userIds.length)
+    }).catch(() => []) : []
+  ]);
+  const chatMap = new Map(chats.map(chat => [telegramIdKey(chat.chat_id), chat]));
+  const userMap = new Map(users.map(user => [telegramIdKey(user.tg_user_id), user]));
+  return rows.map(row => {
+    const chat = chatMap.get(telegramIdKey(row.chat_id)) || {};
+    const user = userMap.get(telegramIdKey(row.created_by_tg_user_id)) || {};
+    return {
+      ...row,
+      chat_title: displayChatTitle(chat) || row.chat_id,
+      created_by_name: [user.first_name, user.last_name].filter(Boolean).join(' ').trim() || user.username || row.created_by_tg_user_id || '',
+      assignee_clickup_ids: normalizeJsonArray(row.assignee_clickup_ids),
+      mentioned_usernames: normalizeJsonArray(row.mentioned_usernames),
+      media: normalizeJsonArray(row.media)
+    };
+  });
+}
+
+async function updateClickUpTaskRecord(body = {}) {
+  const taskId = String(body.id || '').trim();
+  if (!taskId) throw new Error('ClickUp task tanlanmagan');
+  const rows = await supabase.select('clickup_tasks', {
+    select: 'id,clickup_task_id,status,title,raw',
+    id: supabase.eq(taskId),
+    limit: '1'
+  }).catch(() => []);
+  const task = rows[0];
+  if (!task) throw new Error('ClickUp task topilmadi');
+  const requestedStatus = ['pending', 'created', 'closed', 'error', 'skipped'].includes(String(body.status || ''))
+    ? String(body.status)
+    : task.status;
+  const patch = { updated_at: nowIso() };
+  if (requestedStatus !== task.status) patch.status = requestedStatus;
+  if (body.title !== undefined) patch.title = String(body.title || '').trim() || task.title;
+  if (body.description !== undefined) patch.description = String(body.description || '').trim();
+  if (body.error !== undefined) patch.error = String(body.error || '').trim();
+
+  const settings = await getCurrentSettingsForClickUp();
+  if ((body.sync_clickup || body.syncClickUp) && task.clickup_task_id && settings.ready) {
+    const clickUpTask = await getClickUpTask(settings.config, task.clickup_task_id).catch(() => null);
+    if (clickUpTask && clickUpTask.status) {
+      const status = clickUpTask.status.status || clickUpTask.status.type || clickUpTask.status;
+      patch.raw = { ...(jsonObject(task.raw)), clickup_status: status, synced_at: nowIso() };
+      if (/closed|done|complete/i.test(String(status || ''))) patch.status = 'closed';
+    }
+  }
+  if ((body.close_clickup || body.closeClickUp) && task.clickup_task_id && settings.ready) {
+    await updateClickUpTaskStatus(settings.config, task.clickup_task_id, settings.config.done_status);
+    patch.status = 'closed';
+    patch.raw = { ...(jsonObject(task.raw)), closed_in_clickup_at: nowIso() };
+  }
+
+  const updated = await supabase.patch('clickup_tasks', { id: supabase.eq(taskId) }, patch);
+  return updated[0] || { ...task, ...patch };
+}
+
+async function getCurrentSettingsForClickUp() {
+  const rows = await supabase.select('bot_settings', {
+    select: 'key,value',
+    key: 'in.(clickup_integration)'
+  }).catch(() => []);
+  const config = normalizeClickUpIntegration(settingValue(rows, 'clickup_integration'));
+  return { config, ready: isClickUpIntegrationReady(config) };
+}
+
 async function notifyAiModeChange(settings = {}, enabled) {
   const chatId = settings.mainGroupId || await resolveMainStatsChatId().catch(() => '');
   if (!chatId) return;
@@ -3901,27 +4005,70 @@ async function prepareAiIntegrationForSave(previousIntegration = {}, nextValue =
   }
 }
 
+async function prepareClickUpIntegrationForSave(previousIntegration = {}, nextValue = {}) {
+  const config = mergeClickUpIntegration(previousIntegration, nextValue);
+
+  if (!config.enabled) {
+    return {
+      ...config,
+      api_token: nextValue && (nextValue.clear_token || nextValue.clearToken || nextValue.disconnect) ? '' : config.api_token,
+      has_api_token: Boolean(config.api_token),
+      last_check_status: 'disabled',
+      last_checked_at: '',
+      last_check_error: ''
+    };
+  }
+
+  if (!isClickUpIntegrationConfigured(config)) {
+    return {
+      ...config,
+      last_check_status: 'incomplete',
+      last_checked_at: '',
+      last_check_error: 'ClickUp token, Newbies List ID va Big team List ID to‘liq kiritilishi kerak'
+    };
+  }
+
+  try {
+    await testClickUpIntegration(config);
+    return {
+      ...config,
+      last_check_status: 'ok',
+      last_checked_at: nowIso(),
+      last_check_error: ''
+    };
+  } catch (error) {
+    const message = `ClickUp ulanish tekshiruvidan o‘tmadi: ${error.message}`;
+    const validationError = new Error(message);
+    validationError.code = 'CLICKUP_CONNECTION_FAILED';
+    throw validationError;
+  }
+}
+
 async function updateSettings(body) {
   const items = Array.isArray(body.settings) ? body.settings : [];
   if (!items.length) return [];
   const previousRows = await supabase.select('bot_settings', {
     select: 'key,value',
-    key: 'in.(ai_mode,ai_integration,log_notifications,group_message_audit,message_reactions,auto_reply,done_tag,request_detection,main_group)'
+    key: 'in.(ai_mode,ai_integration,log_notifications,group_message_audit,message_reactions,clickup_integration,auto_reply,done_tag,request_detection,main_group)'
   }).catch(() => []);
   const previousSettings = normalizeSettings(previousRows || []);
   const previousAutoReplyExists = hasSetting(previousRows, 'auto_reply');
   const autoReplySubmitted = items.some(item => item && item.key === 'auto_reply');
   const aiIntegrationSubmitted = items.some(item => item && item.key === 'ai_integration');
+  const clickUpIntegrationSubmitted = items.some(item => item && item.key === 'clickup_integration');
   const logNotificationsSubmitted = items.some(item => item && item.key === 'log_notifications');
   const previousIntegration = normalizeAiIntegration(settingValue(previousRows, 'ai_integration'));
   const previousIntegrationReady = isAiIntegrationReady(previousIntegration);
   const previousIntegrationSignature = aiIntegrationSignature(previousIntegration);
+  const previousClickUpIntegration = normalizeClickUpIntegration(settingValue(previousRows, 'clickup_integration'));
+  const previousClickUpReady = isClickUpIntegrationReady(previousClickUpIntegration);
+  const previousClickUpSignature = clickUpIntegrationSignature(previousClickUpIntegration);
   const timestamp = nowIso();
   const rows = [];
   for (const item of items) {
-    const value = item.key === 'ai_integration'
-      ? await prepareAiIntegrationForSave(previousIntegration, item.value)
-      : item.value;
+    let value = item.value;
+    if (item.key === 'ai_integration') value = await prepareAiIntegrationForSave(previousIntegration, item.value);
+    if (item.key === 'clickup_integration') value = await prepareClickUpIntegrationForSave(previousClickUpIntegration, item.value);
     rows.push({ key: item.key, value, updated_at: timestamp });
   }
   const mergedRows = new Map((previousRows || []).map(row => [row.key, row]));
@@ -3969,10 +4116,21 @@ async function updateSettings(body) {
       status: nextSettings.aiIntegration.last_check_status
     }).catch(error => console.error('[admin:ai-integration-log:error]', error));
   }
+  const nextClickUpReady = isClickUpIntegrationReady(nextSettings.clickUpIntegration);
+  const clickUpChanged = previousClickUpSignature !== clickUpIntegrationSignature(nextSettings.clickUpIntegration);
+  if (clickUpIntegrationSubmitted && nextClickUpReady && (!previousClickUpReady || clickUpChanged)) {
+    await notifyOperationalLog('info', 'admin:clickup-integration', 'ClickUp integratsiyasi ulandi', {
+      newbies_list_id: nextSettings.clickUpIntegration.newbies_list_id,
+      big_team_list_id: nextSettings.clickUpIntegration.big_team_list_id,
+      status: nextSettings.clickUpIntegration.last_check_status
+    }).catch(error => console.error('[admin:clickup-integration-log:error]', error));
+  }
 
-  return savedRows.map(row => row.key === 'ai_integration'
-    ? { ...row, value: sanitizeAiIntegration(row.value) }
-    : row);
+  return savedRows.map(row => {
+    if (row.key === 'ai_integration') return { ...row, value: sanitizeAiIntegration(row.value) };
+    if (row.key === 'clickup_integration') return { ...row, value: sanitizeClickUpIntegration(row.value) };
+    return row;
+  });
 }
 
 async function extractAiKnowledge(body = {}) {
@@ -4024,6 +4182,7 @@ async function handleGet(action, query) {
     case 'employees': return listEmployees(query);
     case 'employeeActivity': return getEmployeeActivity(query);
     case 'settings': return listSettings();
+    case 'clickupTasks': return listClickUpTasks(query);
     case 'telegramWebhookInfo': return getTelegramWebhookStatus();
     default: throw new Error(`Unknown GET action: ${action}`);
   }
@@ -4042,6 +4201,7 @@ async function handlePost(action, body, currentAdmin) {
     case 'sendEmployeesMessage': return sendToEmployees({ ...body, created_by: currentAdmin.username });
     case 'assignChatCompany': return assignChatCompany(body);
     case 'settings': return updateSettings(body);
+    case 'clickupTask': return updateClickUpTaskRecord(body);
     case 'aiKnowledgeExtract': return extractAiKnowledge(body);
     case 'adminProfile': return updateAdmin(body, currentAdmin);
     case 'sendMainStats': return sendMainStatsReport(body.chat_id || body.main_group_id);

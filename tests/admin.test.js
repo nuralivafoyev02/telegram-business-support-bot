@@ -2815,6 +2815,63 @@ async function testAssignGroupCompanyCanBeCleared() {
   }
 }
 
+async function testClickUpIntegrationSaveMasksToken() {
+  const originalSelect = supabase.select;
+  const originalInsert = supabase.insert;
+  const originalFetch = global.fetch;
+  let insertedRows = null;
+  const clickUpCalls = [];
+
+  supabase.select = async (table) => {
+    assert.strictEqual(table, 'bot_settings');
+    return [{ key: 'clickup_integration', value: { enabled: false } }];
+  };
+  supabase.insert = async (table, rows) => {
+    assert.strictEqual(table, 'bot_settings');
+    insertedRows = rows;
+    return rows;
+  };
+  global.fetch = async (url) => {
+    clickUpCalls.push(url);
+    assert.match(url, /api\.clickup\.com\/api\/v2\/list\//);
+    return {
+      ok: true,
+      json: async () => ({ id: 'list-1', name: 'List' })
+    };
+  };
+
+  try {
+    const result = await callSettings({
+      settings: [{
+        key: 'clickup_integration',
+        value: {
+          enabled: true,
+          api_token: 'pk_test_clickup',
+          newbies_list_id: '111',
+          big_team_list_id: '222',
+          newbies_chat_id: '-100111',
+          big_team_chat_id: '-100222',
+          done_status: 'complete'
+        }
+      }]
+    });
+
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.ok, true);
+    assert.strictEqual(clickUpCalls.length, 2);
+    assert.strictEqual(insertedRows[0].value.api_token, 'pk_test_clickup');
+    assert.strictEqual(insertedRows[0].value.last_check_status, 'ok');
+    const saved = result.payload.data[0].value;
+    assert.strictEqual(saved.api_token, '');
+    assert.strictEqual(saved.has_api_token, true);
+    assert.strictEqual(saved.last_check_status, 'ok');
+  } finally {
+    supabase.select = originalSelect;
+    supabase.insert = originalInsert;
+    global.fetch = originalFetch;
+  }
+}
+
 async function run() {
   await testAiModeEnableSendsMainGroupNotice();
   await testAiModeDisableSendsMainGroupNotice();
@@ -2863,6 +2920,7 @@ async function run() {
   await testCompanyInfoProxyFallsBackWhenScopedQueryUnsupported();
   await testAssignGroupToExternalCompanyCreatesLocalCompany();
   await testAssignGroupCompanyCanBeCleared();
+  await testClickUpIntegrationSaveMasksToken();
   console.log('Admin tests passed');
 }
 

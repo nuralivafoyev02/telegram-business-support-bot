@@ -4,6 +4,7 @@ const { sendJson, getQuery } = require('../lib/http');
 const { optionalEnv } = require('../lib/env');
 const { sendMainStatsReport } = require('../lib/report');
 const { syncCompanyInfo } = require('../lib/company-info');
+const { syncClickUpCompletedTasks } = require('../lib/clickup-sync');
 const { notifyOperationalError } = require('../lib/log-notifier');
 
 function verify(req) {
@@ -20,6 +21,10 @@ async function handler(req, res) {
     const action = String(query.action || query.job || '').trim();
     if (['companyInfo', 'company-info', 'uyqurCompanyInfo', 'uyqur-company-info'].includes(action)) {
       const result = await syncCompanyInfo();
+      return sendJson(res, 200, { ok: true, data: result });
+    }
+    if (['clickupSync', 'clickup-sync', 'clickup'].includes(action)) {
+      const result = await syncClickUpCompletedTasks({ limit: Number(query.limit || 50) });
       return sendJson(res, 200, { ok: true, data: result });
     }
     const result = await sendMainStatsReport(query.chat_id || undefined);

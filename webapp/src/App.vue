@@ -777,6 +777,43 @@
             </section>
           </template>
 
+          <template v-if="activeTab === 'clickup'">
+            <div class="toolbar">
+              <input v-model="search" class="search"
+                placeholder="Vazifa, guruh, mention yoki ClickUp ID bo‘yicha qidirish" />
+              <TransitionGroup name="action-pop" tag="div" class="toolbar-actions">
+                <button key="refresh" class="btn primary" :disabled="loadingAction === 'clickupTask'"
+                  @click="loadClickUpTasks">Yangilash</button>
+              </TransitionGroup>
+            </div>
+            <section class="card">
+              <div class="card-header">
+                <div>
+                  <div class="card-title">ClickUp vazifalar</div>
+                  <div class="card-note">👁 reaksiyasi orqali yaratilgan vazifalar va qo‘lda kuzatuv</div>
+                </div>
+              </div>
+              <DataTable :columns="clickupColumns" :rows="filteredClickUpTasks" empty="ClickUp vazifa topilmadi">
+                <template #telegramLink="{ row }">
+                  <a v-if="row.message_link" class="table-link" :href="row.message_link" target="_blank"
+                    rel="noreferrer">Ochish</a>
+                  <span v-else>—</span>
+                </template>
+                <template #clickupLink="{ row }">
+                  <a v-if="row.clickup_task_url" class="table-link" :href="row.clickup_task_url" target="_blank"
+                    rel="noreferrer">Task</a>
+                  <span v-else>{{ row.clickup_task_id || '—' }}</span>
+                </template>
+                <template #actions="{ row }">
+                  <button class="btn small" :disabled="loadingAction === 'clickupTask' || !row.clickup_task_id"
+                    @click="syncClickUpTask(row)">Sync</button>
+                  <button class="btn small danger" :disabled="loadingAction === 'clickupTask' || row.status === 'closed'"
+                    @click="closeClickUpTask(row)">Yopish</button>
+                </template>
+              </DataTable>
+            </section>
+          </template>
+
           <template v-if="activeTab === 'settings'">
             <div class="settings-layout">
               <aside class="settings-menu" aria-label="Sozlamalar menyusi">
@@ -812,7 +849,7 @@
                   <label class="label">Telegram reaksiyalari
                     <select v-model="settingsForm.message_reactions" class="select">
                       <option value="false">O‘chirilgan</option>
-                      <option value="true">So‘rov yopilganda ⚡ bosish</option>
+                      <option value="true">👁 task yaratish, 💯 yopish va ⚡ tasdiqlash</option>
                     </select>
                   </label>
                   <label class="label">Yopish tegi
@@ -939,6 +976,52 @@
                     {{ loadingAction === 'saveIntegration' ? 'Saqlamoqda...' : 'Integratsiyani saqlash' }}
                   </button>
                 </form>
+              </section>
+
+              <section class="card pad settings-card">
+                <div class="settings-head">
+                  <div>
+                    <div class="card-title">ClickUp integratsiya</div>
+                    <div class="card-note">Telegram reaksiyalaridan vazifa yaratish va yopish oqimi</div>
+                  </div>
+                  <span class="status-pill" :class="{ ready: clickUpIntegrationReady, error: clickUpIntegrationHasError }">
+                    {{ clickUpIntegrationStatus }}
+                  </span>
+                </div>
+                <form class="form settings-form integration-form" @submit.prevent="saveClickUpIntegration">
+                  <label class="label">API token
+                    <input v-model="clickupForm.api_token" class="input" type="password" autocomplete="new-password"
+                      :placeholder="clickupForm.has_api_token ? 'Saqlangan tokenni almashtirish' : 'pk_...'" />
+                  </label>
+                  <label class="label">Newbies List ID
+                    <input v-model.trim="clickupForm.newbies_list_id" class="input" placeholder="123456789" />
+                  </label>
+                  <label class="label">Big team List ID
+                    <input v-model.trim="clickupForm.big_team_list_id" class="input" placeholder="987654321" />
+                  </label>
+                  <label class="label">Newbies chat ID
+                    <input v-model.trim="clickupForm.newbies_chat_id" class="input" placeholder="-1001234567890" />
+                  </label>
+                  <label class="label">Big team chat ID
+                    <input v-model.trim="clickupForm.big_team_chat_id" class="input" placeholder="-1009876543210" />
+                  </label>
+                  <label class="label">Yopish statusi
+                    <input v-model.trim="clickupForm.done_status" class="input" placeholder="complete" />
+                  </label>
+                  <div class="settings-actions wide">
+                    <button class="btn primary" :disabled="loadingAction === 'saveClickUpIntegration'">
+                      {{ loadingAction === 'saveClickUpIntegration' ? 'Tekshirilmoqda...' : 'Integratsiya qilish' }}
+                    </button>
+                    <button v-if="clickupForm.enabled || clickupForm.has_api_token" class="btn danger" type="button"
+                      :disabled="loadingAction === 'disconnectClickUp'" @click="disconnectClickUpIntegration">
+                      {{ loadingAction === 'disconnectClickUp' ? 'Uzilmoqda...' : 'Uzish' }}
+                    </button>
+                  </div>
+                </form>
+                <p v-if="clickupForm.last_check_error" class="form-error wide">{{ clickupForm.last_check_error }}</p>
+              </section>
+
+              <section class="card pad settings-card">
                 <div class="integration-note log-settings-panel">
                   <div class="settings-head compact">
                     <div>
@@ -1129,6 +1212,9 @@
           </label>
           <label class="label">Telefon
             <input v-model.trim="employeeForm.phone" class="input" placeholder="+998..." />
+          </label>
+          <label class="label">ClickUp User ID
+            <input v-model.trim="employeeForm.clickup_user_id" class="input" placeholder="12345678" />
           </label>
           <label class="label">Rol
             <select v-model="employeeForm.role" class="select">
@@ -2144,12 +2230,13 @@ const tabs = [
   { key: 'employees', label: 'Xodimlar', icon: '🧑‍💼' },
   { key: 'companies', label: 'Kompaniyalar', icon: '🏬' },
   { key: 'integrations', label: 'Integratsiya', icon: '🔌' },
+  { key: 'clickup', label: 'ClickUp', icon: '✅' },
   { key: 'privates', label: 'Mijozlar', icon: '💬' },
   { key: 'knowledgeBase', label: 'Bilim bazasi', icon: '📚' },
   { key: 'settings', label: 'Sozlamalar', icon: '⚙️' }
 ];
 const mainTabKeys = ['stats', 'productAnalytics', 'companyActivity'];
-const otherTabKeys = ['groups', 'employees', 'companies', 'integrations', 'privates', 'knowledgeBase'];
+const otherTabKeys = ['groups', 'employees', 'companies', 'integrations', 'clickup', 'privates', 'knowledgeBase'];
 
 function isValidTab(key) {
   return tabs.some(tab => tab.key === key);
@@ -2214,6 +2301,7 @@ const dashboard = reactive({ summary: {}, employeeStats: [], chatStats: [], open
 const groups = ref([]);
 const privates = ref([]);
 const employees = ref([]);
+const clickupTasks = ref([]);
 const companyInfo = ref({ summary: {}, companies: [], fetched_at: '', source: '' });
 const requestRows = ref([]);
 const ticketList = ref({ rows: [], active: 'all', mode: 'all', source: 'all', title: 'Ticketlar ro‘yxati' });
@@ -2281,7 +2369,7 @@ const floatingTooltipStyle = computed(() => ({
 const settingsForm = reactive({ ai_mode: 'false', auto_reply: 'true', message_reactions: 'false', done_tag: '#done', main_group_id: '', group_message_audit: 'main_group', group_message_audit_channel_id: '', request_detection: 'keyword' });
 const isManagerMode = computed(() => false);
 const mainTabs = computed(() => tabs.filter(tab => mainTabKeys.includes(tab.key)));
-const otherTabs = computed(() => tabs.filter(tab => otherTabKeys.includes(tab.key)));
+const otherTabs = computed(() => tabs.filter(tab => otherTabKeys.includes(tab.key) && (tab.key !== 'clickup' || clickUpIntegrationReady.value)));
 const isOtherTabActive = computed(() => otherTabKeys.includes(activeTab.value));
 const settingsTab = tabs.find(tab => tab.key === 'settings');
 watch(activeTab, key => {
@@ -2323,7 +2411,7 @@ const broadcastForm = reactive({ target_type: 'groups', title: 'Yangilik', text:
 const customPeriodForm = reactive({ start: '', end: '', appliedStart: '', appliedEnd: '' });
 const customPeriodError = ref('');
 const companyAssignForm = reactive({ companyKey: '', search: '' });
-const employeeForm = reactive({ id: '', tg_user_id: '', full_name: '', username: '', phone: '', role: 'support', is_active: true });
+const employeeForm = reactive({ id: '', tg_user_id: '', full_name: '', username: '', phone: '', role: 'support', clickup_user_id: '', is_active: true });
 const adminForm = reactive({ username: 'admin', full_name: 'Tizim admini', new_password: '' });
 const integrationForm = reactive({
   enabled: true,
@@ -2342,6 +2430,20 @@ const integrationForm = reactive({
 const logForm = reactive({ enabled: false, levels: ['error'], target: 'main_group', sources: [], test_level: 'info' });
 const logSourceDraft = reactive({ chat_id: '', label: '', source: 'backend' });
 const savedIntegrationSignature = ref('');
+const clickupForm = reactive({
+  enabled: false,
+  api_token: '',
+  has_api_token: false,
+  newbies_list_id: '',
+  big_team_list_id: '',
+  newbies_chat_id: '',
+  big_team_chat_id: '',
+  done_status: 'complete',
+  last_check_status: '',
+  last_checked_at: '',
+  last_check_error: ''
+});
+const savedClickUpSignature = ref('');
 
 const current = computed(() => tabs.find(t => t.key === activeTab.value) || tabs[0]);
 const currentTitle = computed(() => current.value.label);
@@ -2362,6 +2464,7 @@ const currentSubtitle = computed(() => ({
   employees: 'Xodimlar aktivligi, javoblar va ochiq vazifalar',
   companies: 'Uyqur API’dan kelgan kompaniyalar, mas’ul va obuna ma’lumotlari',
   integrations: 'Tashqi ulanishlar va keyingi log oqimlari uchun boshqaruv',
+  clickup: 'Telegram reaction orqali yaratilgan ClickUp vazifalar kuzatuvi',
   privates: 'Mijozlar bilan shaxsiy va biznes chatlar',
   knowledgeBase: 'AI o‘qitish matnlari, fayllar va modelga beriladigan bilim',
   settings: 'Bot, admin va Telegram ulanishi sozlamalari'
@@ -2375,6 +2478,18 @@ function aiConnectionSignature(source = {}) {
     source.base_url || '',
     source.model || '',
     Boolean(source.has_api_key)
+  ].join('|');
+}
+
+function clickUpConnectionSignature(source = {}) {
+  return [
+    source.enabled === true,
+    source.newbies_list_id || '',
+    source.big_team_list_id || '',
+    source.newbies_chat_id || '',
+    source.big_team_chat_id || '',
+    source.done_status || 'complete',
+    Boolean(source.has_api_token)
   ].join('|');
 }
 
@@ -2400,6 +2515,28 @@ const aiIntegrationStatus = computed(() => {
   if (aiIntegrationDirty.value) return 'Qayta tekshirish kerak';
   if (integrationForm.last_check_status === 'incomplete') return 'Token yoki model kerak';
   return 'Tekshirilmagan';
+});
+
+const clickUpIntegrationDirty = computed(() => Boolean(
+  clickupForm.api_token
+  || (savedClickUpSignature.value && clickUpConnectionSignature(clickupForm) !== savedClickUpSignature.value)
+));
+const clickUpIntegrationReady = computed(() => !!(
+  clickupForm.enabled
+  && clickupForm.newbies_list_id
+  && clickupForm.big_team_list_id
+  && (clickupForm.api_token || clickupForm.has_api_token)
+  && clickupForm.last_check_status === 'ok'
+  && !clickUpIntegrationDirty.value
+));
+const clickUpIntegrationHasError = computed(() => clickupForm.last_check_status === 'failed' || Boolean(clickupForm.last_check_error));
+const clickUpIntegrationStatus = computed(() => {
+  if (clickUpIntegrationDirty.value) return 'Tekshirish kerak';
+  if (clickUpIntegrationReady.value) return 'Ulangan';
+  if (clickupForm.enabled && clickupForm.last_check_status === 'incomplete') return 'To‘liq emas';
+  if (clickUpIntegrationHasError.value) return 'Xato';
+  if (clickupForm.enabled) return 'Kutilmoqda';
+  return 'O‘chirilgan';
 });
 const periodOptions = [
   { key: 'today', label: 'Bugun' },
@@ -2788,6 +2925,9 @@ const loadingText = computed(() => ({
   employeeActivity: 'Xodim faoliyati yuklanmoqda...',
   saveSettings: 'Saqlamoqda...',
   saveIntegration: 'Saqlamoqda...',
+  saveClickUpIntegration: 'ClickUp tekshirilmoqda...',
+  disconnectClickUp: 'ClickUp uzilmoqda...',
+  clickupTask: 'ClickUp yangilanmoqda...',
   saveLogSettings: 'Log sozlamasi saqlanmoqda...',
   testLog: 'Test log yuborilmoqda...',
   extractKnowledge: 'Fayl o‘qilmoqda...',
@@ -3698,6 +3838,7 @@ function includesSearch(row) {
 
 const filteredEmployeeStats = computed(() => (dashboard.employeeStats || []).filter(includesSearch));
 const filteredEmployees = computed(() => employees.value.filter(includesSearch));
+const filteredClickUpTasks = computed(() => clickupTasks.value.filter(includesSearch));
 const filteredGroups = computed(() => groups.value.filter(includesSearch));
 const filteredPrivates = computed(() => privates.value.filter(includesSearch));
 const companyInfoRows = computed(() => companyInfo.value.companies || []);
@@ -4176,6 +4317,7 @@ const employeeColumns = [
   { key: 'full_name', label: 'Xodim', action: 'employeeInfo' },
   { key: 'tg_user_id', label: 'Telegram raqami', format: v => v || '—', action: 'employeeInfo' },
   { key: 'username', label: 'Foydalanuvchi nomi', format: v => v ? `@${v}` : '—', action: 'employeeInfo' },
+  { key: 'clickup_user_id', label: 'ClickUp ID', format: v => v || '—', action: 'employeeInfo' },
   { key: 'role', label: 'Vazifa', format: roleLabel, badge: true, action: 'employeeInfo' },
   { key: 'closed_requests', label: 'Yopilgan', action: 'employeeInfo' },
   { key: 'today_received_requests', label: 'Bugungi so‘rov', format: fmtNumber, action: 'employeeInfo' },
@@ -4185,6 +4327,19 @@ const employeeColumns = [
   { key: 'today_open_customers', label: 'Qolgan so‘rovlar', format: listPreview, truncate: true, action: 'employeeOpenRequests' },
   { key: 'can_message', label: 'Yozish', format: v => v ? 'Mumkin' : 'Botni boshlashi kerak', action: 'employeeMessage' },
   { key: 'is_active', label: 'Holat', format: v => v ? 'Faol' : 'O‘chirilgan', badge: true, action: 'employeeInfo' },
+  { key: 'actions', label: 'Amal', slot: 'actions' }
+];
+
+const clickupColumns = [
+  { key: 'title', label: 'Vazifa', truncate: true },
+  { key: 'chat_title', label: 'Guruh', format: value => value || '—' },
+  { key: 'clickup_list_key', label: 'Oqim', format: value => value === 'big_team' ? 'Big team' : value === 'newbies' ? 'Newbies' : '—', badge: true },
+  { key: 'mentioned_usernames', label: 'Mention', format: value => Array.isArray(value) && value.length ? value.map(item => `@${item}`).join(', ') : '—', truncate: true },
+  { key: 'assignee_clickup_ids', label: 'ClickUp mas’ul', format: value => Array.isArray(value) && value.length ? value.join(', ') : '—', truncate: true },
+  { key: 'status', label: 'Holat', format: value => ({ created: 'Yaratildi', closed: 'Yopildi', error: 'Xato', pending: 'Kutilmoqda', skipped: 'O‘tkazildi' }[value] || value || '—'), badge: true },
+  { key: 'created_at', label: 'Sana', format: fmtDate },
+  { key: 'message_link', label: 'Telegram', slot: 'telegramLink' },
+  { key: 'clickup_task_url', label: 'ClickUp', slot: 'clickupLink' },
   { key: 'actions', label: 'Amal', slot: 'actions' }
 ];
 
@@ -4566,6 +4721,7 @@ async function refresh() {
     if (activeTab.value === 'employees') employees.value = await api.employees();
     if (activeTab.value === 'companies') await loadCompanyInfo();
     if (activeTab.value === 'integrations') await loadSettings();
+    if (activeTab.value === 'clickup') await loadClickUpTasks();
     if (activeTab.value === 'knowledgeBase') await loadSettings();
     if (activeTab.value === 'settings') await loadSettings();
     if (activeTab.value === 'settings') checkTelegramWebhook(false).catch(() => null);
@@ -4637,6 +4793,7 @@ async function loadSettings() {
   }
   const ai = data.settings?.find(s => s.key === 'ai_mode')?.value;
   const integration = data.settings?.find(s => s.key === 'ai_integration')?.value;
+  const clickupIntegration = data.settings?.find(s => s.key === 'clickup_integration')?.value;
   const logNotifications = data.settings?.find(s => s.key === 'log_notifications')?.value;
   const groupMessageAudit = data.settings?.find(s => s.key === 'group_message_audit')?.value;
   const messageReactions = data.settings?.find(s => s.key === 'message_reactions')?.value;
@@ -4665,6 +4822,20 @@ async function loadSettings() {
     test_level: logForm.test_level || 'info'
   });
   savedIntegrationSignature.value = aiConnectionSignature(integrationForm);
+  Object.assign(clickupForm, {
+    enabled: clickupIntegration?.enabled === true,
+    api_token: '',
+    has_api_token: !!clickupIntegration?.has_api_token,
+    newbies_list_id: clickupIntegration?.newbies_list_id || '',
+    big_team_list_id: clickupIntegration?.big_team_list_id || '',
+    newbies_chat_id: clickupIntegration?.newbies_chat_id || '',
+    big_team_chat_id: clickupIntegration?.big_team_chat_id || '',
+    done_status: clickupIntegration?.done_status || 'complete',
+    last_check_status: clickupIntegration?.last_check_status || '',
+    last_checked_at: clickupIntegration?.last_checked_at || '',
+    last_check_error: clickupIntegration?.last_check_error || ''
+  });
+  savedClickUpSignature.value = clickUpConnectionSignature(clickupForm);
   const modelVerified = !!(integration?.last_check_status === 'ok' && integration?.model && integration?.has_api_key);
   settingsForm.ai_mode = ai?.enabled && ai?.provider && modelVerified ? 'model' : String(!!ai?.enabled);
   const autoReplySetting = data.settings?.find(s => s.key === 'auto_reply')?.value;
@@ -4685,6 +4856,10 @@ async function loadSettings() {
         : 'main_group';
   settingsForm.group_message_audit_channel_id = groupMessageAudit?.channel_id || groupMessageAudit?.channelId || '';
   settingsForm.request_detection = detect?.mode || 'keyword';
+}
+
+async function loadClickUpTasks() {
+  clickupTasks.value = await api.clickupTasks({ limit: 200 });
 }
 
 function setThemeMode(mode) {
@@ -4792,6 +4967,7 @@ async function setTab(key) {
     if (activeTab.value === 'employees') employees.value = await api.employees();
     if (activeTab.value === 'companies') await loadCompanyInfo();
     if (activeTab.value === 'integrations') await loadSettings();
+    if (activeTab.value === 'clickup') await loadClickUpTasks();
     if (activeTab.value === 'knowledgeBase') await loadSettings();
     if (activeTab.value === 'settings') await loadSettings();
     if (activeTab.value === 'settings') checkTelegramWebhook(false).catch(() => null);
@@ -5035,6 +5211,7 @@ function openEmployee(row = null) {
     username: row?.username || '',
     phone: row?.phone || '',
     role: row?.role || 'support',
+    clickup_user_id: row?.clickup_user_id || '',
     is_active: row?.is_active ?? true
   });
   modal.value = 'employee';
@@ -6427,6 +6604,117 @@ async function saveIntegration() {
     showToast(error.message);
   } finally {
     stopLoading('saveIntegration');
+  }
+}
+
+function applySavedClickUpIntegration(saved = {}) {
+  Object.assign(clickupForm, {
+    enabled: saved.enabled === true,
+    api_token: '',
+    has_api_token: !!saved.has_api_token,
+    newbies_list_id: saved.newbies_list_id || '',
+    big_team_list_id: saved.big_team_list_id || '',
+    newbies_chat_id: saved.newbies_chat_id || '',
+    big_team_chat_id: saved.big_team_chat_id || '',
+    done_status: saved.done_status || 'complete',
+    last_check_status: saved.last_check_status || '',
+    last_checked_at: saved.last_checked_at || '',
+    last_check_error: saved.last_check_error || ''
+  });
+  savedClickUpSignature.value = clickUpConnectionSignature(clickupForm);
+}
+
+async function saveClickUpIntegration() {
+  startLoading('saveClickUpIntegration');
+  try {
+    const rows = await api.saveSettings({
+      settings: [{
+        key: 'clickup_integration',
+        value: {
+          enabled: true,
+          api_token: clickupForm.api_token,
+          has_api_token: clickupForm.has_api_token,
+          newbies_list_id: clickupForm.newbies_list_id,
+          big_team_list_id: clickupForm.big_team_list_id,
+          newbies_chat_id: clickupForm.newbies_chat_id,
+          big_team_chat_id: clickupForm.big_team_chat_id,
+          done_status: clickupForm.done_status || 'complete'
+        }
+      }]
+    });
+    const saved = rows.find(row => row.key === 'clickup_integration')?.value;
+    if (saved) applySavedClickUpIntegration(saved);
+    else clickupForm.has_api_token = Boolean(clickupForm.api_token || clickupForm.has_api_token);
+    clickupForm.api_token = '';
+    showToast(clickupForm.last_check_status === 'ok' ? 'ClickUp ulandi va tekshirildi' : 'ClickUp sozlamasi saqlandi');
+  } catch (error) {
+    clickupForm.last_check_status = 'failed';
+    clickupForm.last_check_error = error.message;
+    showToast(error.message);
+  } finally {
+    stopLoading('saveClickUpIntegration');
+  }
+}
+
+async function disconnectClickUpIntegration() {
+  const ok = window.confirm('ClickUp integratsiyasi uzilsinmi? Token va list sozlamalari o‘chiriladi.');
+  if (!ok) return;
+  startLoading('disconnectClickUp');
+  try {
+    const rows = await api.saveSettings({
+      settings: [{
+        key: 'clickup_integration',
+        value: {
+          enabled: false,
+          disconnect: true,
+          clear_token: true,
+          api_token: '',
+          newbies_list_id: '',
+          big_team_list_id: '',
+          newbies_chat_id: '',
+          big_team_chat_id: '',
+          done_status: 'complete'
+        }
+      }]
+    });
+    const saved = rows.find(row => row.key === 'clickup_integration')?.value;
+    applySavedClickUpIntegration(saved || {});
+    clickupTasks.value = [];
+    showToast('ClickUp integratsiyasi uzildi');
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    stopLoading('disconnectClickUp');
+  }
+}
+
+async function closeClickUpTask(row = {}) {
+  if (!row.id) return showToast('Task tanlanmagan');
+  const ok = window.confirm(`${row.title || 'ClickUp task'} yopildi deb belgilansinmi?`);
+  if (!ok) return;
+  startLoading('clickupTask');
+  try {
+    await api.updateClickupTask({ id: row.id, status: 'closed', close_clickup: true });
+    await loadClickUpTasks();
+    showToast('ClickUp task yopildi');
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    stopLoading('clickupTask');
+  }
+}
+
+async function syncClickUpTask(row = {}) {
+  if (!row.id) return showToast('Task tanlanmagan');
+  startLoading('clickupTask');
+  try {
+    await api.updateClickupTask({ id: row.id, sync_clickup: true });
+    await loadClickUpTasks();
+    showToast('ClickUp task holati yangilandi');
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    stopLoading('clickupTask');
   }
 }
 

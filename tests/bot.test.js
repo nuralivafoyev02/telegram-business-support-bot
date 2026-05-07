@@ -1259,6 +1259,203 @@ async function testMessageReactionSettingEnablesTicketCloseReaction() {
   }
 }
 
+async function testEyeReactionCreatesClickUpTask() {
+  const originalInsert = supabase.insert;
+  const originalSelect = supabase.select;
+  const originalPatch = supabase.patch;
+  const originalFetch = global.fetch;
+  const inserted = [];
+  const clickUpCalls = [];
+  clearBotSettingsCache();
+
+  supabase.select = async (table, query = {}) => {
+    if (table === 'bot_settings') {
+      return [
+        { key: 'message_reactions', value: { enabled: true, ticket_close: true, emoji: '⚡' } },
+        {
+          key: 'clickup_integration',
+          value: {
+            enabled: true,
+            api_token: 'pk_test',
+            has_api_token: true,
+            newbies_list_id: '111',
+            big_team_list_id: '222',
+            newbies_chat_id: '-100111',
+            big_team_chat_id: '-100222',
+            done_status: 'complete',
+            last_check_status: 'ok'
+          }
+        }
+      ];
+    }
+    if (table === 'tg_chats') return [];
+    if (table === 'clickup_tasks') return [];
+    if (table === 'messages') {
+      return [{
+        id: 'message-row',
+        tg_message_id: 77,
+        chat_id: -100111,
+        from_tg_user_id: 1001,
+        from_name: 'Customer',
+        from_username: 'customer',
+        source_type: 'group',
+        classification: 'message',
+        text: '@ali login sahifasida xatolik bor',
+        raw: {
+          message_id: 77,
+          date: 1777100000,
+          text: '@ali login sahifasida xatolik bor',
+          chat: { id: -100111, type: 'supergroup', title: 'Uyqur Newbies Takliflar' },
+          from: { id: 1001, first_name: 'Customer', username: 'customer', is_bot: false }
+        },
+        created_at: new Date().toISOString()
+      }];
+    }
+    if (table === 'employees') {
+      return [{ id: 'employee-1', tg_user_id: 777, full_name: 'Ali Support', username: 'ali', clickup_user_id: '123', is_active: true }];
+    }
+    if (table === 'support_requests' && query.status === 'eq.open') return [];
+    return [];
+  };
+  supabase.insert = async (table, rows) => {
+    inserted.push({ table, rows });
+    if (table === 'support_requests') return rows.map(row => ({ id: 'request-1', ...row }));
+    if (table === 'clickup_tasks') return rows.map(row => ({ id: 'clickup-row', ...row }));
+    return rows.map(row => ({ id: `${table}-row`, ...row }));
+  };
+  supabase.patch = async (_table, _query, values) => [values];
+  global.fetch = async (url, options = {}) => {
+    clickUpCalls.push({ url, body: JSON.parse(options.body || '{}') });
+    assert.match(url, /api\.clickup\.com\/api\/v2\/list\/111\/task$/);
+    return {
+      ok: true,
+      json: async () => ({ id: 'cu-task-1', url: 'https://app.clickup.com/t/cu-task-1' })
+    };
+  };
+
+  try {
+    const result = await callHandler({
+      update_id: 150,
+      message_reaction: {
+        chat: { id: -100111, type: 'supergroup', title: 'Uyqur Newbies Takliflar' },
+        message_id: 77,
+        date: 1777100100,
+        user: { id: 777, first_name: 'Ali', username: 'ali', is_bot: false },
+        old_reaction: [],
+        new_reaction: [{ type: 'emoji', emoji: '👁' }]
+      }
+    });
+
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.handled, 'message_reaction_eye');
+    assert.strictEqual(clickUpCalls.length, 1);
+    assert.deepStrictEqual(clickUpCalls[0].body.assignees, [123]);
+    assert.match(clickUpCalls[0].body.name, /login sahifasida xatolik/);
+    const clickUpRow = inserted.find(item => item.table === 'clickup_tasks');
+    assert.ok(clickUpRow);
+    assert.strictEqual(clickUpRow.rows[0].status, 'created');
+    assert.strictEqual(clickUpRow.rows[0].clickup_task_id, 'cu-task-1');
+    assert.deepStrictEqual(clickUpRow.rows[0].assignee_clickup_ids, ['123']);
+  } finally {
+    supabase.insert = originalInsert;
+    supabase.select = originalSelect;
+    supabase.patch = originalPatch;
+    global.fetch = originalFetch;
+    clearBotSettingsCache();
+  }
+}
+
+async function testHundredReactionClosesTicketAndClickUpTask() {
+  const originalInsert = supabase.insert;
+  const originalSelect = supabase.select;
+  const originalPatch = supabase.patch;
+  const originalFetch = global.fetch;
+  const inserted = [];
+  const patched = [];
+  const clickUpCalls = [];
+  clearBotSettingsCache();
+
+  supabase.select = async (table, query = {}) => {
+    if (table === 'bot_settings') {
+      return [
+        { key: 'message_reactions', value: { enabled: true, ticket_close: true, emoji: '⚡' } },
+        {
+          key: 'clickup_integration',
+          value: {
+            enabled: true,
+            api_token: 'pk_test',
+            has_api_token: true,
+            newbies_list_id: '111',
+            big_team_list_id: '222',
+            done_status: 'complete',
+            last_check_status: 'ok'
+          }
+        }
+      ];
+    }
+    if (table === 'tg_chats') return [];
+    if (table === 'employees') return [{ id: 'employee-1', tg_user_id: 777, full_name: 'Ali', username: 'ali', clickup_user_id: '123', is_active: true }];
+    if (table === 'support_requests' && query.status === 'eq.open') {
+      return [{
+        id: 'request-1',
+        chat_id: -100111,
+        status: 'open',
+        customer_tg_id: 1001,
+        customer_name: 'Customer',
+        initial_message_id: 77,
+        initial_text: 'Login xato',
+        created_at: new Date().toISOString()
+      }];
+    }
+    if (table === 'clickup_tasks') return [{ id: 'clickup-row', clickup_task_id: 'cu-task-1', status: 'created' }];
+    return [];
+  };
+  supabase.insert = async (table, rows) => {
+    inserted.push({ table, rows });
+    return rows.map(row => ({ id: `${table}-row`, ...row }));
+  };
+  supabase.patch = async (table, query, values) => {
+    patched.push({ table, query, values });
+    return [{ id: table === 'support_requests' ? 'request-1' : 'clickup-row', ...values }];
+  };
+  global.fetch = async (url, options = {}) => {
+    clickUpCalls.push({ url, body: JSON.parse(options.body || '{}') });
+    assert.match(url, /api\.clickup\.com\/api\/v2\/task\/cu-task-1$/);
+    return {
+      ok: true,
+      json: async () => ({ id: 'cu-task-1', status: { status: 'complete' } })
+    };
+  };
+
+  try {
+    const result = await callHandler({
+      update_id: 151,
+      message_reaction: {
+        chat: { id: -100111, type: 'supergroup', title: 'Uyqur Newbies Takliflar' },
+        message_id: 77,
+        date: 1777100200,
+        user: { id: 777, first_name: 'Ali', username: 'ali', is_bot: false },
+        old_reaction: [],
+        new_reaction: [{ type: 'emoji', emoji: '💯' }]
+      }
+    });
+
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.handled, 'message_reaction_done');
+    assert.strictEqual(patched.some(item => item.table === 'support_requests' && item.values.status === 'closed'), true);
+    assert.strictEqual(patched.some(item => item.table === 'clickup_tasks' && item.values.status === 'closed'), true);
+    assert.strictEqual(inserted.some(item => item.table === 'request_events' && item.rows[0].event_type === 'closed'), true);
+    assert.strictEqual(clickUpCalls.length, 1);
+    assert.strictEqual(clickUpCalls[0].body.status, 'complete');
+  } finally {
+    supabase.insert = originalInsert;
+    supabase.select = originalSelect;
+    supabase.patch = originalPatch;
+    global.fetch = originalFetch;
+    clearBotSettingsCache();
+  }
+}
+
 async function testMainGroupBroadcastPreview() {
   const originalInsert = supabase.insert;
   const originalSelect = supabase.select;
@@ -1637,6 +1834,8 @@ async function testBotRemovalMarksGroupInactive() {
   await testReplyToCustomerTicketClosesRequest();
   await testEmployeePlainAnswerClosesLatestOpenRequest();
   await testMessageReactionSettingEnablesTicketCloseReaction();
+  await testEyeReactionCreatesClickUpTask();
+  await testHundredReactionClosesTicketAndClickUpTask();
   await testMainGroupBroadcastPreview();
   await testMainGroupBroadcastConfirmSendsAndReports();
   await testMainGroupBroadcastDeletePreview();

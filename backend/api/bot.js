@@ -3,11 +3,12 @@
 const { sendJson, readBody, getQuery } = require('../lib/http');
 const { optionalEnv, boolEnv } = require('../lib/env');
 const supabase = require('../lib/supabase');
-const { sendMessage, deleteMessage, reactToMessage, answerCallbackQuery, editMessageReplyMarkup, escapeHtml, tgUserName, getWebhookInfo, getMe, getChatMember } = require('../lib/telegram');
+const { sendMessage, deleteMessage, reactToMessage, answerCallbackQuery, editMessageReplyMarkup, escapeHtml, tgUserName, getWebhookInfo, getMe, getChatMember, getFile, downloadFile } = require('../lib/telegram');
 const { getMessageText, classifyMessage, isGreetingOnly, isSmallTalk, isCompletionIntent } = require('../lib/parser');
 const { getBotSettings } = require('../lib/bot-settings');
 const { resolveMainStatsChatId, sendMainStatsReport, buildMainStatsQuestionReply, isMainStatsQuestion } = require('../lib/report');
-const { shouldUseExternalAi, classifyWithAi, generateSupportReply, generateLocalSupportReply } = require('../lib/ai');
+const { shouldUseExternalAi, classifyWithAi, generateSupportReply, generateLocalSupportReply, generateClickUpTaskDraft } = require('../lib/ai');
+const { normalizeClickUpIntegration, isClickUpIntegrationReady, createClickUpTask, updateClickUpTaskStatus, attachClickUpTaskFile } = require('../lib/clickup');
 const { notifyIncomingLog, notifyOperationalError } = require('../lib/log-notifier');
 const metrics = require('../lib/metrics');
 
@@ -246,6 +247,26 @@ function summarizeUpdate(update = {}) {
       status: memberUpdate.new_chat_member && memberUpdate.new_chat_member.status
     };
   }
+  if (update.message_reaction) {
+    const reaction = update.message_reaction;
+    return {
+      update_id: update.update_id,
+      type: 'message_reaction',
+      chat_id: reaction.chat && reaction.chat.id,
+      chat_type: reaction.chat && reaction.chat.type,
+      message_id: reaction.message_id
+    };
+  }
+  if (update.message_reaction_count) {
+    const reactionCount = update.message_reaction_count;
+    return {
+      update_id: update.update_id,
+      type: 'message_reaction_count',
+      chat_id: reactionCount.chat && reactionCount.chat.id,
+      chat_type: reactionCount.chat && reactionCount.chat.type,
+      message_id: reactionCount.message_id
+    };
+  }
   if (update.business_connection) {
     return { update_id: update.update_id, type: 'business_connection' };
   }
@@ -274,6 +295,398 @@ async function handleStart(message) {
 
 function isGroupChat(chat = {}) {
   return ['group', 'supergroup'].includes(chat.type);
+}
+
+function telegramIdKey(value) {
+  return value === undefined || value === null || value === '' ? '' : String(value);
+}
+
+function jsonObject(value) {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+}
+
+function reactionEmojiSet(reactions = []) {
+  return new Set((Array.isArray(reactions) ? reactions : [])
+    .filter(item => item && item.type === 'emoji' && item.emoji)
+    .map(item => item.emoji));
+}
+
+function reactionWasAdded(reaction = {}, emoji) {
+  const oldSet = reactionEmojiSet(reaction.old_reaction);
+  const newSet = reactionEmojiSet(reaction.new_reaction);
+  return !oldSet.has(emoji) && newSet.has(emoji);
+}
+
+function bestPhotoSize(photo = []) {
+  if (!Array.isArray(photo) || !photo.length) return null;
+  return [...photo].sort((a, b) => Number(b.file_size || 0) - Number(a.file_size || 0))[0] || photo.at(-1);
+}
+
+function mediaPayload(type, source = {}, extra = {}) {
+  if (!source) return null;
+  return {
+    type,
+    file_id: source.file_id || null,
+    file_unique_id: source.file_unique_id || null,
+    file_name: source.file_name || null,
+    mime_type: source.mime_type || null,
+    file_size: source.file_size || null,
+    width: source.width || null,
+    height: source.height || null,
+    duration: source.duration || null,
+    ...extra
+  };
+}
+
+function extractReactionMedia(raw = {}) {
+  const media = [];
+  const photo = bestPhotoSize(raw.photo || []);
+  if (photo) media.push(mediaPayload('photo', photo));
+  if (raw.video) media.push(mediaPayload('video', raw.video));
+  if (raw.document) media.push(mediaPayload('document', raw.document));
+  if (raw.animation) media.push(mediaPayload('animation', raw.animation));
+  if (raw.voice) media.push(mediaPayload('voice', raw.voice));
+  if (raw.audio) media.push(mediaPayload('audio', raw.audio));
+  if (raw.video_note) media.push(mediaPayload('video_note', raw.video_note));
+  if (raw.sticker) media.push(mediaPayload('sticker', raw.sticker, {
+    emoji: raw.sticker.emoji || null,
+    set_name: raw.sticker.set_name || null
+  }));
+  return media.filter(Boolean);
+}
+
+function telegramMessageLink(chat = {}, messageId) {
+  if (!messageId) return '';
+  if (chat.username) return `https://t.me/${String(chat.username).replace(/^@/, '')}/${messageId}`;
+  const chatId = telegramIdKey(chat.id);
+  if (chatId.startsWith('-100')) return `https://t.me/c/${chatId.slice(4)}/${messageId}`;
+  return '';
+}
+
+function resolveClickUpReactionList(config = {}, chat = {}) {
+  const normalized = normalizeClickUpIntegration(config);
+  const chatId = telegramIdKey(chat.id);
+  if (normalized.newbies_chat_id && chatId === telegramIdKey(normalized.newbies_chat_id)) {
+    return { key: 'newbies', listId: normalized.newbies_list_id, label: 'Uyqur Newbies Takliflar' };
+  }
+  if (normalized.big_team_chat_id && chatId === telegramIdKey(normalized.big_team_chat_id)) {
+    return { key: 'big_team', listId: normalized.big_team_list_id, label: 'Uyqur Big team' };
+  }
+  const title = String(chat.title || chat.username || '').toLowerCase();
+  if (/\bnewbies?\b|taklif/.test(title)) {
+    return { key: 'newbies', listId: normalized.newbies_list_id, label: 'Uyqur Newbies Takliflar' };
+  }
+  if (/big\s*team|bigteam/.test(title)) {
+    return { key: 'big_team', listId: normalized.big_team_list_id, label: 'Uyqur Big team' };
+  }
+  return null;
+}
+
+function extractMentionHandles(value = '') {
+  return [...new Set(String(value || '')
+    .match(/@[\w\d_]{3,32}/g)?.map(item => item.slice(1).toLowerCase()) || [])];
+}
+
+function normalizeNameForMatch(value = '') {
+  return String(value || '').toLowerCase().replace(/[‘’ʼʻ`']/g, '').replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+}
+
+function resolveClickUpAssignees({ text = '', mentionedUsernames = [], employees = [] } = {}) {
+  const handles = new Set([
+    ...extractMentionHandles(text),
+    ...mentionedUsernames.map(item => String(item || '').replace(/^@/, '').trim().toLowerCase()).filter(Boolean)
+  ]);
+  const normalizedText = normalizeNameForMatch(text);
+  const assignees = [];
+  const matchedUsernames = new Set(handles);
+  for (const employee of employees) {
+    if (!employee || !employee.clickup_user_id) continue;
+    const username = String(employee.username || '').replace(/^@/, '').trim().toLowerCase();
+    const name = normalizeNameForMatch(employee.full_name);
+    const usernameMatched = username && handles.has(username);
+    const nameMatched = name && name.length >= 4 && normalizedText.includes(name);
+    if (!usernameMatched && !nameMatched) continue;
+    assignees.push(String(employee.clickup_user_id).trim());
+    if (username) matchedUsernames.add(username);
+  }
+  return {
+    assignees: [...new Set(assignees)].filter(Boolean),
+    mentionedUsernames: [...matchedUsernames]
+  };
+}
+
+function clickUpTaskDescription({ draft = {}, savedMessage = {}, messageLink = '', chat = {}, media = [] } = {}) {
+  const lines = [
+    draft.description || savedMessage.text || 'Telegram xabaridan vazifa.',
+    '',
+    messageLink ? `[Telegram xabar](${messageLink})` : '',
+    chat.title ? `Guruh: ${chat.title}` : '',
+    savedMessage.from_name ? `Muallif: ${savedMessage.from_name}` : '',
+    media.length ? `Media: ${media.map(item => item.type || 'file').join(', ')}` : ''
+  ].filter(line => line !== '');
+  return lines.join('\n');
+}
+
+function attachmentFilename(media = {}, index = 0) {
+  if (media.file_name) return media.file_name;
+  const ext = media.mime_type && String(media.mime_type).includes('/')
+    ? `.${String(media.mime_type).split('/').pop().replace(/[^a-z0-9]+/gi, '').slice(0, 8)}`
+    : '';
+  return `telegram-${media.type || 'file'}-${index + 1}${ext}`;
+}
+
+async function attachReactionMediaToClickUp(config, taskId, media = []) {
+  const attachable = media.filter(item => item && item.file_id).slice(0, 3);
+  const results = [];
+  for (let index = 0; index < attachable.length; index += 1) {
+    const item = attachable[index];
+    try {
+      const file = await getFile(item.file_id);
+      if (!file || !file.file_path) {
+        results.push({ file_id: item.file_id, ok: false, error: 'file_path_missing' });
+        continue;
+      }
+      if (file.file_size && Number(file.file_size) > 15 * 1024 * 1024) {
+        results.push({ file_id: item.file_id, ok: false, skipped: 'too_large' });
+        continue;
+      }
+      const response = await downloadFile(file.file_path);
+      const buffer = await response.arrayBuffer();
+      await attachClickUpTaskFile(config, taskId, {
+        buffer,
+        filename: attachmentFilename(item, index),
+        mime_type: item.mime_type || response.headers.get('content-type') || 'application/octet-stream'
+      });
+      results.push({ file_id: item.file_id, ok: true });
+    } catch (error) {
+      results.push({ file_id: item.file_id, ok: false, error: error.message });
+    }
+  }
+  return results;
+}
+
+async function getSavedReactionMessage(chatId, messageId) {
+  const rows = await supabase.select('messages', {
+    select: 'id,tg_message_id,chat_id,from_tg_user_id,from_name,from_username,source_type,classification,text,raw,created_at',
+    chat_id: supabase.eq(chatId),
+    tg_message_id: supabase.eq(messageId),
+    limit: '1'
+  }).catch(() => []);
+  return rows[0] || null;
+}
+
+async function getClickUpTracking(chatId, messageId, emoji) {
+  const rows = await supabase.select('clickup_tasks', {
+    select: 'id,status,clickup_task_id,clickup_task_url',
+    chat_id: supabase.eq(chatId),
+    tg_message_id: supabase.eq(messageId),
+    reaction_emoji: supabase.eq(emoji),
+    limit: '1'
+  }).catch(() => []);
+  return rows[0] || null;
+}
+
+async function saveClickUpTracking(row = {}) {
+  const rows = await supabase.insert('clickup_tasks', [{
+    ...row,
+    updated_at: new Date().toISOString()
+  }], { upsert: true, onConflict: 'chat_id,tg_message_id,reaction_emoji' });
+  return rows[0];
+}
+
+function reactionActor(reaction = {}) {
+  return reaction.user || reaction.actor_chat || {};
+}
+
+async function ensureReactionContext(reaction = {}) {
+  const chat = reaction.chat || {};
+  const actor = reactionActor(reaction);
+  await Promise.all([
+    actor.id && !actor.type ? metrics.upsertTelegramUser(actor, {}, { prefer: 'return=minimal' }).catch(() => null) : null,
+    chat.id ? metrics.upsertChat(chat, isGroupChat(chat) ? 'group' : 'private', {}, { prefer: 'return=minimal' }).catch(() => null) : null
+  ]);
+}
+
+async function handleDoneReaction(reaction = {}, settings = {}) {
+  const chat = reaction.chat || {};
+  const actor = reactionActor(reaction);
+  await ensureReactionContext(reaction);
+  const employee = actor.id && !actor.type
+    ? await metrics.getKnownEmployeeByTelegramId(actor.id).catch(() => null) || await metrics.ensureEmployee(actor).catch(() => null)
+    : null;
+  const closeMessage = {
+    message_id: reaction.message_id,
+    date: reaction.date,
+    text: '💯',
+    chat,
+    from: actor.id && !actor.type ? actor : {}
+  };
+  const result = await metrics.closeRequestByMessage({ message: closeMessage, targetMessageId: reaction.message_id, employee });
+  const taskRows = await supabase.select('clickup_tasks', {
+    select: 'id,clickup_task_id,status',
+    chat_id: supabase.eq(chat.id),
+    tg_message_id: supabase.eq(reaction.message_id),
+    limit: '20'
+  }).catch(() => []);
+  const clickUpConfig = normalizeClickUpIntegration(settings.clickUpIntegration);
+  await Promise.all(taskRows.map(async task => {
+    if (task.clickup_task_id && isClickUpIntegrationReady(clickUpConfig)) {
+      await updateClickUpTaskStatus(clickUpConfig, task.clickup_task_id, clickUpConfig.done_status).catch(error => {
+        console.warn('[bot:clickup:close-status:error]', error.message);
+      });
+    }
+    await supabase.patch('clickup_tasks', { id: supabase.eq(task.id) }, {
+      status: 'closed',
+      updated_at: new Date().toISOString()
+    }).catch(() => null);
+  }));
+  return { ok: true, closed: result.closed, request_id: result.request && result.request.id || null };
+}
+
+async function handleEyeReaction(reaction = {}, settings = {}) {
+  const chat = reaction.chat || {};
+  const clickUpConfig = normalizeClickUpIntegration(settings.clickUpIntegration);
+  if (!isClickUpIntegrationReady(clickUpConfig)) {
+    return { ok: false, skipped: 'clickup_not_ready' };
+  }
+  const target = resolveClickUpReactionList(clickUpConfig, chat);
+  if (!target || !target.listId) return { ok: false, skipped: 'unsupported_chat' };
+  await ensureReactionContext(reaction);
+
+  const existing = await getClickUpTracking(chat.id, reaction.message_id, '👁');
+  if (existing && ['created', 'closed'].includes(existing.status)) {
+    return { ok: true, duplicate: true, task_id: existing.clickup_task_id || null };
+  }
+
+  const actor = reactionActor(reaction);
+  const savedMessage = await getSavedReactionMessage(chat.id, reaction.message_id);
+  if (!savedMessage) {
+    await saveClickUpTracking({
+      chat_id: chat.id,
+      tg_message_id: reaction.message_id,
+      clickup_list_id: target.listId,
+      clickup_list_key: target.key,
+      status: 'error',
+      reaction_emoji: '👁',
+      created_by_tg_user_id: actor.id && !actor.type ? actor.id : null,
+      error: 'Reaction bosilgan xabar bazadan topilmadi. Bot avval shu xabarni saqlagan bo‘lishi kerak.',
+      raw: { reaction }
+    });
+    return { ok: false, error: 'message_not_found' };
+  }
+
+  const raw = {
+    ...jsonObject(savedMessage.raw),
+    message_id: savedMessage.tg_message_id,
+    chat: jsonObject(savedMessage.raw).chat || chat,
+    from: jsonObject(savedMessage.raw).from || {
+      id: savedMessage.from_tg_user_id || null,
+      first_name: savedMessage.from_name || '',
+      username: savedMessage.from_username || ''
+    },
+    text: jsonObject(savedMessage.raw).text || savedMessage.text || '',
+    caption: jsonObject(savedMessage.raw).caption || ''
+  };
+  const sourceType = savedMessage.source_type || 'group';
+  const supportRequest = await metrics.createSupportRequest({
+    message: raw,
+    sourceType,
+    companyId: null
+  }).catch(error => {
+    console.warn('[bot:clickup:support-request:error]', error.message);
+    return null;
+  });
+  const media = extractReactionMedia(raw);
+  const messageLink = telegramMessageLink(raw.chat || chat, savedMessage.tg_message_id);
+  const text = savedMessage.text || getMessageText(raw);
+  const employees = await supabase.select('employees', {
+    select: 'id,tg_user_id,full_name,username,clickup_user_id,is_active',
+    is_active: 'eq.true',
+    limit: '5000'
+  }).catch(() => []);
+  const draft = await generateClickUpTaskDraft({
+    text,
+    chatTitle: metrics.chatTitle(chat),
+    messageLink,
+    media,
+    employees,
+    settings
+  });
+  const assignment = resolveClickUpAssignees({
+    text,
+    mentionedUsernames: draft.mentioned_usernames,
+    employees
+  });
+  const description = clickUpTaskDescription({ draft, savedMessage, messageLink, chat, media });
+
+  try {
+    const clickUpTask = await createClickUpTask(clickUpConfig, {
+      listId: target.listId,
+      name: draft.title,
+      description,
+      assignees: assignment.assignees
+    });
+    const taskId = clickUpTask.id || clickUpTask.task_id || '';
+    const taskUrl = clickUpTask.url || clickUpTask.custom_url || '';
+    const attachmentResults = taskId
+      ? await attachReactionMediaToClickUp(clickUpConfig, taskId, media)
+      : [];
+    await saveClickUpTracking({
+      chat_id: chat.id,
+      tg_message_id: savedMessage.tg_message_id,
+      support_request_id: supportRequest && supportRequest.id || null,
+      clickup_task_id: taskId,
+      clickup_task_url: taskUrl,
+      clickup_list_id: target.listId,
+      clickup_list_key: target.key,
+      title: draft.title,
+      description,
+      status: 'created',
+      assignee_clickup_ids: assignment.assignees,
+      mentioned_usernames: assignment.mentionedUsernames,
+      message_link: messageLink,
+      media,
+      reaction_emoji: '👁',
+      created_by_tg_user_id: actor.id && !actor.type ? actor.id : null,
+      error: '',
+      raw: { reaction, clickup_task: clickUpTask, attachments: attachmentResults }
+    });
+    return { ok: true, task_id: taskId, task_url: taskUrl };
+  } catch (error) {
+    await saveClickUpTracking({
+      chat_id: chat.id,
+      tg_message_id: savedMessage.tg_message_id,
+      support_request_id: supportRequest && supportRequest.id || null,
+      clickup_list_id: target.listId,
+      clickup_list_key: target.key,
+      title: draft.title,
+      description,
+      status: 'error',
+      assignee_clickup_ids: assignment.assignees,
+      mentioned_usernames: assignment.mentionedUsernames,
+      message_link: messageLink,
+      media,
+      reaction_emoji: '👁',
+      created_by_tg_user_id: actor.id && !actor.type ? actor.id : null,
+      error: error.message,
+      raw: { reaction }
+    });
+    return { ok: false, error: error.message };
+  }
+}
+
+async function handleMessageReaction(reaction = {}) {
+  const settings = await getBotSettings();
+  if (!settings.messageReactions?.enabled) return { ok: true, handled: 'message_reaction_disabled' };
+  if (reactionWasAdded(reaction, '💯')) {
+    const result = await handleDoneReaction(reaction, settings);
+    return { ok: true, handled: 'message_reaction_done', ...result };
+  }
+  if (reactionWasAdded(reaction, '👁')) {
+    const result = await handleEyeReaction(reaction, settings);
+    return { ok: true, handled: 'message_reaction_eye', ...result };
+  }
+  return { ok: true, handled: 'message_reaction_ignored' };
 }
 
 function isChannelLogPost(updateKind = '', chat = {}) {
@@ -1789,6 +2202,14 @@ async function handleTelegramUpdate(update = {}) {
   if (update.my_chat_member || update.chat_member) {
     await metrics.registerChatMemberUpdate(update);
     return { ok: true, handled: 'chat_member' };
+  }
+
+  if (update.message_reaction) {
+    return handleMessageReaction(update.message_reaction);
+  }
+
+  if (update.message_reaction_count) {
+    return { ok: true, handled: 'message_reaction_count' };
   }
 
   if (update.callback_query) {

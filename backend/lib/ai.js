@@ -245,6 +245,104 @@ async function classifyWithAi({ text, chatType, sourceType, settings }) {
   }
 }
 
+function extractMentionHandles(value = '') {
+  return [...new Set(String(value || '')
+    .match(/@[\w\d_]{3,32}/g)?.map(item => item.slice(1).toLowerCase()) || [])];
+}
+
+function fallbackClickUpTaskDraft({ text = '', chatTitle = '', messageLink = '', media = [] } = {}) {
+  const clean = String(text || '').trim();
+  const mediaLabel = Array.isArray(media) && media.length ? `Media: ${media.map(item => item.type || item.file_id || 'file').join(', ')}` : '';
+  const titleSource = clean.split(/\n+/).map(line => line.trim()).find(Boolean) || mediaLabel || 'Telegramdan vazifa';
+  const title = titleSource.length > 90 ? `${titleSource.slice(0, 87).trim()}...` : titleSource;
+  const description = [
+    clean || 'Xabar matni topilmadi.',
+    messageLink ? `\nTelegram xabar: ${messageLink}` : '',
+    chatTitle ? `Guruh: ${chatTitle}` : '',
+    mediaLabel
+  ].filter(Boolean).join('\n');
+  return {
+    title: title || 'Telegramdan vazifa',
+    description,
+    mentioned_usernames: extractMentionHandles(clean)
+  };
+}
+
+async function generateClickUpTaskDraft({ text, chatTitle, messageLink, media = [], employees = [], settings = {} } = {}) {
+  const fallback = fallbackClickUpTaskDraft({ text, chatTitle, messageLink, media });
+  if (!shouldUseExternalAi(settings)) return fallback;
+  const config = normalizeAiIntegration(settings.aiIntegration);
+  if (!config.api_key) return fallback;
+
+  const employeeHints = employees
+    .filter(employee => employee && (employee.username || employee.full_name) && employee.clickup_user_id)
+    .slice(0, 120)
+    .map(employee => ({
+      username: employee.username ? `@${employee.username}` : '',
+      full_name: employee.full_name || '',
+      clickup_user_id: employee.clickup_user_id
+    }));
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000);
+  try {
+    const response = await fetch(chatCompletionsUrl(config.base_url), {
+      method: 'POST',
+      signal: controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${config.api_key}`
+      },
+      body: JSON.stringify({
+        model: config.model,
+        temperature: 0.2,
+        max_tokens: 700,
+        response_format: { type: 'json_object' },
+        messages: [
+          {
+            role: 'system',
+            content: [
+              'Siz Telegram xabaridan ClickUp task tayyorlaydigan yordamchisiz.',
+              'Faqat JSON qaytaring: {"title":"qisqa sarlavha","description":"batafsil tavsif","mentioned_usernames":["username"]}.',
+              'Sarlavha 90 belgidan oshmasin. Tavsifda muammo, kutilgan natija, Telegram xabar linki va media mavjudligini yozing.',
+              'Mention qilingan xodimlarni faqat username ko‘rinishida, @ belgisiz qaytaring. Aniq topilmagan odamni o‘ylab topmang.'
+            ].join('\n')
+          },
+          {
+            role: 'user',
+            content: JSON.stringify({
+              chat_title: chatTitle,
+              telegram_message_link: messageLink,
+              text,
+              media,
+              known_employees: employeeHints
+            })
+          }
+        ]
+      })
+    });
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) return fallback;
+    const content = payload.choices && payload.choices[0] && payload.choices[0].message && payload.choices[0].message.content;
+    const parsed = safeJsonParse(content || '{}');
+    const title = String(parsed.title || fallback.title).trim().slice(0, 120) || fallback.title;
+    const description = String(parsed.description || fallback.description).trim() || fallback.description;
+    const aiMentions = Array.isArray(parsed.mentioned_usernames)
+      ? parsed.mentioned_usernames.map(item => String(item || '').replace(/^@/, '').trim().toLowerCase()).filter(Boolean)
+      : [];
+    return {
+      title,
+      description,
+      mentioned_usernames: [...new Set([...fallback.mentioned_usernames, ...aiMentions])]
+    };
+  } catch (_error) {
+    return fallback;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 function buildAutoReplySystemPrompt(config, queryText = '') {
   const knowledge = selectRelevantKnowledgeText(config.knowledge_text, queryText).slice(-MAX_KNOWLEDGE_CHARS);
   const extraInstruction = autoReplyExtraInstruction(config.system_prompt);
@@ -684,6 +782,7 @@ module.exports = {
   shouldUseExternalAi,
   testAiIntegration,
   classifyWithAi,
+  generateClickUpTaskDraft,
   generateSupportReply,
   generateLocalSupportReply,
   scoreTextMatch
