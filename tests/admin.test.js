@@ -803,14 +803,111 @@ async function testPrivateChatsExcludeEmployees() {
     ];
   };
   supabase.select = async (table) => {
-    assert.strictEqual(table, 'employees');
-    return [{ id: 'emp-1', tg_user_id: 202, full_name: 'Support xodim' }];
+    if (table === 'employees') return [{ id: 'emp-1', tg_user_id: 202, full_name: 'Support xodim' }];
+    if (['messages', 'support_requests', 'business_connections'].includes(table)) return [];
+    throw new Error(`Unexpected table ${table}`);
   };
 
   try {
     const result = await callAdmin('privates');
     assert.strictEqual(result.status, 200);
     assert.deepStrictEqual(result.payload.data.map(row => row.chat_id), [101, 303]);
+  } finally {
+    supabase.select = originalSelect;
+    stats.selectChatStatistics = originalStats;
+  }
+}
+
+async function testPrivateBusinessChatsSplitByConnection() {
+  const originalSelect = supabase.select;
+  const originalStats = stats.selectChatStatistics;
+
+  stats.selectChatStatistics = async (query) => {
+    assert.strictEqual(query.source_type, 'in.(private,business)');
+    return [
+      {
+        chat_id: 303,
+        title: 'Business mijoz',
+        source_type: 'business',
+        business_connection_id: 'bc-old',
+        total_requests: 2,
+        last_message_at: '2026-05-01T08:00:00.000Z'
+      }
+    ];
+  };
+
+  supabase.select = async (table) => {
+    if (table === 'employees') {
+      return [
+        { id: 'emp-1', tg_user_id: 11, full_name: 'Ali', username: 'ali' },
+        { id: 'emp-2', tg_user_id: 22, full_name: 'Vali', username: 'vali' }
+      ];
+    }
+    if (table === 'messages') {
+      return [
+        {
+          id: 'm1',
+          chat_id: 303,
+          source_type: 'business',
+          business_connection_id: 'bc-old',
+          from_name: 'Mijoz',
+          text: 'Ali uchun savol',
+          created_at: '2026-05-01T08:00:00.000Z'
+        },
+        {
+          id: 'm2',
+          chat_id: 303,
+          source_type: 'business',
+          business_connection_id: 'bc-new',
+          from_name: 'Mijoz',
+          text: 'Vali uchun savol',
+          created_at: '2026-05-01T09:00:00.000Z'
+        }
+      ];
+    }
+    if (table === 'support_requests') {
+      return [
+        {
+          id: 'r1',
+          chat_id: 303,
+          source_type: 'business',
+          business_connection_id: 'bc-old',
+          status: 'open',
+          created_at: '2026-05-01T08:01:00.000Z'
+        },
+        {
+          id: 'r2',
+          chat_id: 303,
+          source_type: 'business',
+          business_connection_id: 'bc-new',
+          status: 'closed',
+          created_at: '2026-05-01T09:01:00.000Z',
+          closed_at: '2026-05-01T09:05:00.000Z'
+        }
+      ];
+    }
+    if (table === 'business_connections') {
+      return [
+        { connection_id: 'bc-old', tg_user_id: 11, user_chat_id: 303 },
+        { connection_id: 'bc-new', tg_user_id: 22, user_chat_id: 303 }
+      ];
+    }
+    throw new Error(`Unexpected table ${table}`);
+  };
+
+  try {
+    const result = await callAdmin('privates');
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.data.length, 2);
+    const byConnection = new Map(result.payload.data.map(row => [row.business_connection_id, row]));
+    assert.strictEqual(byConnection.get('bc-old').employee_name, 'Ali');
+    assert.strictEqual(byConnection.get('bc-old').open_requests, 1);
+    assert.strictEqual(byConnection.get('bc-old').closed_requests, 0);
+    assert.strictEqual(byConnection.get('bc-old').last_message_text, 'Ali uchun savol');
+    assert.strictEqual(byConnection.get('bc-new').employee_name, 'Vali');
+    assert.strictEqual(byConnection.get('bc-new').open_requests, 0);
+    assert.strictEqual(byConnection.get('bc-new').closed_requests, 1);
+    assert.strictEqual(byConnection.get('bc-new').last_message_text, 'Vali uchun savol');
   } finally {
     supabase.select = originalSelect;
     stats.selectChatStatistics = originalStats;
@@ -956,6 +1053,62 @@ async function testChatDetailIncludesTicketSolutionAndTimeline() {
     assert.strictEqual(result.payload.data.conversation[0].media.kind, 'photo');
     assert.strictEqual(result.payload.data.conversation[0].media.file_id, 'large-photo');
     assert.strictEqual(result.payload.data.conversation[1].direction, 'outbound');
+  } finally {
+    supabase.select = originalSelect;
+  }
+}
+
+async function testChatDetailFiltersBusinessConnection() {
+  const originalSelect = supabase.select;
+  const chatId = 303;
+  const filters = [];
+
+  supabase.select = async (table, params = {}) => {
+    if (table === 'support_requests' || table === 'messages') {
+      filters.push({ table, business_connection_id: params.business_connection_id });
+    }
+    if (table === 'tg_chats') {
+      return [{ chat_id: chatId, title: 'Business mijoz', source_type: 'business', business_connection_id: 'bc-old', is_active: true }];
+    }
+    if (table === 'support_requests') {
+      assert.strictEqual(params.business_connection_id, 'eq.bc-old');
+      return [{
+        id: 'r1',
+        source_type: 'business',
+        chat_id: chatId,
+        business_connection_id: 'bc-old',
+        customer_name: 'Mijoz',
+        initial_message_id: 11,
+        initial_text: 'Ali uchun',
+        status: 'open',
+        created_at: '2026-05-01T08:00:00.000Z'
+      }];
+    }
+    if (table === 'messages') {
+      assert.strictEqual(params.business_connection_id, 'eq.bc-old');
+      return [{
+        id: 'm1',
+        tg_message_id: 11,
+        chat_id: chatId,
+        business_connection_id: 'bc-old',
+        from_name: 'Mijoz',
+        source_type: 'business',
+        text: 'Ali uchun',
+        classification: 'request',
+        raw: {},
+        created_at: '2026-05-01T08:00:00.000Z'
+      }];
+    }
+    if (table === 'employees' || table === 'request_events') return [];
+    throw new Error(`Unexpected table ${table}`);
+  };
+
+  try {
+    const result = await callAdmin('chatDetail', { query: { chat_id: chatId, business_connection_id: 'bc-old' } });
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.data.chat.business_connection_id, 'bc-old');
+    assert.strictEqual(result.payload.data.chat.total_requests, 1);
+    assert.deepStrictEqual(filters.map(item => item.business_connection_id), ['eq.bc-old', 'eq.bc-old']);
   } finally {
     supabase.select = originalSelect;
   }
@@ -2332,6 +2485,100 @@ async function testEmployeeActivityIsolatesSelectedEmployeeChats() {
   }
 }
 
+async function testEmployeeActivitySeparatesBusinessConnections() {
+  const originalSelect = supabase.select;
+  const employees = [
+    { id: 'emp-1', tg_user_id: 777, full_name: 'Mirshod', username: 'mirshod', is_active: true },
+    { id: 'emp-2', tg_user_id: 888, full_name: 'Ozodbek', username: 'ozodbek', is_active: true }
+  ];
+  const requests = [
+    {
+      id: 'r-business-1',
+      source_type: 'business',
+      chat_id: 303,
+      business_connection_id: 'bc-a',
+      customer_name: 'Mijoz',
+      initial_message_id: 11,
+      initial_text: 'Mirshod uchun',
+      status: 'open',
+      created_at: '2026-05-01T08:00:00.000Z'
+    },
+    {
+      id: 'r-business-2',
+      source_type: 'business',
+      chat_id: 303,
+      business_connection_id: 'bc-b',
+      customer_name: 'Mijoz',
+      initial_message_id: 12,
+      initial_text: 'Ozodbek uchun',
+      status: 'open',
+      created_at: '2026-05-01T08:05:00.000Z'
+    }
+  ];
+  const messages = [
+    {
+      id: 'm-business-1',
+      tg_message_id: 21,
+      chat_id: 303,
+      business_connection_id: 'bc-a',
+      from_tg_user_id: 777,
+      from_name: 'Mirshod',
+      from_username: 'mirshod',
+      employee_id: 'emp-1',
+      source_type: 'business',
+      classification: 'employee_message',
+      text: 'Mirshod javobi',
+      raw: {},
+      created_at: '2026-05-01T08:01:00.000Z'
+    },
+    {
+      id: 'm-business-2',
+      tg_message_id: 22,
+      chat_id: 303,
+      business_connection_id: 'bc-b',
+      from_tg_user_id: 888,
+      from_name: 'Ozodbek',
+      from_username: 'ozodbek',
+      employee_id: 'emp-2',
+      source_type: 'business',
+      classification: 'employee_message',
+      text: 'Ozodbek javobi',
+      raw: {},
+      created_at: '2026-05-01T08:06:00.000Z'
+    }
+  ];
+
+  supabase.select = async (table, params = {}) => {
+    if (table === 'employees') return employees;
+    if (table === 'tg_users') return [];
+    if (table === 'tg_chats') return [{ chat_id: 303, title: 'Business mijoz', source_type: 'business', business_connection_id: 'bc-a' }];
+    if (table === 'support_requests') {
+      if (params.status === 'eq.open') return requests;
+      if (params.closed_by_employee_id === 'eq.emp-1') return [];
+      if (params.closed_by_tg_id === 'eq.777') return [];
+      return requests;
+    }
+    if (table === 'messages') {
+      if (params.employee_id === 'eq.emp-1') return messages.filter(row => row.employee_id === 'emp-1');
+      if (params.from_tg_user_id === 'eq.777') return messages.filter(row => row.from_tg_user_id === 777);
+      return messages;
+    }
+    if (table === 'request_events') return [];
+    throw new Error(`Unexpected table ${table}`);
+  };
+
+  try {
+    const result = await callAdmin('employeeActivity', { query: { employee_id: 'emp-1', period: 'all' } });
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.data.groups.length, 1);
+    assert.strictEqual(result.payload.data.groups[0].business_connection_id, 'bc-a');
+    assert.deepStrictEqual(result.payload.data.groups[0].open_requests.map(request => request.id), ['r-business-1']);
+    assert.strictEqual(result.payload.data.groups[0].chat_messages.some(message => message.text === 'Ozodbek javobi'), false);
+  } finally {
+    supabase.select = originalSelect;
+  }
+}
+
 async function testLogNotificationsCanSendSelectedLevels() {
   const originalSelect = supabase.select;
   const originalInsert = supabase.insert;
@@ -2624,6 +2871,54 @@ async function testCompanyInfoProxyNormalizesExternalRows() {
   }
 }
 
+async function testCompanyInfoSupportSyncIgnoresPhoneOnlySupport() {
+  const originalFetch = global.fetch;
+  const originalSelect = supabase.select;
+  const originalInsert = supabase.insert;
+  const originalAuth = process.env.UYQUR_COMPANY_INFO_AUTH;
+  const originalUrl = process.env.UYQUR_COMPANY_INFO_URL;
+  process.env.UYQUR_COMPANY_INFO_AUTH = 'test-company-auth';
+  process.env.UYQUR_COMPANY_INFO_URL = 'https://example.test/company-info';
+  const insertedEmployees = [];
+
+  supabase.select = async (table) => {
+    if (table === 'employees') return [];
+    return [];
+  };
+  supabase.insert = async (table, rows) => {
+    if (table === 'employees') insertedEmployees.push(...rows);
+    return rows;
+  };
+  global.fetch = async () => ({
+    ok: true,
+    json: async () => ({
+      data: [{
+        id: 4,
+        name: 'Phone Only',
+        status: 'active',
+        uyqur_support_username: '',
+        uyqur_support_phone: '+998901112233'
+      }]
+    })
+  });
+
+  try {
+    const result = await callAdmin('companyInfo');
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.data.summary.support_assigned, 0);
+    assert.strictEqual(result.payload.data.support_employee_sync.created, 0);
+    assert.strictEqual(insertedEmployees.length, 0);
+  } finally {
+    supabase.select = originalSelect;
+    supabase.insert = originalInsert;
+    global.fetch = originalFetch;
+    if (originalAuth === undefined) delete process.env.UYQUR_COMPANY_INFO_AUTH;
+    else process.env.UYQUR_COMPANY_INFO_AUTH = originalAuth;
+    if (originalUrl === undefined) delete process.env.UYQUR_COMPANY_INFO_URL;
+    else process.env.UYQUR_COMPANY_INFO_URL = originalUrl;
+  }
+}
+
 async function testCompanyInfoProxyReturnsCachedSnapshotAndNotifiesOnFetchError() {
   const originalFetch = global.fetch;
   const originalSelect = supabase.select;
@@ -2886,8 +3181,10 @@ async function run() {
   await testAiModeModelRejectsStaleHasApiKeyWithoutSecret();
   await testUnrelatedSettingsDoNotNotifyStaleAiIntegration();
   await testPrivateChatsExcludeEmployees();
+  await testPrivateBusinessChatsSplitByConnection();
   await testGroupsIncludeMessageStatsForChatPreview();
   await testChatDetailIncludesTicketSolutionAndTimeline();
+  await testChatDetailFiltersBusinessConnection();
   await testChatDetailShowsTelegramMemberServiceMessages();
   await testCompanyGroupActivityReturnsLinkedGroupMessagesWithTickets();
   await testCompanyGroupActivityLimitsLargeConversationPayload();
@@ -2911,11 +3208,13 @@ async function run() {
   await testDeleteEmployeeRemovesEmployeeRow();
   await testEmployeeActivityReturnsGroupsAndCustomers();
   await testEmployeeActivityIsolatesSelectedEmployeeChats();
+  await testEmployeeActivitySeparatesBusinessConnections();
   await testLogNotificationsCanSendSelectedLevels();
   await testGroupMessageAuditSettingCanBeSaved();
   await testGroupMessageAuditChannelRequiresDestination();
   await testSendGroupAuditStatsSendsConfiguredChannelReport();
   await testCompanyInfoProxyNormalizesExternalRows();
+  await testCompanyInfoSupportSyncIgnoresPhoneOnlySupport();
   await testCompanyInfoProxyReturnsCachedSnapshotAndNotifiesOnFetchError();
   await testCompanyInfoProxyFallsBackWhenScopedQueryUnsupported();
   await testAssignGroupToExternalCompanyCreatesLocalCompany();

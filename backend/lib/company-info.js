@@ -90,10 +90,6 @@ function normalizeSupportUsername(value = '') {
   return String(value || '').replace(/^@/, '').trim().toLowerCase();
 }
 
-function normalizePhone(value = '') {
-  return String(value || '').replace(/\D/g, '');
-}
-
 function pickFields(source = {}, fields = []) {
   return Object.fromEntries(fields
     .filter(field => Object.prototype.hasOwnProperty.call(source, field))
@@ -296,7 +292,7 @@ function buildSummary(companies = []) {
     business_active: companies.filter(company => company.business_status === 'ACTIVE').length,
     business_new: companies.filter(company => company.business_status === 'NEW').length,
     business_paused: companies.filter(company => company.business_status === 'PAUSED').length,
-    support_assigned: companies.filter(company => company.uyqur_support_username || company.uyqur_support_phone).length,
+    support_assigned: companies.filter(company => normalizeSupportUsername(company.uyqur_support_username)).length,
     auto_currency_refresh: companies.filter(company => company.auto_refresh_currencies === 1).length,
     expired: companies.filter(company => company.expiry_state === 'expired').length,
     expiring_soon: companies.filter(company => company.expiry_state === 'soon').length,
@@ -310,15 +306,14 @@ function supportContactsFromCompanies(companies = []) {
   const contacts = new Map();
   companies.forEach(company => {
     const username = normalizeSupportUsername(company.uyqur_support_username);
-    const phoneDigits = normalizePhone(company.uyqur_support_phone);
-    if (!username && !phoneDigits) return;
-    const key = username ? `u:${username}` : `p:${phoneDigits}`;
+    if (!username) return;
+    const key = `u:${username}`;
     if (!contacts.has(key)) {
       contacts.set(key, {
-        username: username || null,
+        username,
         phone: company.uyqur_support_phone || null,
-        phone_digits: phoneDigits || '',
-        full_name: username ? `@${username}` : (company.uyqur_support_phone || 'Support xodim')
+        phone_digits: '',
+        full_name: `@${username}`
       });
     }
   });
@@ -328,13 +323,11 @@ function supportContactsFromCompanies(companies = []) {
 function employeeMatchesSupport(employee = {}, contact = {}) {
   const employeeUsername = normalizeSupportUsername(employee.username);
   const employeeNameUsername = normalizeSupportUsername(employee.full_name);
-  const employeePhone = normalizePhone(employee.phone);
   return Boolean(
     (contact.username && (
       (employeeUsername && contact.username === employeeUsername)
       || (employeeNameUsername && contact.username === employeeNameUsername)
     ))
-    || (contact.phone_digits && employeePhone && contact.phone_digits === employeePhone)
   );
 }
 

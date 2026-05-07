@@ -2799,18 +2799,18 @@ body {
   min-height: 28px;
   padding: 4px 12px;
   border-radius: var(--radius);
-  background: #eef4ff;
-  color: var(--primary);
+  background: var(--info-bg);
+  color: var(--info-text);
 }
 
 .ticket-list-meta b.danger {
-  color: #dc2626;
-  background: #fee2e2;
+  color: var(--danger-text);
+  background: var(--danger-bg);
 }
 
 .ticket-list-meta b.success {
-  color: #047857;
-  background: #dcfce7;
+  color: var(--success-text);
+  background: var(--success-bg);
 }
 
 .metric {
@@ -2841,7 +2841,7 @@ body {
 }
 
 .metric-icon.warn {
-  color: #f59e0b;
+  color: var(--warning-text);
 }
 
 .metric-value {
@@ -3176,7 +3176,7 @@ body {
 }
 
 .open-count.warn {
-  color: #f59e0b;
+  color: var(--warning-text);
 }
 
 .open-count.danger {
@@ -3364,65 +3364,33 @@ body {
 }
 
 .rank-pill.gold {
-  color: #713f12;
-  background: #fef3c7;
-  border-color: #fde68a;
+  color: var(--warning-text);
+  background: var(--warning-soft-bg);
+  border-color: var(--warning-soft-line);
 }
 
 .rank-pill.silver {
-  color: #334155;
-  background: #e2e8f0;
-  border-color: #cbd5e1;
+  color: var(--neutral-text);
+  background: var(--neutral-bg);
+  border-color: var(--line-strong);
 }
 
 .grade-pill.top {
-  color: #166534;
-  background: #dcfce7;
-  border-color: #bbf7d0;
+  color: var(--success-text);
+  background: var(--success-bg);
+  border-color: var(--success-line);
 }
 
 .grade-pill.mid {
-  color: #075985;
-  background: #e0f2fe;
-  border-color: #bae6fd;
+  color: var(--info-text);
+  background: var(--info-bg);
+  border-color: var(--info-line);
 }
 
 .grade-pill.low {
-  color: #991b1b;
-  background: #fee2e2;
-  border-color: #fecaca;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme]) .grade-pill.top {
-    color: #bbf7d0;
-    background: rgba(34, 197, 94, .16);
-    border-color: rgba(34, 197, 94, .28);
-  }
-
-  :root:not([data-theme]) .grade-pill.mid {
-    color: #bae6fd;
-    background: rgba(14, 165, 233, .14);
-    border-color: rgba(14, 165, 233, .26);
-  }
-
-  :root:not([data-theme]) .grade-pill.low {
-    color: #fecaca;
-    background: rgba(239, 68, 68, .14);
-    border-color: rgba(239, 68, 68, .26);
-  }
-
-  .rank-pill.gold {
-    color: #fde68a;
-    background: rgba(245, 158, 11, .15);
-    border-color: rgba(245, 158, 11, .28);
-  }
-
-  .rank-pill.silver {
-    color: #cbd5e1;
-    background: rgba(148, 163, 184, .16);
-    border-color: rgba(148, 163, 184, .28);
-  }
+  color: var(--danger-text);
+  background: var(--danger-bg);
+  border-color: var(--danger-line);
 }
 
 .alert-list {
@@ -3508,7 +3476,7 @@ td,
 }
 
 .chart-fill.green {
-  background: #22c55e;
+  background: var(--success);
 }
 
 .chart-fill.orange {
@@ -3554,7 +3522,7 @@ td,
 }
 
 .trend-line {
-  stroke: #2f86c6;
+  stroke: var(--primary);
   stroke-width: 3;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -3562,7 +3530,7 @@ td,
 
 .trend-dot {
   fill: var(--surface);
-  stroke: #2f86c6;
+  stroke: var(--primary);
   stroke-width: 3;
 }
 
@@ -3642,7 +3610,7 @@ td,
 }
 
 .ticket-bar.total {
-  background: #cbd5e1;
+  background: var(--line-strong);
 }
 
 .ticket-bar.closed {
@@ -3650,7 +3618,7 @@ td,
 }
 
 .ticket-bar.open {
-  background: #ff5d65;
+  background: var(--danger);
 }
 
 .ticket-trend-day b {
@@ -3716,11 +3684,11 @@ td,
 
 .company-ticket-fill.closed {
   left: 0;
-  background: #06bd7b;
+  background: var(--success);
 }
 
 .company-ticket-fill.open {
-  background: #ff5d65;
+  background: var(--danger);
 }
 
 .company-ticket-row strong {
@@ -3739,11 +3707,11 @@ td,
 }
 
 .closed-text {
-  color: #059669;
+  color: var(--success);
 }
 
 .open-text {
-  color: #ef4444;
+  color: var(--danger);
 }
 
 .company-ticket-legend {
@@ -3770,11 +3738,11 @@ td,
 }
 
 .legend-square.closed {
-  background: #06bd7b;
+  background: var(--success);
 }
 
 .legend-square.open {
-  background: #ff5d65;
+  background: var(--danger);
 }
 
 .active-company-chart {
@@ -3949,36 +3917,6 @@ tbody tr:hover {
 :root[data-theme="dark"] .success-pill {
   color: var(--success-text);
   background: var(--success-bg);
-}
-
-:root[data-theme="dark"] .grade-pill.top {
-  color: #bbf7d0;
-  background: rgba(34, 197, 94, .16);
-  border-color: rgba(34, 197, 94, .28);
-}
-
-:root[data-theme="dark"] .grade-pill.mid {
-  color: #bae6fd;
-  background: rgba(14, 165, 233, .14);
-  border-color: rgba(14, 165, 233, .26);
-}
-
-:root[data-theme="dark"] .grade-pill.low {
-  color: #fecaca;
-  background: rgba(239, 68, 68, .14);
-  border-color: rgba(239, 68, 68, .26);
-}
-
-:root[data-theme="dark"] .rank-pill.gold {
-  color: #fde68a;
-  background: rgba(245, 158, 11, .15);
-  border-color: rgba(245, 158, 11, .28);
-}
-
-:root[data-theme="dark"] .rank-pill.silver {
-  color: #cbd5e1;
-  background: rgba(148, 163, 184, .16);
-  border-color: rgba(148, 163, 184, .28);
 }
 
 :root[data-theme="dark"] .status-pill {
@@ -4478,8 +4416,8 @@ tbody tr:hover {
   min-width: 22px;
   height: 22px;
   border-radius: var(--radius);
-  background: #e8f1ff;
-  color: var(--primary);
+  background: var(--info-bg);
+  color: var(--info-text);
   font-size: 12px;
 }
 
@@ -4738,7 +4676,7 @@ tbody tr.open-ticket-row:hover {
 }
 
 .employee-ticket-strip span {
-  color: #059669;
+  color: var(--success);
   font-size: 12px;
   font-weight: 900;
 }
@@ -5061,11 +4999,11 @@ tbody tr.top-performer-row td:first-child {
 }
 
 .timeline-used.active {
-  background: #22c55e;
+  background: var(--success);
 }
 
 .timeline-used.soon {
-  background: #f59e0b;
+  background: var(--warning-text);
 }
 
 .timeline-used.expired {
@@ -5489,7 +5427,7 @@ tbody tr.top-performer-row td:first-child {
   width: fit-content;
   align-self: flex-start;
   white-space: nowrap;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
 }
 
 .trend-label.good {
@@ -5678,14 +5616,14 @@ input:checked + .slider:before {
   justify-content: center;
   border-radius: var(--radius);
   border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--surface);
   color: var(--text);
   padding: 0;
   transition: all 0.2s ease;
 }
 
 .btn-icon.mini-icon:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--surface-soft);
   border-color: var(--line-strong);
 }
 

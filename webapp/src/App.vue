@@ -907,7 +907,181 @@
                 </Transition>
               </section>
 
-              <section v-else class="card pad settings-card settings-panel">
+              <div v-else-if="activeSettingsSection === 'integrations'" class="settings-stack integration-stack">
+                <section class="card pad settings-card">
+                  <div class="settings-head">
+                    <div>
+                      <div class="card-title">Integratsiya</div>
+                      <div class="card-note">Model ulanishi va asosiy guruhga yuboriladigan log oqimlari</div>
+                    </div>
+                    <span class="status-pill" :class="{ ready: aiIntegrationReady, error: aiIntegrationHasError }">{{
+                      aiIntegrationStatus }}</span>
+                  </div>
+                  <form class="form settings-form integration-form" @submit.prevent="saveIntegration">
+                    <label class="label">Xizmat turi
+                      <select v-model="integrationForm.provider" class="select">
+                        <option value="openai_compatible">OpenAI formatiga mos</option>
+                      </select>
+                    </label>
+                    <label class="label">Model nomi
+                      <input v-model.trim="integrationForm.label" class="input" placeholder="Uyqur AI" />
+                    </label>
+                    <label class="label">Asosiy manzil
+                      <input v-model.trim="integrationForm.base_url" class="input"
+                        placeholder="https://api.openai.com/v1" />
+                    </label>
+                    <label class="label">Model
+                      <input v-model.trim="integrationForm.model" class="input" placeholder="gpt-4o-mini" />
+                    </label>
+                    <label class="label">API kalit
+                      <input v-model="integrationForm.api_key" class="input" type="password" autocomplete="new-password"
+                        :placeholder="integrationForm.has_api_key ? 'Saqlangan kalitni almashtirish' : 'sk-...'" />
+                    </label>
+                    <label class="label">Holat
+                      <select v-model="integrationForm.enabled" class="select">
+                        <option :value="true">Faol</option>
+                        <option :value="false">O‘chirilgan</option>
+                      </select>
+                    </label>
+                    <label class="label wide">Tizim ko‘rsatmasi
+                      <textarea v-model="integrationForm.system_prompt" class="textarea tall"></textarea>
+                    </label>
+                    <button class="btn primary"
+                      :disabled="loadingAction === 'saveIntegration' || loadingAction === 'extractKnowledge'">
+                      {{ loadingAction === 'saveIntegration' ? 'Saqlamoqda...' : 'Integratsiyani saqlash' }}
+                    </button>
+                  </form>
+                </section>
+
+                <section class="card pad settings-card">
+                  <div class="settings-head">
+                    <div>
+                      <div class="card-title">ClickUp integratsiya</div>
+                      <div class="card-note">Telegram reaksiyalaridan vazifa yaratish va yopish oqimi</div>
+                    </div>
+                    <span class="status-pill" :class="{ ready: clickUpIntegrationReady, error: clickUpIntegrationHasError }">
+                      {{ clickUpIntegrationStatus }}
+                    </span>
+                  </div>
+                  <form class="form settings-form integration-form" @submit.prevent="saveClickUpIntegration">
+                    <label class="label">API token
+                      <input v-model="clickupForm.api_token" class="input" type="password" autocomplete="new-password"
+                        :placeholder="clickupForm.has_api_token ? 'Saqlangan tokenni almashtirish' : 'pk_...'" />
+                    </label>
+                    <label class="label">Newbies List ID
+                      <input v-model.trim="clickupForm.newbies_list_id" class="input" placeholder="123456789" />
+                    </label>
+                    <label class="label">Big team List ID
+                      <input v-model.trim="clickupForm.big_team_list_id" class="input" placeholder="987654321" />
+                    </label>
+                    <label class="label">Newbies chat ID
+                      <input v-model.trim="clickupForm.newbies_chat_id" class="input" placeholder="-1001234567890" />
+                    </label>
+                    <label class="label">Big team chat ID
+                      <input v-model.trim="clickupForm.big_team_chat_id" class="input" placeholder="-1009876543210" />
+                    </label>
+                    <label class="label">Yopish statusi
+                      <input v-model.trim="clickupForm.done_status" class="input" placeholder="complete" />
+                    </label>
+                    <div class="settings-actions wide">
+                      <button class="btn primary" :disabled="loadingAction === 'saveClickUpIntegration'">
+                        {{ loadingAction === 'saveClickUpIntegration' ? 'Tekshirilmoqda...' : 'Integratsiya qilish' }}
+                      </button>
+                      <button v-if="clickupForm.enabled || clickupForm.has_api_token" class="btn danger" type="button"
+                        :disabled="loadingAction === 'disconnectClickUp'" @click="disconnectClickUpIntegration">
+                        {{ loadingAction === 'disconnectClickUp' ? 'Uzilmoqda...' : 'Uzish' }}
+                      </button>
+                    </div>
+                  </form>
+                  <p v-if="clickupForm.last_check_error" class="form-error wide">{{ clickupForm.last_check_error }}</p>
+                </section>
+
+                <section class="card pad settings-card">
+                  <div class="integration-note log-settings-panel">
+                    <div class="settings-head compact">
+                      <div>
+                        <div class="card-title">Asosiy guruh loglari</div>
+                        <div class="card-note">Xato va oddiy loglar tanlangan bo‘lsa asosiy guruhga yuboriladi</div>
+                      </div>
+                      <span class="status-pill" :class="{ ready: logForm.enabled, 'muted-status': !logForm.enabled }">
+                        {{ logForm.enabled ? 'Yoqilgan' : 'O‘chiq' }}
+                      </span>
+                    </div>
+                    <div class="log-settings-grid">
+                      <label class="switch-row">
+                        <input v-model="logForm.enabled" type="checkbox" />
+                        <span>Log yuborishni yoqish</span>
+                      </label>
+                      <label class="label">Qayerga yuboriladi
+                        <select v-model="logForm.target" class="select">
+                          <option value="main_group">Asosiy guruh</option>
+                        </select>
+                      </label>
+                      <div class="log-levels">
+                        <span>Yuboriladigan loglar</span>
+                        <label><input v-model="logForm.levels" type="checkbox" value="error" /> Error log</label>
+                        <label><input v-model="logForm.levels" type="checkbox" value="info" /> Oddiy log</label>
+                      </div>
+                      <label class="label">Test turi
+                        <select v-model="logForm.test_level" class="select">
+                          <option value="info">Oddiy log</option>
+                          <option value="error">Error log</option>
+                        </select>
+                      </label>
+                    </div>
+                    <div class="log-channel-panel">
+                      <div class="drilldown-label">Log kanallari</div>
+                      <div v-if="logForm.sources.length" class="log-channel-list">
+                        <article v-for="(source, index) in logForm.sources"
+                          :key="source.id || `${source.chat_id}-${index}`" class="log-channel-item">
+                          <label class="label">Kanal nomi
+                            <input v-model.trim="source.label" class="input" placeholder="Server loglari" />
+                          </label>
+                          <label class="label">Kanal raqami
+                            <input v-model.trim="source.chat_id" class="input" placeholder="-100..." />
+                          </label>
+                          <label class="label">Manba
+                            <select v-model="source.source" class="select">
+                              <option value="backend">Backend</option>
+                              <option value="web">Veb</option>
+                              <option value="mobile">Mobil</option>
+                              <option value="other">Boshqa</option>
+                            </select>
+                          </label>
+                          <label class="switch-row compact">
+                            <input v-model="source.enabled" type="checkbox" />
+                            <span>Faol</span>
+                          </label>
+                          <button class="btn small danger" type="button" @click="removeLogSource(index)">Olib
+                            tashlash</button>
+                        </article>
+                      </div>
+                      <div v-else class="empty compact">Hali log kanali qo‘shilmagan</div>
+
+                      <div class="log-channel-add">
+                        <input v-model.trim="logSourceDraft.label" class="input" placeholder="Kanal nomi" />
+                        <input v-model.trim="logSourceDraft.chat_id" class="input" placeholder="Kanal raqami: -100..." />
+                        <select v-model="logSourceDraft.source" class="select">
+                          <option value="backend">Backend</option>
+                          <option value="web">Veb</option>
+                          <option value="mobile">Mobil</option>
+                          <option value="other">Boshqa</option>
+                        </select>
+                        <button class="btn" type="button" @click="addLogSource">Kanal qo‘shish</button>
+                      </div>
+                    </div>
+                    <div class="actions">
+                      <button class="btn primary" type="button" :disabled="loadingAction === 'saveLogSettings'"
+                        @click="saveLogSettings">{{ loadingAction === 'saveLogSettings' ? 'Saqlanmoqda...' :
+                          'Log sozlamasini saqlash' }}</button>
+                      <button class="btn" type="button" :disabled="loadingAction === 'testLog'" @click="sendTestLog">{{
+                        loadingAction === 'testLog' ? 'Yuborilmoqda...' : 'Test log yuborish' }}</button>
+                    </div>
+                  </div>
+                </section>
+              </div>
+
+              <section v-else-if="activeSettingsSection === 'admin'" class="card pad settings-card settings-panel">
                 <div class="settings-head">
                   <div>
                     <div class="card-title">Admin profili</div>
@@ -927,182 +1101,6 @@
                   <button class="btn primary" :disabled="loadingAction === 'saveAdmin'">{{ loadingAction === 'saveAdmin'
                     ? 'Saqlamoqda...' : 'Saqlash' }}</button>
                 </form>
-              </section>
-            </div>
-          </template>
-
-          <template v-if="activeTab === 'integrations'">
-            <div class="settings-stack integration-stack">
-              <section class="card pad settings-card">
-                <div class="settings-head">
-                  <div>
-                    <div class="card-title">Integratsiya</div>
-                    <div class="card-note">Model ulanishi va asosiy guruhga yuboriladigan log oqimlari</div>
-                  </div>
-                  <span class="status-pill" :class="{ ready: aiIntegrationReady, error: aiIntegrationHasError }">{{
-                    aiIntegrationStatus }}</span>
-                </div>
-                <form class="form settings-form integration-form" @submit.prevent="saveIntegration">
-                  <label class="label">Xizmat turi
-                    <select v-model="integrationForm.provider" class="select">
-                      <option value="openai_compatible">OpenAI formatiga mos</option>
-                    </select>
-                  </label>
-                  <label class="label">Model nomi
-                    <input v-model.trim="integrationForm.label" class="input" placeholder="Uyqur AI" />
-                  </label>
-                  <label class="label">Asosiy manzil
-                    <input v-model.trim="integrationForm.base_url" class="input"
-                      placeholder="https://api.openai.com/v1" />
-                  </label>
-                  <label class="label">Model
-                    <input v-model.trim="integrationForm.model" class="input" placeholder="gpt-4o-mini" />
-                  </label>
-                  <label class="label">API kalit
-                    <input v-model="integrationForm.api_key" class="input" type="password" autocomplete="new-password"
-                      :placeholder="integrationForm.has_api_key ? 'Saqlangan kalitni almashtirish' : 'sk-...'" />
-                  </label>
-                  <label class="label">Holat
-                    <select v-model="integrationForm.enabled" class="select">
-                      <option :value="true">Faol</option>
-                      <option :value="false">O‘chirilgan</option>
-                    </select>
-                  </label>
-                  <label class="label wide">Tizim ko‘rsatmasi
-                    <textarea v-model="integrationForm.system_prompt" class="textarea tall"></textarea>
-                  </label>
-                  <button class="btn primary"
-                    :disabled="loadingAction === 'saveIntegration' || loadingAction === 'extractKnowledge'">
-                    {{ loadingAction === 'saveIntegration' ? 'Saqlamoqda...' : 'Integratsiyani saqlash' }}
-                  </button>
-                </form>
-              </section>
-
-              <section class="card pad settings-card">
-                <div class="settings-head">
-                  <div>
-                    <div class="card-title">ClickUp integratsiya</div>
-                    <div class="card-note">Telegram reaksiyalaridan vazifa yaratish va yopish oqimi</div>
-                  </div>
-                  <span class="status-pill" :class="{ ready: clickUpIntegrationReady, error: clickUpIntegrationHasError }">
-                    {{ clickUpIntegrationStatus }}
-                  </span>
-                </div>
-                <form class="form settings-form integration-form" @submit.prevent="saveClickUpIntegration">
-                  <label class="label">API token
-                    <input v-model="clickupForm.api_token" class="input" type="password" autocomplete="new-password"
-                      :placeholder="clickupForm.has_api_token ? 'Saqlangan tokenni almashtirish' : 'pk_...'" />
-                  </label>
-                  <label class="label">Newbies List ID
-                    <input v-model.trim="clickupForm.newbies_list_id" class="input" placeholder="123456789" />
-                  </label>
-                  <label class="label">Big team List ID
-                    <input v-model.trim="clickupForm.big_team_list_id" class="input" placeholder="987654321" />
-                  </label>
-                  <label class="label">Newbies chat ID
-                    <input v-model.trim="clickupForm.newbies_chat_id" class="input" placeholder="-1001234567890" />
-                  </label>
-                  <label class="label">Big team chat ID
-                    <input v-model.trim="clickupForm.big_team_chat_id" class="input" placeholder="-1009876543210" />
-                  </label>
-                  <label class="label">Yopish statusi
-                    <input v-model.trim="clickupForm.done_status" class="input" placeholder="complete" />
-                  </label>
-                  <div class="settings-actions wide">
-                    <button class="btn primary" :disabled="loadingAction === 'saveClickUpIntegration'">
-                      {{ loadingAction === 'saveClickUpIntegration' ? 'Tekshirilmoqda...' : 'Integratsiya qilish' }}
-                    </button>
-                    <button v-if="clickupForm.enabled || clickupForm.has_api_token" class="btn danger" type="button"
-                      :disabled="loadingAction === 'disconnectClickUp'" @click="disconnectClickUpIntegration">
-                      {{ loadingAction === 'disconnectClickUp' ? 'Uzilmoqda...' : 'Uzish' }}
-                    </button>
-                  </div>
-                </form>
-                <p v-if="clickupForm.last_check_error" class="form-error wide">{{ clickupForm.last_check_error }}</p>
-              </section>
-
-              <section class="card pad settings-card">
-                <div class="integration-note log-settings-panel">
-                  <div class="settings-head compact">
-                    <div>
-                      <div class="card-title">Asosiy guruh loglari</div>
-                      <div class="card-note">Xato va oddiy loglar tanlangan bo‘lsa asosiy guruhga yuboriladi</div>
-                    </div>
-                    <span class="status-pill" :class="{ ready: logForm.enabled, 'muted-status': !logForm.enabled }">
-                      {{ logForm.enabled ? 'Yoqilgan' : 'O‘chiq' }}
-                    </span>
-                  </div>
-                  <div class="log-settings-grid">
-                    <label class="switch-row">
-                      <input v-model="logForm.enabled" type="checkbox" />
-                      <span>Log yuborishni yoqish</span>
-                    </label>
-                    <label class="label">Qayerga yuboriladi
-                      <select v-model="logForm.target" class="select">
-                        <option value="main_group">Asosiy guruh</option>
-                      </select>
-                    </label>
-                    <div class="log-levels">
-                      <span>Yuboriladigan loglar</span>
-                      <label><input v-model="logForm.levels" type="checkbox" value="error" /> Error log</label>
-                      <label><input v-model="logForm.levels" type="checkbox" value="info" /> Oddiy log</label>
-                    </div>
-                    <label class="label">Test turi
-                      <select v-model="logForm.test_level" class="select">
-                        <option value="info">Oddiy log</option>
-                        <option value="error">Error log</option>
-                      </select>
-                    </label>
-                  </div>
-                  <div class="log-channel-panel">
-                    <div class="drilldown-label">Log kanallari</div>
-                    <div v-if="logForm.sources.length" class="log-channel-list">
-                      <article v-for="(source, index) in logForm.sources"
-                        :key="source.id || `${source.chat_id}-${index}`" class="log-channel-item">
-                        <label class="label">Kanal nomi
-                          <input v-model.trim="source.label" class="input" placeholder="Server loglari" />
-                        </label>
-                        <label class="label">Kanal raqami
-                          <input v-model.trim="source.chat_id" class="input" placeholder="-100..." />
-                        </label>
-                        <label class="label">Manba
-                          <select v-model="source.source" class="select">
-                            <option value="backend">Backend</option>
-                            <option value="web">Veb</option>
-                            <option value="mobile">Mobil</option>
-                            <option value="other">Boshqa</option>
-                          </select>
-                        </label>
-                        <label class="switch-row compact">
-                          <input v-model="source.enabled" type="checkbox" />
-                          <span>Faol</span>
-                        </label>
-                        <button class="btn small danger" type="button" @click="removeLogSource(index)">Olib
-                          tashlash</button>
-                      </article>
-                    </div>
-                    <div v-else class="empty compact">Hali log kanali qo‘shilmagan</div>
-
-                    <div class="log-channel-add">
-                      <input v-model.trim="logSourceDraft.label" class="input" placeholder="Kanal nomi" />
-                      <input v-model.trim="logSourceDraft.chat_id" class="input" placeholder="Kanal raqami: -100..." />
-                      <select v-model="logSourceDraft.source" class="select">
-                        <option value="backend">Backend</option>
-                        <option value="web">Veb</option>
-                        <option value="mobile">Mobil</option>
-                        <option value="other">Boshqa</option>
-                      </select>
-                      <button class="btn" type="button" @click="addLogSource">Kanal qo‘shish</button>
-                    </div>
-                  </div>
-                  <div class="actions">
-                    <button class="btn primary" type="button" :disabled="loadingAction === 'saveLogSettings'"
-                      @click="saveLogSettings">{{ loadingAction === 'saveLogSettings' ? 'Saqlanmoqda...' :
-                        'Log sozlamasini saqlash' }}</button>
-                    <button class="btn" type="button" :disabled="loadingAction === 'testLog'" @click="sendTestLog">{{
-                      loadingAction === 'testLog' ? 'Yuborilmoqda...' : 'Test log yuborish' }}</button>
-                  </div>
-                </div>
               </section>
             </div>
           </template>
@@ -1207,8 +1205,8 @@
           <label class="label">Telegram raqami
             <input v-model.trim="employeeForm.tg_user_id" class="input" placeholder="123456789" />
           </label>
-          <label class="label">Foydalanuvchi nomi
-            <input v-model.trim="employeeForm.username" class="input" placeholder="foydalanuvchi nomi" />
+          <label class="label">Telegram username
+            <input v-model.trim="employeeForm.username" class="input" placeholder="@username" />
           </label>
           <label class="label">Telefon
             <input v-model.trim="employeeForm.phone" class="input" placeholder="+998..." />
@@ -1405,7 +1403,7 @@
 
           <section class="detail-section metric-chat-panel">
             <Transition name="fade-slide-up" mode="out-in">
-              <div v-if="metricChatDetail.chat" :key="metricChatDetail.chat.chat_id" class="chat-pane-shell">
+              <div v-if="metricChatDetail.chat" :key="chatIdKey(metricChatDetail.chat)" class="chat-pane-shell">
                 <div class="metric-chat-header">
                   <div>
                     <div class="card-title">{{ metricChatTitle }}</div>
@@ -2219,9 +2217,11 @@ import { computed, defineComponent, h, nextTick, onMounted, onUnmounted, reactiv
 import { api, getToken, setToken } from './api';
 
 const ACTIVE_TAB_STORAGE_KEY = 'uyqur_support_active_tab';
+const SETTINGS_SECTION_STORAGE_KEY = 'uyqur_support_settings_section';
 const THEME_STORAGE_KEY = 'uyqur_support_theme';
 const COMPARISON_STORAGE_KEY = 'uyqur_support_comparison_enabled';
 const TELEGRAM_AUTO_SYNC_INTERVAL_MS = 25_000;
+const SETTINGS_SECTION_KEYS = ['bot', 'integrations', 'telegram', 'admin'];
 const tabs = [
   { key: 'stats', label: 'Support performance', icon: '📊' },
   { key: 'productAnalytics', label: 'Product analytics', icon: '📈' },
@@ -2229,14 +2229,13 @@ const tabs = [
   { key: 'groups', label: 'Bot ulangan guruhlar', icon: '👥' },
   { key: 'employees', label: 'Xodimlar', icon: '🧑‍💼' },
   { key: 'companies', label: 'Kompaniyalar', icon: '🏬' },
-  { key: 'integrations', label: 'Integratsiya', icon: '🔌' },
   { key: 'clickup', label: 'ClickUp', icon: '✅' },
   { key: 'privates', label: 'Mijozlar', icon: '💬' },
   { key: 'knowledgeBase', label: 'Bilim bazasi', icon: '📚' },
   { key: 'settings', label: 'Sozlamalar', icon: '⚙️' }
 ];
 const mainTabKeys = ['stats', 'productAnalytics', 'companyActivity'];
-const otherTabKeys = ['groups', 'employees', 'companies', 'integrations', 'clickup', 'privates', 'knowledgeBase'];
+const otherTabKeys = ['groups', 'employees', 'companies', 'clickup', 'privates', 'knowledgeBase'];
 
 function isValidTab(key) {
   return tabs.some(tab => tab.key === key);
@@ -2245,12 +2244,28 @@ function isValidTab(key) {
 function getStoredActiveTab() {
   if (typeof window === 'undefined') return 'stats';
   const stored = window.localStorage.getItem(ACTIVE_TAB_STORAGE_KEY);
+  if (stored === 'integrations') {
+    window.localStorage.setItem(ACTIVE_TAB_STORAGE_KEY, 'settings');
+    window.localStorage.setItem(SETTINGS_SECTION_STORAGE_KEY, 'integrations');
+    return 'settings';
+  }
   return isValidTab(stored) ? stored : 'stats';
 }
 
 function storeActiveTab(key) {
   if (typeof window === 'undefined') return;
   window.localStorage.setItem(ACTIVE_TAB_STORAGE_KEY, key);
+}
+
+function getStoredSettingsSection() {
+  if (typeof window === 'undefined') return 'bot';
+  const stored = window.localStorage.getItem(SETTINGS_SECTION_STORAGE_KEY);
+  return SETTINGS_SECTION_KEYS.includes(stored) ? stored : 'bot';
+}
+
+function storeSettingsSection(key) {
+  if (typeof window === 'undefined' || !SETTINGS_SECTION_KEYS.includes(key)) return;
+  window.localStorage.setItem(SETTINGS_SECTION_STORAGE_KEY, key);
 }
 
 function getStoredThemeMode() {
@@ -2295,7 +2310,7 @@ const themeMode = ref(getStoredThemeMode());
 applyThemeMode(themeMode.value);
 const selectedGroups = ref([]);
 const selectedEmployees = ref([]);
-const activeSettingsSection = ref('bot');
+const activeSettingsSection = ref(getStoredSettingsSection());
 const otherMenuOpen = ref(otherTabKeys.includes(activeTab.value));
 const dashboard = reactive({ summary: {}, employeeStats: [], chatStats: [], openRequests: [], analytics: {} });
 const groups = ref([]);
@@ -2378,6 +2393,10 @@ watch(activeTab, key => {
   if (otherTabKeys.includes(key)) otherMenuOpen.value = true;
 });
 
+watch(activeSettingsSection, key => {
+  storeSettingsSection(key);
+});
+
 watch(comparisonEnabled, value => {
   if (typeof window === 'undefined') return;
   window.localStorage.setItem(COMPARISON_STORAGE_KEY, value ? 'true' : 'false');
@@ -2449,6 +2468,7 @@ const current = computed(() => tabs.find(t => t.key === activeTab.value) || tabs
 const currentTitle = computed(() => current.value.label);
 const settingsSections = [
   { key: 'bot', label: 'Bot sozlamalari', icon: '⚙️', note: 'AI, audit va so‘rov aniqlash' },
+  { key: 'integrations', label: 'Integratsiya', icon: '🔌', note: 'AI, ClickUp va loglar' },
   { key: 'telegram', label: 'Telegram ulanishi', icon: '🔗', note: 'Webhook va sinxronlash' },
   { key: 'admin', label: 'Admin profili', icon: '👤', note: 'Login va parol' }
 ];
@@ -2463,7 +2483,6 @@ const currentSubtitle = computed(() => ({
   groups: 'Bot ulangan guruhlar, so‘rov oqimi va mijoz murojaatlari',
   employees: 'Xodimlar aktivligi, javoblar va ochiq vazifalar',
   companies: 'Uyqur API’dan kelgan kompaniyalar, mas’ul va obuna ma’lumotlari',
-  integrations: 'Tashqi ulanishlar va keyingi log oqimlari uchun boshqaruv',
   clickup: 'Telegram reaction orqali yaratilgan ClickUp vazifalar kuzatuvi',
   privates: 'Mijozlar bilan shaxsiy va biznes chatlar',
   knowledgeBase: 'AI o‘qitish matnlari, fayllar va modelga beriladigan bilim',
@@ -3467,7 +3486,8 @@ function expiryStatusClass(row = {}) {
 }
 
 function companySupportLabel(row = {}) {
-  return [row.uyqur_support_username, row.uyqur_support_phone].filter(Boolean).join(' · ') || 'Biriktirilmagan';
+  const username = normalizeSupportUsername(row.uyqur_support_username);
+  return username ? `@${username}` : 'Biriktirilmagan';
 }
 
 function normalizeLogSources(sources = []) {
@@ -3483,7 +3503,7 @@ function normalizeLogSources(sources = []) {
 }
 
 function hasCompanySupport(row = {}) {
-  return Boolean(String(row.uyqur_support_username || '').trim() || String(row.uyqur_support_phone || '').trim());
+  return Boolean(normalizeSupportUsername(row.uyqur_support_username));
 }
 
 function normalizeSupportUsername(value = '') {
@@ -3509,10 +3529,7 @@ function resolveEmployeeForCompany(row = {}) {
 function companyMatchesEmployee(company = {}, employee = {}) {
   const employeeUsername = normalizeSupportUsername(employee.username);
   const companyUsername = normalizeSupportUsername(company.uyqur_support_username);
-  if (employeeUsername && companyUsername && employeeUsername === companyUsername) return true;
-  const employeePhone = normalizePhone(employee.phone);
-  const companyPhone = normalizePhone(company.uyqur_support_phone);
-  return Boolean(employeePhone && companyPhone && employeePhone === companyPhone);
+  return Boolean(employeeUsername && companyUsername && employeeUsername === companyUsername);
 }
 
 function isCompanyChurn(row = {}) {
@@ -4456,6 +4473,7 @@ const employeeCompanyColumns = [
 const privateColumns = [
   { key: 'title', label: 'Chat', action: 'telegram' },
   { key: 'source_type', label: 'Tur', format: sourceTypeLabel, badge: true, action: 'chatDetail' },
+  { key: 'employee_name', label: 'Xodim', format: (value, row) => value || (row.employee_username ? `@${row.employee_username}` : '—'), action: 'chatDetail' },
   { key: 'total_requests', label: 'So‘rov', action: 'chatDetail' },
   { key: 'open_requests', label: 'Ochiq', action: 'chatDetail' },
   { key: 'closed_requests', label: 'Yopilgan', action: 'chatDetail' },
@@ -4720,7 +4738,6 @@ async function refresh() {
     if (activeTab.value === 'privates') privates.value = await api.privates();
     if (activeTab.value === 'employees') employees.value = await api.employees();
     if (activeTab.value === 'companies') await loadCompanyInfo();
-    if (activeTab.value === 'integrations') await loadSettings();
     if (activeTab.value === 'clickup') await loadClickUpTasks();
     if (activeTab.value === 'knowledgeBase') await loadSettings();
     if (activeTab.value === 'settings') await loadSettings();
@@ -4966,7 +4983,6 @@ async function setTab(key) {
     if (activeTab.value === 'privates') privates.value = await api.privates();
     if (activeTab.value === 'employees') employees.value = await api.employees();
     if (activeTab.value === 'companies') await loadCompanyInfo();
-    if (activeTab.value === 'integrations') await loadSettings();
     if (activeTab.value === 'clickup') await loadClickUpTasks();
     if (activeTab.value === 'knowledgeBase') await loadSettings();
     if (activeTab.value === 'settings') await loadSettings();
@@ -5093,7 +5109,14 @@ function tableActionChatRow(row = {}) {
 }
 
 function chatIdKey(row = {}) {
-  return row?.chat_id === undefined || row?.chat_id === null ? '' : String(row.chat_id);
+  if (row?.chat_id === undefined || row?.chat_id === null) return '';
+  return [row.chat_id, row.business_connection_id || ''].filter(value => value !== undefined && value !== null).join('::');
+}
+
+function conversationQuery(row = {}) {
+  const query = { chat_id: row.chat_id };
+  if (row.business_connection_id) query.business_connection_id = row.business_connection_id;
+  return query;
 }
 
 function telegramUrlFor(row = {}) {
@@ -5226,7 +5249,8 @@ function openEmployeeGroups(row = {}) {
 }
 
 function employeeProfileChatKey(row = {}) {
-  return String(row.chat_id || row.key || row.title || '').trim();
+  if (row.chat_id !== undefined && row.chat_id !== null) return chatIdKey(row);
+  return String(row.key || row.title || '').trim();
 }
 
 function companyGroupChatKey(row = {}) {
@@ -5608,7 +5632,7 @@ async function loadMetricChatDetail(row = {}) {
   metricChatTicketsOpen.value = true;
   clearMediaUrls();
   try {
-    const data = await api.chatDetail({ chat_id: chatRow.chat_id });
+    const data = await api.chatDetail(conversationQuery(chatRow));
     if (metricChatSelectedId.value !== selectedKey) return;
     metricChatDetail.value = data;
     await scrollMetricChatToEnd();
@@ -5998,7 +6022,7 @@ async function sendSingleMessage() {
   if (!selectedTarget.value?.chat_id) return showToast('Chat tanlanmagan');
   startLoading('sendSingle');
   try {
-    await api.sendMessage({ chat_id: selectedTarget.value.chat_id, text: messageForm.text });
+    await api.sendMessage({ ...conversationQuery(selectedTarget.value), text: messageForm.text });
     showToast('Xabar yuborildi');
     closeModal();
   } catch (error) {
@@ -6133,7 +6157,7 @@ async function sendSelectedMessage() {
 
 async function loadRequests(row) {
   selectedTarget.value = row;
-  requestRows.value = await api.requests({ chat_id: row.chat_id });
+  requestRows.value = await api.requests(conversationQuery(row));
   modal.value = 'requests';
 }
 
@@ -6323,7 +6347,7 @@ async function loadChatDetail(row) {
   chatTicketsOpen.value = true;
   startLoading('chatDetail');
   try {
-    chatDetail.value = await api.chatDetail({ chat_id: row.chat_id });
+    chatDetail.value = await api.chatDetail(conversationQuery(row));
     modal.value = 'chatDetail';
     await scrollChatDetailToEnd();
     loadConversationMedia(chatDetail.value.conversation || [])
