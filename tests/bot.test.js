@@ -977,7 +977,7 @@ async function testMainGroupStatsTriggerSendsReport() {
   supabase.select = async (table) => {
     if (table === 'bot_settings') return [{ key: 'main_group', value: { chat_id: '-100777' } }];
     if (table === 'v_today_summary') return [{ total_requests: 1, open_requests: 0, closed_requests: 1, groups_count: 1 }];
-    if (table === 'employees') return [{ id: 'employee-1', full_name: 'Ali Valiyev', username: 'ali' }];
+    if (table === 'employees') return [{ id: 'employee-1', tg_user_id: 777, full_name: 'Ali Valiyev', username: 'ali', role: 'admin', is_active: true }];
     if (table === 'v_chat_statistics') return [{ chat_id: -100777, title: 'Main group', open_requests: 0 }];
     if (table === 'support_requests') {
       return [{
@@ -1023,8 +1023,9 @@ async function testMainGroupStatsTriggerSendsReport() {
     assert.strictEqual(telegramCalls.length, 1);
     assert.match(telegramCalls[0].url, /sendMessage$/);
     assert.strictEqual(String(telegramCalls[0].body.chat_id), '-100777');
-    assert.match(telegramCalls[0].body.text, /Bugungi xodimlar statistikasi/);
-    assert.match(telegramCalls[0].body.text, /Ali Valiyev/);
+    assert.match(telegramCalls[0].body.text, /Uyqur AI vazifa tahlili/);
+    assert.match(telegramCalls[0].body.text, /Xodimlar statistikasini main guruhga yuborish/);
+    assert.strictEqual(telegramCalls[0].body.reply_markup.inline_keyboard[0][0].callback_data, 'ai_ok:stats:17');
     assert.strictEqual(insertedTables.includes('support_requests'), false);
   } finally {
     supabase.insert = originalInsert;
@@ -1489,7 +1490,7 @@ async function testMainGroupBroadcastPreview() {
 
   supabase.select = async (table) => {
     if (table === 'bot_settings') return [{ key: 'main_group', value: { chat_id: '-100777' } }];
-    if (table === 'employees') return [];
+    if (table === 'employees') return [{ id: 'employee-1', tg_user_id: 777, full_name: 'Ali', username: 'ali_pm', role: 'admin', is_active: true }];
     if (table === 'tg_chats') {
       return [
         { chat_id: -1001, title: 'New Era', source_type: 'group' },
@@ -1539,10 +1540,11 @@ async function testMainGroupBroadcastPreview() {
     assert.strictEqual(broadcastRow.text, announcementText);
     const preview = telegramCalls.find(call => /sendMessage$/.test(call.url));
     assert.ok(preview);
-    assert.match(preview.body.text, /Ommaviy xabar preview/);
-    assert.match(preview.body.text, /Yuboriladigan guruhlar:<\/b> 2 ta/);
+    assert.match(preview.body.text, /Uyqur AI vazifa tahlili/);
+    assert.match(preview.body.text, /Reply qilingan xabarni barcha faol guruhlarga yuborish/);
+    assert.match(preview.body.text, /Qamrov:<\/b> 2 ta guruh/);
     assert.match(preview.body.text, /1\. Smeta eksporti\n2\. Ombor qoldig‘i\n3\. Xodimlar hisoboti/);
-    assert.strictEqual(preview.body.reply_markup.inline_keyboard[0][0].callback_data, 'broadcast_confirm:broadcast-1');
+    assert.strictEqual(preview.body.reply_markup.inline_keyboard[0][0].callback_data, 'ai_ok:bcast:broadcast-1');
   } finally {
     supabase.insert = originalInsert;
     supabase.select = originalSelect;
@@ -1570,6 +1572,7 @@ async function testMainGroupBroadcastConfirmSendsAndReports() {
 
   supabase.select = async (table) => {
     if (table === 'bot_settings') return [{ key: 'main_group', value: { chat_id: '-100777' } }];
+    if (table === 'employees') return [{ id: 'employee-1', tg_user_id: 777, full_name: 'Ali', username: 'ali_pm', role: 'admin', is_active: true }];
     if (table === 'tg_chats') {
       return [
         { chat_id: -1001, title: 'New Era', source_type: 'group' },
@@ -1610,7 +1613,7 @@ async function testMainGroupBroadcastConfirmSendsAndReports() {
       update_id: 14,
       callback_query: {
         id: 'callback-1',
-        data: 'broadcast_confirm:broadcast-1',
+        data: 'ai_ok:bcast:broadcast-1',
         from: { id: 777, first_name: 'Ali', username: 'ali_pm', is_bot: false },
         message: {
           message_id: 55,
@@ -1654,7 +1657,7 @@ async function testMainGroupBroadcastDeletePreview() {
 
   supabase.select = async (table) => {
     if (table === 'bot_settings') return [{ key: 'main_group', value: { chat_id: '-100777' } }];
-    if (table === 'employees') return [];
+    if (table === 'employees') return [{ id: 'employee-1', tg_user_id: 777, full_name: 'Ali', username: 'ali_pm', role: 'admin', is_active: true }];
     if (table === 'broadcasts') {
       return [{
         id: 'broadcast-1',
@@ -1706,11 +1709,12 @@ async function testMainGroupBroadcastDeletePreview() {
     assert.strictEqual(result.payload.handled, 'message');
     const preview = telegramCalls.find(call => /sendMessage$/.test(call.url));
     assert.ok(preview);
-    assert.match(preview.body.text, /Oxirgi ommaviy xabarni o‘chirish/);
-    assert.match(preview.body.text, /Guruhlar:<\/b> 2 ta/);
-    assert.match(preview.body.text, /Shu xabarni barcha guruhlardan o‘chirishimni tasdiqlaysizmi/);
-    assert.strictEqual(preview.body.reply_markup.inline_keyboard[0][0].callback_data, 'broadcast_delete_confirm:broadcast-1');
-    assert.strictEqual(preview.body.reply_markup.inline_keyboard[0][1].callback_data, 'broadcast_delete_cancel:broadcast-1');
+    assert.match(preview.body.text, /Uyqur AI vazifa tahlili/);
+    assert.match(preview.body.text, /Oxirgi ommaviy xabarni guruhlardan o‘chirish/);
+    assert.match(preview.body.text, /Qamrov:<\/b> 2 ta guruh/);
+    assert.match(preview.body.text, /Shu ishni bajarishni tasdiqlaysizmi/);
+    assert.strictEqual(preview.body.reply_markup.inline_keyboard[0][0].callback_data, 'ai_ok:del:broadcast-1');
+    assert.strictEqual(preview.body.reply_markup.inline_keyboard[0][1].callback_data, 'ai_no:del:broadcast-1');
   } finally {
     supabase.insert = originalInsert;
     supabase.select = originalSelect;
@@ -1728,6 +1732,7 @@ async function testMainGroupBroadcastDeleteConfirmDeletesAndReports() {
 
   supabase.select = async (table) => {
     if (table === 'bot_settings') return [{ key: 'main_group', value: { chat_id: '-100777' } }];
+    if (table === 'employees') return [{ id: 'employee-1', tg_user_id: 777, full_name: 'Ali', username: 'ali_pm', role: 'admin', is_active: true }];
     if (table === 'broadcasts') {
       return [{
         id: 'broadcast-1',
@@ -1775,7 +1780,7 @@ async function testMainGroupBroadcastDeleteConfirmDeletesAndReports() {
       update_id: 16,
       callback_query: {
         id: 'callback-2',
-        data: 'broadcast_delete_confirm:broadcast-1',
+        data: 'ai_ok:del:broadcast-1',
         from: { id: 777, first_name: 'Ali', username: 'ali_pm', is_bot: false },
         message: {
           message_id: 61,

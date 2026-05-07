@@ -71,7 +71,7 @@ async function upsertTelegramUser(user = {}, extra = {}, options = {}) {
 async function getKnownEmployeeByTelegramId(tgUserId) {
   if (!tgUserId) return null;
   const rows = await supabase.select('employees', {
-    select: 'id,tg_user_id,full_name,username,clickup_user_id,is_active',
+    select: 'id,tg_user_id,full_name,username,role,clickup_user_id,is_active',
     tg_user_id: supabase.eq(tgUserId),
     is_active: 'eq.true',
     limit: '1'

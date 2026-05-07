@@ -28,9 +28,11 @@ Node.js + Vercel serverless backend, Supabase SQL schema va Vite/Vue dark admin 
    - Shaxsiy chatga xabar yuborish
    - Kompaniya yaratish/tahrirlash
    - Kompaniya guruhlariga broadcast yuborish
+   - Xodim Telegram IDlarini bot admin sifatida biriktirish
    - Main guruhga xodimlar statistikasini yuborish
    - Admin login/parol va bot sozlamalarini boshqarish mumkin.
-5. Main guruhda yangilik xabariga reply qilib botga “barcha guruhlarga yubor” mazmunida yozilsa, bot preview chiqaradi. Inline tasdiq bosilgandan keyin xabar main guruh bilan birga barcha faol guruhlarga yuboriladi va natija ro‘yxati main guruhga qaytadi. “Oxirgi yangilanishdagi yuborgan xabarlaringni o‘chir” mazmunidagi so‘rov bilan oxirgi broadcast xabarlari ham tasdiqdan keyin guruhlardan o‘chiriladi.
+5. Main guruhda faol xodim Telegram IDsi bilan tanilgan bot adminlar botga reply yoki mention qilib vazifa berishi mumkin. Uyqur AI vazifani tahlil qiladi, inline tasdiq chiqaradi va faqat tasdiqdan keyin xavfsiz whitelistdagi amallarni bajaradi: xodimlar statistikasini yuborish, reply qilingan yangilikni barcha faol guruhlarga yuborish, oxirgi broadcast xabarlarini o‘chirish. Inline tugmani bosgan foydalanuvchi ham faol xodim-bot admin bo‘lishi kerak.
+6. Webappda hozircha tayyorgarlik rejimidagi Uyqur AI modal oynasi bor; floating `Uyqur AI` tugmasi barcha menyular ustida turadi.
 
 ## Muhim cheklov
 

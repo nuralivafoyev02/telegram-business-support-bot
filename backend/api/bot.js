@@ -24,6 +24,13 @@ const BROADCAST_CONFIRM_PREFIX = 'broadcast_confirm:';
 const BROADCAST_CANCEL_PREFIX = 'broadcast_cancel:';
 const BROADCAST_DELETE_CONFIRM_PREFIX = 'broadcast_delete_confirm:';
 const BROADCAST_DELETE_CANCEL_PREFIX = 'broadcast_delete_cancel:';
+const ASSISTANT_CONFIRM_PREFIX = 'ai_ok:';
+const ASSISTANT_CANCEL_PREFIX = 'ai_no:';
+const ASSISTANT_ACTIONS = Object.freeze({
+  STATS: 'stats',
+  BROADCAST: 'bcast',
+  DELETE_BROADCAST: 'del'
+});
 const TELEGRAM_TEXT_LIMIT = 4096;
 const RESULT_CHUNK_LIMIT = 3600;
 const BROADCAST_CONCURRENCY = clampInt(optionalEnv('BROADCAST_CONCURRENCY', '8'), 8, 1, 20);
@@ -34,6 +41,10 @@ const MAIN_GROUP_AUTO_REPLY_MISS = "Bu savol bo'yicha bilim bazasida aniq javob 
 const AUTO_REPLY_MISS = "Savolingiz qabul qilindi. Bilim bazasida aniq javob topilmadi, mas'ul xodim javob beradi.";
 const MAIN_STATS_SCOPE_REPLY = "Bu statistika savoli faqat main guruhda ishlaydi. Sozlamalarda <code>main_group_id</code> ni tekshiring yoki savolni main guruhda qayta yuboring.";
 const QUESTION_LIKE_RE = /[?؟]|\b(qanday|qanaqa|qayerda|qayerdan|qachon|nega|nimaga|nima\s+uchun|qancha|savol|tushuntir|ko'?rsat|o'?rgat|как|где|почему|зачем|сколько|what|how|where|why|when)\b/i;
+const BOT_PROFILE_CACHE_MS = 60 * 60 * 1000;
+
+let cachedBotProfile = null;
+let cachedBotProfileAt = 0;
 
 function clampInt(value, fallback, min, max) {
   const parsed = Number.parseInt(value, 10);
@@ -944,6 +955,253 @@ async function isMainStatsGroup(chat = {}, settings = null, options = {}) {
   return target && sameChatId(target, chat.id);
 }
 
+function escapeRegExp(value = '') {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+async function getCachedBotProfile() {
+  const now = Date.now();
+  if (cachedBotProfile && now - cachedBotProfileAt < BOT_PROFILE_CACHE_MS) return cachedBotProfile;
+  cachedBotProfile = await getMe();
+  cachedBotProfileAt = now;
+  return cachedBotProfile;
+}
+
+function isBotAdminEmployee(employee = null) {
+  return Boolean(employee && employee.id && employee.tg_user_id && employee.is_active !== false);
+}
+
+function botAdminName(employee = null, user = {}) {
+  return employee && (employee.full_name || employee.username)
+    ? employee.full_name || `@${employee.username}`
+    : actorName(user);
+}
+
+async function isAssistantAddressedToBot(message = {}, text = '') {
+  const replyFrom = message.reply_to_message && message.reply_to_message.from;
+  if (replyFrom && replyFrom.is_bot) return true;
+
+  const rawText = String(text || '');
+  if (!/@[\w\d_]{3,32}/.test(rawText)) return false;
+
+  try {
+    const bot = await getCachedBotProfile();
+    const username = String(bot && bot.username || '').replace(/^@/, '').trim();
+    if (!username) return false;
+    return new RegExp(`@${escapeRegExp(username)}\\b`, 'i').test(rawText);
+  } catch (error) {
+    logBackgroundError('assistant-get-me', error);
+    return false;
+  }
+}
+
+function hasAssistantAddressCandidate(message = {}, text = '') {
+  const replyFrom = message.reply_to_message && message.reply_to_message.from;
+  return Boolean(replyFrom && replyFrom.is_bot) || /@[\w\d_]{3,32}/.test(String(text || ''));
+}
+
+function looksLikeStatsAssistantTask(text = '') {
+  const value = String(text || '');
+  const hasStats = /\b(statisti[ck]a|hisobot|report|natija|performance)\w*\b/i.test(value);
+  const hasEmployee = /\b(xodim|hodim|support|operator|admin)\w*\b/i.test(value);
+  return hasStats && hasEmployee;
+}
+
+function isAssistantKnownTask(text = '') {
+  return isMainStatsTrigger(text)
+    || looksLikeStatsAssistantTask(text)
+    || isGroupBroadcastDeleteTrigger(text)
+    || isGroupBroadcastTrigger(text);
+}
+
+function assistantCallbackData(kind, action, id = '') {
+  return `${kind}${action}:${String(id || '0')}`;
+}
+
+function parseAssistantCallbackData(data = '') {
+  const value = String(data || '');
+  const prefix = value.startsWith(ASSISTANT_CONFIRM_PREFIX)
+    ? ASSISTANT_CONFIRM_PREFIX
+    : value.startsWith(ASSISTANT_CANCEL_PREFIX)
+      ? ASSISTANT_CANCEL_PREFIX
+      : '';
+  if (!prefix) return null;
+  const rest = value.slice(prefix.length);
+  const [action, ...idParts] = rest.split(':');
+  if (!Object.values(ASSISTANT_ACTIONS).includes(action)) return null;
+  return {
+    confirmed: prefix === ASSISTANT_CONFIRM_PREFIX,
+    action,
+    id: idParts.join(':')
+  };
+}
+
+function assistantActionLabel(action) {
+  return ({
+    [ASSISTANT_ACTIONS.STATS]: 'Xodimlar statistikasini main guruhga yuborish',
+    [ASSISTANT_ACTIONS.BROADCAST]: 'Reply qilingan xabarni barcha faol guruhlarga yuborish',
+    [ASSISTANT_ACTIONS.DELETE_BROADCAST]: 'Oxirgi ommaviy xabarni guruhlardan o‘chirish'
+  })[action] || 'Bot amali';
+}
+
+function assistantPreviewText({ action, adminName, sourceText = '', targetCount = 0, broadcast = null }) {
+  const details = [];
+  if (targetCount) details.push(`<b>Qamrov:</b> ${targetCount} ta guruh`);
+  if (broadcast && broadcast.title) details.push(`<b>Sarlavha:</b> ${escapeHtml(broadcast.title)}`);
+  if (sourceText) {
+    details.push('<b>Xabar bo‘lagi:</b>');
+    details.push(escapeHtml(clipText(sourceText, 900)));
+  }
+
+  return [
+    '🤖 <b>Uyqur AI vazifa tahlili</b>',
+    '',
+    `<b>Admin:</b> ${escapeHtml(adminName)}`,
+    `<b>Tushundim:</b> ${escapeHtml(assistantActionLabel(action))}`,
+    ...(details.length ? ['', ...details] : []),
+    '',
+    'Shu ishni bajarishni tasdiqlaysizmi?'
+  ].join('\n');
+}
+
+function assistantUnsupportedText(text = '') {
+  return [
+    '🤖 <b>Uyqur AI vazifani ko‘rib chiqdi</b>',
+    '',
+    `<b>So‘rov:</b> ${escapeHtml(clipText(text, 700)) || 'Matn topilmadi.'}`,
+    '',
+    'Bu vazifa uchun hozircha xavfsiz executor topilmadi. Hozir tasdiq bilan bajariladigan amallar: xodimlar statistikasi, reply qilingan xabarni barcha guruhlarga yuborish, oxirgi ommaviy xabarni o‘chirish.'
+  ].join('\n');
+}
+
+async function rejectUnauthorizedBotAdmin(message = {}) {
+  await sendMessage(message.chat.id, '⚠️ Bu amal faqat webappdagi faol xodim Telegram IDsi biriktirilgan bot adminlar uchun.', {
+    reply_to_message_id: message.message_id
+  }).catch(error => logBackgroundError('assistant-unauthorized-message', error));
+}
+
+async function getCallbackEmployee(query = {}) {
+  const user = query.from || {};
+  if (!user.id) return null;
+  await metrics.upsertTelegramUser(user, {}, { prefer: 'return=minimal' }).catch(error => logBackgroundError('callback-user-upsert', error));
+  return metrics.getKnownEmployeeByTelegramId(user.id);
+}
+
+async function ensureCallbackBotAdmin(query = {}, label = 'callback') {
+  const employee = await getCallbackEmployee(query).catch(error => {
+    logBackgroundError(`${label}-employee`, error);
+    return null;
+  });
+  if (isBotAdminEmployee(employee)) return employee;
+  await answerCallbackQuery(query.id, 'Bu amal faqat bot admin xodimlar uchun.')
+    .catch(error => logBackgroundError(`${label}-unauthorized-answer`, error));
+  return null;
+}
+
+async function planAssistantAction({ message = {}, text = '', employee = null }) {
+  const actionText = String(text || '');
+  const adminName = botAdminName(employee, message.from || {});
+
+  if (isGroupBroadcastDeleteTrigger(actionText)) {
+    const { broadcast, targets } = await loadGroupBroadcastWithTargets();
+    if (!broadcast || !targets.length) {
+      return { error: '⚠️ O‘chirish uchun oxirgi yuborilgan ommaviy xabar topilmadi.' };
+    }
+    return {
+      action: ASSISTANT_ACTIONS.DELETE_BROADCAST,
+      id: broadcast.id,
+      adminName,
+      broadcast,
+      targetCount: targets.length,
+      sourceText: broadcast.text || ''
+    };
+  }
+
+  if (isGroupBroadcastTrigger(actionText)) {
+    const source = message.reply_to_message || {};
+    const sourceText = getRawMessageText(source);
+    if (!sourceText) {
+      return { error: '⚠️ Qaysi xabar yuborilishini bilishim uchun yangilik xabariga reply qilib yozing.' };
+    }
+    if (sourceText.length > TELEGRAM_TEXT_LIMIT) {
+      return { error: `⚠️ Xabar juda uzun. Telegram limiti: ${TELEGRAM_TEXT_LIMIT} belgi.` };
+    }
+    const targets = await listActiveGroupBroadcastTargets();
+    if (!targets.length) return { error: '⚠️ Yuborish uchun faol guruh topilmadi.' };
+
+    const [broadcast] = await supabase.insert('broadcasts', [{
+      title: broadcastTitle(sourceText),
+      text: sourceText,
+      target_type: 'groups',
+      total_targets: targets.length,
+      sent_count: 0,
+      failed_count: 0,
+      created_by: adminName,
+      status: 'created'
+    }]);
+    return {
+      action: ASSISTANT_ACTIONS.BROADCAST,
+      id: broadcast.id,
+      adminName,
+      broadcast,
+      targetCount: targets.length,
+      sourceText
+    };
+  }
+
+  if (isMainStatsTrigger(actionText) || looksLikeStatsAssistantTask(actionText)) {
+    return {
+      action: ASSISTANT_ACTIONS.STATS,
+      id: message.message_id || '0',
+      adminName,
+      targetCount: 1
+    };
+  }
+
+  return null;
+}
+
+async function maybeStartAdminAssistantPreview({ message = {}, text = '', settings = null, employee = null }) {
+  const chat = message.chat || {};
+  const knownTask = isAssistantKnownTask(text);
+  const addressCandidate = !knownTask && hasAssistantAddressCandidate(message, text);
+  if (!isGroupChat(chat) || (!knownTask && !addressCandidate)) return false;
+  if (!await isMainStatsGroup(chat, settings, knownTask ? {} : { resolveFallback: false })) return false;
+
+  const addressed = knownTask ? true : await isAssistantAddressedToBot(message, text);
+  if (!knownTask && !addressed) return false;
+
+  if (!isBotAdminEmployee(employee)) {
+    await rejectUnauthorizedBotAdmin(message);
+    return true;
+  }
+
+  const plan = await planAssistantAction({ message, text, employee });
+  if (!plan) {
+    await sendMessage(chat.id, assistantUnsupportedText(text), {
+      reply_to_message_id: message.message_id
+    }).catch(error => logBackgroundError('assistant-unsupported', error));
+    return true;
+  }
+  if (plan.error) {
+    await sendMessage(chat.id, plan.error, {
+      reply_to_message_id: message.message_id
+    }).catch(error => logBackgroundError('assistant-plan-error', error));
+    return true;
+  }
+
+  await sendMessage(chat.id, assistantPreviewText(plan), {
+    reply_to_message_id: message.message_id,
+    reply_markup: {
+      inline_keyboard: [[
+        { text: '✅ Tasdiqlash', callback_data: assistantCallbackData(ASSISTANT_CONFIRM_PREFIX, plan.action, plan.id) },
+        { text: '❌ Bekor qilish', callback_data: assistantCallbackData(ASSISTANT_CANCEL_PREFIX, plan.action, plan.id) }
+      ]]
+    }
+  }).catch(error => logBackgroundError('assistant-preview', error));
+  return true;
+}
+
 async function maybeSendMainStatsFromGroup(message, text, settings = null) {
   const chat = message.chat || {};
   if (!isGroupChat(chat) || !isMainStatsTrigger(text)) return false;
@@ -1526,6 +1784,90 @@ async function deleteSentGroupBroadcast({ broadcast }) {
   return { total: targets.length, deleted, failed, details };
 }
 
+async function cancelAssistantAction(query, parsed) {
+  const callbackMessage = query.message || {};
+  const chat = callbackMessage.chat || {};
+  if (parsed.action === ASSISTANT_ACTIONS.BROADCAST && parsed.id) {
+    await cancelBroadcastPreview(parsed.id);
+  }
+  await answerCallbackQuery(query.id, 'Bekor qilindi.').catch(error => logBackgroundError('assistant-cancel-answer', error));
+  if (callbackMessage.message_id) {
+    await editMessageReplyMarkup(chat.id, callbackMessage.message_id, { inline_keyboard: [] })
+      .catch(error => logBackgroundError('assistant-cancel-markup', error));
+  }
+  await sendMessage(chat.id, '❌ Uyqur AI vazifasi bekor qilindi.', {
+    reply_to_message_id: callbackMessage.message_id
+  }).catch(error => logBackgroundError('assistant-cancel-message', error));
+  return true;
+}
+
+async function handleAssistantCallback(query, parsed) {
+  const callbackMessage = query.message || {};
+  const chat = callbackMessage.chat || {};
+  if (!isGroupChat(chat) || !await isMainStatsGroup(chat)) {
+    await answerCallbackQuery(query.id, 'Bu tugma faqat main guruhda ishlaydi.').catch(error => logBackgroundError('assistant-callback-main-group', error));
+    return true;
+  }
+
+  const employee = await ensureCallbackBotAdmin(query, 'assistant-callback');
+  if (!employee) return true;
+
+  if (!parsed.confirmed) return cancelAssistantAction(query, parsed);
+
+  if (callbackMessage.message_id) {
+    await editMessageReplyMarkup(chat.id, callbackMessage.message_id, { inline_keyboard: [] })
+      .catch(error => logBackgroundError('assistant-confirm-markup', error));
+  }
+
+  if (parsed.action === ASSISTANT_ACTIONS.STATS) {
+    await answerCallbackQuery(query.id, 'Statistika yuborilmoqda.').catch(error => logBackgroundError('assistant-stats-answer', error));
+    try {
+      await sendMainStatsReport(chat.id);
+    } catch (error) {
+      logBackgroundError('assistant-stats-send', error);
+      await sendMessage(chat.id, `⚠️ Statistika yuborilmadi: ${escapeHtml(error.message)}`, {
+        reply_to_message_id: callbackMessage.message_id
+      }).catch(replyError => logBackgroundError('assistant-stats-error-message', replyError));
+    }
+    return true;
+  }
+
+  if (parsed.action === ASSISTANT_ACTIONS.BROADCAST) {
+    const broadcast = await markBroadcastProcessing(parsed.id);
+    if (!broadcast) {
+      await answerCallbackQuery(query.id, 'Bu preview allaqachon ishlatilgan.').catch(error => logBackgroundError('assistant-broadcast-stale-answer', error));
+      return true;
+    }
+    await answerCallbackQuery(query.id, 'Yuborish boshlandi.').catch(error => logBackgroundError('assistant-broadcast-answer', error));
+    const result = await sendPendingGroupBroadcast({ broadcast });
+    const messages = broadcastResultMessages(result);
+    for (let index = 0; index < messages.length; index += 1) {
+      await sendMessage(chat.id, messages[index], index === 0 ? { reply_to_message_id: callbackMessage.message_id } : {})
+        .catch(error => logBackgroundError('assistant-broadcast-result-message', error));
+    }
+    return true;
+  }
+
+  if (parsed.action === ASSISTANT_ACTIONS.DELETE_BROADCAST) {
+    const { broadcast, targets } = await loadGroupBroadcastWithTargets(parsed.id);
+    if (!broadcast || !targets.length) {
+      await answerCallbackQuery(query.id, 'O‘chirish uchun xabar topilmadi.').catch(error => logBackgroundError('assistant-delete-stale-answer', error));
+      return true;
+    }
+    await answerCallbackQuery(query.id, 'O‘chirish boshlandi.').catch(error => logBackgroundError('assistant-delete-answer', error));
+    const result = await deleteSentGroupBroadcast({ broadcast });
+    const messages = broadcastDeleteResultMessages(result);
+    for (let index = 0; index < messages.length; index += 1) {
+      await sendMessage(chat.id, messages[index], index === 0 ? { reply_to_message_id: callbackMessage.message_id } : {})
+        .catch(error => logBackgroundError('assistant-delete-result-message', error));
+    }
+    return true;
+  }
+
+  await answerCallbackQuery(query.id).catch(error => logBackgroundError('assistant-unknown-answer', error));
+  return true;
+}
+
 async function handleBroadcastDeleteCallback(query, parsed) {
   const callbackMessage = query.message || {};
   const chat = callbackMessage.chat || {};
@@ -1533,6 +1875,9 @@ async function handleBroadcastDeleteCallback(query, parsed) {
     await answerCallbackQuery(query.id, 'Bu tugma faqat main guruhda ishlaydi.').catch(error => logBackgroundError('broadcast-delete-callback-answer', error));
     return true;
   }
+
+  const employee = await ensureCallbackBotAdmin(query, 'broadcast-delete-callback');
+  if (!employee) return true;
 
   if (parsed.action === 'delete_cancel') {
     await answerCallbackQuery(query.id, 'Bekor qilindi.').catch(error => logBackgroundError('broadcast-delete-cancel-answer', error));
@@ -1575,6 +1920,9 @@ async function handleBroadcastCallback(query, parsed) {
     return true;
   }
 
+  const employee = await ensureCallbackBotAdmin(query, 'broadcast-callback');
+  if (!employee) return true;
+
   if (parsed.action === 'cancel') {
     const cancelled = await cancelBroadcastPreview(parsed.id);
     await answerCallbackQuery(query.id, cancelled ? 'Bekor qilindi.' : 'Bu preview allaqachon ishlatilgan.').catch(error => logBackgroundError('broadcast-cancel-answer', error));
@@ -1612,6 +1960,8 @@ async function handleBroadcastCallback(query, parsed) {
 }
 
 async function handleCallbackQuery(query = {}) {
+  const assistantParsed = parseAssistantCallbackData(query.data);
+  if (assistantParsed) return handleAssistantCallback(query, assistantParsed);
   const parsed = parseBroadcastCallbackData(query.data);
   if (parsed && parsed.action.startsWith('delete_')) return handleBroadcastDeleteCallback(query, parsed);
   if (parsed) return handleBroadcastCallback(query, parsed);
@@ -2096,9 +2446,11 @@ async function processMessage(updateKind, message) {
     throw error;
   }
 
+  const assistantKnownTask = isAssistantKnownTask(text);
+  const assistantAddressCandidate = !assistantKnownTask && hasAssistantAddressCandidate(message, text);
   const possibleMainGroupAutomation = isGroupChat(chat)
-    && (isMainStatsTrigger(text) || isGroupBroadcastDeleteTrigger(text) || isGroupBroadcastTrigger(text))
-    && await isMainStatsGroup(chat, settings);
+    && (assistantKnownTask || assistantAddressCandidate)
+    && await isMainStatsGroup(chat, settings, assistantKnownTask ? {} : { resolveFallback: false });
 
   if (possibleMainGroupAutomation) {
     try {
@@ -2117,9 +2469,7 @@ async function processMessage(updateKind, message) {
       });
       throw error;
     }
-    if (await maybeSendMainStatsFromGroup(message, text, settings)) return;
-    if (await maybeStartGroupBroadcastDeletePreview(message, text, settings)) return;
-    if (await maybeStartGroupBroadcastPreview(message, text, settings)) return;
+    if (await maybeStartAdminAssistantPreview({ message, text, settings, employee })) return;
   }
 
   const classification = await classifyIncomingMessage({
@@ -2151,9 +2501,7 @@ async function processMessage(updateKind, message) {
   }
   await maybeNotifyMainGroupMessageSaved({ updateKind, message, settings, chatRow, classification, employee, savedMessage, target: 'public.messages' });
 
-  if (await maybeSendMainStatsFromGroup(message, text, settings)) return;
-  if (await maybeStartGroupBroadcastDeletePreview(message, text, settings)) return;
-  if (await maybeStartGroupBroadcastPreview(message, text, settings)) return;
+  if (await maybeStartAdminAssistantPreview({ message, text, settings, employee })) return;
 
   if (isGroupChat(chat) && isConfiguredMainGroup(chat, settings)) {
     await maybeAnswerGroupQuestion({ updateKind, message, sourceType, text, settings, employee });

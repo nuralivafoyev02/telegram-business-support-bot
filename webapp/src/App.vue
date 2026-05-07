@@ -1219,6 +1219,7 @@
               <option value="support">Texnik yordam</option>
               <option value="manager">Menejer</option>
               <option value="owner">Ega</option>
+              <option value="admin">Bot admin</option>
             </select>
           </label>
           <label class="label">Holat
@@ -2209,6 +2210,28 @@
     <Transition name="toast-pop">
       <div v-if="toast" class="toast">{{ toast }}</div>
     </Transition>
+
+    <div class="ai-launcher-wrap">
+      <button class="ai-launcher" type="button" aria-label="Uyqur AI oynasini ochish" @click="aiAssistantOpen = true">
+        <span>Uyqur AI</span>
+      </button>
+      <div class="ai-launcher-tooltip" role="tooltip">
+        Bot vazifalarini tahlil qiladi, xavfli amallarni tasdiq bilan bajaradi va tez kunda web paneldan ham yordam beradi.
+      </div>
+    </div>
+
+    <Transition name="ai-modal">
+      <div v-if="aiAssistantOpen" class="ai-modal-backdrop" @click="aiAssistantOpen = false">
+        <section class="ai-modal" role="dialog" aria-modal="true" aria-labelledby="ai-modal-title"
+          @click.stop>
+          <button class="ai-modal-close" type="button" aria-label="Yopish" @click="aiAssistantOpen = false">✕</button>
+          <div class="ai-maintenance" id="ai-modal-title">
+            <span class="ai-maintenance-mark" aria-hidden="true"></span>
+            <p>Texnik ishlar olib borilmoqda... Tez kunda Uyqur AI foydalanishga topshiriladi!</p>
+          </div>
+        </section>
+      </div>
+    </Transition>
   </div>
 </template>
 
@@ -2295,6 +2318,7 @@ const loadingAction = ref('');
 const toast = ref('');
 const search = ref('');
 const modal = ref('');
+const aiAssistantOpen = ref(false);
 const selectedTarget = ref(null);
 const deletingGroupId = ref('');
 const deletingEmployeeId = ref('');
@@ -2418,8 +2442,8 @@ function setModalScrollLock(locked) {
   window.scrollTo(0, modalScrollY);
 }
 
-watch(modal, value => {
-  setModalScrollLock(Boolean(value));
+watch([modal, aiAssistantOpen], ([value, aiOpen]) => {
+  setModalScrollLock(Boolean(value || aiOpen));
 });
 
 const loginForm = reactive({ username: 'admin', password: '' });
