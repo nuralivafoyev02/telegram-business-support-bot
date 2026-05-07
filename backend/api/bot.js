@@ -467,7 +467,7 @@ async function attachReactionMediaToClickUp(config, taskId, media = []) {
 
 async function getSavedReactionMessage(chatId, messageId) {
   const rows = await supabase.select('messages', {
-    select: 'id,tg_message_id,chat_id,from_tg_user_id,from_name,from_username,source_type,classification,text,raw,created_at',
+    select: 'id,tg_message_id,chat_id,from_tg_user_id,from_name,from_username,source_type,classification,text,business_connection_id,raw,created_at',
     chat_id: supabase.eq(chatId),
     tg_message_id: supabase.eq(messageId),
     limit: '1'
@@ -579,6 +579,7 @@ async function handleEyeReaction(reaction = {}, settings = {}) {
     ...jsonObject(savedMessage.raw),
     message_id: savedMessage.tg_message_id,
     chat: jsonObject(savedMessage.raw).chat || chat,
+    business_connection_id: savedMessage.business_connection_id || jsonObject(savedMessage.raw).business_connection_id || null,
     from: jsonObject(savedMessage.raw).from || {
       id: savedMessage.from_tg_user_id || null,
       first_name: savedMessage.from_name || '',
@@ -651,7 +652,25 @@ async function handleEyeReaction(reaction = {}, settings = {}) {
       error: '',
       raw: { reaction, clickup_task: clickUpTask, attachments: attachmentResults }
     });
-    return { ok: true, task_id: taskId, task_url: taskUrl };
+    const taskLink = taskUrl || (taskId ? `https://app.clickup.com/t/${encodeURIComponent(taskId)}` : '');
+    let replySent = false;
+    if (taskLink) {
+      try {
+        await sendTrackedBotReply({
+          message: raw,
+          sourceType,
+          text: `Task yaratildi: ${taskLink}`,
+          options: { reply_to_message_id: savedMessage.tg_message_id, parse_mode: null },
+          classification: 'bot_reply',
+          updateKind: 'clickup_task_created_reply',
+          rawSource: 'clickup_task_created_reply'
+        });
+        replySent = true;
+      } catch (replyError) {
+        logBackgroundError('clickup-task-created-reply', replyError);
+      }
+    }
+    return { ok: true, task_id: taskId, task_url: taskUrl, reply_sent: replySent };
   } catch (error) {
     await saveClickUpTracking({
       chat_id: chat.id,

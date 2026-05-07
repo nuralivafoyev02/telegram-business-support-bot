@@ -1266,6 +1266,7 @@ async function testEyeReactionCreatesClickUpTask() {
   const originalFetch = global.fetch;
   const inserted = [];
   const clickUpCalls = [];
+  const telegramCalls = [];
   clearBotSettingsCache();
 
   supabase.select = async (table, query = {}) => {
@@ -1325,12 +1326,22 @@ async function testEyeReactionCreatesClickUpTask() {
   };
   supabase.patch = async (_table, _query, values) => [values];
   global.fetch = async (url, options = {}) => {
-    clickUpCalls.push({ url, body: JSON.parse(options.body || '{}') });
-    assert.match(url, /api\.clickup\.com\/api\/v2\/list\/111\/task$/);
-    return {
-      ok: true,
-      json: async () => ({ id: 'cu-task-1', url: 'https://app.clickup.com/t/cu-task-1' })
-    };
+    const body = JSON.parse(options.body || '{}');
+    if (/api\.clickup\.com\/api\/v2\/list\/111\/task$/.test(url)) {
+      clickUpCalls.push({ url, body });
+      return {
+        ok: true,
+        json: async () => ({ id: 'cu-task-1', url: 'https://app.clickup.com/t/cu-task-1' })
+      };
+    }
+    if (/sendMessage$/.test(url)) {
+      telegramCalls.push({ url, body });
+      return {
+        ok: true,
+        json: async () => ({ ok: true, result: { message_id: 9101 } })
+      };
+    }
+    throw new Error(`Unexpected fetch ${url}`);
   };
 
   try {
@@ -1348,9 +1359,14 @@ async function testEyeReactionCreatesClickUpTask() {
 
     assert.strictEqual(result.status, 200);
     assert.strictEqual(result.payload.handled, 'message_reaction_eye');
+    assert.strictEqual(result.payload.reply_sent, true);
     assert.strictEqual(clickUpCalls.length, 1);
     assert.deepStrictEqual(clickUpCalls[0].body.assignees, [123]);
     assert.match(clickUpCalls[0].body.name, /login sahifasida xatolik/);
+    assert.strictEqual(telegramCalls.length, 1);
+    assert.strictEqual(telegramCalls[0].body.chat_id, -100111);
+    assert.strictEqual(telegramCalls[0].body.reply_to_message_id, 77);
+    assert.strictEqual(telegramCalls[0].body.text, 'Task yaratildi: https://app.clickup.com/t/cu-task-1');
     const clickUpRow = inserted.find(item => item.table === 'clickup_tasks');
     assert.ok(clickUpRow);
     assert.strictEqual(clickUpRow.rows[0].status, 'created');
