@@ -2562,37 +2562,47 @@ async function handleMessageReaction(reactionUpdate) {
   const { chat, message_id, user, new_reaction } = reactionUpdate;
   if (!chat || !message_id || !user || !new_reaction) return;
 
+  const chatId = String(chat.id);
+  const msgId = String(message_id);
+  const userId = String(user.id);
+
+  console.info(`[bot:reaction] Incoming reaction from ${userId} in chat ${chatId} for msg ${msgId}`);
+
   // 1. Faqat xodimlardan kelgan reaksiyalarni qabul qilamiz
-  const employee = await metrics.getKnownEmployeeByTelegramId(user.id);
-  if (!employee) return;
+  const employee = await metrics.getKnownEmployeeByTelegramId(userId);
+  if (!employee) {
+    console.warn(`[bot:reaction] User ${userId} is not a known active employee, ignoring`);
+    return;
+  }
 
   // 2. Qaysi emoji qo'yilganini aniqlaymiz
   const emojis = new_reaction.filter(r => r.type === 'emoji').map(r => r.emoji);
-  const isEye = emojis.includes('👁️');
+  const isEye = emojis.includes('👁️') || emojis.includes('👀');
   const isHundred = emojis.includes('💯');
+
+  console.info(`[bot:reaction] Emojis: ${emojis.join(', ')} (isEye: ${isEye}, isHundred: ${isHundred})`);
 
   if (!isEye && !isHundred) return;
 
-  // 3. Bazadan ushbu xabarni topamiz (matnini olish uchun)
+  // 3. Bazadan ushbu xabarni topamiz
   const rows = await supabase.select('messages', {
     select: 'id,chat_id,tg_message_id,from_tg_user_id,from_name,from_username,text,source_type,created_at',
-    chat_id: supabase.eq(chat.id),
-    tg_message_id: supabase.eq(message_id),
+    chat_id: supabase.eq(chatId),
+    tg_message_id: supabase.eq(msgId),
     limit: '1'
   });
   
   const dbMessage = rows && rows[0];
   if (!dbMessage) {
-    console.warn(`[bot:reaction] Message ${message_id} not found in DB, ignoring reaction`);
+    console.warn(`[bot:reaction] Message ${msgId} in chat ${chatId} not found in DB`);
     return;
   }
 
-  // Telegram xabar obyektini simulyatsiya qilamiz
   const fakeMessage = {
-    message_id,
-    chat,
+    message_id: Number(msgId),
+    chat: { id: Number(chatId), type: chat.type, title: chat.title },
     from: { 
-      id: dbMessage.from_tg_user_id, 
+      id: Number(dbMessage.from_tg_user_id), 
       first_name: dbMessage.from_name || 'Customer', 
       username: dbMessage.from_username || null 
     },
@@ -2601,17 +2611,13 @@ async function handleMessageReaction(reactionUpdate) {
   };
 
   if (isEye) {
-    // Ticket ochish (agarda ochilmagan bo'lsa)
     await metrics.createSupportRequest({ message: fakeMessage, sourceType: dbMessage.source_type });
-    // Bazadagi xabar tasnifini (classification) yangilash
     await supabase.patch('messages', { id: supabase.eq(dbMessage.id) }, { classification: 'ticket' });
-    console.info(`[bot:reaction] Eye reaction -> Ticket opened/updated for msg ${message_id}`);
+    console.info(`[bot:reaction] SUCCESS: Eye reaction -> Ticket opened for msg ${msgId}`);
   } else if (isHundred) {
-    // Ticketni yopish
     await metrics.closeLatestRequest({ message: fakeMessage, employee });
-    // Bazadagi xabar tasnifini yangilash
     await supabase.patch('messages', { id: supabase.eq(dbMessage.id) }, { classification: 'done' });
-    console.info(`[bot:reaction] 100 reaction -> Ticket closed for msg ${message_id}`);
+    console.info(`[bot:reaction] SUCCESS: 100 reaction -> Ticket closed for msg ${msgId}`);
   }
 }
 
