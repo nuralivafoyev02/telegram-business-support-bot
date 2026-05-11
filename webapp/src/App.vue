@@ -1784,7 +1784,6 @@
             <aside class="employee-chat-list-panel">
               <div class="employee-chat-list-head">
                 <b>{{ employeeProfileTab === 'group' ? 'Guruh yozishmalari' : 'Shaxsiy yozishmalar' }}</b>
-                <span>{{ selectedPeriodLabel }}dagi xodimga tegishli ticketlar</span>
               </div>
               <div v-if="employeeProfileVisibleChats.length" class="employee-chat-list">
                 <button v-for="chat in employeeProfileVisibleChats" :key="employeeProfileChatKey(chat)" type="button"
@@ -5495,12 +5494,17 @@ async function scrollThreadToEnd(threadRef) {
   
   setThreadScrollToEnd(thread);
   
+  // Multiple attempts to ensure we reach the bottom as content renders
+  const attempts = [10, 50, 100, 300, 600, 1000];
+  attempts.forEach(ms => {
+    setTimeout(() => {
+      const currentThread = threadRef.value;
+      if (currentThread) setThreadScrollToEnd(currentThread);
+    }, ms);
+  });
+
   if (typeof requestAnimationFrame === 'function') {
-    requestAnimationFrame(() => {
-      setThreadScrollToEnd(thread);
-      setTimeout(() => setThreadScrollToEnd(thread), 100);
-      setTimeout(() => setThreadScrollToEnd(thread), 300);
-    });
+    requestAnimationFrame(() => setThreadScrollToEnd(thread));
   }
 }
 
