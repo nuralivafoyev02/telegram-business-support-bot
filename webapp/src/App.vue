@@ -4542,7 +4542,7 @@ function mediaOpenLabel(media) {
 
 function mediaPlaceholder(media) {
   if (!media) return 'Fayl';
-  if (mediaErrors.value[media.file_id]) return 'Fayl yuklanmadi';
+  if (mediaErrors.value[media.file_id]) return mediaErrors.value[media.file_id];
   if (mediaLoading.value[media.file_id]) return 'Fayl yuklanmoqda...';
   return ({
     sticker: 'Stikerli xabar',
