@@ -2695,7 +2695,7 @@ const supportSummaryCards = computed(() => {
       key: 'open',
       title: 'Javobsiz',
       value: fmtNumber(stats.open_requests),
-      note: `${fmtNumber(overdueOpenRequestsTotal.value)} tasi 30 daqiqadan oshgan`,
+      note: `${fmtNumber(stats.overdue_open_requests || 0)} tasi 30 daqiqadan oshgan`,
       comparison: attachPreviousLabel(compareValue(stats.open_requests, stats.prev_open_requests, { invert: true, unit: 'ta' })),
       icon: '⚠️',
       tone: 'danger',
