@@ -304,11 +304,11 @@ function emptyPeriod(periodKey, label) {
 
 function buildPeriodSummary(requests, periodKey, label, keys) {
   const created = requests.filter(request => inCurrentPeriod(request.created_at, periodKey, keys));
-  const closed = created.filter(request => request.status === 'closed');
+  const closed = requests.filter(request => request.status === 'closed' && request.closed_at && inCurrentPeriod(request.closed_at, periodKey, keys));
   const closeMinutes = closed.map(request => minutesBetween(request.created_at, request.closed_at)).filter(value => value !== null);
 
   const prevCreated = requests.filter(request => inPreviousPeriod(request.created_at, periodKey, keys));
-  const prevClosed = prevCreated.filter(request => request.status === 'closed');
+  const prevClosed = requests.filter(request => request.status === 'closed' && request.closed_at && inPreviousPeriod(request.closed_at, periodKey, keys));
   const prevCloseMinutes = prevClosed.map(request => minutesBetween(request.created_at, request.closed_at)).filter(value => value !== null);
 
   return {
@@ -335,6 +335,8 @@ function buildPeriodSummary(requests, periodKey, label, keys) {
 function buildEmployeePerformance({ requests, employees, messages = [], periodKey, keys }) {
   const employeeMap = new Map(employees.map(employee => [employee.id, employee]).filter(([id]) => id));
   const employeeByTgId = new Map(employees.map(employee => [telegramIdKey(employee.tg_user_id), employee]).filter(([id]) => id));
+  const employeeByUsername = new Map(employees.map(employee => [String(employee.username || '').toLowerCase().trim(), employee]).filter(([username]) => username));
+  const employeeByName = new Map(employees.map(employee => [String(employee.full_name || '').toLowerCase().trim(), employee]).filter(([name]) => name));
   const employeeMaps = buildEmployeeMaps(employees);
   const messagesByConversation = new Map();
   messages.forEach(message => {
@@ -344,13 +346,13 @@ function buildEmployeePerformance({ requests, employees, messages = [], periodKe
   });
 
   const closed = requests.filter(request => {
-    if (request.status !== 'closed' || !inCurrentPeriod(request.closed_at, periodKey, keys)) return false;
+    if (request.status !== 'closed' || !request.closed_at || !inCurrentPeriod(request.closed_at, periodKey, keys)) return false;
     return Boolean(request.closed_by_employee_id || request.closed_by_tg_id || request.closed_by_name);
   });
   const open = requests.filter(request => request.status === 'open' && inCurrentPeriod(request.created_at, periodKey, keys));
 
   const prevClosed = requests.filter(request => {
-    if (request.status !== 'closed' || !inPreviousPeriod(request.closed_at, periodKey, keys)) return false;
+    if (request.status !== 'closed' || !request.closed_at || !inPreviousPeriod(request.closed_at, periodKey, keys)) return false;
     return Boolean(request.closed_by_employee_id || request.closed_by_tg_id || request.closed_by_name);
   });
   const prevOpen = requests.filter(request => request.status === 'open' && inPreviousPeriod(request.created_at, periodKey, keys));
@@ -380,8 +382,27 @@ function buildEmployeePerformance({ requests, employees, messages = [], periodKe
     return totals.get(key);
   }
 
+  function findEmployee(employeeId, tgUserId, name) {
+    let employee = employeeMap.get(employeeId) || employeeByTgId.get(telegramIdKey(tgUserId));
+    if (!employee && name) {
+      const nameClean = String(name).toLowerCase().trim();
+      employee = employeeByUsername.get(nameClean) || employeeByName.get(nameClean);
+      if (!employee) {
+        for (const emp of employees) {
+          const empName = String(emp.full_name || '').toLowerCase();
+          const empUser = String(emp.username || '').toLowerCase();
+          if (empName === nameClean || empUser === nameClean || nameClean.includes(empName) || empName.includes(nameClean)) {
+            employee = emp;
+            break;
+          }
+        }
+      }
+    }
+    return employee;
+  }
+
   closed.forEach(request => {
-    const employee = employeeMap.get(request.closed_by_employee_id) || employeeByTgId.get(telegramIdKey(request.closed_by_tg_id));
+    const employee = findEmployee(request.closed_by_employee_id, request.closed_by_tg_id, request.closed_by_name);
     const current = ensureEmployeeTotal({ employee, employeeId: request.closed_by_employee_id, tgUserId: request.closed_by_tg_id, name: request.closed_by_name });
     current.closed_requests += 1;
     if (request.chat_id) current.handled_chats.add(conversationScopeKey(request));
@@ -393,14 +414,14 @@ function buildEmployeePerformance({ requests, employees, messages = [], periodKe
   open.forEach(request => {
     const responsible = resolveRequestResponsibleEmployee(request, messagesByConversation.get(conversationScopeKey(request)) || [], employeeMaps);
     if (!responsible) return;
-    const employee = employeeMap.get(responsible.employee_id) || employeeByTgId.get(telegramIdKey(responsible.tg_user_id));
+    const employee = findEmployee(responsible.employee_id, responsible.tg_user_id, responsible.full_name);
     const current = ensureEmployeeTotal({ employee, employeeId: responsible.employee_id, tgUserId: responsible.tg_user_id, name: responsible.full_name });
     current.open_requests += 1;
     if (request.chat_id) current.handled_chats.add(conversationScopeKey(request));
   });
 
   prevClosed.forEach(request => {
-    const employee = employeeMap.get(request.closed_by_employee_id) || employeeByTgId.get(telegramIdKey(request.closed_by_tg_id));
+    const employee = findEmployee(request.closed_by_employee_id, request.closed_by_tg_id, request.closed_by_name);
     const current = ensureEmployeeTotal({ employee, employeeId: request.closed_by_employee_id, tgUserId: request.closed_by_tg_id, name: request.closed_by_name });
     current.prev_closed_requests += 1;
     if (request.chat_id) current.prev_handled_chats.add(conversationScopeKey(request));
@@ -411,7 +432,7 @@ function buildEmployeePerformance({ requests, employees, messages = [], periodKe
   prevOpen.forEach(request => {
     const responsible = resolveRequestResponsibleEmployee(request, messagesByConversation.get(conversationScopeKey(request)) || [], employeeMaps);
     if (!responsible) return;
-    const employee = employeeMap.get(responsible.employee_id) || employeeByTgId.get(telegramIdKey(responsible.tg_user_id));
+    const employee = findEmployee(responsible.employee_id, responsible.tg_user_id, responsible.full_name);
     const current = ensureEmployeeTotal({ employee, employeeId: responsible.employee_id, tgUserId: responsible.tg_user_id, name: responsible.full_name });
     current.prev_open_requests += 1;
     if (request.chat_id) current.prev_handled_chats.add(conversationScopeKey(request));
@@ -447,37 +468,49 @@ function buildEmployeePerformance({ requests, employees, messages = [], periodKe
 
 function buildChatPerformance({ requests, chats, periodKey, keys, sourceType = '' }) {
   const chatMap = new Map(chats.map(chat => [String(chat.chat_id), chat]));
-  const periodRequests = requests.filter(request => {
-    if (sourceType && request.source_type !== sourceType) return false;
-    return inCurrentPeriod(request.created_at, periodKey, keys);
-  });
   const totals = new Map();
 
-  periodRequests.forEach(request => {
-    const key = String(request.chat_id);
-    const chat = chatMap.get(key) || {};
-    const current = totals.get(key) || {
-      chat_id: request.chat_id,
-      title: chat.title || key,
-      company_name: chat.company_name || null,
-      source_type: chat.source_type || request.source_type || '',
-      total_requests: 0,
-      open_requests: 0,
-      closed_requests: 0,
-      close_minutes: [],
-      customers: new Set(),
-      last_request_at: null
-    };
-    current.total_requests += 1;
-    if (request.status === 'open') current.open_requests += 1;
-    if (request.status === 'closed') {
-      current.closed_requests += 1;
-      const closeMinute = minutesBetween(request.created_at, request.closed_at);
-      if (closeMinute !== null) current.close_minutes.push(closeMinute);
+  function ensureChatTotal(chatId, request) {
+    const key = String(chatId);
+    if (!totals.has(key)) {
+      const chat = chatMap.get(key) || {};
+      totals.set(key, {
+        chat_id: chatId,
+        title: chat.title || key,
+        company_name: chat.company_name || null,
+        source_type: chat.source_type || request.source_type || '',
+        total_requests: 0,
+        open_requests: 0,
+        closed_requests: 0,
+        close_minutes: [],
+        customers: new Set(),
+        last_request_at: null
+      });
     }
-    if (request.customer_tg_id) current.customers.add(String(request.customer_tg_id));
-    if (!current.last_request_at || String(request.created_at || '') > String(current.last_request_at || '')) current.last_request_at = request.created_at || null;
-    totals.set(key, current);
+    return totals.get(key);
+  }
+
+  requests.forEach(request => {
+    if (sourceType && request.source_type !== sourceType) return;
+    const createdInPeriod = inCurrentPeriod(request.created_at, periodKey, keys);
+    const closedInPeriod = request.status === 'closed' && request.closed_at && inCurrentPeriod(request.closed_at, periodKey, keys);
+
+    if (createdInPeriod || closedInPeriod) {
+      const current = ensureChatTotal(request.chat_id, request);
+      if (createdInPeriod) {
+        current.total_requests += 1;
+        if (request.status === 'open') current.open_requests += 1;
+        if (request.customer_tg_id) current.customers.add(String(request.customer_tg_id));
+        if (!current.last_request_at || String(request.created_at || '') > String(current.last_request_at || '')) {
+          current.last_request_at = request.created_at || null;
+        }
+      }
+      if (closedInPeriod) {
+        current.closed_requests += 1;
+        const closeMinute = minutesBetween(request.created_at, request.closed_at);
+        if (closeMinute !== null) current.close_minutes.push(closeMinute);
+      }
+    }
   });
 
   return [...totals.values()]
@@ -505,11 +538,11 @@ function buildGroupPerformance(args) {
 function buildResponseTimeTrend(requests, periodKey, keys) {
   const buckets = new Map();
   requests
-    .filter(request => request.status === 'closed' && inCurrentPeriod(request.created_at, periodKey, keys))
+    .filter(request => request.status === 'closed' && request.closed_at && inCurrentPeriod(request.closed_at, periodKey, keys))
     .forEach(request => {
       const closeMinute = minutesBetween(request.created_at, request.closed_at);
       if (closeMinute === null) return;
-      const hourLabel = tashkentHourKey(request.created_at);
+      const hourLabel = tashkentHourKey(request.closed_at);
       const current = buckets.get(hourLabel) || {
         hour_label: hourLabel,
         response_minutes: [],
@@ -550,23 +583,36 @@ function buildTicketAnswerTrend(requests, periodKey, keys) {
     open_requests: 0
   }]));
 
-  requests
-    .filter(request => request.created_at && inCurrentPeriod(request.created_at, periodKey, keys))
-    .forEach(request => {
-      const dateKey = tashkentDateKey(request.created_at);
-      const current = buckets.get(dateKey) || {
+  function ensureBucket(dateKey) {
+    if (!buckets.has(dateKey)) {
+      buckets.set(dateKey, {
         date_key: dateKey,
         date_label: shortDateLabel(dateKey),
         weekday_label: weekdayLabel(dateKey),
         total_requests: 0,
         closed_requests: 0,
         open_requests: 0
-      };
+      });
+    }
+    return buckets.get(dateKey);
+  }
+
+  requests.forEach(request => {
+    const createdInPeriod = request.created_at && inCurrentPeriod(request.created_at, periodKey, keys);
+    const closedInPeriod = request.status === 'closed' && request.closed_at && inCurrentPeriod(request.closed_at, periodKey, keys);
+
+    if (createdInPeriod) {
+      const dateKey = tashkentDateKey(request.created_at);
+      const current = ensureBucket(dateKey);
       current.total_requests += 1;
-      if (request.status === 'closed') current.closed_requests += 1;
       if (request.status === 'open') current.open_requests += 1;
-      buckets.set(dateKey, current);
-    });
+    }
+    if (closedInPeriod) {
+      const dateKey = tashkentDateKey(request.closed_at);
+      const current = ensureBucket(dateKey);
+      current.closed_requests += 1;
+    }
+  });
 
   return [...buckets.values()]
     .sort((a, b) => a.date_key.localeCompare(b.date_key))
@@ -601,16 +647,24 @@ function buildCompanyTicketPerformance({ requests, chats = [], companies, messag
     return current;
   }
 
-  requests
-    .filter(request => request.created_at && inCurrentPeriod(request.created_at, periodKey, keys))
-    .forEach(request => {
+  requests.forEach(request => {
+    const createdInPeriod = request.created_at && inCurrentPeriod(request.created_at, periodKey, keys);
+    const closedInPeriod = request.status === 'closed' && request.closed_at && inCurrentPeriod(request.closed_at, periodKey, keys);
+
+    if (createdInPeriod || closedInPeriod) {
       const companyId = request.company_id || chatCompanyMap.get(telegramIdKey(request.chat_id));
       const current = ensureCompanyTotal(companyId);
       if (!current) return;
-      current.total_requests += 1;
-      if (request.status === 'closed') current.closed_requests += 1;
-      if (request.status === 'open') current.open_requests += 1;
-    });
+
+      if (createdInPeriod) {
+        current.total_requests += 1;
+        if (request.status === 'open') current.open_requests += 1;
+      }
+      if (closedInPeriod) {
+        current.closed_requests += 1;
+      }
+    }
+  });
 
   messages
     .filter(message => message.created_at && inCurrentPeriod(message.created_at, periodKey, keys))

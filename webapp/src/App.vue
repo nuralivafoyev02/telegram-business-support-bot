@@ -1915,7 +1915,8 @@
                               class="chat-media-file" :href="mediaUrl(message.media)" target="_blank"
                               rel="noopener noreferrer">{{ mediaPlaceholder(message.media) }}</a>
                             <div v-else class="chat-media-placeholder"
-                              :class="{ sticker: message.media.kind === 'sticker' }">
+                              :class="{ sticker: message.media.kind === 'sticker' }"
+                              :title="mediaErrors[message.media.file_id] || undefined">
                               {{ mediaPlaceholder(message.media) }}
                             </div>
                             <a v-if="showMediaOpenLink(message.media)" class="chat-media-link"
@@ -2138,7 +2139,8 @@
                       <a v-else-if="isDocumentMedia(message.media) && mediaUrl(message.media)" class="chat-media-file"
                         :href="mediaUrl(message.media)" target="_blank" rel="noopener noreferrer">{{
                           mediaPlaceholder(message.media) }}</a>
-                      <div v-else class="chat-media-placeholder" :class="{ sticker: message.media.kind === 'sticker' }">
+                      <div v-else class="chat-media-placeholder" :class="{ sticker: message.media.kind === 'sticker' }"
+                           :title="mediaErrors[message.media.file_id] || undefined">
                         {{ mediaPlaceholder(message.media) }}
                       </div>
                       <a v-if="showMediaOpenLink(message.media)" class="chat-media-link"
@@ -4590,9 +4592,7 @@ function mediaOpenLabel(media) {
 
 function mediaPlaceholder(media) {
   if (!media) return 'Fayl';
-  if (mediaErrors.value[media.file_id]) return mediaErrors.value[media.file_id];
-  if (mediaLoading.value[media.file_id]) return 'Fayl yuklanmoqda...';
-  return ({
+  const labels = {
     sticker: 'Stikerli xabar',
     photo: 'Rasm',
     video: 'Video',
@@ -4601,7 +4601,15 @@ function mediaPlaceholder(media) {
     voice: 'Ovozli xabar',
     audio: 'Audio',
     document: media.file_name || 'Fayl'
-  }[media.kind] || 'Fayl');
+  };
+  const baseLabel = labels[media.kind] || 'Fayl';
+  if (mediaErrors.value[media.file_id]) {
+    return `${baseLabel} (Yuklab bo‘lmadi)`;
+  }
+  if (mediaLoading.value[media.file_id]) {
+    return `${baseLabel} yuklanmoqda...`;
+  }
+  return baseLabel;
 }
 
 function chatMessageText(message = {}) {
