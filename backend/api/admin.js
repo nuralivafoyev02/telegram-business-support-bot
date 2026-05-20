@@ -363,7 +363,7 @@ function buildPeriodSummary(requests, periodKey, label, keys, messages = [], emp
     return min !== null && min > 30;
   });
 
-  const closed = requests.filter(request => request.status === 'closed' && request.closed_at && inCurrentPeriod(request.closed_at, periodKey, keys));
+  const closed = created.filter(request => request.status === 'closed');
   const closeMinutes = closed
     .filter(request => inCurrentPeriod(request.created_at, periodKey, keys))
     .map(request => {
@@ -379,7 +379,7 @@ function buildPeriodSummary(requests, periodKey, label, keys, messages = [], emp
     return min !== null && min > 30;
   });
 
-  const prevClosed = requests.filter(request => request.status === 'closed' && request.closed_at && inPreviousPeriod(request.closed_at, periodKey, keys));
+  const prevClosed = prevCreated.filter(request => request.status === 'closed');
   const prevCloseMinutes = prevClosed
     .filter(request => inPreviousPeriod(request.created_at, periodKey, keys))
     .map(request => {
@@ -425,13 +425,13 @@ function buildEmployeePerformance({ requests, employees, messages = [], periodKe
   const chatToEmployeeId = buildChatToEmployeeIdMap(chats, companyMembers);
 
   const closed = requests.filter(request => {
-    if (request.status !== 'closed' || !request.closed_at || !inCurrentPeriod(request.closed_at, periodKey, keys)) return false;
+    if (request.status !== 'closed' || !inCurrentPeriod(request.created_at, periodKey, keys)) return false;
     return Boolean(request.closed_by_employee_id || request.closed_by_tg_id || request.closed_by_name);
   });
   const open = requests.filter(request => request.status === 'open' && inCurrentPeriod(request.created_at, periodKey, keys));
 
   const prevClosed = requests.filter(request => {
-    if (request.status !== 'closed' || !request.closed_at || !inPreviousPeriod(request.closed_at, periodKey, keys)) return false;
+    if (request.status !== 'closed' || !inPreviousPeriod(request.created_at, periodKey, keys)) return false;
     return Boolean(request.closed_by_employee_id || request.closed_by_tg_id || request.closed_by_name);
   });
   const prevOpen = requests.filter(request => request.status === 'open' && inPreviousPeriod(request.created_at, periodKey, keys));
