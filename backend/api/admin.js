@@ -364,10 +364,12 @@ function buildPeriodSummary(requests, periodKey, label, keys, messages = [], emp
   });
 
   const closed = requests.filter(request => request.status === 'closed' && request.closed_at && inCurrentPeriod(request.closed_at, periodKey, keys));
-  const closeMinutes = closed.map(request => {
-    const replyMin = calculateFirstResponseMinutes(request, messages, employeeMaps);
-    return replyMin !== null ? replyMin : minutesBetween(request.created_at, request.closed_at);
-  }).filter(value => value !== null);
+  const closeMinutes = closed
+    .filter(request => inCurrentPeriod(request.created_at, periodKey, keys))
+    .map(request => {
+      const replyMin = calculateFirstResponseMinutes(request, messages, employeeMaps);
+      return replyMin !== null ? replyMin : minutesBetween(request.created_at, request.closed_at);
+    }).filter(value => value !== null);
 
   const prevCreated = requests.filter(request => inPreviousPeriod(request.created_at, periodKey, keys));
   const prevOpenRequests = prevCreated.filter(request => request.status === 'open');
@@ -378,10 +380,12 @@ function buildPeriodSummary(requests, periodKey, label, keys, messages = [], emp
   });
 
   const prevClosed = requests.filter(request => request.status === 'closed' && request.closed_at && inPreviousPeriod(request.closed_at, periodKey, keys));
-  const prevCloseMinutes = prevClosed.map(request => {
-    const replyMin = calculateFirstResponseMinutes(request, messages, employeeMaps);
-    return replyMin !== null ? replyMin : minutesBetween(request.created_at, request.closed_at);
-  }).filter(value => value !== null);
+  const prevCloseMinutes = prevClosed
+    .filter(request => inPreviousPeriod(request.created_at, periodKey, keys))
+    .map(request => {
+      const replyMin = calculateFirstResponseMinutes(request, messages, employeeMaps);
+      return replyMin !== null ? replyMin : minutesBetween(request.created_at, request.closed_at);
+    }).filter(value => value !== null);
 
   return {
     ...emptyPeriod(periodKey, label),
@@ -481,9 +485,11 @@ function buildEmployeePerformance({ requests, employees, messages = [], periodKe
     const current = ensureEmployeeTotal({ employee, employeeId: request.closed_by_employee_id, tgUserId: request.closed_by_tg_id, name: request.closed_by_name });
     current.closed_requests += 1;
     if (request.chat_id) current.handled_chats.add(conversationScopeKey(request));
-    const replyMin = calculateFirstResponseMinutes(request, messages, employeeMaps);
-    const closeMinute = replyMin !== null ? replyMin : minutesBetween(request.created_at, request.closed_at);
-    if (closeMinute !== null) current.close_minutes.push(closeMinute);
+    if (inCurrentPeriod(request.created_at, periodKey, keys)) {
+      const replyMin = calculateFirstResponseMinutes(request, messages, employeeMaps);
+      const closeMinute = replyMin !== null ? replyMin : minutesBetween(request.created_at, request.closed_at);
+      if (closeMinute !== null) current.close_minutes.push(closeMinute);
+    }
     if (!current.last_closed_at || String(request.closed_at || '') > String(current.last_closed_at || '')) current.last_closed_at = request.closed_at || null;
   });
 
@@ -501,9 +507,11 @@ function buildEmployeePerformance({ requests, employees, messages = [], periodKe
     const current = ensureEmployeeTotal({ employee, employeeId: request.closed_by_employee_id, tgUserId: request.closed_by_tg_id, name: request.closed_by_name });
     current.prev_closed_requests += 1;
     if (request.chat_id) current.prev_handled_chats.add(conversationScopeKey(request));
-    const replyMin = calculateFirstResponseMinutes(request, messages, employeeMaps);
-    const closeMinute = replyMin !== null ? replyMin : minutesBetween(request.created_at, request.closed_at);
-    if (closeMinute !== null) current.prev_close_minutes.push(closeMinute);
+    if (inPreviousPeriod(request.created_at, periodKey, keys)) {
+      const replyMin = calculateFirstResponseMinutes(request, messages, employeeMaps);
+      const closeMinute = replyMin !== null ? replyMin : minutesBetween(request.created_at, request.closed_at);
+      if (closeMinute !== null) current.prev_close_minutes.push(closeMinute);
+    }
   });
 
   prevOpen.forEach(request => {
@@ -584,8 +592,10 @@ function buildChatPerformance({ requests, chats, periodKey, keys, sourceType = '
       }
       if (closedInPeriod) {
         current.closed_requests += 1;
-        const closeMinute = minutesBetween(request.created_at, request.closed_at);
-        if (closeMinute !== null) current.close_minutes.push(closeMinute);
+        if (createdInPeriod) {
+          const closeMinute = minutesBetween(request.created_at, request.closed_at);
+          if (closeMinute !== null) current.close_minutes.push(closeMinute);
+        }
       }
     }
   });
@@ -617,6 +627,7 @@ function buildResponseTimeTrend(requests, periodKey, keys, messages = [], employ
   requests
     .filter(request => request.status === 'closed' && request.closed_at && inCurrentPeriod(request.closed_at, periodKey, keys))
     .forEach(request => {
+      if (!inCurrentPeriod(request.created_at, periodKey, keys)) return;
       const replyMin = calculateFirstResponseMinutes(request, messages, employeeMaps);
       const closeMinute = replyMin !== null ? replyMin : minutesBetween(request.created_at, request.closed_at);
       if (closeMinute === null) return;
