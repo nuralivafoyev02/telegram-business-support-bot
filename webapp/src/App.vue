@@ -1452,8 +1452,20 @@
                               class="chat-media-image" :src="mediaUrl(message.media)" alt="" />
                             <video v-else-if="isVideoMedia(message.media) && mediaUrl(message.media)"
                               class="chat-media-video" :src="mediaUrl(message.media)" controls playsinline></video>
-                            <audio v-else-if="isAudioMedia(message.media)"
-                              class="chat-media-audio" :src="mediaUrl(message.media) || undefined" controls></audio>
+                            <div v-else-if="isAudioMedia(message.media)" class="chat-media-audio-wrapper" style="display: flex; flex-direction: column; gap: 4px; width: 100%;">
+                              <audio class="chat-media-audio" :src="mediaUrl(message.media) || undefined" controls></audio>
+                              <div v-if="mediaLoading[message.media.file_id] || mediaErrors[message.media.file_id]" 
+                                   class="chat-media-audio-status" 
+                                   :style="{
+                                     fontSize: '11px',
+                                     color: mediaErrors[message.media.file_id] ? '#ef4444' : '#6b7280',
+                                     marginLeft: '12px',
+                                     marginTop: '2px',
+                                     fontStyle: 'italic'
+                                   }">
+                                {{ mediaPlaceholder(message.media) }}
+                              </div>
+                            </div>
                             <a v-else-if="isDocumentMedia(message.media) && mediaUrl(message.media)"
                               class="chat-media-file" :href="mediaUrl(message.media)" target="_blank"
                               rel="noopener noreferrer">{{ mediaPlaceholder(message.media) }}</a>
@@ -1632,8 +1644,20 @@
                               class="chat-media-image" :src="mediaUrl(message.media)" alt="" />
                             <video v-else-if="isVideoMedia(message.media) && mediaUrl(message.media)"
                               class="chat-media-video" :src="mediaUrl(message.media)" controls playsinline></video>
-                            <audio v-else-if="isAudioMedia(message.media)"
-                              class="chat-media-audio" :src="mediaUrl(message.media) || undefined" controls></audio>
+                            <div v-else-if="isAudioMedia(message.media)" class="chat-media-audio-wrapper" style="display: flex; flex-direction: column; gap: 4px; width: 100%;">
+                              <audio class="chat-media-audio" :src="mediaUrl(message.media) || undefined" controls></audio>
+                              <div v-if="mediaLoading[message.media.file_id] || mediaErrors[message.media.file_id]" 
+                                   class="chat-media-audio-status" 
+                                   :style="{
+                                     fontSize: '11px',
+                                     color: mediaErrors[message.media.file_id] ? '#ef4444' : '#6b7280',
+                                     marginLeft: '12px',
+                                     marginTop: '2px',
+                                     fontStyle: 'italic'
+                                   }">
+                                {{ mediaPlaceholder(message.media) }}
+                              </div>
+                            </div>
                             <a v-else-if="isDocumentMedia(message.media) && mediaUrl(message.media)"
                               class="chat-media-file" :href="mediaUrl(message.media)" target="_blank"
                               rel="noopener noreferrer">{{ mediaPlaceholder(message.media) }}</a>
@@ -1873,8 +1897,20 @@
                               class="chat-media-image" :src="mediaUrl(message.media)" alt="" />
                             <video v-else-if="isVideoMedia(message.media) && mediaUrl(message.media)"
                               class="chat-media-video" :src="mediaUrl(message.media)" controls playsinline></video>
-                            <audio v-else-if="isAudioMedia(message.media)"
-                              class="chat-media-audio" :src="mediaUrl(message.media) || undefined" controls></audio>
+                            <div v-else-if="isAudioMedia(message.media)" class="chat-media-audio-wrapper" style="display: flex; flex-direction: column; gap: 4px; width: 100%;">
+                              <audio class="chat-media-audio" :src="mediaUrl(message.media) || undefined" controls></audio>
+                              <div v-if="mediaLoading[message.media.file_id] || mediaErrors[message.media.file_id]" 
+                                   class="chat-media-audio-status" 
+                                   :style="{
+                                     fontSize: '11px',
+                                     color: mediaErrors[message.media.file_id] ? '#ef4444' : '#6b7280',
+                                     marginLeft: '12px',
+                                     marginTop: '2px',
+                                     fontStyle: 'italic'
+                                   }">
+                                {{ mediaPlaceholder(message.media) }}
+                              </div>
+                            </div>
                             <a v-else-if="isDocumentMedia(message.media) && mediaUrl(message.media)"
                               class="chat-media-file" :href="mediaUrl(message.media)" target="_blank"
                               rel="noopener noreferrer">{{ mediaPlaceholder(message.media) }}</a>
@@ -2085,8 +2121,20 @@
                         :src="mediaUrl(message.media)" alt="" />
                       <video v-else-if="isVideoMedia(message.media) && mediaUrl(message.media)" class="chat-media-video"
                         :src="mediaUrl(message.media)" controls playsinline></video>
-                      <audio v-else-if="isAudioMedia(message.media)" class="chat-media-audio"
-                        :src="mediaUrl(message.media) || undefined" controls></audio>
+                      <div v-else-if="isAudioMedia(message.media)" class="chat-media-audio-wrapper" style="display: flex; flex-direction: column; gap: 4px; width: 100%;">
+                        <audio class="chat-media-audio" :src="mediaUrl(message.media) || undefined" controls></audio>
+                        <div v-if="mediaLoading[message.media.file_id] || mediaErrors[message.media.file_id]" 
+                             class="chat-media-audio-status" 
+                             :style="{
+                               fontSize: '11px',
+                               color: mediaErrors[message.media.file_id] ? '#ef4444' : '#6b7280',
+                               marginLeft: '12px',
+                               marginTop: '2px',
+                               fontStyle: 'italic'
+                             }">
+                          {{ mediaPlaceholder(message.media) }}
+                        </div>
+                      </div>
                       <a v-else-if="isDocumentMedia(message.media) && mediaUrl(message.media)" class="chat-media-file"
                         :href="mediaUrl(message.media)" target="_blank" rel="noopener noreferrer">{{
                           mediaPlaceholder(message.media) }}</a>
@@ -2779,7 +2827,13 @@ function mergeSupportCandidate(map, row = {}, source = 'identity') {
 
 const supportPerformanceRows = computed(() => {
   const merged = new Map();
-  const openRequestMap = employeeOpenRequestSummaryMap();
+  const periodStatsMap = new Map();
+
+  topEmployeeRows.value.forEach(pRow => {
+    const key = employeeSummaryKey(pRow);
+    if (key) periodStatsMap.set(key, pRow);
+  });
+
   employees.value.filter(row => !isAdminLikeEmployee(row)).forEach(row => mergeSupportCandidate(merged, row, 'employee'));
   (dashboard.employeeStats || []).forEach(row => mergeSupportCandidate(merged, row, 'stats'));
   topEmployeeRows.value.forEach(row => mergeSupportCandidate(merged, row, 'period'));
@@ -2796,20 +2850,17 @@ const supportPerformanceRows = computed(() => {
   return [...merged.values()].filter(row => !isAdminLikeEmployee(row)).map((row, index) => {
     const stat = employeeStatsMap.value.get(employeeLookupKey(row)) || row;
     const candidate = { ...row, ...stat };
-    const openSummary = openRequestMap.get(employeeSummaryKey(candidate)) || openRequestMap.get(employeeSummaryKey(row)) || null;
+    const key = employeeSummaryKey(row) || employeeSummaryKey(stat);
+    const periodRow = key ? periodStatsMap.get(key) : null;
     const assignedCompanyCount = visibleCompanyInfoRows.value.filter(company => companyMatchesEmployee(company, candidate)).length;
-    const closed = Number(row.period_closed_requests || row.stats_closed_requests || row.closed_requests || stat.closed_requests || stat.today_answered_requests || 0);
-    const open = Math.max(
-      Number(row.period_open_requests || 0),
-      Number(openSummary?.open_requests || 0),
-      Number(row.stats_open_requests || 0),
-      Number(row.stats_today_open_requests || 0),
-      Number(stat.open_requests || 0),
-      Number(stat.today_open_requests || 0)
-    );
+
+    const closed = periodRow ? Number(periodRow.closed_requests || 0) : 0;
+    const open = periodRow ? Number(periodRow.open_requests || 0) : 0;
     const total = closed + open;
-    const sla = total ? Math.round((closed / total) * 1000) / 10 : Number(row.sla || stat.sla || row.close_rate || stat.close_rate || 0);
-    const avg = Number(row._avg_weight ? Math.round((row._avg_total / row._avg_weight) * 10) / 10 : (row.avg_close_minutes || stat.avg_close_minutes || 0));
+    const sla = periodRow ? Number(periodRow.sla || periodRow.close_rate || 0) : 0;
+    const avg = periodRow ? Number(periodRow.avg_close_minutes || 0) : 0;
+    const handledChats = periodRow ? Number(periodRow.handled_chats || 0) : 0;
+
     const grade = performanceGrade(sla, avg);
     return {
       key: supportRowKey(row) || `${row.full_name || 'employee'}-${index}`,
@@ -2821,10 +2872,7 @@ const supportPerformanceRows = computed(() => {
       role: row.role || stat.role || '',
       full_name: row.full_name || stat.full_name || 'Xodim',
       telegram_is_premium: row.telegram_is_premium === true || stat.telegram_is_premium === true,
-      handled_chats: Math.max(
-        Number(row.period_handled_chats || row.stats_handled_chats || row.handled_chats || stat.handled_chats || stat.today_written_groups_count || 0),
-        Number(openSummary?.chat_keys?.size || 0)
-      ),
+      handled_chats: handledChats,
       closed_requests: closed,
       open_requests: open,
       total_requests: total,
@@ -4531,7 +4579,7 @@ function isDocumentMedia(media) {
 }
 
 function showMediaOpenLink(media) {
-  return ['voice', 'audio'].includes(media?.kind);
+  return false;
 }
 
 function mediaOpenLabel(media) {
@@ -4565,7 +4613,17 @@ function chatMessageText(message = {}) {
 
 function chatMessageBodyText(message = {}) {
   const text = String(message?.text || '').trim();
-  if (message?.media?.kind === 'sticker' && text === 'Stikerli xabar') return '';
+  if (!text) return '';
+  if (message?.media?.kind) {
+    const kind = message.media.kind;
+    if (kind === 'sticker' && (text === 'Stikerli xabar' || text === 'Sticker')) return '';
+    if (kind === 'audio' && (text === 'Audio xabar' || text === 'Audio' || text === 'Audioni alohida ochish')) return '';
+    if (kind === 'photo' && (text === 'Rasmli xabar' || text === 'Rasm')) return '';
+    if (kind === 'video' && (text === 'Videoli xabar' || text === 'Video')) return '';
+    if (kind === 'video_note' && (text === 'Video xabar' || text === 'Video note')) return '';
+    if (kind === 'animation' && (text === 'Animatsiyali xabar' || text === 'Animatsiya')) return '';
+    if (kind === 'document' && (text === 'Faylli xabar' || text === 'Fayl' || text === message.media.file_name)) return '';
+  }
   return text;
 }
 

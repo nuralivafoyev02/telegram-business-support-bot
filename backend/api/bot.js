@@ -2045,6 +2045,20 @@ async function classifyIncomingMessage({ text, chat, sourceType, updateKind, mes
     }
   }
 
+  if (!employee && message && !['request', 'ticket', 'done', 'command'].includes(classification)) {
+    const hasMedia = message.voice || 
+                     (Array.isArray(message.photo) && message.photo.length > 0) || 
+                     message.video || 
+                     message.audio || 
+                     message.document || 
+                     message.video_note || 
+                     message.sticker || 
+                     message.animation;
+    if (hasMedia) {
+      classification = 'request';
+    }
+  }
+
   return classification;
 }
 
