@@ -698,18 +698,14 @@ function buildTicketAnswerTrend(requests, periodKey, keys) {
 
   requests.forEach(request => {
     const createdInPeriod = request.created_at && inCurrentPeriod(request.created_at, periodKey, keys);
-    const closedInPeriod = request.status === 'closed' && request.closed_at && inCurrentPeriod(request.closed_at, periodKey, keys);
+    const closedInPeriod = request.status === 'closed' && createdInPeriod;
 
     if (createdInPeriod) {
       const dateKey = tashkentDateKey(request.created_at);
       const current = ensureBucket(dateKey);
       current.total_requests += 1;
       if (request.status === 'open') current.open_requests += 1;
-    }
-    if (closedInPeriod) {
-      const dateKey = tashkentDateKey(request.closed_at);
-      const current = ensureBucket(dateKey);
-      current.closed_requests += 1;
+      if (closedInPeriod) current.closed_requests += 1;
     }
   });
 
@@ -748,20 +744,17 @@ function buildCompanyTicketPerformance({ requests, chats = [], companies, messag
 
   requests.forEach(request => {
     const createdInPeriod = request.created_at && inCurrentPeriod(request.created_at, periodKey, keys);
-    const closedInPeriod = request.status === 'closed' && request.closed_at && inCurrentPeriod(request.closed_at, periodKey, keys);
+    if (!createdInPeriod) return;
 
-    if (createdInPeriod || closedInPeriod) {
-      const companyId = request.company_id || chatCompanyMap.get(telegramIdKey(request.chat_id));
-      const current = ensureCompanyTotal(companyId);
-      if (!current) return;
+    const companyId = request.company_id || chatCompanyMap.get(telegramIdKey(request.chat_id));
+    const current = ensureCompanyTotal(companyId);
+    if (!current) return;
 
-      if (createdInPeriod) {
-        current.total_requests += 1;
-        if (request.status === 'open') current.open_requests += 1;
-      }
-      if (closedInPeriod) {
-        current.closed_requests += 1;
-      }
+    current.total_requests += 1;
+    if (request.status === 'open') {
+      current.open_requests += 1;
+    } else if (request.status === 'closed') {
+      current.closed_requests += 1;
     }
   });
 

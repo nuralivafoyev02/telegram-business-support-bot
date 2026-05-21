@@ -1533,6 +1533,10 @@
               }}</b>
             </div>
             <div>
+              <span>Yopilgan</span>
+              <b class="success">{{ fmtNumber(companyGroupDetail.company?.closed_requests || companyGroupDetail.summary?.closed_requests) }}</b>
+            </div>
+            <div>
               <span>Ochiq</span>
               <b>{{ fmtNumber(companyGroupDetail.company?.open_requests || companyGroupDetail.summary?.open_requests)
               }}</b>
