@@ -5975,7 +5975,7 @@ async function selectCompanyGroup(row = {}) {
   companyGroupTicketsOpen.value = true;
   clearMediaUrls();
   await nextTick();
-  scrollCompanyGroupToEnd();
+  await scrollCompanyGroupToEnd();
   loadConversationMedia(companyGroupConversation.value)
     .then(scrollCompanyGroupToEnd)
     .catch(error => showToast(error.message));
@@ -6003,7 +6003,7 @@ async function openCompanyGroupActivity(row = {}) {
     modal.value = 'companyGroupActivity';
     clearMediaUrls();
     await nextTick();
-    scrollCompanyGroupToEnd();
+    await scrollCompanyGroupToEnd();
     loadConversationMedia(companyGroupConversation.value).catch(error => showToast(error.message));
   } catch (error) {
     showToast(error.message);

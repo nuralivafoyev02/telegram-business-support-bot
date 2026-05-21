@@ -744,16 +744,17 @@ function buildCompanyTicketPerformance({ requests, chats = [], companies, messag
 
   requests.forEach(request => {
     const createdInPeriod = request.created_at && inCurrentPeriod(request.created_at, periodKey, keys);
-    if (!createdInPeriod) return;
+    const closedInPeriod = request.status === 'closed' && request.closed_at && inCurrentPeriod(request.closed_at, periodKey, keys);
+    if (!createdInPeriod && !closedInPeriod) return;
 
     const companyId = request.company_id || chatCompanyMap.get(telegramIdKey(request.chat_id));
     const current = ensureCompanyTotal(companyId);
     if (!current) return;
 
     current.total_requests += 1;
-    if (request.status === 'open') {
+    if (request.status === 'open' && createdInPeriod) {
       current.open_requests += 1;
-    } else if (request.status === 'closed') {
+    } else if (request.status === 'closed' && closedInPeriod) {
       current.closed_requests += 1;
     }
   });

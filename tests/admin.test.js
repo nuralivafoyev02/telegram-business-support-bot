@@ -1414,6 +1414,60 @@ async function testDashboardCompanyTicketsUseRegisteredGroupCompany() {
   }
 }
 
+async function testDashboardCompanyTicketsCountClosedRequestsByClosedAt() {
+  const originalSelect = supabase.select;
+  const originalEmployeeStats = stats.selectEmployeeStatistics;
+  const originalChatStats = stats.selectChatStatistics;
+  const originalTodaySummary = stats.selectTodaySummary;
+  const chatId = -100900;
+  const companyId = 'company-closed-period';
+  const linkedChat = {
+    chat_id: chatId,
+    title: 'Closed Period group',
+    source_type: 'group',
+    type: 'supergroup',
+    company_id: companyId,
+    is_active: true
+  };
+  const closedRequest = {
+    id: 'r-closed-period',
+    source_type: 'group',
+    chat_id: chatId,
+    company_id: companyId,
+    status: 'closed',
+    created_at: '2026-01-01T00:00:00.000Z',
+    closed_at: '2026-05-01T12:00:00.000Z'
+  };
+
+  supabase.select = async (table) => {
+    if (table === 'support_requests') return [closedRequest];
+    if (table === 'tg_chats') return [linkedChat];
+    if (table === 'companies') return [{ id: companyId, name: 'Closed Period Inc', is_active: true }];
+    if (table === 'employees') return [];
+    return [];
+  };
+  stats.selectEmployeeStatistics = async () => [];
+  stats.selectChatStatistics = async () => [linkedChat];
+  stats.selectTodaySummary = async () => [{ total_requests: 0, open_requests: 0, closed_requests: 0 }];
+
+  try {
+    const result = await callAdmin('dashboard', { query: { period: 'custom', start_date: '2026-05-01', end_date: '2026-05-01' } });
+    assert.strictEqual(result.status, 200);
+    const rows = result.payload.data.analytics.companyTickets.custom;
+    assert.strictEqual(rows.length, 1);
+    assert.strictEqual(rows[0].company_id, companyId);
+    assert.strictEqual(rows[0].name, 'Closed Period Inc');
+    assert.strictEqual(rows[0].total_requests, 1);
+    assert.strictEqual(rows[0].closed_requests, 1);
+    assert.strictEqual(rows[0].open_requests, 0);
+  } finally {
+    supabase.select = originalSelect;
+    stats.selectEmployeeStatistics = originalEmployeeStats;
+    stats.selectChatStatistics = originalChatStats;
+    stats.selectTodaySummary = originalTodaySummary;
+  }
+}
+
 async function testDashboardCompanyTicketsIncludeLinkedGroupMessagesWithoutRequests() {
   const originalSelect = supabase.select;
   const originalEmployeeStats = stats.selectEmployeeStatistics;
