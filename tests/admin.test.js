@@ -3276,6 +3276,171 @@ async function testClickUpIntegrationSaveMasksToken() {
   }
 }
 
+async function testDashboardCompanyTicketsNoFallbackForTicketUsingCompany() {
+  const originalSelect = supabase.select;
+  const originalEmployeeStats = stats.selectEmployeeStatistics;
+  const originalChatStats = stats.selectChatStatistics;
+  const originalTodaySummary = stats.selectTodaySummary;
+  const chatId = -100900;
+  const companyId = 'company-ticket-user';
+
+  // Company has 5 closed tickets in the past (all-time) but 0 in this week.
+  // Messages exist in this week — these must NOT be used as fallback.
+  const allRequests = [
+    { id: 'r-1', source_type: 'group', chat_id: chatId, company_id: null, customer_tg_id: 1, customer_name: 'A', status: 'closed', closed_by_employee_id: 'e1', created_at: '2026-03-01T08:00:00.000Z', closed_at: '2026-03-01T08:10:00.000Z' },
+    { id: 'r-2', source_type: 'group', chat_id: chatId, company_id: null, customer_tg_id: 2, customer_name: 'B', status: 'closed', closed_by_employee_id: 'e1', created_at: '2026-03-02T08:00:00.000Z', closed_at: '2026-03-02T08:10:00.000Z' },
+    { id: 'r-3', source_type: 'group', chat_id: chatId, company_id: null, customer_tg_id: 3, customer_name: 'C', status: 'closed', closed_by_employee_id: 'e1', created_at: '2026-03-03T08:00:00.000Z', closed_at: '2026-03-03T08:10:00.000Z' },
+    { id: 'r-4', source_type: 'group', chat_id: chatId, company_id: null, customer_tg_id: 4, customer_name: 'D', status: 'closed', closed_by_employee_id: 'e1', created_at: '2026-03-04T08:00:00.000Z', closed_at: '2026-03-04T08:10:00.000Z' },
+    { id: 'r-5', source_type: 'group', chat_id: chatId, company_id: null, customer_tg_id: 5, customer_name: 'E', status: 'closed', closed_by_employee_id: 'e1', created_at: '2026-03-05T08:00:00.000Z', closed_at: '2026-03-05T08:10:00.000Z' }
+  ];
+  const linkedChat = {
+    chat_id: chatId,
+    title: 'UYQUR B2B support',
+    source_type: 'group',
+    type: 'supergroup',
+    company_id: companyId,
+    is_active: true,
+    total_requests: 5,
+    last_message_at: '2026-05-20T12:00:00.000Z'
+  };
+
+  supabase.select = async (table) => {
+    if (table === 'support_requests') return allRequests;
+    if (table === 'tg_chats') return [linkedChat];
+    if (table === 'companies') return [{ id: companyId, name: 'UYQUR B2B', is_active: true }];
+    if (table === 'employees') return [];
+    if (table === 'messages') return Array.from({ length: 63 }, (_, i) => ({
+      id: `msg-${i}`,
+      tg_message_id: 1000 + i,
+      chat_id: chatId,
+      from_tg_user_id: 700 + i,
+      from_name: `User ${i}`,
+      employee_id: null,
+      source_type: 'group',
+      classification: 'message',
+      text: `Xabar ${i}`,
+      created_at: '2026-05-20T10:00:00.000Z'
+    }));
+    return [];
+  };
+  stats.selectEmployeeStatistics = async () => [];
+  stats.selectChatStatistics = async () => [linkedChat];
+  stats.selectTodaySummary = async () => [{ total_requests: 0, open_requests: 0, closed_requests: 0 }];
+
+  try {
+    // Query for the current week - no tickets in that week, but 63 messages exist
+    const result = await callAdmin('dashboard', { query: { period: 'week' } });
+    assert.strictEqual(result.status, 200);
+    const rows = result.payload.data.analytics.companyTickets.week;
+    // Since company has actual requests (all-time), it should NOT appear at all in the week
+    // (no tickets created/closed in the week period). If it appears, total_requests must be 0.
+    const companyRow = (rows || []).find(row => row.company_id === companyId);
+    if (companyRow) {
+      assert.strictEqual(companyRow.total_requests, 0, 'Should not fall back to message count for ticket-using company');
+    }
+  } finally {
+    supabase.select = originalSelect;
+    stats.selectEmployeeStatistics = originalEmployeeStats;
+    stats.selectChatStatistics = originalChatStats;
+    stats.selectTodaySummary = originalTodaySummary;
+  }
+}
+
+async function testCompanyGroupActivityFiltersByPeriod() {
+  const originalSelect = supabase.select;
+  const originalChatStats = stats.selectChatStatistics;
+  const chatId = -100901;
+  const companyId = 'company-period-filter';
+  const linkedChat = {
+    chat_id: chatId,
+    title: 'Period Filter Support',
+    source_type: 'group',
+    type: 'supergroup',
+    company_id: companyId,
+    is_active: true,
+    last_message_at: '2026-05-20T12:00:00.000Z'
+  };
+
+  const todayDate = new Date();
+  const todayIso = todayDate.toISOString().slice(0, 10);
+  const weekAgoDate = new Date(todayDate);
+  weekAgoDate.setDate(weekAgoDate.getDate() - 3);
+  const weekAgoIso = weekAgoDate.toISOString().slice(0, 10);
+
+  const recentRequest = {
+    id: 'rp-1',
+    source_type: 'group',
+    chat_id: chatId,
+    company_id: companyId,
+    customer_tg_id: 800,
+    customer_name: 'Recent Customer',
+    customer_username: '',
+    initial_message_id: 10,
+    initial_text: 'Recent request',
+    status: 'closed',
+    business_connection_id: null,
+    closed_at: `${todayIso}T10:00:00.000Z`,
+    closed_by_employee_id: 'e1',
+    closed_by_tg_id: null,
+    closed_by_name: 'Ali',
+    done_message_id: null,
+    created_at: `${todayIso}T09:00:00.000Z`
+  };
+  const oldRequest = {
+    id: 'rp-2',
+    source_type: 'group',
+    chat_id: chatId,
+    company_id: companyId,
+    customer_tg_id: 801,
+    customer_name: 'Old Customer',
+    customer_username: '',
+    initial_message_id: 11,
+    initial_text: 'Old request',
+    status: 'closed',
+    business_connection_id: null,
+    closed_at: '2026-01-15T10:00:00.000Z',
+    closed_by_employee_id: 'e1',
+    closed_by_tg_id: null,
+    closed_by_name: 'Ali',
+    done_message_id: null,
+    created_at: '2026-01-15T09:00:00.000Z'
+  };
+
+  supabase.select = async (table) => {
+    if (table === 'tg_chats') return [linkedChat];
+    if (table === 'companies') return [{ id: companyId, name: 'Period Filter LLC', is_active: true, legal_name: '' }];
+    if (table === 'employees') return [];
+    if (table === 'support_requests') return [recentRequest, oldRequest];
+    if (table === 'messages') return [
+      { id: 'm-1', tg_message_id: 20, chat_id: chatId, from_tg_user_id: 800, from_name: 'Recent Customer', from_username: '', employee_id: null, source_type: 'group', classification: 'message', text: 'Recent msg', raw: null, created_at: `${todayIso}T09:00:00.000Z` },
+      { id: 'm-2', tg_message_id: 21, chat_id: chatId, from_tg_user_id: 801, from_name: 'Old Customer', from_username: '', employee_id: null, source_type: 'group', classification: 'message', text: 'Old msg', raw: null, created_at: '2026-01-15T09:00:00.000Z' }
+    ];
+    if (table === 'request_events') return [];
+    return [];
+  };
+  stats.selectChatStatistics = async () => [linkedChat];
+
+  try {
+    // Query for 'week' period - only recent request and message should be in results
+    const result = await callAdmin('companyGroupActivity', { query: { period: 'week', company_id: companyId } });
+    assert.strictEqual(result.status, 200);
+    const companies = result.payload.data.companies || [];
+    const company = companies.find(c => c.company_id === companyId);
+    assert.ok(company, 'Company should be present');
+    const group = (company.groups || [])[0];
+    assert.ok(group, 'Group should be present');
+    // Only the recent request should be included (created today, within this week)
+    assert.strictEqual(group.total_requests, 1, 'Only requests in the period should be counted');
+    assert.strictEqual(group.requests[0].id, recentRequest.id, 'Only recent request should appear');
+    // Only the recent message should be included
+    const msgs = group.conversation || [];
+    assert.strictEqual(msgs.length, 1, 'Only messages in the period should appear');
+  } finally {
+    supabase.select = originalSelect;
+    stats.selectChatStatistics = originalChatStats;
+  }
+}
+
 async function run() {
   await testAiModeEnableSendsMainGroupNotice();
   await testAiModeDisableSendsMainGroupNotice();
@@ -3330,6 +3495,8 @@ async function run() {
   await testAssignGroupToExternalCompanyCreatesLocalCompany();
   await testAssignGroupCompanyCanBeCleared();
   await testClickUpIntegrationSaveMasksToken();
+  await testDashboardCompanyTicketsNoFallbackForTicketUsingCompany();
+  await testCompanyGroupActivityFiltersByPeriod();
   console.log('Admin tests passed');
 }
 

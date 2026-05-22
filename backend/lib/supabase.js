@@ -101,6 +101,10 @@ function eq(value) {
   return `eq.${String(value)}`;
 }
 
+function ilike(value) {
+  return `ilike.${String(value)}`;
+}
+
 function inList(values) {
   return `in.(${values.map(v => String(v)).join(',')})`;
 }
@@ -109,4 +113,5 @@ function order(column, ascending = false) {
   return `${column}.${ascending ? 'asc' : 'desc'}`;
 }
 
-module.exports = { select, insert, patch, remove, rpc, eq, inList, order };
+module.exports = { select, insert, patch, remove, rpc, eq, ilike, inList, order };
+

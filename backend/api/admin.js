@@ -486,6 +486,7 @@ function buildEmployeePerformance({ requests, employees, messages = [], periodKe
 
   closed.forEach(request => {
     const employee = findEmployee(request.closed_by_employee_id, request.closed_by_tg_id, request.closed_by_name);
+    if (!employee) return;
     const current = ensureEmployeeTotal({ employee, employeeId: request.closed_by_employee_id, tgUserId: request.closed_by_tg_id, name: request.closed_by_name });
     current.closed_requests += 1;
     if (request.chat_id) current.handled_chats.add(conversationScopeKey(request));
@@ -500,19 +501,16 @@ function buildEmployeePerformance({ requests, employees, messages = [], periodKe
   open.forEach(request => {
     const responsible = resolveRequestResponsibleEmployee(request, messagesByConversation.get(conversationScopeKey(request)) || [], employeeMaps, chatToEmployeeId);
     
-    let responsibleEmp = responsible;
-    if (!responsibleEmp) {
-      responsibleEmp = { employee_id: 'unassigned', tg_user_id: null, full_name: 'Biriktirilmagan (Umumiy)' };
-    }
-    
     const employee = responsible ? findEmployee(responsible.employee_id, responsible.tg_user_id, responsible.full_name) : null;
-    const current = ensureEmployeeTotal({ employee, employeeId: responsibleEmp.employee_id, tgUserId: responsibleEmp.tg_user_id, name: responsibleEmp.full_name });
+    if (!employee) return;
+    const current = ensureEmployeeTotal({ employee, employeeId: employee.id, tgUserId: employee.tg_user_id, name: employee.full_name });
     current.open_requests += 1;
     if (request.chat_id) current.handled_chats.add(conversationScopeKey(request));
   });
 
   prevClosed.forEach(request => {
     const employee = findEmployee(request.closed_by_employee_id, request.closed_by_tg_id, request.closed_by_name);
+    if (!employee) return;
     const current = ensureEmployeeTotal({ employee, employeeId: request.closed_by_employee_id, tgUserId: request.closed_by_tg_id, name: request.closed_by_name });
     current.prev_closed_requests += 1;
     if (request.chat_id) current.prev_handled_chats.add(conversationScopeKey(request));
@@ -526,13 +524,9 @@ function buildEmployeePerformance({ requests, employees, messages = [], periodKe
   prevOpen.forEach(request => {
     const responsible = resolveRequestResponsibleEmployee(request, messagesByConversation.get(conversationScopeKey(request)) || [], employeeMaps, chatToEmployeeId);
     
-    let responsibleEmp = responsible;
-    if (!responsibleEmp) {
-      responsibleEmp = { employee_id: 'unassigned', tg_user_id: null, full_name: 'Biriktirilmagan (Umumiy)' };
-    }
-
     const employee = responsible ? findEmployee(responsible.employee_id, responsible.tg_user_id, responsible.full_name) : null;
-    const current = ensureEmployeeTotal({ employee, employeeId: responsibleEmp.employee_id, tgUserId: responsibleEmp.tg_user_id, name: responsibleEmp.full_name });
+    if (!employee) return;
+    const current = ensureEmployeeTotal({ employee, employeeId: employee.id, tgUserId: employee.tg_user_id, name: employee.full_name });
     current.prev_open_requests += 1;
     if (request.chat_id) current.prev_handled_chats.add(conversationScopeKey(request));
   });
@@ -727,6 +721,20 @@ function buildCompanyTicketPerformance({ requests, chats = [], companies, messag
   const chatCompanyMap = new Map(linkedGroupChats
     .map(chat => [telegramIdKey(chat.chat_id), chat.company_id])
     .filter(([, companyId]) => companyId));
+
+  const companyIdsWithActualRequests = new Set();
+  chats.forEach(chat => {
+    if (chat.company_id && Number(chat.total_requests || 0) > 0) {
+      companyIdsWithActualRequests.add(String(chat.company_id));
+    }
+  });
+  requests.forEach(request => {
+    const companyId = request.company_id || chatCompanyMap.get(telegramIdKey(request.chat_id));
+    if (companyId) {
+      companyIdsWithActualRequests.add(String(companyId));
+    }
+  });
+
   const totals = new Map();
 
   function ensureCompanyTotal(companyId) {
@@ -748,7 +756,8 @@ function buildCompanyTicketPerformance({ requests, chats = [], companies, messag
 
   requests.forEach(request => {
     const createdInPeriod = request.created_at && inCurrentPeriod(request.created_at, periodKey, keys);
-    const closedInPeriod = request.status === 'closed' && request.closed_at && inCurrentPeriod(request.closed_at, periodKey, keys);
+    const closedAt = request.closed_at || request.created_at;
+    const closedInPeriod = request.status === 'closed' && closedAt && inCurrentPeriod(closedAt, periodKey, keys);
     if (!createdInPeriod && !closedInPeriod) return;
 
     const companyId = request.company_id || chatCompanyMap.get(telegramIdKey(request.chat_id));
@@ -777,7 +786,8 @@ function buildCompanyTicketPerformance({ requests, chats = [], companies, messag
 
   return [...totals.values()]
     .map(row => {
-      const fallbackTotal = row.ticket_like_messages || row.message_count;
+      const hasActualRequests = companyIdsWithActualRequests.has(String(row.company_id));
+      const fallbackTotal = hasActualRequests ? 0 : (row.ticket_like_messages || row.message_count);
       const totalRequests = row.total_requests || fallbackTotal;
       const openRequests = row.total_requests ? row.open_requests : fallbackTotal;
       return {
@@ -2431,7 +2441,7 @@ function mergeCompanyActivityRows(localRows = [], externalRows = []) {
 }
 
 async function getCompanyGroupActivity(query = {}) {
-  const { period, label } = queryPeriodContext(query);
+  const { period, label, keys } = queryPeriodContext(query);
   const companyIdFilter = String(query.company_id || query.id || '').trim();
   const companyNameFilter = String(query.company_name || query.name || '').trim().toLowerCase();
 
@@ -2484,16 +2494,26 @@ async function getCompanyGroupActivity(query = {}) {
   const chatMap = new Map(linkedChats.map(chat => [telegramIdKey(chat.chat_id), chat]));
   const requestsByChat = new Map();
   requests.forEach(request => {
+    if (period !== 'all') {
+      const createdInPeriod = request.created_at && inCurrentPeriod(request.created_at, period, keys);
+      const closedAt = request.closed_at || request.created_at;
+      const closedInPeriod = request.status === 'closed' && closedAt && inCurrentPeriod(closedAt, period, keys);
+      if (!createdInPeriod && !closedInPeriod) return;
+    }
     const key = telegramIdKey(request.chat_id);
     if (!requestsByChat.has(key)) requestsByChat.set(key, []);
     requestsByChat.get(key).push(request);
   });
   const messagesByChat = new Map();
   messages.forEach(message => {
+    if (period !== 'all') {
+      if (!message.created_at || !inCurrentPeriod(message.created_at, period, keys)) return;
+    }
     const key = telegramIdKey(message.chat_id);
     if (!messagesByChat.has(key)) messagesByChat.set(key, []);
     messagesByChat.get(key).push(message);
   });
+
 
   const requestByInitialMessageId = new Map(requests.map(request => [telegramIdKey(request.initial_message_id), request]).filter(([id]) => id));
   const requestByDoneMessageId = new Map(requests.map(request => [telegramIdKey(request.done_message_id), request]).filter(([id]) => id));

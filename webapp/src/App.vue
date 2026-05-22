@@ -2895,6 +2895,14 @@ const supportPerformanceRows = computed(() => {
   const merged = new Map();
   const periodStatsMap = new Map();
 
+  // Faqat ma'lum bo'lgan xodimlarning kalitlarini yig'ib olamiz
+  const knownEmployeeKeys = new Set([
+    ...employees.value.map(supportRowKey),
+    ...visibleCompanyInfoRows.value.filter(hasCompanySupport).map(c => 
+      supportRowKey({ username: c.uyqur_support_username, phone: c.uyqur_support_phone })
+    )
+  ].filter(Boolean));
+
   topEmployeeRows.value.forEach(pRow => {
     const key = employeeSummaryKey(pRow);
     if (key) periodStatsMap.set(key, pRow);
@@ -2915,7 +2923,11 @@ const supportPerformanceRows = computed(() => {
 
   const openMap = employeeOpenRequestSummaryMap();
 
-  return [...merged.values()].filter(row => !isAdminLikeEmployee(row)).map((row, index) => {
+  return [...merged.values()]
+    .filter(row => !isAdminLikeEmployee(row))
+    // Faqat bazada bor yoki Uyqur API'dan kelgan xodimlarni qoldiramiz (mijozlarni chiqarib tashlaymiz)
+    .filter(row => knownEmployeeKeys.has(supportRowKey(row)))
+    .map((row, index) => {
     const stat = employeeStatsMap.value.get(employeeLookupKey(row)) || row;
     const candidate = { ...row, ...stat };
     const key = employeeSummaryKey(row) || employeeSummaryKey(stat);
@@ -5750,6 +5762,13 @@ function employeeSummaryKey(row = {}) {
 function employeeOpenRequestSummaryMap() {
   const map = new Map();
   
+  const knownEmployeeKeys = new Set([
+    ...employees.value.map(supportRowKey),
+    ...visibleCompanyInfoRows.value.filter(hasCompanySupport).map(c => 
+      supportRowKey({ username: c.uyqur_support_username, phone: c.uyqur_support_phone })
+    )
+  ].filter(Boolean));
+
   const employeeMappings = (employees.value || []).filter(emp => !isAdminLikeEmployee(emp)).map(emp => {
     const companies = (visibleCompanyInfoRows.value || []).filter(c => companyMatchesEmployee(c, emp));
     const companyIds = new Set(companies.map(c => String(c.id || c.company_id || '').trim()).filter(Boolean));
@@ -5803,6 +5822,9 @@ function employeeOpenRequestSummaryMap() {
     
     const key = matchedEmp ? matchedEmp.key : employeeSummaryKey(request);
     if (!key) return;
+
+    // Agar xodim aniqlanmagan bo'lsa va u ma'lum xodimlar ro'yxatida bo'lmasa, o'tkazib yuboramiz
+    if (!matchedEmp && !knownEmployeeKeys.has(key)) return;
     
     const current = map.get(key) || {
       key,
