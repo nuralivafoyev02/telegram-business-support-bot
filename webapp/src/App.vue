@@ -2960,7 +2960,7 @@ const supportPerformanceRows = computed(() => {
       role: row.role || stat.role || '',
       full_name: row.full_name || stat.full_name || 'Xodim',
       telegram_is_premium: row.telegram_is_premium === true || stat.telegram_is_premium === true,
-      is_uyqur_employee: uyqur,
+      is_uyqur_employee: isUyqurEmployee(row),
       handled_chats: handledChats,
       closed_requests: closed,
       open_requests: open,
