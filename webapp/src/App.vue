@@ -366,10 +366,9 @@
                         :style="{ left: (row.total_requests > 0 ? (row.closed_requests / row.total_requests * 100) : 0) + '%', width: (row.total_requests > 0 ? (row.open_requests / row.total_requests * 100) : 0) + '%' }"></span>
                     </div>
                     <strong>
-                      <span class="closed-text">{{ fmtNumber(row.closed_requests) }}</span>
-                      <span>/</span>
-                      <span class="open-text">{{ fmtNumber(row.open_requests) }}</span>
-                      <small>({{ fmtNumber(row.total_requests) }})</small>
+                      <span class="total-text">Jami: {{ fmtNumber(row.total_requests) }}</span>
+                      <span class="closed-text">Javob berilgan: {{ fmtNumber(row.closed_requests) }}</span>
+                      <span class="open-text">Ochiq: {{ fmtNumber(row.open_requests) }}</span>
                     </strong>
                   </article>
                 </div>
@@ -3696,11 +3695,9 @@ function normalizeCompanyTicketRow(row = {}) {
   const explicitOpen = firstNumericValue(row, ['open_requests', 'open_ticket_count', 'open_tickets', 'unresolved_requests', 'unresolved_ticket_count']);
   const messageCount = firstNumericValue(row, ['message_count', 'total_messages', 'messages_count']);
   const ticketLikeMessages = firstNumericValue(row, ['ticket_like_messages', 'request_messages', 'classified_requests']);
-  const open = explicitOpen || (!closed ? (ticketLikeMessages || messageCount) : 0);
-  const total = firstNumericValue(row, ['total_requests', 'requests_count', 'ticket_count', 'tickets_count', 'support_ticket_count'])
-    || closed + open
-    || ticketLikeMessages
-    || messageCount;
+  const open = explicitOpen;
+  const explicitTotal = firstNumericValue(row, ['total_requests', 'requests_count', 'ticket_count', 'tickets_count', 'support_ticket_count']);
+  const total = explicitTotal || (closed + open);
   return {
     company_id: row.company_id || row.id || row.external_id || row.uyqur_company_id || '',
     name: row.name || row.company_name || row.legal_name || 'Kompaniya',
@@ -3738,9 +3735,7 @@ function mergeCompanyTicketRows(rows = []) {
     const total = Math.max(
       Number(current.total_requests || 0),
       Number(row.total_requests || 0),
-      closed + open,
-      ticketLikeMessages,
-      messageCount
+      closed + open
     );
 
     map.set(key, {
