@@ -361,9 +361,9 @@
                     <b>{{ row.name }}</b>
                     <div class="company-ticket-track">
                       <span class="company-ticket-fill closed"
-                      :style="{ width: companyTicketWidth(row.closed_requests) }"></span>
+                        :style="{ width: (row.total_requests > 0 ? (row.closed_requests / row.total_requests * 100) : 0) + '%' }"></span>
                       <span class="company-ticket-fill open"
-                      :style="{ left: companyTicketWidth(row.closed_requests), width: companyTicketWidth(row.open_requests) }"></span>
+                        :style="{ left: (row.total_requests > 0 ? (row.closed_requests / row.total_requests * 100) : 0) + '%', width: (row.total_requests > 0 ? (row.open_requests / row.total_requests * 100) : 0) + '%' }"></span>
                     </div>
                     <strong>
                       <span class="closed-text">{{ fmtNumber(row.closed_requests) }}</span>
@@ -377,7 +377,6 @@
                 <div class="company-ticket-legend">
                   <span><i class="legend-square closed"></i>Yopilgan ticket</span>
                   <span><i class="legend-square open"></i>Ochiq ticket</span>
-                  <span>Bar uzunligi = jami ticket soni</span>
                   <span>Bar = javob berilgan va qolgan ticketlar nisbati</span>
                 </div>
               </section>
