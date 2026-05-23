@@ -52,6 +52,13 @@ function clampInt(value, fallback, min, max) {
   return Math.min(Math.max(parsed, min), max);
 }
 
+function isUyqurEmployee(employee = null) {
+  if (!employee) return false;
+  const name = String(employee.full_name || '').toLowerCase();
+  const username = String(employee.username || '').toLowerCase();
+  return name.includes('uyqur') || username.includes('uyqur');
+}
+
 async function mapWithConcurrency(items, limit, worker) {
   const results = new Array(items.length);
   let nextIndex = 0;
@@ -525,6 +532,9 @@ async function handleDoneReaction(reaction = {}, settings = {}) {
   const employee = actor.id && !actor.type
     ? await metrics.getKnownEmployeeByTelegramId(actor.id).catch(() => null) || await metrics.ensureEmployee(actor).catch(() => null)
     : null;
+  if (employee && !isUyqurEmployee(employee)) {
+    return { ok: false, skipped: 'not_support_employee' };
+  }
   const closeMessage = {
     message_id: reaction.message_id,
     date: reaction.date,
@@ -2486,7 +2496,7 @@ async function processMessage(updateKind, message) {
     if (await maybeStartAdminAssistantPreview({ message, text, settings, employee })) return;
   }
 
-  const classification = await classifyIncomingMessage({
+  let classification = await classifyIncomingMessage({
     text,
     chat,
     sourceType,
@@ -2495,6 +2505,11 @@ async function processMessage(updateKind, message) {
     employee,
     settings
   });
+
+  const isIgnoredStaff = employee && !isUyqurEmployee(employee);
+  if (isIgnoredStaff) {
+    classification = 'message';
+  }
 
   let savedMessage = null;
   try {
@@ -2531,11 +2546,15 @@ async function processMessage(updateKind, message) {
 
   if (await maybeReplyPrivateGreeting(updateKind, message, text)) return;
 
-  if (await maybeCloseRequestFromReply(message, classification, employee, settings)) return;
+  if (!isIgnoredStaff) {
+    if (await maybeCloseRequestFromReply(message, classification, employee, settings)) return;
+  }
 
   if (await maybeAnswerGroupQuestion({ updateKind, message, sourceType, text, settings, employee })) return;
 
-  if (await maybeCloseRequestFromEmployeeAnswer(message, classification, employee, text, settings)) return;
+  if (!isIgnoredStaff) {
+    if (await maybeCloseRequestFromEmployeeAnswer(message, classification, employee, text, settings)) return;
+  }
 
   if (isSupportRequestClassification(classification)) {
     try {
