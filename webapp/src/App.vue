@@ -195,7 +195,7 @@
               <div class="card-header performance-head">
                 <div>
                   <div class="card-title">Hodimlar reytingi</div>
-                  <div class="card-note">Ticketlarni yopish, ochiq qoldiqlar va SLA bo‘yicha support natijasi</div>
+                  <div class="card-note">Ticketlarni yopish, ochiq qoldiqlar va SLA bo‘yicha support natijasi. Ochiq ticketlar kompaniya mas’uli yoki guruhdagi javob bo‘yicha xodimga biriktiriladi.</div>
                 </div>
                 <div class="card-header-actions" ref="rankingMenuRef">
                   <button class="btn-icon mini-icon" @click="rankingMenuOpen = !rankingMenuOpen" title="Sozlamalar">
@@ -360,10 +360,8 @@
                     @keydown.space.prevent="openCompanyGroupActivity(row)">
                     <b>{{ row.name }}</b>
                     <div class="company-ticket-track">
-                      <span class="company-ticket-fill closed"
-                        :style="{ width: (row.total_requests > 0 ? (row.closed_requests / row.total_requests * 100) : 0) + '%' }"></span>
-                      <span class="company-ticket-fill open"
-                        :style="{ left: (row.total_requests > 0 ? (row.closed_requests / row.total_requests * 100) : 0) + '%', width: (row.total_requests > 0 ? (row.open_requests / row.total_requests * 100) : 0) + '%' }"></span>
+                      <span class="company-ticket-fill closed" :style="companyTicketClosedStyle(row)"></span>
+                      <span class="company-ticket-fill open" :style="companyTicketOpenStyle(row)"></span>
                     </div>
                     <strong style="display: flex; gap: 10px; font-size: 14px;">
                       <span class="total-text" style="color: var(--text);" title="Jami ticketlar">{{ fmtNumber(row.total_requests) }}</span>
@@ -1449,22 +1447,22 @@
                           <div v-if="message.media" class="chat-media">
                             <img v-if="message.media.kind === 'photo' && mediaUrl(message.media)"
                               class="chat-media-image" :src="mediaUrl(message.media)" alt="" />
+                            <button v-else-if="message.media.kind === 'photo'" type="button"
+                              class="chat-media-placeholder chat-media-open" @click="retryMediaLoad(message.media)">{{
+                                mediaPlaceholder(message.media) }}</button>
                             <video v-else-if="isVideoMedia(message.media) && mediaUrl(message.media)"
                               class="chat-media-video" :src="mediaUrl(message.media)" controls playsinline></video>
-                            <div v-else-if="isAudioMedia(message.media)" class="chat-media-audio-wrapper" style="display: flex; flex-direction: column; gap: 4px; width: 100%;">
-                              <audio class="chat-media-audio" :src="mediaUrl(message.media) || undefined" controls></audio>
-                              <div v-if="mediaLoading[message.media.file_id] || mediaErrors[message.media.file_id]" 
-                                   class="chat-media-audio-status" 
-                                   :style="{
-                                     fontSize: '11px',
-                                     color: mediaErrors[message.media.file_id] ? '#ef4444' : '#6b7280',
-                                     marginLeft: '12px',
-                                     marginTop: '2px',
-                                     fontStyle: 'italic'
-                                   }">
-                                {{ mediaPlaceholder(message.media) }}
-                              </div>
-                            </div>
+                            <button v-else-if="isVideoMedia(message.media)" type="button"
+                              class="chat-media-placeholder chat-media-open" @click="retryMediaLoad(message.media)">{{
+                                mediaPlaceholder(message.media) }}</button>
+                            <template v-else-if="isAudioMedia(message.media)">
+                              <audio v-if="mediaUrl(message.media)" class="chat-media-audio"
+                                :src="mediaUrl(message.media)" controls></audio>
+                              <button v-else type="button" class="chat-media-placeholder chat-media-open"
+                                @click="retryMediaLoad(message.media)">{{ mediaPlaceholder(message.media) }}</button>
+                              <a v-if="mediaUrl(message.media)" class="chat-media-link" :href="mediaUrl(message.media)"
+                                target="_blank" rel="noopener noreferrer">{{ mediaOpenLabel(message.media) }}</a>
+                            </template>
                             <a v-else-if="isDocumentMedia(message.media) && mediaUrl(message.media)"
                               class="chat-media-file" :href="mediaUrl(message.media)" target="_blank"
                               rel="noopener noreferrer">{{ mediaPlaceholder(message.media) }}</a>
@@ -1642,22 +1640,22 @@
                           <div v-if="message.media" class="chat-media">
                             <img v-if="message.media.kind === 'photo' && mediaUrl(message.media)"
                               class="chat-media-image" :src="mediaUrl(message.media)" alt="" />
+                            <button v-else-if="message.media.kind === 'photo'" type="button"
+                              class="chat-media-placeholder chat-media-open" @click="retryMediaLoad(message.media)">{{
+                                mediaPlaceholder(message.media) }}</button>
                             <video v-else-if="isVideoMedia(message.media) && mediaUrl(message.media)"
                               class="chat-media-video" :src="mediaUrl(message.media)" controls playsinline></video>
-                            <div v-else-if="isAudioMedia(message.media)" class="chat-media-audio-wrapper" style="display: flex; flex-direction: column; gap: 4px; width: 100%;">
-                              <audio class="chat-media-audio" :src="mediaUrl(message.media) || undefined" controls></audio>
-                              <div v-if="mediaLoading[message.media.file_id] || mediaErrors[message.media.file_id]" 
-                                   class="chat-media-audio-status" 
-                                   :style="{
-                                     fontSize: '11px',
-                                     color: mediaErrors[message.media.file_id] ? '#ef4444' : '#6b7280',
-                                     marginLeft: '12px',
-                                     marginTop: '2px',
-                                     fontStyle: 'italic'
-                                   }">
-                                {{ mediaPlaceholder(message.media) }}
-                              </div>
-                            </div>
+                            <button v-else-if="isVideoMedia(message.media)" type="button"
+                              class="chat-media-placeholder chat-media-open" @click="retryMediaLoad(message.media)">{{
+                                mediaPlaceholder(message.media) }}</button>
+                            <template v-else-if="isAudioMedia(message.media)">
+                              <audio v-if="mediaUrl(message.media)" class="chat-media-audio"
+                                :src="mediaUrl(message.media)" controls></audio>
+                              <button v-else type="button" class="chat-media-placeholder chat-media-open"
+                                @click="retryMediaLoad(message.media)">{{ mediaPlaceholder(message.media) }}</button>
+                              <a v-if="mediaUrl(message.media)" class="chat-media-link" :href="mediaUrl(message.media)"
+                                target="_blank" rel="noopener noreferrer">{{ mediaOpenLabel(message.media) }}</a>
+                            </template>
                             <a v-else-if="isDocumentMedia(message.media) && mediaUrl(message.media)"
                               class="chat-media-file" :href="mediaUrl(message.media)" target="_blank"
                               rel="noopener noreferrer">{{ mediaPlaceholder(message.media) }}</a>
@@ -1895,22 +1893,22 @@
                           <div v-if="message.media" class="chat-media">
                             <img v-if="message.media.kind === 'photo' && mediaUrl(message.media)"
                               class="chat-media-image" :src="mediaUrl(message.media)" alt="" />
+                            <button v-else-if="message.media.kind === 'photo'" type="button"
+                              class="chat-media-placeholder chat-media-open" @click="retryMediaLoad(message.media)">{{
+                                mediaPlaceholder(message.media) }}</button>
                             <video v-else-if="isVideoMedia(message.media) && mediaUrl(message.media)"
                               class="chat-media-video" :src="mediaUrl(message.media)" controls playsinline></video>
-                            <div v-else-if="isAudioMedia(message.media)" class="chat-media-audio-wrapper" style="display: flex; flex-direction: column; gap: 4px; width: 100%;">
-                              <audio class="chat-media-audio" :src="mediaUrl(message.media) || undefined" controls></audio>
-                              <div v-if="mediaLoading[message.media.file_id] || mediaErrors[message.media.file_id]" 
-                                   class="chat-media-audio-status" 
-                                   :style="{
-                                     fontSize: '11px',
-                                     color: mediaErrors[message.media.file_id] ? '#ef4444' : '#6b7280',
-                                     marginLeft: '12px',
-                                     marginTop: '2px',
-                                     fontStyle: 'italic'
-                                   }">
-                                {{ mediaPlaceholder(message.media) }}
-                              </div>
-                            </div>
+                            <button v-else-if="isVideoMedia(message.media)" type="button"
+                              class="chat-media-placeholder chat-media-open" @click="retryMediaLoad(message.media)">{{
+                                mediaPlaceholder(message.media) }}</button>
+                            <template v-else-if="isAudioMedia(message.media)">
+                              <audio v-if="mediaUrl(message.media)" class="chat-media-audio"
+                                :src="mediaUrl(message.media)" controls></audio>
+                              <button v-else type="button" class="chat-media-placeholder chat-media-open"
+                                @click="retryMediaLoad(message.media)">{{ mediaPlaceholder(message.media) }}</button>
+                              <a v-if="mediaUrl(message.media)" class="chat-media-link" :href="mediaUrl(message.media)"
+                                target="_blank" rel="noopener noreferrer">{{ mediaOpenLabel(message.media) }}</a>
+                            </template>
                             <a v-else-if="isDocumentMedia(message.media) && mediaUrl(message.media)"
                               class="chat-media-file" :href="mediaUrl(message.media)" target="_blank"
                               rel="noopener noreferrer">{{ mediaPlaceholder(message.media) }}</a>
@@ -2120,22 +2118,22 @@
                     <div v-if="message.media" class="chat-media">
                       <img v-if="message.media.kind === 'photo' && mediaUrl(message.media)" class="chat-media-image"
                         :src="mediaUrl(message.media)" alt="" />
+                      <button v-else-if="message.media.kind === 'photo'" type="button"
+                        class="chat-media-placeholder chat-media-open" @click="retryMediaLoad(message.media)">{{
+                          mediaPlaceholder(message.media) }}</button>
                       <video v-else-if="isVideoMedia(message.media) && mediaUrl(message.media)" class="chat-media-video"
                         :src="mediaUrl(message.media)" controls playsinline></video>
-                      <div v-else-if="isAudioMedia(message.media)" class="chat-media-audio-wrapper" style="display: flex; flex-direction: column; gap: 4px; width: 100%;">
-                        <audio class="chat-media-audio" :src="mediaUrl(message.media) || undefined" controls></audio>
-                        <div v-if="mediaLoading[message.media.file_id] || mediaErrors[message.media.file_id]" 
-                             class="chat-media-audio-status" 
-                             :style="{
-                               fontSize: '11px',
-                               color: mediaErrors[message.media.file_id] ? '#ef4444' : '#6b7280',
-                               marginLeft: '12px',
-                               marginTop: '2px',
-                               fontStyle: 'italic'
-                             }">
-                          {{ mediaPlaceholder(message.media) }}
-                        </div>
-                      </div>
+                      <button v-else-if="isVideoMedia(message.media)" type="button"
+                        class="chat-media-placeholder chat-media-open" @click="retryMediaLoad(message.media)">{{
+                          mediaPlaceholder(message.media) }}</button>
+                      <template v-else-if="isAudioMedia(message.media)">
+                        <audio v-if="mediaUrl(message.media)" class="chat-media-audio" :src="mediaUrl(message.media)"
+                          controls></audio>
+                        <button v-else type="button" class="chat-media-placeholder chat-media-open"
+                          @click="retryMediaLoad(message.media)">{{ mediaPlaceholder(message.media) }}</button>
+                        <a v-if="mediaUrl(message.media)" class="chat-media-link" :href="mediaUrl(message.media)"
+                          target="_blank" rel="noopener noreferrer">{{ mediaOpenLabel(message.media) }}</a>
+                      </template>
                       <a v-else-if="isDocumentMedia(message.media) && mediaUrl(message.media)" class="chat-media-file"
                         :href="mediaUrl(message.media)" target="_blank" rel="noopener noreferrer">{{
                           mediaPlaceholder(message.media) }}</a>
@@ -4625,7 +4623,7 @@ function isDocumentMedia(media) {
 }
 
 function showMediaOpenLink(media) {
-  return false;
+  return Boolean(media && media.file_id && mediaUrl(media));
 }
 
 function mediaOpenLabel(media) {
@@ -4670,6 +4668,7 @@ function chatMessageBodyText(message = {}) {
     const kind = message.media.kind;
     if (kind === 'sticker' && (text === 'Stikerli xabar' || text === 'Sticker')) return '';
     if (kind === 'audio' && (text === 'Audio xabar' || text === 'Audio' || text === 'Audioni alohida ochish')) return '';
+    if (kind === 'voice' && (text === 'Ovozli xabar' || text === 'Ovozli xabarni alohida ochish')) return '';
     if (kind === 'photo' && (text === 'Rasmli xabar' || text === 'Rasm')) return '';
     if (kind === 'video' && (text === 'Videoli xabar' || text === 'Video')) return '';
     if (kind === 'video_note' && (text === 'Video xabar' || text === 'Video note')) return '';
@@ -4747,6 +4746,29 @@ function clearMediaUrls() {
   mediaUrls.value = {};
   mediaLoading.value = {};
   mediaErrors.value = {};
+}
+
+function ticketBarPercent(part = 0, total = 0) {
+  const safeTotal = Number(total) || 0;
+  const safePart = Number(part) || 0;
+  if (!safeTotal) return '0%';
+  return `${Math.max(0, Math.min(100, (safePart / safeTotal) * 100))}%`;
+}
+
+function companyTicketClosedStyle(row = {}) {
+  return { width: ticketBarPercent(row.closed_requests, row.total_requests) };
+}
+
+function companyTicketOpenStyle(row = {}) {
+  const total = Number(row.total_requests) || 0;
+  const closedPct = total ? (Number(row.closed_requests) / total) * 100 : 0;
+  const openPct = total ? (Number(row.open_requests) / total) * 100 : 0;
+  return { left: `${closedPct}%`, width: `${openPct}%` };
+}
+
+async function retryMediaLoad(media) {
+  if (!media || !media.file_id) return;
+  await loadConversationMedia([{ media }]);
 }
 
 async function loadConversationMedia(messages = []) {

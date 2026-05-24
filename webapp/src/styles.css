@@ -1819,6 +1819,22 @@ tbody tr:hover {
   background: rgba(52, 211, 153, .12);
 }
 
+.chat-media-open {
+  cursor: pointer;
+  font: inherit;
+  width: 100%;
+}
+
+.chat-media-open:hover {
+  border-color: var(--brand-blue);
+  color: var(--brand-blue);
+}
+
+.chat-media-audio {
+  width: 100%;
+  min-width: 220px;
+}
+
 .chat-bubble-footer {
   display: flex;
   align-items: center;

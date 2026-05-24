@@ -24,6 +24,8 @@ function messageDateIso(message = {}) {
 }
 
 function messageDisplayText(message = {}) {
+  const analyzed = String(message.analysis_text || '').trim();
+  if (analyzed) return analyzed;
   const text = String(message.text || message.caption || '').trim();
   if (text) return text;
   if (message.sticker) return MEDIA_TEXT.sticker;

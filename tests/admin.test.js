@@ -1058,6 +1058,47 @@ async function testChatDetailIncludesTicketSolutionAndTimeline() {
   }
 }
 
+async function testChatDetailExtractsVoiceMediaFromJsonRaw() {
+  const originalSelect = supabase.select;
+  const chatId = -100901;
+  const voiceRaw = JSON.stringify({
+    message_id: 77,
+    voice: { file_id: 'voice-file-1', mime_type: 'audio/ogg', duration: 12 }
+  });
+
+  supabase.select = async (table, params = {}) => {
+    if (table === 'tg_chats') {
+      return [{ chat_id: chatId, title: 'Test guruh', source_type: 'group', is_active: true }];
+    }
+    if (table === 'support_requests') return [];
+    if (table === 'messages') {
+      return [{
+        tg_message_id: 77,
+        chat_id: chatId,
+        from_tg_user_id: 501,
+        from_name: 'Mijoz',
+        source_type: 'group',
+        text: 'Ovozli xabar',
+        classification: 'request',
+        raw: voiceRaw,
+        created_at: '2026-05-23T14:32:00.000Z'
+      }];
+    }
+    if (table === 'employees' || table === 'request_events') return [];
+    throw new Error(`Unexpected table ${table}`);
+  };
+
+  try {
+    const result = await callAdmin('chatDetail', { query: { chat_id: chatId } });
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.data.conversation.length, 1);
+    assert.strictEqual(result.payload.data.conversation[0].media.kind, 'voice');
+    assert.strictEqual(result.payload.data.conversation[0].media.file_id, 'voice-file-1');
+  } finally {
+    supabase.select = originalSelect;
+  }
+}
+
 async function testChatDetailFiltersBusinessConnection() {
   const originalSelect = supabase.select;
   const chatId = 303;
@@ -1652,6 +1693,63 @@ async function testDashboardEmployeePerformanceCountsOpenAndSlaPerEmployee() {
     assert.strictEqual(row.total_requests, 2);
     assert.strictEqual(row.sla, 50);
     assert.strictEqual(row.avg_close_minutes, 10);
+  } finally {
+    supabase.select = originalSelect;
+    stats.selectEmployeeStatistics = originalEmployeeStats;
+    stats.selectChatStatistics = originalChatStats;
+    stats.selectTodaySummary = originalTodaySummary;
+  }
+}
+
+async function testDashboardEmployeePerformanceAssignsOpenByCompanySupport() {
+  const originalSelect = supabase.select;
+  const originalEmployeeStats = stats.selectEmployeeStatistics;
+  const originalChatStats = stats.selectChatStatistics;
+  const originalTodaySummary = stats.selectTodaySummary;
+
+  const chatId = -100904;
+  const companyId = 'company-support-1';
+  const employees = [{ id: 'emp-1', tg_user_id: 777, full_name: 'Uyqur | Nurali', username: 'uyqur_nurali', role: 'support', is_active: true }];
+  const requests = [
+    {
+      id: 'request-open-company',
+      source_type: 'group',
+      chat_id: chatId,
+      company_id: companyId,
+      customer_tg_id: 501,
+      customer_name: 'Mijoz',
+      status: 'open',
+      created_at: '2026-05-24T10:00:00.000Z',
+      closed_at: null
+    }
+  ];
+  const companyInfoCache = {
+    companies: [{ id: companyId, name: 'Test LLC', uyqur_support_username: 'uyqur_nurali' }],
+    cached_at: '2026-05-24T10:00:00.000Z'
+  };
+
+  supabase.select = async (table, query = {}) => {
+    if (table === 'support_requests') return requests;
+    if (table === 'tg_chats') return [{ chat_id: chatId, title: 'Support guruhi', source_type: 'group', company_id: companyId, is_active: true }];
+    if (table === 'employees') return employees;
+    if (table === 'messages') return [];
+    if (table === 'companies') return [{ id: companyId, name: 'Test LLC', is_active: true }];
+    if (table === 'company_members') return [];
+    if (table === 'bot_settings' && query.key) return [{ key: 'uyqur_company_info_cache', value: companyInfoCache }];
+    return [];
+  };
+  stats.selectEmployeeStatistics = async () => [];
+  stats.selectChatStatistics = async () => [{ chat_id: chatId, title: 'Support guruhi', source_type: 'group', company_id: companyId, is_active: true }];
+  stats.selectTodaySummary = async () => [{ total_requests: 0, open_requests: 0, closed_requests: 0 }];
+
+  try {
+    const result = await callAdmin('dashboard', {
+      query: { period: 'custom', start_date: '2026-05-24', end_date: '2026-05-24' }
+    });
+    assert.strictEqual(result.status, 200);
+    const row = result.payload.data.analytics.employeePerformance.custom.find(item => item.employee_id === 'emp-1');
+    assert.ok(row);
+    assert.strictEqual(row.open_requests, 1);
   } finally {
     supabase.select = originalSelect;
     stats.selectEmployeeStatistics = originalEmployeeStats;
@@ -3540,6 +3638,7 @@ async function run() {
   await testPrivateBusinessChatsSplitByConnection();
   await testGroupsIncludeMessageStatsForChatPreview();
   await testChatDetailIncludesTicketSolutionAndTimeline();
+  await testChatDetailExtractsVoiceMediaFromJsonRaw();
   await testChatDetailFiltersBusinessConnection();
   await testChatDetailShowsTelegramMemberServiceMessages();
   await testCompanyGroupActivityReturnsLinkedGroupMessagesWithTickets();
@@ -3548,6 +3647,7 @@ async function run() {
   await testDashboardCompanyTicketsIncludeLinkedGroupMessagesWithoutRequests();
   await testDashboardCompanyTicketsUseLinkedGroupOrdinaryMessages();
   await testDashboardEmployeePerformanceCountsOpenAndSlaPerEmployee();
+  await testDashboardEmployeePerformanceAssignsOpenByCompanySupport();
   await testDashboardPeriodCountsOnlyRequestsCreatedInSelectedRange();
   await testDashboardEmployeePerformanceCountsClosedByCloseDate();
   await testRequestsListEnrichesCompanyFromRegisteredGroup();

@@ -410,12 +410,15 @@ function buildPeriodSummary(requests, periodKey, label, keys, messages = [], emp
   };
 }
 
-function buildEmployeePerformance({ requests, employees, messages = [], periodKey, keys, chats = [], companyMembers = [] }) {
+function buildEmployeePerformance({ requests, employees, messages = [], periodKey, keys, chats = [], companyMembers = [], companyInfoCompanies = [] }) {
   const employeeMap = new Map(employees.map(employee => [employee.id, employee]).filter(([id]) => id));
   const employeeByTgId = new Map(employees.map(employee => [telegramIdKey(employee.tg_user_id), employee]).filter(([id]) => id));
   const employeeByUsername = new Map(employees.map(employee => [String(employee.username || '').toLowerCase().trim(), employee]).filter(([username]) => username));
   const employeeByName = new Map(employees.map(employee => [String(employee.full_name || '').toLowerCase().trim(), employee]).filter(([name]) => name));
   const employeeMaps = buildEmployeeMaps(employees);
+  const chatMap = new Map(chats.map(chat => [telegramIdKey(chat.chat_id), chat]));
+  const companySupportByCompanyId = buildCompanySupportByCompanyId(companyInfoCompanies, employeeMaps);
+  const resolveOptions = { chatMap, companySupportByCompanyId };
   const messagesByConversation = new Map();
   messages.forEach(message => {
     const key = conversationScopeKey(message);
@@ -497,8 +500,14 @@ function buildEmployeePerformance({ requests, employees, messages = [], periodKe
   });
 
   open.forEach(request => {
-    const responsible = resolveRequestResponsibleEmployee(request, messagesByConversation.get(conversationScopeKey(request)) || [], employeeMaps, chatToEmployeeId);
-    
+    const responsible = resolveRequestResponsibleEmployee(
+      request,
+      messagesByConversation.get(conversationScopeKey(request)) || [],
+      employeeMaps,
+      chatToEmployeeId,
+      resolveOptions
+    );
+
     const employee = responsible ? findEmployee(responsible.employee_id, responsible.tg_user_id, responsible.full_name) : null;
     if (!employee) return;
     const current = ensureEmployeeTotal({ employee, employeeId: employee.id, tgUserId: employee.tg_user_id, name: employee.full_name });
@@ -520,8 +529,14 @@ function buildEmployeePerformance({ requests, employees, messages = [], periodKe
   });
 
   prevOpen.forEach(request => {
-    const responsible = resolveRequestResponsibleEmployee(request, messagesByConversation.get(conversationScopeKey(request)) || [], employeeMaps, chatToEmployeeId);
-    
+    const responsible = resolveRequestResponsibleEmployee(
+      request,
+      messagesByConversation.get(conversationScopeKey(request)) || [],
+      employeeMaps,
+      chatToEmployeeId,
+      resolveOptions
+    );
+
     const employee = responsible ? findEmployee(responsible.employee_id, responsible.tg_user_id, responsible.full_name) : null;
     if (!employee) return;
     const current = ensureEmployeeTotal({ employee, employeeId: employee.id, tgUserId: employee.tg_user_id, name: employee.full_name });
@@ -1042,13 +1057,15 @@ async function getDashboardAnalytics(query = {}) {
   const periods = requestedAnalyticsPeriods(query, customPeriod);
   const window = analyticsWindow(periods, keys);
 
-  const [requests, chats, employees, companies, companyMembers] = await Promise.all([
+  const [requests, chats, employees, companies, companyMembers, companyInfoCache] = await Promise.all([
     selectAnalyticsRequests(window),
     stats.selectChatStatistics({ select: '*', is_active: 'eq.true', limit: '5000' }).catch(() => []),
     supabase.select('employees', { select: 'id,tg_user_id,full_name,username,role,is_active', limit: '5000' }).catch(() => []),
     supabase.select('companies', { select: 'id,name,is_active', limit: '5000' }).catch(() => []),
-    supabase.select('company_members', { select: 'company_id,employee_id,member_type,is_active', limit: '5000' }).catch(() => [])
+    supabase.select('company_members', { select: 'company_id,employee_id,member_type,is_active', limit: '5000' }).catch(() => []),
+    getCachedCompanyInfo().catch(() => null)
   ]);
+  const companyInfoCompanies = companyInfoCache?.companies || [];
   const chatIds = [...new Set([
     ...requests.map(request => request.chat_id),
     ...chats
@@ -1094,7 +1111,7 @@ async function getDashboardAnalytics(query = {}) {
   return {
     periods: Object.fromEntries(periodContext.map(p => [p.key, p.summary])),
     periodDates: Object.fromEntries(periodContext.map(p => [p.key, { current: p.currentLabel, prev: p.prevLabel }])),
-    employeePerformance: Object.fromEntries(periods.map(([key]) => [key, buildEmployeePerformance({ requests, employees, messages, periodKey: key, keys, chats, companyMembers })])),
+    employeePerformance: Object.fromEntries(periods.map(([key]) => [key, buildEmployeePerformance({ requests, employees, messages, periodKey: key, keys, chats, companyMembers, companyInfoCompanies })])),
     chatPerformance: Object.fromEntries(periods.map(([key]) => [key, buildChatPerformance({ requests, chats, periodKey: key, keys })])),
     groupPerformance: Object.fromEntries(periods.map(([key]) => [key, buildGroupPerformance({ requests, chats, periodKey: key, keys })])),
     responseTimeTrend: Object.fromEntries(periods.map(([key]) => [key, buildResponseTimeTrend(requests, key, keys, messages, employeeMaps)])),
@@ -1461,6 +1478,42 @@ function employeeSummary(employee = null) {
   };
 }
 
+function normalizeSupportUsername(value = '') {
+  return String(value || '').trim().replace(/^@/, '').toLowerCase();
+}
+
+function isEmployeeConversationMessage(message = {}, employeeMaps = buildEmployeeMaps([])) {
+  if (!message) return false;
+  if (message.employee_id) return true;
+  if (employeeMaps?.byTgId?.has(telegramIdKey(message.from_tg_user_id))) return true;
+  if (message.from_username && employeeMaps?.byUsername?.has(normalizeSupportUsername(message.from_username))) return true;
+  if (message.from_name && employeeMaps?.byName?.has(String(message.from_name).toLowerCase().trim())) return true;
+  const classification = String(message.classification || '').toLowerCase();
+  if (['admin_reply', 'admin_send', 'employee_reply'].includes(classification)) return true;
+  const updateKind = String(message.update_kind || '').toLowerCase();
+  return ['admin_send', 'admin_reply', 'admin_request_reply'].includes(updateKind);
+}
+
+function buildCompanySupportByCompanyId(companies = [], employeeMaps = buildEmployeeMaps([])) {
+  const map = new Map();
+  companies.forEach(company => {
+    const companyId = String(company.id || company.company_id || '').trim();
+    const username = normalizeSupportUsername(company.uyqur_support_username);
+    if (!companyId || !username) return;
+    const employee = employeeMaps.byUsername.get(username)
+      || [...employeeMaps.byName.values()].find(emp => normalizeSupportUsername(emp.username) === username)
+      || [...employeeMaps.byName.values()].find(emp => String(emp.full_name || '').toLowerCase().includes(username));
+    if (employee) map.set(companyId, employeeSummary(employee));
+  });
+  return map;
+}
+
+function resolveCompanyIdForRequest(request = {}, chatMap = new Map()) {
+  if (request.company_id) return String(request.company_id);
+  const chat = chatMap.get(telegramIdKey(request.chat_id));
+  return chat?.company_id ? String(chat.company_id) : '';
+}
+
 function buildChatToEmployeeIdMap(chats = [], companyMembers = []) {
   const map = new Map();
   chats.forEach(chat => {
@@ -1474,17 +1527,11 @@ function buildChatToEmployeeIdMap(chats = [], companyMembers = []) {
   return map;
 }
 
-function resolveRequestResponsibleEmployee(request, messages = [], employeeMaps = buildEmployeeMaps([]), chatToEmployeeId = new Map()) {
+function resolveRequestResponsibleEmployee(request, messages = [], employeeMaps = buildEmployeeMaps([]), chatToEmployeeId = new Map(), options = {}) {
+  const { chatMap = new Map(), companySupportByCompanyId = new Map() } = options;
   const requestTime = new Date(request.created_at || 0).getTime();
   const employeeMessages = messages
-    .filter(message => {
-      if (!message) return false;
-      const hasEmpId = message.employee_id || 
-                       (employeeMaps && employeeMaps.byTgId && employeeMaps.byTgId.has(telegramIdKey(message.from_tg_user_id))) ||
-                       (message.from_username && employeeMaps && employeeMaps.byUsername && employeeMaps.byUsername.has(String(message.from_username).toLowerCase().trim())) ||
-                       (message.from_name && employeeMaps && employeeMaps.byName && employeeMaps.byName.has(String(message.from_name).toLowerCase().trim()));
-      return hasEmpId;
-    })
+    .filter(message => isEmployeeConversationMessage(message, employeeMaps))
     .map(message => {
       const employee = (employeeMaps && employeeMaps.byId && employeeMaps.byId.get(message.employee_id)) || 
                        (employeeMaps && employeeMaps.byTgId && employeeMaps.byTgId.get(telegramIdKey(message.from_tg_user_id))) ||
@@ -1506,6 +1553,11 @@ function resolveRequestResponsibleEmployee(request, messages = [], employeeMaps 
   if (assignedEmpId) {
     const emp = employeeMaps?.byId?.get(assignedEmpId);
     if (emp) return employeeSummary(emp);
+  }
+
+  const companyId = resolveCompanyIdForRequest(request, chatMap);
+  if (companyId && companySupportByCompanyId.has(companyId)) {
+    return companySupportByCompanyId.get(companyId);
   }
 
   return null;
@@ -1543,7 +1595,7 @@ function resolveRequestResponsibleEmployeeFromEvents(request = {}, events = [], 
   return afterRequest ? afterRequest.employee : null;
 }
 
-function enrichOpenRequests({ requests = [], chats = [], messages = [], employees = [], companyMembers = [] }) {
+function enrichOpenRequests({ requests = [], chats = [], messages = [], employees = [], companyMembers = [], companyInfoCompanies = [] }) {
   const now = new Date();
   const chatMap = new Map(chats.map(chat => [telegramIdKey(chat.chat_id), chat]));
   const messagesByConversation = new Map();
@@ -1554,10 +1606,18 @@ function enrichOpenRequests({ requests = [], chats = [], messages = [], employee
   });
   const employeeMaps = buildEmployeeMaps(employees);
   const chatToEmployeeId = buildChatToEmployeeIdMap(chats, companyMembers);
+  const companySupportByCompanyId = buildCompanySupportByCompanyId(companyInfoCompanies, employeeMaps);
+  const resolveOptions = { chatMap, companySupportByCompanyId };
 
   return requests.map(request => {
     const chat = chatMap.get(telegramIdKey(request.chat_id)) || {};
-    const responsible = resolveRequestResponsibleEmployee(request, messagesByConversation.get(conversationScopeKey(request)) || [], employeeMaps, chatToEmployeeId);
+    const responsible = resolveRequestResponsibleEmployee(
+      request,
+      messagesByConversation.get(conversationScopeKey(request)) || [],
+      employeeMaps,
+      chatToEmployeeId,
+      resolveOptions
+    );
     return {
       ...request,
       chat_title: displayChatTitle(chat),
@@ -1583,7 +1643,7 @@ async function getOpenRequestInsights() {
     .map(request => request.created_at)
     .filter(Boolean)
     .sort()[0] || '';
-  const [chats, messages, employees, companyMembers] = await Promise.all([
+  const [chats, messages, employees, companyMembers, companyInfoCache] = await Promise.all([
     chatIds.length ? supabase.select('tg_chats', {
       select: 'chat_id,title,username,company_id,source_type,business_connection_id,last_message_at',
       chat_id: supabase.inList(chatIds),
@@ -1597,10 +1657,18 @@ async function getOpenRequestInsights() {
       limit: '5000'
     }).catch(() => []) : Promise.resolve([]),
     supabase.select('employees', { select: 'id,tg_user_id,full_name,username,role,is_active', limit: '1000' }).catch(() => []),
-    supabase.select('company_members', { select: 'company_id,employee_id,member_type,is_active', limit: '5000' }).catch(() => [])
+    supabase.select('company_members', { select: 'company_id,employee_id,member_type,is_active', limit: '5000' }).catch(() => []),
+    getCachedCompanyInfo().catch(() => null)
   ]);
 
-  const enriched = enrichOpenRequests({ requests, chats, messages, employees, companyMembers });
+  const enriched = enrichOpenRequests({
+    requests,
+    chats,
+    messages,
+    employees,
+    companyMembers,
+    companyInfoCompanies: companyInfoCache?.companies || []
+  });
   const groupOpen = enriched.filter(request => request.source_type === 'group').length;
   const chatOpen = enriched.filter(request => request.source_type !== 'group').length;
   return {
@@ -1646,39 +1714,55 @@ function buildMediaPayload(kind, source = {}, extra = {}) {
   };
 }
 
+function normalizeTelegramRaw(raw = {}) {
+  if (!raw) return {};
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw);
+      return normalizeTelegramRaw(parsed);
+    } catch (_error) {
+      return {};
+    }
+  }
+  if (typeof raw !== 'object') return {};
+  if (raw.message && typeof raw.message === 'object') return normalizeTelegramRaw(raw.message);
+  return raw;
+}
+
 function extractMessageMedia(raw = {}) {
-  if (!raw || typeof raw !== 'object' || raw.source === 'admin_send') return null;
-  const photo = bestPhotoSize(raw.photo || []);
+  const normalized = normalizeTelegramRaw(raw);
+  if (!normalized || Object.keys(normalized).length === 0 || normalized.source === 'admin_send') return null;
+  const photo = bestPhotoSize(normalized.photo || []);
   if (photo) return buildMediaPayload('photo', photo);
-  if (raw.sticker) {
-    return buildMediaPayload('sticker', raw.sticker, {
-      emoji: raw.sticker.emoji || null,
-      set_name: raw.sticker.set_name || null,
-      sticker_type: raw.sticker.type || null,
-      custom_emoji_id: raw.sticker.custom_emoji_id || null,
-      thumbnail_file_id: raw.sticker.thumbnail && raw.sticker.thumbnail.file_id || null
+  if (normalized.sticker) {
+    return buildMediaPayload('sticker', normalized.sticker, {
+      emoji: normalized.sticker.emoji || null,
+      set_name: normalized.sticker.set_name || null,
+      sticker_type: normalized.sticker.type || null,
+      custom_emoji_id: normalized.sticker.custom_emoji_id || null,
+      thumbnail_file_id: normalized.sticker.thumbnail && normalized.sticker.thumbnail.file_id || null
     });
   }
-  if (raw.video) {
-    return buildMediaPayload('video', raw.video, {
-      thumbnail_file_id: raw.video.thumbnail && raw.video.thumbnail.file_id || null
+  if (normalized.video) {
+    return buildMediaPayload('video', normalized.video, {
+      thumbnail_file_id: normalized.video.thumbnail && normalized.video.thumbnail.file_id || null
     });
   }
-  if (raw.voice) return buildMediaPayload('voice', raw.voice);
-  if (raw.audio) return buildMediaPayload('audio', raw.audio);
-  if (raw.video_note) {
-    return buildMediaPayload('video_note', raw.video_note, {
-      thumbnail_file_id: raw.video_note.thumbnail && raw.video_note.thumbnail.file_id || null
+  if (normalized.voice) return buildMediaPayload('voice', normalized.voice);
+  if (normalized.audio) return buildMediaPayload('audio', normalized.audio);
+  if (normalized.video_note) {
+    return buildMediaPayload('video_note', normalized.video_note, {
+      thumbnail_file_id: normalized.video_note.thumbnail && normalized.video_note.thumbnail.file_id || null
     });
   }
-  if (raw.animation) {
-    return buildMediaPayload('animation', raw.animation, {
-      thumbnail_file_id: raw.animation.thumbnail && raw.animation.thumbnail.file_id || null
+  if (normalized.animation) {
+    return buildMediaPayload('animation', normalized.animation, {
+      thumbnail_file_id: normalized.animation.thumbnail && normalized.animation.thumbnail.file_id || null
     });
   }
-  if (raw.document) {
-    return buildMediaPayload('document', raw.document, {
-      thumbnail_file_id: raw.document.thumbnail && raw.document.thumbnail.file_id || null
+  if (normalized.document) {
+    return buildMediaPayload('document', normalized.document, {
+      thumbnail_file_id: normalized.document.thumbnail && normalized.document.thumbnail.file_id || null
     });
   }
   return null;

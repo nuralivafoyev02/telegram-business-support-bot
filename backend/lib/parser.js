@@ -4,8 +4,13 @@ const DEFAULT_DONE_TAG = '#done';
 
 const GREETING_RE = /\b(assalomu\s+alaykum|assalamu\s+alaykum|assalomu\s+aleykum|assalamu\s+aleykum|asalomu\s+alaykum|asalamu\s+alaykum|assalomu|assalamu|asalomu|asalamu|salom|salomlar|alom|hello|hi|hey|привет|салом|здравствуйте|добрый\s+(день|вечер|утро)|hayrli\s+(tong|kun|kech)|xayrli\s+(tong|kun|kech))\b/i;
 const GREETING_ONLY_RE = /^(assalomu\s+alaykum|assalamu\s+alaykum|assalomu\s+aleykum|assalamu\s+aleykum|asalomu\s+alaykum|asalamu\s+alaykum|salom|salomlar|hello|hi|hey|привет|салом|здравствуйте|hayrli\s+(tong|kun|kech)|xayrli\s+(tong|kun|kech)|добрый\s+(день|вечер|утро))[!.\s]*$/i;
-const SMALL_TALK_RE = /^(rahmat|raxmat|tashakkur|ok|okay|xo'p|xop|hop|ha|yo'q|yoq|mayli|tushunarli|yaxshi|zor|zo'r|ajoyib|spasibo|спасибо|ок|хорошо|понятно|thanks|thank you)(\s+(rahmat|raxmat|tashakkur|ok|okay|xo'p|xop|hop|ha|mayli|tushunarli|yaxshi|zor|zo'r|ajoyib|spasibo|спасибо|ок|хорошо|понятно|thanks))*[!.\s]*$/i;
-const SOCIAL_QUESTION_RE = /^(qalaysiz|qalesiz|qandaysiz|yaxshimisiz|ishlar\s+qalay|ahvollar\s+qalay|как\s+дела|как\s+вы|how\s+are\s+you)[?!. \s]*$/i;
+const FAREWELL_RE = /\b(xayr|hayr|hayir|hayrli\s+kun|xayrli\s+kun|ko'?rishguncha|ko'rishguncha|sog'\s+bo'?ling|sog\s+boling|yaxshi\s+qoling|yaxshi\s+dam\s+oling|до\s+свидания|пока|goodbye|bye)\b/i;
+const FAREWELL_ONLY_RE = /^(xayr|hayr|hayir|hayrli\s+kun|xayrli\s+kun|ko'?rishguncha|ko'rishguncha|sog'\s+bo'?ling|sog\s+boling|yaxshi\s+qoling|yaxshi\s+dam\s+oling|до\s+свидания|пока|goodbye|bye)[!.\s]*$/i;
+const SMALL_TALK_RE = /^(rahmat|raxmat|tashakkur|minnatdorman|minnatdor|ok|okay|xo'p|xop|hop|ha|yo'q|yoq|mayli|tushunarli|yaxshi|zor|zo'r|ajoyib|barakalla|barakalloh|alhamdulillah|alhamdulilah|spasibo|спасибо|ок|хорошо|понятно|thanks|thank you)(\s+(rahmat|raxmat|tashakkur|ok|okay|xo'p|xop|hop|ha|mayli|tushunarli|yaxshi|zor|zo'r|ajoyib|spasibo|спасибо|ок|хорошо|понятно|thanks|uziz|aziz|aka|uka|opa))*[!.\s]*$/i;
+const SOCIAL_QUESTION_RE = /^(qalaysiz|qalesiz|qandaysiz|yaxshimisiz|yaxshimisz|ishlar\s+qalay|ahvollar\s+qalay|ahvolingiz\s+qanday|как\s+дела|как\s+вы|how\s+are\s+you)[?!. \s]*$/i;
+const CONVERSATIONAL_TOKEN_RE = /\b(alhamdulillah|alhamdulilah|bismillah|barakallahu?fik|barakalla|rahmat|raxmat|tashakkur|minnatdorman|salom|salomlar|assalomu|assalamu|alaykum|aleykum|yaxshi|yaxshimisiz|yaxshimisz|qalaysiz|qalesiz|qandaysiz|uziz|aziz|aka|uka|opa|ustoz|do'stim|xayr|hayr|hayir|ko'?rishguncha|sog'|boling|oling|hammaga|barchaga|спасибо|привет|пока|здравствуйте)\b/gi;
+const MEDIA_PLACEHOLDER_RE = /^(stikerli xabar|videoli xabar|audio xabar|video xabar|animatsiyali xabar|faylli xabar|fayl xabar|media xabar)$/i;
+const VOICE_PLACEHOLDER_RE = /^ovozli xabar$/i;
 const COMPLETION_RE = /\b(hal\s+bo'?ldi|hal\s+qilindi|bajarildi|tayyor|yechildi|echildi|yopildi|qilindi|решено|готово|сделано|закрыто|исправлено|done|fixed|resolved|completed)\b/i;
 const COMPLETION_NEGATION_RE = /\b(hal\s+bo'?lmadi|tayyor\s+emas|yechilmadi|echilmadi|не\s+готово|не\s+решено|not\s+done|not\s+fixed|unresolved)\b/i;
 
@@ -16,7 +21,7 @@ const STRONG_REQUEST_PATTERNS = [
   /\b(ishlamayapti|ishlamadi|ishlamayabdi|ochilmayapti|kirmayapti|chiqmayapti|yubormayapti|kelmayapti|topilmayapti|ko'?rinmayapti|saqlanmayapti|yuklanmayapti|sinxronlashmayapti|bo'?lmayapti|qotib|to'?xtab|qilolmayapman|qila\s+olmayapman|chiqara\s+olmayapman|kiritolmayapman|kirita\s+olmayapman|topolmayapman|topa\s+olmayapman|o'?tolmayapman|kirolmayapman|tasdiqlanmayapti|aktivlashmayapti|bloklandi|blok|yo'?qolib\s+qoldi|o'?chib\s+qoldi|зависает|не\s+работает|не\s+открывается|не\s+получается|не\s+приходит|не\s+заходит|не\s+отправляет|не\s+сохраняется|не\s+видно|не\s+выходит|not\s+working|cannot|can'?t|failed|not\s+found|forbidden)\b/i,
   /\b(tekshir|tekshirib|qarab|ko'?rib|tuzat|to'?g'?irla|hal\s+qil|yordam\s+ber|javob\s+ber|tasdiqla|ulan|ulab|ochib\s+ber|tiklab\s+ber|yuborib\s+ber|проверь|исправь|помогите|ответьте|подключите|проверьте|check|fix|resolve|connect|restore|send\s+me)\b/i,
   /\b(so'?rov|sorov|murojaat|ariza|zayavka|заявка|обращение|request|ticket)\b/i,
-  /\b(parol|login|kod|sms|kabinet|akkaunt|account|password|otp|код|смс|логин|пароль|аккаунт)\b/i,
+  /\b(parol\w*|login\w*|kod\w*|sms|kabinet|akkaunt|account|password|otp|код|смс|логин|парол\w*|аккаунт)\b/i,
   /\b(to'?lov|tolov|pul|summa|hisob|balans|karta|chek|oplata|оплата|платеж|payment|invoice|balance|refund|qaytar)\b/i,
   /\b(ro'?yxat|registratsiya|aktivatsiya|obuna|tarif|dostavka|yetkazib|buyurtma|zakaz|доставка|заказ|регистрация|активация|тариф|услуга|admin|operator|administrator|support|manager)\b/i,
   /помощь|ошибка|проблема|не\s+работает|не\s+открывается|не\s+получается|проверь|исправь|помогите|ответьте|заявка|обращение|логин|пароль|аккаунт|оплата|платеж/i
@@ -82,6 +87,8 @@ function normalizedLower(text = '') {
 }
 
 function getMessageText(message = {}) {
+  const analyzed = normalizeText(message.analysis_text || '');
+  if (analyzed) return analyzed;
   return normalizeText(message.text || message.caption || '');
 }
 
@@ -157,10 +164,53 @@ function isSmallTalk(text = '') {
   return SMALL_TALK_RE.test(value) || SOCIAL_QUESTION_RE.test(value);
 }
 
+function isMediaPlaceholder(text = '') {
+  const value = normalizedLower(text);
+  return Boolean(value) && MEDIA_PLACEHOLDER_RE.test(value);
+}
+
+function isFarewellOnly(text = '') {
+  const value = normalizedLower(text);
+  if (!value) return false;
+  if (FAREWELL_ONLY_RE.test(value)) return true;
+  const withoutFarewell = value
+    .replace(FAREWELL_RE, '')
+    .replace(/\b(rahmat|raxmat|aka|uka|opa|uziz|aziz)\b/gi, '')
+    .replace(/[!?.\s,]+/g, '');
+  return FAREWELL_RE.test(value) && withoutFarewell.length === 0;
+}
+
+function stripConversationalTokens(text = '') {
+  return normalizedLower(text)
+    .replace(CONVERSATIONAL_TOKEN_RE, '')
+    .replace(/[^\p{L}\p{N}]+/gu, '')
+    .trim();
+}
+
+function isConversationalOnly(text = '') {
+  const value = normalizedLower(text);
+  if (!value) return true;
+  if (isMediaPlaceholder(value)) return true;
+  if (isGreetingOnly(value) || isSmallTalk(value) || isFarewellOnly(value)) return true;
+
+  const stripped = stripConversationalTokens(value);
+  if (!stripped.length) return true;
+
+  if (stripped.length <= 4 && !hasPattern(STRONG_REQUEST_PATTERNS, value)) return true;
+
+  const letters = value.replace(/[^\p{L}\p{N}]+/gu, '');
+  if (letters.length >= 8 && stripped.length / letters.length <= 0.2 && !hasPattern(STRONG_REQUEST_PATTERNS, value)) {
+    return true;
+  }
+
+  return false;
+}
+
 function requestScore(value = '') {
   const normalized = normalizedLower(value);
   if (!normalized || isNoiseOnly(normalized)) return 0;
   if (isNonSupportSalesIntent(normalized)) return 0;
+  if (isConversationalOnly(normalized)) return 0;
 
   let score = 0;
   const question = normalized.includes('?') || /\b\w+mi(\s|[?!.]|$)/i.test(normalized);
@@ -205,7 +255,7 @@ function isRequestIntent(text = '', options = {}) {
   const value = normalizedLower(text);
   if (!value || isNoiseOnly(value) || isCommand(value) || isDoneMessage(value, options)) return false;
   if (isNonSupportSalesIntent(value)) return false;
-  if (isGreetingOnly(value) || isSmallTalk(value)) return false;
+  if (isConversationalOnly(value)) return false;
   const threshold = options.strict ? 2 : 1;
   return requestScore(value) >= threshold;
 }
@@ -218,6 +268,16 @@ function shouldOpenPrivateRequest(text = '', options = {}) {
   return meaningfulLength(value) >= minTextLength(options);
 }
 
+function isCustomerPhotoRequest({ mediaKind = '', isKnownEmployee = false } = {}) {
+  return !isKnownEmployee && mediaKind === 'photo';
+}
+
+function isCustomerVoiceWithoutTranscript({ text = '', mediaKind = '', isKnownEmployee = false } = {}) {
+  return !isKnownEmployee
+    && (mediaKind === 'voice' || mediaKind === 'audio')
+    && VOICE_PLACEHOLDER_RE.test(normalizedLower(text));
+}
+
 function classifyMessage({
   text,
   chatType,
@@ -226,7 +286,8 @@ function classifyMessage({
   doneTag,
   requestDetectionMode = 'keyword',
   minTextLength = 10,
-  aiMode = false
+  aiMode = false,
+  mediaKind = ''
 }) {
   const cleaned = normalizeText(text);
   const options = { doneTag, requestDetectionMode, minTextLength, aiMode };
@@ -235,7 +296,9 @@ function classifyMessage({
   if (isCommand(cleaned)) return 'command';
   if (isKnownEmployee && isCompletionIntent(cleaned)) return 'done';
   if (isKnownEmployee) return 'employee_message';
-  if (isGreetingOnly(cleaned) || isSmallTalk(cleaned)) return 'message';
+  if (isCustomerPhotoRequest({ mediaKind, isKnownEmployee })) return 'request';
+  if (isCustomerVoiceWithoutTranscript({ text: cleaned, mediaKind, isKnownEmployee })) return 'request';
+  if (isConversationalOnly(cleaned)) return 'message';
   if ((isBusiness || chatType === 'private') && shouldOpenPrivateRequest(cleaned, options)) return 'request';
   if (['group', 'supergroup'].includes(chatType) && isRequestIntent(cleaned, { ...options, strict: true })) return 'request';
   return 'message';
@@ -250,6 +313,9 @@ module.exports = {
   isCommand,
   isGreetingOnly,
   isSmallTalk,
+  isFarewellOnly,
+  isConversationalOnly,
+  isMediaPlaceholder,
   isRequestIntent,
   requestScore,
   classifyMessage

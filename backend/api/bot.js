@@ -8,6 +8,7 @@ const { getMessageText, classifyMessage, isGreetingOnly, isSmallTalk, isCompleti
 const { getBotSettings } = require('../lib/bot-settings');
 const { resolveMainStatsChatId, sendMainStatsReport, buildMainStatsQuestionReply, isMainStatsQuestion } = require('../lib/report');
 const { shouldUseExternalAi, classifyWithAi, generateSupportReply, generateLocalSupportReply, generateClickUpTaskDraft } = require('../lib/ai');
+const { detectIncomingMediaKind, resolveIncomingMessageText } = require('../lib/media-analysis');
 const { normalizeClickUpIntegration, isClickUpIntegrationReady, createClickUpTask, updateClickUpTaskStatus, attachClickUpTaskFile } = require('../lib/clickup');
 const { notifyIncomingLog, notifyOperationalError } = require('../lib/log-notifier');
 const metrics = require('../lib/metrics');
@@ -2036,19 +2037,31 @@ async function recordIncomingMessageWithAudit(updateKind, message, sourceType, c
 
 async function classifyIncomingMessage({ text, chat, sourceType, updateKind, message, employee, settings }) {
   if (message && message.from && message.from.is_bot) return 'bot_message';
+
+  const mediaKind = detectIncomingMediaKind(message);
+  let textForClassify = text;
+  try {
+    const resolved = await resolveIncomingMessageText(message, settings);
+    textForClassify = resolved.text || text;
+    if (resolved.analysisText) message.analysis_text = resolved.analysisText;
+  } catch (error) {
+    logBackgroundError('media-analysis', error);
+  }
+
   const useExternalAi = shouldUseExternalAi(settings);
   const localSettings = useExternalAi ? { ...settings, aiMode: false } : settings;
   let classification = classifyMessage({
-    text,
+    text: textForClassify,
     chatType: chat.type,
     isKnownEmployee: !!employee,
     isBusiness: updateKind.includes('business'),
+    mediaKind,
     ...localSettings
   });
 
   if (!employee && useExternalAi && !['done', 'command'].includes(classification)) {
     try {
-      const ai = await classifyWithAi({ text, chatType: chat.type, sourceType, settings });
+      const ai = await classifyWithAi({ text: textForClassify, chatType: chat.type, sourceType, settings });
       if (shouldUseAiClassification(classification, ai)) classification = ai.classification;
     } catch (error) {
       logBackgroundError('ai-classify', error);
@@ -2056,17 +2069,12 @@ async function classifyIncomingMessage({ text, chat, sourceType, updateKind, mes
   }
 
   if (!employee && message && !['request', 'ticket', 'done', 'command'].includes(classification)) {
-    const hasMedia = message.voice || 
-                     (Array.isArray(message.photo) && message.photo.length > 0) || 
-                     message.video || 
-                     message.audio || 
-                     message.document || 
-                     message.video_note || 
-                     message.sticker || 
-                     message.animation;
-    if (hasMedia) {
-      classification = 'request';
-    }
+    const hasMedia = message.video
+      || message.document
+      || message.video_note
+      || message.sticker
+      || message.animation;
+    if (hasMedia) classification = 'request';
   }
 
   return classification;
@@ -2505,6 +2513,7 @@ async function processMessage(updateKind, message) {
     employee,
     settings
   });
+  const effectiveText = getMessageText(message);
 
   const isIgnoredStaff = employee && !isUyqurEmployee(employee);
   if (isIgnoredStaff) {
@@ -2530,10 +2539,10 @@ async function processMessage(updateKind, message) {
   }
   await maybeNotifyMainGroupMessageSaved({ updateKind, message, settings, chatRow, classification, employee, savedMessage, target: 'public.messages' });
 
-  if (await maybeStartAdminAssistantPreview({ message, text, settings, employee })) return;
+  if (await maybeStartAdminAssistantPreview({ message, effectiveText, settings, employee })) return;
 
   if (isGroupChat(chat) && isConfiguredMainGroup(chat, settings)) {
-    await maybeAnswerGroupQuestion({ updateKind, message, sourceType, text, settings, employee });
+    await maybeAnswerGroupQuestion({ updateKind, message, sourceType, text: effectiveText, settings, employee });
     return;
   }
 
@@ -2544,16 +2553,16 @@ async function processMessage(updateKind, message) {
     return;
   }
 
-  if (await maybeReplyPrivateGreeting(updateKind, message, text)) return;
+  if (await maybeReplyPrivateGreeting(updateKind, message, effectiveText)) return;
 
   if (!isIgnoredStaff) {
     if (await maybeCloseRequestFromReply(message, classification, employee, settings)) return;
   }
 
-  if (await maybeAnswerGroupQuestion({ updateKind, message, sourceType, text, settings, employee })) return;
+  if (await maybeAnswerGroupQuestion({ updateKind, message, sourceType, text: effectiveText, settings, employee })) return;
 
   if (!isIgnoredStaff) {
-    if (await maybeCloseRequestFromEmployeeAnswer(message, classification, employee, text, settings)) return;
+    if (await maybeCloseRequestFromEmployeeAnswer(message, classification, employee, effectiveText, settings)) return;
   }
 
   if (isSupportRequestClassification(classification)) {

@@ -13,6 +13,16 @@ assert.strictEqual(isRequestIntent('Salom'), false);
 assert.strictEqual(isRequestIntent('Assalomu alaykum'), false);
 assert.strictEqual(isRequestIntent('Qalaysiz?'), false);
 assert.strictEqual(isRequestIntent('Rahmat'), false);
+assert.strictEqual(isRequestIntent('Alhamdulillah rahmat uziz yaxshimisiz'), false);
+assert.strictEqual(isRequestIntent('Alhamdulillah rahmat'), false);
+assert.strictEqual(isRequestIntent('Salom rahmat aka'), false);
+assert.strictEqual(isRequestIntent('Xayr'), false);
+assert.strictEqual(isRequestIntent('Hayrli kun'), false);
+assert.strictEqual(isRequestIntent('Ko‘rishguncha'), false);
+assert.strictEqual(isRequestIntent('Faylli xabar'), false);
+assert.strictEqual(classifyMessage({ text: 'Rasmli xabar', chatType: 'supergroup', mediaKind: 'photo' }), 'request');
+assert.strictEqual(classifyMessage({ text: 'Ovozli xabar', chatType: 'supergroup', mediaKind: 'voice' }), 'request');
+assert.strictEqual(classifyMessage({ text: 'Rahmat', chatType: 'supergroup', mediaKind: 'voice' }), 'message');
 assert.strictEqual(isGreetingOnly('Assalomu alaykum admin'), true);
 assert.strictEqual(isSmallTalk('Yaxshi rahmat'), true);
 assert.strictEqual(isRequestIntent('Admin bormi? Login qilolmayapman'), true);
@@ -51,6 +61,11 @@ assert.strictEqual(classifyMessage({ text: 'Smeta hisobotini chiqara olmayapman'
 assert.strictEqual(classifyMessage({ text: 'Rekvizitlarni tashlab bering', chatType: 'supergroup' }), 'message');
 assert.strictEqual(classifyMessage({ text: 'Admin bormi?', chatType: 'supergroup' }), 'request');
 assert.strictEqual(classifyMessage({ text: 'Assalomu alaykum', chatType: 'supergroup' }), 'message');
+assert.strictEqual(classifyMessage({ text: 'Alhamdulillah rahmat uziz yaxshimisiz', chatType: 'supergroup' }), 'message');
+assert.strictEqual(classifyMessage({ text: 'Rasmli xabar', chatType: 'supergroup', mediaKind: 'photo' }), 'request');
+assert.strictEqual(classifyMessage({ text: 'Ovozli xabar', chatType: 'supergroup', mediaKind: 'voice' }), 'request');
+assert.strictEqual(classifyMessage({ text: 'Faylli xabar', chatType: 'supergroup' }), 'message');
+assert.strictEqual(classifyMessage({ text: 'Xayr rahmat', chatType: 'supergroup' }), 'message');
 assert.strictEqual(classifyMessage({ text: 'https://example.com', chatType: 'private', aiMode: true }), 'ignore');
 
 console.log('Parser tests passed');
