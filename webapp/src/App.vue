@@ -2921,8 +2921,6 @@ const supportPerformanceRows = computed(() => {
     }, 'company');
   });
 
-  const openMap = employeeOpenRequestSummaryMap();
-
   return [...merged.values()]
     .filter(row => !isAdminLikeEmployee(row))
     // Faqat bazada bor yoki Uyqur API'dan kelgan xodimlarni qoldiramiz (mijozlarni chiqarib tashlaymiz) va faqat Uyqur xodimlarini ko'rsatamiz
@@ -2935,8 +2933,7 @@ const supportPerformanceRows = computed(() => {
     const assignedCompanyCount = visibleCompanyInfoRows.value.filter(company => companyMatchesEmployee(company, candidate)).length;
 
     const closedRaw = periodRow ? Number(periodRow.closed_requests || 0) : 0;
-    const openSummary = key ? openMap.get(key) : null;
-    const openRaw = openSummary ? Number(openSummary.open_requests || 0) : 0;
+    const openRaw = periodRow ? Number(periodRow.open_requests || 0) : 0;
     const totalRaw = closedRaw + openRaw;
     const slaRaw = totalRaw > 0 ? (closedRaw / totalRaw) * 100 : 100;
     const avgRaw = periodRow ? Number(periodRow.avg_close_minutes || 0) : 0;

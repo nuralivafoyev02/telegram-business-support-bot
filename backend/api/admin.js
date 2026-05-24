@@ -583,26 +583,19 @@ function buildChatPerformance({ requests, chats, periodKey, keys, sourceType = '
 
   requests.forEach(request => {
     if (sourceType && request.source_type !== sourceType) return;
-    const createdInPeriod = inCurrentPeriod(request.created_at, periodKey, keys);
-    const closedInPeriod = request.status === 'closed' && request.closed_at && inCurrentPeriod(request.closed_at, periodKey, keys);
+    if (!inCurrentPeriod(request.created_at, periodKey, keys)) return;
 
-    if (createdInPeriod || closedInPeriod) {
-      const current = ensureChatTotal(request.chat_id, request);
-      if (createdInPeriod) {
-        current.total_requests += 1;
-        if (request.status === 'open') current.open_requests += 1;
-        if (request.customer_tg_id) current.customers.add(String(request.customer_tg_id));
-        if (!current.last_request_at || String(request.created_at || '') > String(current.last_request_at || '')) {
-          current.last_request_at = request.created_at || null;
-        }
-      }
-      if (closedInPeriod) {
-        current.closed_requests += 1;
-        if (createdInPeriod) {
-          const closeMinute = minutesBetween(request.created_at, request.closed_at);
-          if (closeMinute !== null) current.close_minutes.push(closeMinute);
-        }
-      }
+    const current = ensureChatTotal(request.chat_id, request);
+    current.total_requests += 1;
+    if (request.status === 'open') current.open_requests += 1;
+    if (request.status === 'closed') {
+      current.closed_requests += 1;
+      const closeMinute = minutesBetween(request.created_at, request.closed_at);
+      if (closeMinute !== null) current.close_minutes.push(closeMinute);
+    }
+    if (request.customer_tg_id) current.customers.add(String(request.customer_tg_id));
+    if (!current.last_request_at || String(request.created_at || '') > String(current.last_request_at || '')) {
+      current.last_request_at = request.created_at || null;
     }
   });
 
@@ -754,18 +747,16 @@ function buildCompanyTicketPerformance({ requests, chats = [], companies, messag
 
   requests.forEach(request => {
     const createdInPeriod = request.created_at && inCurrentPeriod(request.created_at, periodKey, keys);
-    const closedAt = request.closed_at || request.created_at;
-    const closedInPeriod = request.status === 'closed' && closedAt && inCurrentPeriod(closedAt, periodKey, keys);
-    if (!createdInPeriod && !closedInPeriod) return;
+    if (!createdInPeriod) return;
 
     const companyId = request.company_id || chatCompanyMap.get(telegramIdKey(request.chat_id));
     const current = ensureCompanyTotal(companyId);
     if (!current) return;
 
     current.total_requests += 1;
-    if (request.status === 'open' && createdInPeriod) {
+    if (request.status === 'open') {
       current.open_requests += 1;
-    } else if (request.status === 'closed' && closedInPeriod) {
+    } else if (request.status === 'closed') {
       current.closed_requests += 1;
     }
   });
@@ -784,11 +775,18 @@ function buildCompanyTicketPerformance({ requests, chats = [], companies, messag
 
   return [...totals.values()]
     .map(row => {
+      const messageCount = Number(row.message_count || 0);
+      const ticketLikeMessages = Number(row.ticket_like_messages || 0);
+      const hasTicketHistory = companyIdsWithActualRequests.has(String(row.company_id || ''));
+      const messageFallback = hasTicketHistory ? 0 : (ticketLikeMessages || messageCount);
+      const totalRequests = Number(row.total_requests || 0) || messageFallback;
+      const closedRequests = Number(row.closed_requests || 0);
+      const openRequests = Number(row.open_requests || 0) || (closedRequests ? 0 : messageFallback);
       return {
         ...row,
-        total_requests: row.total_requests || 0,
-        open_requests: row.open_requests || 0,
-        close_rate: percent(row.closed_requests, row.total_requests || 0)
+        total_requests: totalRequests,
+        open_requests: openRequests,
+        close_rate: percent(closedRequests, totalRequests)
       };
     })
     .filter(row => Number(row.total_requests || 0) > 0 || Number(row.message_count || 0) > 0)
@@ -2004,7 +2002,22 @@ function buildChatDetail({ chat, requests, events, messages, employeesById, empl
   };
 }
 
+function filterRequestsCreatedInPeriod(requests = [], periodKey, keys = {}) {
+  if (periodKey === 'all') return requests;
+  return requests.filter(request => request.created_at && inCurrentPeriod(request.created_at, periodKey, keys));
+}
+
 async function getDashboard(query = {}) {
+  const customPeriod = normalizeCustomPeriod(query);
+  const selectedPeriod = customPeriod ? 'custom' : normalizePeriodKey(query.period || 'all');
+  const periodKeys = {
+    ...currentPeriodKeys(),
+    ...previousPeriodKeys(),
+    customStart: customPeriod?.start || '',
+    customEnd: customPeriod?.end || '',
+    prevCustomStart: getPreviousCustomPeriod(customPeriod)?.start || '',
+    prevCustomEnd: getPreviousCustomPeriod(customPeriod)?.end || ''
+  };
   const [employeeStats, chatStats, openInsights, today, analytics] = await Promise.all([
     stats.selectEmployeeStatistics({ select: '*', order: 'closed_requests.desc', limit: '100' }),
     stats.selectChatStatistics({ select: '*', order: 'total_requests.desc', limit: '100' }),
@@ -2012,20 +2025,24 @@ async function getDashboard(query = {}) {
     stats.selectTodaySummary({ select: '*' }),
     getDashboardAnalytics(query)
   ]);
-  const selectedPeriod = normalizeCustomPeriod(query) ? 'custom' : normalizePeriodKey(query.period || 'all');
-  const allPeriod = analytics.periods?.all || analytics.periods?.[selectedPeriod] || {};
+  const periodSummary = analytics.periods?.[selectedPeriod] || analytics.periods?.all || {};
+  const periodOpenRequests = filterRequestsCreatedInPeriod(openInsights.openRequests, selectedPeriod, periodKeys);
   return {
     summary: today[0] || stats.DEFAULT_SUMMARY,
     employeeStats,
     chatStats,
-    openRequests: openInsights.openRequests,
+    openRequests: periodOpenRequests,
     manager: {
-      ...openInsights.manager,
-      total_requests: allPeriod.total_requests || 0,
-      closed_requests: allPeriod.closed_requests || 0,
-      group_requests: allPeriod.group_requests || 0,
-      private_requests: allPeriod.private_requests || 0,
-      business_requests: allPeriod.business_requests || 0
+      open_requests: periodOpenRequests.length,
+      group_open_requests: periodOpenRequests.filter(request => request.source_type === 'group').length,
+      chat_open_requests: periodOpenRequests.filter(request => request.source_type !== 'group').length,
+      oldest_open_minutes: periodOpenRequests.reduce((max, request) => Math.max(max, Number(request.open_minutes || 0)), 0),
+      assigned_open_requests: periodOpenRequests.filter(request => request.responsible_employee_name).length,
+      total_requests: periodSummary.total_requests || 0,
+      closed_requests: periodSummary.closed_requests || 0,
+      group_requests: periodSummary.group_requests || 0,
+      private_requests: periodSummary.private_requests || 0,
+      business_requests: periodSummary.business_requests || 0
     },
     analytics
   };

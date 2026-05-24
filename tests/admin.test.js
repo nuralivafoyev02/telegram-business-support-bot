@@ -1660,14 +1660,100 @@ async function testDashboardEmployeePerformanceCountsOpenAndSlaPerEmployee() {
   }
 }
 
+async function testDashboardPeriodCountsOnlyRequestsCreatedInSelectedRange() {
+  const originalSelect = supabase.select;
+  const originalEmployeeStats = stats.selectEmployeeStatistics;
+  const originalChatStats = stats.selectChatStatistics;
+  const originalTodaySummary = stats.selectTodaySummary;
+  const chatId = -100903;
+  const employees = [{ id: 'emp-1', tg_user_id: 777, full_name: 'Uyqur | Ali', username: 'ali', role: 'support', is_active: true }];
+  const requests = [
+    {
+      id: 'request-old-open',
+      source_type: 'group',
+      chat_id: chatId,
+      customer_tg_id: 501,
+      customer_name: 'Mijoz old',
+      status: 'open',
+      created_at: '2026-05-22T10:00:00.000Z',
+      closed_at: null
+    },
+    {
+      id: 'request-day-open',
+      source_type: 'group',
+      chat_id: chatId,
+      customer_tg_id: 502,
+      customer_name: 'Mijoz new',
+      initial_message_id: 51,
+      initial_text: 'Bugungi ochiq',
+      status: 'open',
+      created_at: '2026-05-24T10:00:00.000Z',
+      closed_at: null
+    },
+    {
+      id: 'request-day-closed',
+      source_type: 'group',
+      chat_id: chatId,
+      customer_tg_id: 503,
+      customer_name: 'Mijoz closed',
+      status: 'closed',
+      closed_by_employee_id: 'emp-1',
+      closed_by_tg_id: 777,
+      closed_by_name: 'Uyqur | Ali',
+      created_at: '2026-05-24T11:00:00.000Z',
+      closed_at: '2026-05-24T12:00:00.000Z'
+    }
+  ];
+  const messages = [
+    { id: 'm51', tg_message_id: 51, chat_id: chatId, from_tg_user_id: 502, from_name: 'Mijoz new', employee_id: null, text: 'Bugungi ochiq', created_at: '2026-05-24T10:00:00.000Z' },
+    { id: 'm52', tg_message_id: 52, chat_id: chatId, from_tg_user_id: 777, from_name: 'Uyqur | Ali', from_username: 'ali', employee_id: 'emp-1', text: 'Javob', created_at: '2026-05-24T10:05:00.000Z' }
+  ];
+
+  supabase.select = async (table, query = {}) => {
+    if (table === 'support_requests') return query.status === 'eq.open' ? requests.filter(row => row.status === 'open') : requests;
+    if (table === 'tg_chats') return [{ chat_id: chatId, title: 'Support guruhi', source_type: 'group', is_active: true }];
+    if (table === 'employees') return employees;
+    if (table === 'messages') return messages;
+    if (table === 'companies') return [];
+    if (table === 'company_members') return [];
+    if (table === 'request_events') return [];
+    return [];
+  };
+  stats.selectEmployeeStatistics = async () => [];
+  stats.selectChatStatistics = async () => [{ chat_id: chatId, title: 'Support guruhi', source_type: 'group', is_active: true }];
+  stats.selectTodaySummary = async () => [{ total_requests: 0, open_requests: 0, closed_requests: 0 }];
+
+  try {
+    const result = await callAdmin('dashboard', {
+      query: { period: 'custom', start_date: '2026-05-24', end_date: '2026-05-24' }
+    });
+    assert.strictEqual(result.status, 200);
+    const period = result.payload.data.analytics.periods.custom;
+    assert.strictEqual(period.total_requests, 2);
+    assert.strictEqual(period.open_requests, 1);
+    assert.strictEqual(period.closed_requests, 1);
+    assert.strictEqual(result.payload.data.openRequests.some(request => request.id === 'request-old-open'), false);
+    assert.strictEqual(result.payload.data.openRequests.some(request => request.id === 'request-day-open'), true);
+    const row = result.payload.data.analytics.employeePerformance.custom.find(item => item.employee_id === 'emp-1');
+    assert.ok(row);
+    assert.strictEqual(row.open_requests, 1);
+    assert.strictEqual(row.closed_requests, 1);
+  } finally {
+    supabase.select = originalSelect;
+    stats.selectEmployeeStatistics = originalEmployeeStats;
+    stats.selectChatStatistics = originalChatStats;
+    stats.selectTodaySummary = originalTodaySummary;
+  }
+}
+
 async function testDashboardEmployeePerformanceCountsClosedByCloseDate() {
   const originalSelect = supabase.select;
   const originalEmployeeStats = stats.selectEmployeeStatistics;
   const originalChatStats = stats.selectChatStatistics;
   const originalTodaySummary = stats.selectTodaySummary;
   const chatId = -100902;
-  const createdAt = '2026-04-29T23:50:00.000Z';
-  const closedAt = '2026-04-30T00:05:00.000Z';
+  const createdAt = '2026-04-29T10:00:00.000Z';
+  const closedAt = '2026-04-30T05:00:00.000Z';
   const employees = [{ id: 'emp-1', tg_user_id: 777, full_name: 'Ali Support', username: 'ali', role: 'support', is_active: true }];
   const requests = [
     {
@@ -3462,6 +3548,7 @@ async function run() {
   await testDashboardCompanyTicketsIncludeLinkedGroupMessagesWithoutRequests();
   await testDashboardCompanyTicketsUseLinkedGroupOrdinaryMessages();
   await testDashboardEmployeePerformanceCountsOpenAndSlaPerEmployee();
+  await testDashboardPeriodCountsOnlyRequestsCreatedInSelectedRange();
   await testDashboardEmployeePerformanceCountsClosedByCloseDate();
   await testRequestsListEnrichesCompanyFromRegisteredGroup();
   await testRequestsListShowsResponsibleEmployeeFromTicketMessages();
