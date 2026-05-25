@@ -3873,15 +3873,17 @@ function normalizeCompanyTicketRow(row = {}) {
   const open = explicitOpen;
   const explicitTotal = firstNumericValue(row, ['total_requests', 'requests_count', 'ticket_count', 'tickets_count', 'support_ticket_count']);
   const total = explicitTotal || (closed + open);
+  const companyId = row.company_id || row.id || row.external_id || row.uyqur_company_id || '';
   return {
-    company_id: row.company_id || row.id || row.external_id || row.uyqur_company_id || '',
+    company_id: companyId,
     name: row.name || row.company_name || row.legal_name || 'Kompaniya',
     total_requests: total,
     closed_requests: closed,
     open_requests: open,
     message_count: messageCount,
     ticket_like_messages: ticketLikeMessages,
-    close_rate: Number(row.close_rate || row.sla || 0)
+    close_rate: Number(row.close_rate || row.sla || 0),
+    is_unassigned: row.is_unassigned === true || companyId === '__unassigned__'
   };
 }
 
@@ -6374,7 +6376,11 @@ async function openCompanyGroupActivity(row = {}) {
       company_name: companyName
     });
     const detail = normalizeCompanyGroupPayload(data, row);
-    if (!detail.groups.length) return showToast('Bu kompaniyaga ulangan guruhlarda xabar topilmadi');
+    if (!detail.groups.length) {
+      return showToast(row.is_unassigned
+        ? 'Bu davrda kompaniyaga biriktirilmagan guruh ticketlari topilmadi'
+        : 'Bu kompaniyaga ulangan guruhlarda xabar topilmadi');
+    }
     detail.groups = sortChatsWithOpenFirst(detail.groups);
     companyGroupDetail.value = detail;
     companyGroupSelectedChatKey.value = companyGroupChatKey(detail.groups[0]);

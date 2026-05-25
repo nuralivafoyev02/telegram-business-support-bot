@@ -744,6 +744,7 @@ function buildTicketAnswerTrend(requests, periodKey, keys) {
 }
 
 function buildCompanyTicketPerformance({ requests, chats = [], companies, messages = [], periodKey, keys }) {
+  const UNASSIGNED_COMPANY_ID = '__unassigned__';
   const companyMap = new Map(companies.map(company => [company.id, company]).filter(([id]) => id));
   const linkedGroupChats = chats.filter(chat => chat.company_id && (chat.source_type === 'group' || ['group', 'supergroup'].includes(chat.type)));
   const chatCompanyMap = new Map(linkedGroupChats
@@ -758,12 +759,13 @@ function buildCompanyTicketPerformance({ requests, chats = [], companies, messag
     const key = company?.id || companyId;
     const current = totals.get(key) || {
       company_id: company?.id || companyId,
-      name: company?.name || 'Kompaniya',
+      name: companyId === UNASSIGNED_COMPANY_ID ? 'Biriktirilmagan' : (company?.name || 'Kompaniya'),
       total_requests: 0,
       closed_requests: 0,
       open_requests: 0,
       message_count: 0,
-      ticket_like_messages: 0
+      ticket_like_messages: 0,
+      is_unassigned: companyId === UNASSIGNED_COMPANY_ID
     };
     totals.set(key, current);
     return current;
@@ -773,7 +775,7 @@ function buildCompanyTicketPerformance({ requests, chats = [], companies, messag
     const createdInPeriod = request.created_at && inCurrentPeriod(request.created_at, periodKey, keys);
     if (!createdInPeriod) return;
 
-    const companyId = request.company_id || chatCompanyMap.get(telegramIdKey(request.chat_id));
+    const companyId = request.company_id || chatCompanyMap.get(telegramIdKey(request.chat_id)) || UNASSIGNED_COMPANY_ID;
     const current = ensureCompanyTotal(companyId);
     if (!current) return;
 
@@ -2555,8 +2557,10 @@ function mergeCompanyActivityRows(localRows = [], externalRows = []) {
 
 async function getCompanyGroupActivity(query = {}) {
   const { period, label, keys } = queryPeriodContext(query);
+  const UNASSIGNED_COMPANY_ID = '__unassigned__';
   const companyIdFilter = String(query.company_id || query.id || '').trim();
   const companyNameFilter = String(query.company_name || query.name || '').trim().toLowerCase();
+  const isUnassignedFilter = companyIdFilter === UNASSIGNED_COMPANY_ID || companyNameFilter === 'biriktirilmagan';
 
   const [companies, chats, employeeLookup] = await Promise.all([
     selectPaged('companies', {
@@ -2573,7 +2577,8 @@ async function getCompanyGroupActivity(query = {}) {
 
   const companyMap = new Map(companies.map(company => [String(company.id || ''), company]).filter(([id]) => id));
   const linkedChats = chats.filter(chat => chat.company_id);
-  const chatIds = linkedChats.map(chat => chat.chat_id).filter(value => value !== undefined && value !== null);
+  const scopedChats = isUnassignedFilter ? chats.filter(chat => !chat.company_id) : linkedChats;
+  const chatIds = scopedChats.map(chat => chat.chat_id).filter(value => value !== undefined && value !== null);
 
   const [requests, messages] = chatIds.length
     ? await Promise.all([
@@ -2604,14 +2609,12 @@ async function getCompanyGroupActivity(query = {}) {
     list.push(event);
     eventsByRequestId.set(event.request_id, list);
   });
-  const chatMap = new Map(linkedChats.map(chat => [telegramIdKey(chat.chat_id), chat]));
+  const chatMap = new Map(scopedChats.map(chat => [telegramIdKey(chat.chat_id), chat]));
   const requestsByChat = new Map();
   requests.forEach(request => {
     if (period !== 'all') {
       const createdInPeriod = request.created_at && inCurrentPeriod(request.created_at, period, keys);
-      const closedAt = request.closed_at || request.created_at;
-      const closedInPeriod = request.status === 'closed' && closedAt && inCurrentPeriod(closedAt, period, keys);
-      if (!createdInPeriod && !closedInPeriod) return;
+      if (!createdInPeriod) return;
     }
     const key = telegramIdKey(request.chat_id);
     if (!requestsByChat.has(key)) requestsByChat.set(key, []);
@@ -2726,6 +2729,20 @@ async function getCompanyGroupActivity(query = {}) {
   };
 
   const groupedCompanies = new Map();
+  const groupedUnassigned = {
+    company_id: UNASSIGNED_COMPANY_ID,
+    name: 'Biriktirilmagan',
+    brand: '',
+    is_active: true,
+    groups: [],
+    group_count: 0,
+    total_messages: 0,
+    total_requests: 0,
+    closed_requests: 0,
+    open_requests: 0,
+    unique_customers: new Set(),
+    last_message_at: null
+  };
   const ensureCompany = (companyId, chat = {}) => {
     const key = String(companyId || '').trim();
     if (!key) return null;
@@ -2751,16 +2768,22 @@ async function getCompanyGroupActivity(query = {}) {
     return current;
   };
 
-  linkedChats.forEach(chat => {
+  scopedChats.forEach(chat => {
     const companyId = String(chat.company_id || '').trim();
+    if (isUnassignedFilter ? Boolean(companyId) : !companyId) return;
     const company = ensureCompany(companyId, chat);
-    if (!company) return;
+    const target = company || groupedUnassigned;
+    if (!target) return;
 
     const chatKey = telegramIdKey(chat.chat_id);
     const chatRequests = (requestsByChat.get(chatKey) || [])
-      .filter(request => String(request.company_id || chat.company_id || '') === companyId)
+      .filter(request => {
+        const requestCompanyId = String(request.company_id || chat.company_id || '').trim();
+        return isUnassignedFilter ? !requestCompanyId : requestCompanyId === companyId;
+      })
       .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
     const allChatMessages = messagesByChat.get(chatKey) || [];
+    if (!chatRequests.length && !allChatMessages.length) return;
     const chatMessages = allChatMessages
       .slice(0, COMPANY_GROUP_ACTIVITY_CONVERSATION_LIMIT)
       .sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')));
@@ -2773,8 +2796,8 @@ async function getCompanyGroupActivity(query = {}) {
       chat_id: chat.chat_id,
       title: displayChatTitle(chat),
       username: chat.username || '',
-      source_type: 'group',
-      company_id: companyId,
+      source_type: chat.source_type || 'group',
+      company_id: companyId || null,
       last_message_at: chat.last_message_at || latestBy(chatMessages, 'created_at'),
       total_messages: allChatMessages.length,
       total_requests: requestRows.length,
@@ -2787,18 +2810,18 @@ async function getCompanyGroupActivity(query = {}) {
       conversation_truncated: allChatMessages.length > conversationPreview.length
     };
 
-    company.groups.push(group);
-    company.group_count += 1;
-    company.total_messages += group.total_messages;
-    company.total_requests += group.total_requests;
-    company.closed_requests += group.closed_requests;
-    company.open_requests += group.open_requests;
+    target.groups.push(group);
+    target.group_count += 1;
+    target.total_messages += group.total_messages;
+    target.total_requests += group.total_requests;
+    target.closed_requests += group.closed_requests;
+    target.open_requests += group.open_requests;
     requestRows.forEach(request => {
-      if (request.customer_tg_id || request.customer_name) company.unique_customers.add(request.customer_tg_id || request.customer_name);
+      if (request.customer_tg_id || request.customer_name) target.unique_customers.add(request.customer_tg_id || request.customer_name);
     });
     const latestMessageAt = group.last_message_at || latestBy(chatMessages, 'created_at');
-    if (latestMessageAt && (!company.last_message_at || String(latestMessageAt) > String(company.last_message_at))) {
-      company.last_message_at = latestMessageAt;
+    if (latestMessageAt && (!target.last_message_at || String(latestMessageAt) > String(target.last_message_at))) {
+      target.last_message_at = latestMessageAt;
     }
   });
 
@@ -2812,7 +2835,16 @@ async function getCompanyGroupActivity(query = {}) {
     .filter(company => company.groups.length)
     .sort((a, b) => b.total_requests - a.total_requests || b.total_messages - a.total_messages || a.name.localeCompare(b.name));
 
-  const cachedCompanyInfo = await getCachedCompanyInfo().catch(() => null);
+  if (isUnassignedFilter && groupedUnassigned.groups.length) {
+    rows = [{
+      ...groupedUnassigned,
+      unique_customers: groupedUnassigned.unique_customers.size,
+      close_rate: percent(groupedUnassigned.closed_requests, groupedUnassigned.total_requests),
+      groups: groupedUnassigned.groups.sort((a, b) => String(b.last_message_at || '').localeCompare(String(a.last_message_at || '')))
+    }];
+  }
+
+  const cachedCompanyInfo = isUnassignedFilter ? null : await getCachedCompanyInfo().catch(() => null);
   if (cachedCompanyInfo) {
     rows = mergeCompanyActivityRows(rows, externalCompanyActivityRows(cachedCompanyInfo))
       .sort((a, b) => b.total_requests - a.total_requests || b.total_messages - a.total_messages || a.name.localeCompare(b.name));
@@ -3118,7 +3150,7 @@ async function getEmployeeActivity(query = {}) {
   const requests = uniqueRowsBy([...requestsByEmployeeId, ...requestsByTgId], row => row.id || `${row.chat_id}:${row.initial_message_id || row.closed_at}`);
   const closedRequests = requests
     .filter(request => request.status === 'closed')
-    .filter(request => inCurrentPeriod(request.closed_at || request.created_at, periodKey, keys));
+    .filter(request => inCurrentPeriod(request.created_at, periodKey, keys));
   const messages = uniqueRowsBy([...employeeMessagesById, ...employeeMessagesByTg], row => `${conversationScopeKey(row)}:${row.tg_message_id || row.id}`)
     .filter(message => inCurrentPeriod(message.created_at, periodKey, keys));
   const chatIds = [...new Set([

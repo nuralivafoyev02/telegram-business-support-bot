@@ -1455,7 +1455,7 @@ async function testDashboardCompanyTicketsUseRegisteredGroupCompany() {
   }
 }
 
-async function testDashboardCompanyTicketsCountClosedRequestsByClosedAt() {
+async function testDashboardCompanyTicketsIgnoreRequestsCreatedBeforeSelectedPeriod() {
   const originalSelect = supabase.select;
   const originalEmployeeStats = stats.selectEmployeeStatistics;
   const originalChatStats = stats.selectChatStatistics;
@@ -1495,12 +1495,7 @@ async function testDashboardCompanyTicketsCountClosedRequestsByClosedAt() {
     const result = await callAdmin('dashboard', { query: { period: 'custom', start_date: '2026-05-01', end_date: '2026-05-01' } });
     assert.strictEqual(result.status, 200);
     const rows = result.payload.data.analytics.companyTickets.custom;
-    assert.strictEqual(rows.length, 1);
-    assert.strictEqual(rows[0].company_id, companyId);
-    assert.strictEqual(rows[0].name, 'Closed Period Inc');
-    assert.strictEqual(rows[0].total_requests, 1);
-    assert.strictEqual(rows[0].closed_requests, 1);
-    assert.strictEqual(rows[0].open_requests, 0);
+    assert.strictEqual(rows.length, 0);
   } finally {
     supabase.select = originalSelect;
     stats.selectEmployeeStatistics = originalEmployeeStats;
@@ -1553,13 +1548,7 @@ async function testDashboardCompanyTicketsIncludeLinkedGroupMessagesWithoutReque
     const result = await callAdmin('dashboard', { query: { period: 'all' } });
     assert.strictEqual(result.status, 200);
     const rows = result.payload.data.analytics.companyTickets.all;
-    assert.strictEqual(rows.length, 1);
-    assert.strictEqual(rows[0].company_id, companyId);
-    assert.strictEqual(rows[0].name, 'Message Only LLC');
-    assert.strictEqual(rows[0].message_count, 1);
-    assert.strictEqual(rows[0].ticket_like_messages, 1);
-    assert.strictEqual(rows[0].total_requests, 1);
-    assert.strictEqual(rows[0].open_requests, 1);
+    assert.strictEqual(rows.length, 0);
   } finally {
     supabase.select = originalSelect;
     stats.selectEmployeeStatistics = originalEmployeeStats;
@@ -1612,12 +1601,71 @@ async function testDashboardCompanyTicketsUseLinkedGroupOrdinaryMessages() {
     const result = await callAdmin('dashboard', { query: { period: 'all' } });
     assert.strictEqual(result.status, 200);
     const rows = result.payload.data.analytics.companyTickets.all;
-    assert.strictEqual(rows.length, 1);
-    assert.strictEqual(rows[0].company_id, companyId);
-    assert.strictEqual(rows[0].message_count, 1);
-    assert.strictEqual(rows[0].ticket_like_messages, 0);
-    assert.strictEqual(rows[0].total_requests, 1);
-    assert.strictEqual(rows[0].open_requests, 1);
+    assert.strictEqual(rows.length, 0);
+  } finally {
+    supabase.select = originalSelect;
+    stats.selectEmployeeStatistics = originalEmployeeStats;
+    stats.selectChatStatistics = originalChatStats;
+    stats.selectTodaySummary = originalTodaySummary;
+  }
+}
+
+async function testDashboardCompanyTicketsIncludeUnassignedRequests() {
+  const originalSelect = supabase.select;
+  const originalEmployeeStats = stats.selectEmployeeStatistics;
+  const originalChatStats = stats.selectChatStatistics;
+  const originalTodaySummary = stats.selectTodaySummary;
+  const groupChatId = -100812;
+  const privateChatId = 901001;
+  const requests = [
+    {
+      id: 'r-unassigned-group',
+      source_type: 'group',
+      chat_id: groupChatId,
+      company_id: null,
+      status: 'open',
+      created_at: '2026-04-30T13:30:00.000Z',
+      closed_at: null
+    },
+    {
+      id: 'r-unassigned-private',
+      source_type: 'private',
+      chat_id: privateChatId,
+      company_id: null,
+      status: 'closed',
+      created_at: '2026-04-30T13:45:00.000Z',
+      closed_at: '2026-04-30T14:00:00.000Z'
+    }
+  ];
+
+  supabase.select = async (table) => {
+    if (table === 'support_requests') return requests;
+    if (table === 'tg_chats') {
+      return [
+        { chat_id: groupChatId, title: 'Biriktirilmagan guruh', source_type: 'group', type: 'supergroup', company_id: null, is_active: true },
+        { chat_id: privateChatId, title: 'Private mijoz', source_type: 'private', type: 'private', company_id: null, is_active: true }
+      ];
+    }
+    if (table === 'companies') return [];
+    if (table === 'employees') return [];
+    if (table === 'messages') return [];
+    return [];
+  };
+  stats.selectEmployeeStatistics = async () => [];
+  stats.selectChatStatistics = async () => [];
+  stats.selectTodaySummary = async () => [{ total_requests: 2, open_requests: 1, closed_requests: 1 }];
+
+  try {
+    const result = await callAdmin('dashboard', { query: { period: 'all' } });
+    assert.strictEqual(result.status, 200);
+    const rows = result.payload.data.analytics.companyTickets.all;
+    const row = rows.find(item => item.company_id === '__unassigned__');
+    assert.ok(row, 'Unassigned company row should be present');
+    assert.strictEqual(row.name, 'Biriktirilmagan');
+    assert.strictEqual(row.total_requests, 2);
+    assert.strictEqual(row.closed_requests, 1);
+    assert.strictEqual(row.open_requests, 1);
+    assert.strictEqual(row.is_unassigned, true);
   } finally {
     supabase.select = originalSelect;
     stats.selectEmployeeStatistics = originalEmployeeStats;
@@ -2868,6 +2916,54 @@ async function testEmployeeActivitySeparatesBusinessConnections() {
   }
 }
 
+async function testEmployeeActivityUsesRequestCreatedAtForPeriod() {
+  const originalSelect = supabase.select;
+  const employees = [
+    { id: 'emp-1', tg_user_id: 777, full_name: 'Mirshod', username: 'mirshod', is_active: true }
+  ];
+  const requests = [
+    {
+      id: 'r-old-created',
+      source_type: 'group',
+      chat_id: -1007,
+      customer_name: 'Mijoz',
+      initial_text: 'Kechagi ticket',
+      status: 'closed',
+      closed_by_employee_id: 'emp-1',
+      closed_by_tg_id: 777,
+      closed_by_name: 'Mirshod',
+      created_at: '2026-04-29T23:30:00.000Z',
+      closed_at: '2026-04-30T08:05:00.000Z'
+    }
+  ];
+
+  supabase.select = async (table, params = {}) => {
+    if (table === 'employees') return employees;
+    if (table === 'tg_users') return [];
+    if (table === 'tg_chats') return [{ chat_id: -1007, title: 'Support guruhi', source_type: 'group' }];
+    if (table === 'support_requests') {
+      if (params.status === 'eq.open') return [];
+      if (params.closed_by_employee_id === 'eq.emp-1') return requests;
+      if (params.closed_by_tg_id === 'eq.777') return [];
+      return requests;
+    }
+    if (table === 'messages' || table === 'request_events') return [];
+    throw new Error(`Unexpected table ${table}`);
+  };
+
+  try {
+    const result = await callAdmin('employeeActivity', {
+      query: { employee_id: 'emp-1', period: 'custom', start_date: '2026-04-30', end_date: '2026-04-30' }
+    });
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.data.summary.closed_requests, 0);
+    assert.strictEqual(result.payload.data.closed_requests.length, 0);
+    assert.strictEqual(result.payload.data.groups.length, 0);
+  } finally {
+    supabase.select = originalSelect;
+  }
+}
+
 async function testLogNotificationsCanSendSelectedLevels() {
   const originalSelect = supabase.select;
   const originalInsert = supabase.insert;
@@ -3578,7 +3674,7 @@ async function testCompanyGroupActivityFiltersByPeriod() {
     initial_text: 'Old request',
     status: 'closed',
     business_connection_id: null,
-    closed_at: '2026-01-15T10:00:00.000Z',
+    closed_at: `${todayIso}T11:00:00.000Z`,
     closed_by_employee_id: 'e1',
     closed_by_tg_id: null,
     closed_by_name: 'Ali',
@@ -3609,7 +3705,8 @@ async function testCompanyGroupActivityFiltersByPeriod() {
     assert.ok(company, 'Company should be present');
     const group = (company.groups || [])[0];
     assert.ok(group, 'Group should be present');
-    // Only the recent request should be included (created today, within this week)
+    // Only the recent request should be included. The old request was closed in-period,
+    // but created outside the selected period, so it must still be excluded.
     assert.strictEqual(group.total_requests, 1, 'Only requests in the period should be counted');
     assert.strictEqual(group.requests[0].id, recentRequest.id, 'Only recent request should appear');
     // Only the recent message should be included
@@ -3646,6 +3743,8 @@ async function run() {
   await testDashboardCompanyTicketsUseRegisteredGroupCompany();
   await testDashboardCompanyTicketsIncludeLinkedGroupMessagesWithoutRequests();
   await testDashboardCompanyTicketsUseLinkedGroupOrdinaryMessages();
+  await testDashboardCompanyTicketsIgnoreRequestsCreatedBeforeSelectedPeriod();
+  await testDashboardCompanyTicketsIncludeUnassignedRequests();
   await testDashboardEmployeePerformanceCountsOpenAndSlaPerEmployee();
   await testDashboardEmployeePerformanceAssignsOpenByCompanySupport();
   await testDashboardPeriodCountsOnlyRequestsCreatedInSelectedRange();
@@ -3667,6 +3766,7 @@ async function run() {
   await testEmployeeActivityReturnsGroupsAndCustomers();
   await testEmployeeActivityIsolatesSelectedEmployeeChats();
   await testEmployeeActivitySeparatesBusinessConnections();
+  await testEmployeeActivityUsesRequestCreatedAtForPeriod();
   await testLogNotificationsCanSendSelectedLevels();
   await testGroupMessageAuditSettingCanBeSaved();
   await testGroupMessageAuditChannelRequiresDestination();
