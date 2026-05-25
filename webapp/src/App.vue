@@ -2851,6 +2851,23 @@ function isUyqurEmployee(row = {}) {
   return name.includes('uyqur') || username.includes('uyqur');
 }
 
+function isManagerEmployee(row = {}) {
+  return String(row.role || '').trim().toLowerCase() === 'manager';
+}
+
+function weightedAverageBy(rows = [], valueKey = 'avg_close_minutes', weightKey = 'closed_requests') {
+  let totalWeight = 0;
+  let totalValue = 0;
+  rows.forEach(row => {
+    const weight = Number(row[weightKey] || 0);
+    const value = Number(row[valueKey] || 0);
+    if (!weight || !Number.isFinite(value)) return;
+    totalWeight += weight;
+    totalValue += value * weight;
+  });
+  return totalWeight ? totalValue / totalWeight : 0;
+}
+
 function mergeSupportCandidate(map, row = {}, source = 'identity') {
   if (isAdminLikeEmployee(row)) return;
   const key = supportRowKey(row);
@@ -2892,6 +2909,7 @@ function mergeSupportCandidate(map, row = {}, source = 'identity') {
 const supportPerformanceRows = computed(() => {
   const merged = new Map();
   const periodStatsMap = new Map();
+  const openSummaryMap = employeeOpenRequestSummaryMap();
 
   // Faqat ma'lum bo'lgan xodimlarning kalitlarini yig'ib olamiz
   const knownEmployeeKeys = new Set([
@@ -2919,23 +2937,27 @@ const supportPerformanceRows = computed(() => {
     }, 'company');
   });
 
-  return [...merged.values()]
+  const candidateRows = [...merged.values()]
     .filter(row => !isAdminLikeEmployee(row))
-    // Faqat bazada bor yoki Uyqur API'dan kelgan xodimlarni qoldiramiz (mijozlarni chiqarib tashlaymiz) va faqat Uyqur xodimlarini ko'rsatamiz
-    .filter(row => knownEmployeeKeys.has(supportRowKey(row)) && isUyqurEmployee(row))
     .map((row, index) => {
     const stat = employeeStatsMap.value.get(employeeLookupKey(row)) || row;
     const candidate = { ...row, ...stat };
-    const key = employeeSummaryKey(row) || employeeSummaryKey(stat);
+    const key = employeeSummaryKey(candidate) || employeeSummaryKey(row) || employeeSummaryKey(stat);
     const periodRow = key ? periodStatsMap.get(key) : null;
+    const openSummary = key ? openSummaryMap.get(key) : null;
+    if (key) openSummaryMap.delete(key);
     const assignedCompanyCount = visibleCompanyInfoRows.value.filter(company => companyMatchesEmployee(company, candidate)).length;
 
     const closedRaw = periodRow ? Number(periodRow.closed_requests || 0) : 0;
-    const openRaw = periodRow ? Number(periodRow.open_requests || 0) : 0;
+    const backendOpenRaw = periodRow ? Number(periodRow.open_requests || 0) : 0;
+    const openRaw = openSummary ? Number(openSummary.open_requests || 0) : backendOpenRaw;
     const totalRaw = closedRaw + openRaw;
     const slaRaw = totalRaw > 0 ? (closedRaw / totalRaw) * 100 : 100;
     const avgRaw = periodRow ? Number(periodRow.avg_close_minutes || 0) : 0;
-    const handledChatsRaw = periodRow ? Number(periodRow.handled_chats || 0) : 0;
+    const handledChatsRaw = Math.max(
+      periodRow ? Number(periodRow.handled_chats || 0) : 0,
+      openSummary?.chat_keys?.size || 0
+    );
 
     const closed = closedRaw;
     const open = openRaw;
@@ -2964,9 +2986,92 @@ const supportPerformanceRows = computed(() => {
       avg_close_minutes: avg,
       close_rate: sla,
       sla,
+      prev_closed_requests: periodRow ? Number(periodRow.prev_closed_requests || 0) : 0,
+      prev_open_requests: periodRow ? Number(periodRow.prev_open_requests || 0) : 0,
+      prev_avg_close_minutes: periodRow ? Number(periodRow.prev_avg_close_minutes || 0) : 0,
+      prev_close_rate: periodRow ? Number(periodRow.prev_close_rate || 0) : 0,
       grade
     };
-  }).sort((a, b) => b.closed_requests - a.closed_requests
+  });
+
+  const rows = candidateRows
+    // Faqat bazada bor yoki Uyqur API'dan kelgan texnik yordam xodimlarini qoldiramiz
+    .filter(row => knownEmployeeKeys.has(supportRowKey(row)) && isUyqurEmployee(row));
+
+  openSummaryMap.forEach(summary => {
+    const summarySupportKey = supportRowKey(summary);
+    if (summarySupportKey && !knownEmployeeKeys.has(summarySupportKey)) return;
+    if (!isUyqurEmployee(summary)) return;
+    rows.push({
+      key: summary.key,
+      id: summary.employee_id || '',
+      employee_id: summary.employee_id || '',
+      tg_user_id: '',
+      username: summary.username || '',
+      phone: '',
+      role: 'support',
+      full_name: summary.full_name || 'Xodim',
+      telegram_is_premium: false,
+      is_uyqur_employee: true,
+      handled_chats: summary.chat_keys?.size || 0,
+      closed_requests: 0,
+      open_requests: Number(summary.open_requests || 0),
+      total_requests: Number(summary.open_requests || 0),
+      assigned_company_count: 0,
+      avg_close_minutes: 0,
+      close_rate: 0,
+      sla: 0,
+      prev_closed_requests: 0,
+      prev_open_requests: 0,
+      prev_avg_close_minutes: 0,
+      prev_close_rate: 0,
+      grade: performanceGrade(0, 0)
+    });
+  });
+
+  const managerRows = candidateRows.filter(isManagerEmployee);
+  if (managerRows.length) {
+    const closedRequests = managerRows.reduce((sum, row) => sum + Number(row.closed_requests || 0), 0);
+    const openRequests = managerRows.reduce((sum, row) => sum + Number(row.open_requests || 0), 0);
+    const totalRequests = closedRequests + openRequests;
+    rows.push({
+      key: 'manager:all',
+      id: '',
+      employee_id: '',
+      tg_user_id: '',
+      username: '',
+      phone: '',
+      role: 'manager',
+      full_name: 'Barcha menejerlar',
+      telegram_is_premium: false,
+      is_uyqur_employee: false,
+      is_manager_group: true,
+      handled_chats: managerRows.reduce((sum, row) => sum + Number(row.handled_chats || 0), 0),
+      closed_requests: closedRequests,
+      open_requests: openRequests,
+      total_requests: totalRequests,
+      assigned_company_count: managerRows.length,
+      company_total: managerRows.length,
+      avg_close_minutes: weightedAverageBy(managerRows, 'avg_close_minutes', 'closed_requests'),
+      close_rate: totalRequests > 0 ? (closedRequests / totalRequests) * 100 : 100,
+      sla: totalRequests > 0 ? (closedRequests / totalRequests) * 100 : 100,
+      prev_closed_requests: managerRows.reduce((sum, row) => sum + Number(row.prev_closed_requests || 0), 0),
+      prev_open_requests: managerRows.reduce((sum, row) => sum + Number(row.prev_open_requests || 0), 0),
+      prev_avg_close_minutes: weightedAverageBy(managerRows, 'prev_avg_close_minutes', 'prev_closed_requests'),
+      prev_close_rate: (() => {
+        const prevClosed = managerRows.reduce((sum, row) => sum + Number(row.prev_closed_requests || 0), 0);
+        const prevOpen = managerRows.reduce((sum, row) => sum + Number(row.prev_open_requests || 0), 0);
+        const prevTotal = prevClosed + prevOpen;
+        return prevTotal > 0 ? (prevClosed / prevTotal) * 100 : 100;
+      })(),
+      grade: performanceGrade(
+        totalRequests > 0 ? (closedRequests / totalRequests) * 100 : 100,
+        weightedAverageBy(managerRows, 'avg_close_minutes', 'closed_requests')
+      )
+    });
+  }
+
+  return rows.sort((a, b) => b.closed_requests - a.closed_requests
     || b.assigned_company_count - a.assigned_company_count
     || a.full_name.localeCompare(b.full_name));
 });
@@ -4009,7 +4114,7 @@ const topSupportCards = computed(() => supportPerformanceRows.value.map((row, in
     rank: index + 1,
     assigned_companies: companies,
     company_summary: companySummary,
-    company_total: companySummary.total,
+    company_total: companySummary.total || Number(row.company_total || row.assigned_company_count || 0),
     company_active: companySummary.active,
     company_churn: companySummary.churn,
     company_expiring_soon: companySummary.expiring_soon,
@@ -5827,19 +5932,20 @@ function employeeOpenRequestSummaryMap() {
     const reqTgId = String(request.tg_user_id || '').trim();
     const reqEmpName = String(request.responsible_employee_name || '').trim().toLowerCase();
     
+    // Ochiq qolganlar birinchi navbatda xodimga biriktirilgan kompaniya/guruh bo'yicha hisoblanadi.
     matchedEmp = employeeMappings.find(m => {
-      if (reqUsername && m.username === reqUsername) return true;
-      if (reqEmpId && m.id === reqEmpId) return true;
-      if (reqTgId && m.tg_user_id === reqTgId) return true;
-      if (reqEmpName && m.full_name === reqEmpName) return true;
+      if (request.company_id && m.companyIds.has(String(request.company_id).trim())) return true;
+      if (request.company_name && m.companyNames.has(normalizedCompanyName(request.company_name))) return true;
+      if (request.chat_id && m.chatIds.has(String(request.chat_id).trim())) return true;
       return false;
     });
-    
+
     if (!matchedEmp) {
       matchedEmp = employeeMappings.find(m => {
-        if (request.company_id && m.companyIds.has(String(request.company_id).trim())) return true;
-        if (request.company_name && m.companyNames.has(normalizedCompanyName(request.company_name))) return true;
-        if (request.chat_id && m.chatIds.has(String(request.chat_id).trim())) return true;
+        if (reqUsername && m.username === reqUsername) return true;
+        if (reqEmpId && m.id === reqEmpId) return true;
+        if (reqTgId && m.tg_user_id === reqTgId) return true;
+        if (reqEmpName && m.full_name === reqEmpName) return true;
         return false;
       });
     }
