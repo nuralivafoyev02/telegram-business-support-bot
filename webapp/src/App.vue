@@ -2727,9 +2727,9 @@ const supportSummaryCards = computed(() => {
     {
       key: 'open',
       title: 'Javobsiz',
-      value: fmtNumber(stats.open_requests),
-      note: `${fmtNumber(stats.overdue_open_requests || 0)} tasi 30 daqiqadan oshgan`,
-      comparison: attachPreviousLabel(compareValue(stats.open_requests, stats.prev_open_requests, { invert: true, unit: 'ta' })),
+      value: fmtNumber(filteredOpenRequests.value.length),
+      note: `${fmtNumber(overdueOpenRequestsTotal.value || 0)} tasi 30 daqiqadan oshgan`,
+      comparison: attachPreviousLabel(compareValue(filteredOpenRequests.value.length, stats.prev_open_requests, { invert: true, unit: 'ta' })),
       icon: '⚠️',
       tone: 'danger',
       action: 'open'
@@ -3045,9 +3045,12 @@ const supportPerformanceRows = computed(() => {
     .filter(row => knownEmployeeKeys.has(supportRowKey(row)) && isUyqurEmployee(row));
 
   openSummaryMap.forEach(summary => {
+    const isUnassigned = summary.is_unassigned === true;
     const summarySupportKey = supportRowKey(summary);
-    if (summarySupportKey && !knownEmployeeKeys.has(summarySupportKey)) return;
-    if (!isUyqurEmployee(summary)) return;
+    if (!isUnassigned) {
+      if (summarySupportKey && !knownEmployeeKeys.has(summarySupportKey)) return;
+      if (!isUyqurEmployee(summary)) return;
+    }
     rows.push({
       key: summary.key,
       id: summary.employee_id || '',
@@ -3056,9 +3059,10 @@ const supportPerformanceRows = computed(() => {
       username: summary.username || '',
       phone: '',
       role: 'support',
-      full_name: summary.full_name || 'Xodim',
+      full_name: summary.full_name || (isUnassigned ? 'Biriktirilmagan' : 'Xodim'),
       telegram_is_premium: false,
-      is_uyqur_employee: true,
+      is_uyqur_employee: !isUnassigned,
+      is_unassigned: isUnassigned,
       handled_chats: summary.chat_keys?.size || 0,
       closed_requests: 0,
       open_requests: Number(summary.open_requests || 0),
@@ -5419,6 +5423,10 @@ function handleTableCellAction({ action, row }) {
     return;
   }
   if (action === 'employeeCompanies') {
+    if (row?.is_unassigned) {
+      showToast('Bu ochiq ticketlar hali xodimga biriktirilmagan');
+      return;
+    }
     openEmployeeCompanies(row);
     return;
   }
@@ -6118,6 +6126,7 @@ function employeeOpenRequestSummaryMap() {
 
   (filteredOpenRequests.value || []).forEach(request => {
     let matchedEmp = null;
+    const fallbackKey = 'unassigned:open';
     
     const reqUsername = normalizeSupportUsername(request.responsible_employee_username || request.username);
     const reqEmpId = String(request.responsible_employee_id || request.employee_id || '').trim();
@@ -6142,17 +6151,17 @@ function employeeOpenRequestSummaryMap() {
       });
     }
     
-    const key = matchedEmp ? matchedEmp.key : employeeSummaryKey(request);
+    let key = matchedEmp ? matchedEmp.key : employeeSummaryKey(request);
+    const shouldFallbackToUnassigned = !matchedEmp && (!key || !knownEmployeeKeys.has(key));
+    if (shouldFallbackToUnassigned) key = fallbackKey;
     if (!key) return;
-
-    // Agar xodim aniqlanmagan bo'lsa va u ma'lum xodimlar ro'yxatida bo'lmasa, o'tkazib yuboramiz
-    if (!matchedEmp && !knownEmployeeKeys.has(key)) return;
     
     const current = map.get(key) || {
       key,
-      employee_id: matchedEmp ? (matchedEmp.employee.id || matchedEmp.employee.employee_id || '') : (request.responsible_employee_id || ''),
-      username: matchedEmp ? (matchedEmp.employee.username || '') : (request.responsible_employee_username || ''),
-      full_name: matchedEmp ? (matchedEmp.employee.full_name || 'Xodim') : (request.responsible_employee_name || 'Xodim biriktirilmagan'),
+      employee_id: matchedEmp ? (matchedEmp.employee.id || matchedEmp.employee.employee_id || '') : (shouldFallbackToUnassigned ? '' : (request.responsible_employee_id || '')),
+      username: matchedEmp ? (matchedEmp.employee.username || '') : (shouldFallbackToUnassigned ? '' : (request.responsible_employee_username || '')),
+      full_name: matchedEmp ? (matchedEmp.employee.full_name || 'Xodim') : (shouldFallbackToUnassigned ? 'Biriktirilmagan' : (request.responsible_employee_name || 'Xodim biriktirilmagan')),
+      is_unassigned: shouldFallbackToUnassigned,
       open_requests: 0,
       chat_keys: new Set()
     };
