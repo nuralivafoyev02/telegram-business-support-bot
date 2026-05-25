@@ -2871,6 +2871,17 @@ function isManagerEmployee(row = {}) {
   return String(row.role || '').trim().toLowerCase() === 'manager';
 }
 
+function hasEmployeeActivity(row = {}) {
+  const numericKeys = ['closed_requests', 'open_requests', 'handled_chats', 'total_requests', 'message_count', 'customer_count'];
+  if (numericKeys.some(key => Number(row?.[key] || 0) > 0)) return true;
+  if (Array.isArray(row?.groups) && row.groups.length) return true;
+  if (Array.isArray(row?.messages) && row.messages.length) return true;
+  if (Array.isArray(row?.chat_messages) && row.chat_messages.length) return true;
+  if (Array.isArray(row?.closed_requests) && row.closed_requests.length) return true;
+  if (Array.isArray(row?.open_requests) && row.open_requests.length) return true;
+  return false;
+}
+
 function weightedAverageBy(rows = [], valueKey = 'avg_close_minutes', weightKey = 'closed_requests') {
   let totalWeight = 0;
   let totalValue = 0;
@@ -3045,7 +3056,7 @@ const supportPerformanceRows = computed(() => {
     });
   });
 
-  const managerRows = candidateRows.filter(isManagerEmployee);
+  const managerRows = candidateRows.filter(row => isManagerEmployee(row) && hasEmployeeActivity(row));
   if (managerRows.length) {
     const closedRequests = managerRows.reduce((sum, row) => sum + Number(row.closed_requests || 0), 0);
     const openRequests = 0;
@@ -5583,14 +5594,19 @@ function mergeManagerActivityGroups(groups = []) {
 }
 
 function buildManagerAggregateProfile(row = {}, managers = [], payloads = []) {
-  const groups = mergeManagerActivityGroups(payloads.flatMap(payload => Array.isArray(payload.groups) ? payload.groups : []));
-  const summaries = payloads.map(payload => payload.summary || {});
+  const activeEntries = managers
+    .map((manager, index) => ({ manager, payload: payloads[index] || {} }))
+    .filter(({ payload }) => hasEmployeeActivity(payload.summary || payload));
+  const activeManagers = activeEntries.map(entry => entry.manager);
+  const activePayloads = activeEntries.map(entry => entry.payload);
+  const groups = mergeManagerActivityGroups(activePayloads.flatMap(payload => Array.isArray(payload.groups) ? payload.groups : []));
+  const summaries = activePayloads.map(payload => payload.summary || {});
   const closedRequests = summaries.reduce((sum, summary) => sum + Number(summary.closed_requests || 0), 0);
   const handledChats = new Set(groups.map(group => employeeProfileChatKey(group)).filter(Boolean)).size;
   const messageCount = summaries.reduce((sum, summary) => sum + Number(summary.message_count || 0), 0);
   const customerCount = summaries.reduce((sum, summary) => sum + Number(summary.customer_count || 0), 0);
-  const memberStats = managers.map((manager, index) => {
-    const payload = payloads[index] || {};
+  const memberStats = activeManagers.map((manager, index) => {
+    const payload = activePayloads[index] || {};
     const summary = payload.summary || {};
     const closed = Number(summary.closed_requests || 0);
     return {
@@ -5613,14 +5629,14 @@ function buildManagerAggregateProfile(row = {}, managers = [], payloads = []) {
       ...row,
       full_name: row.full_name || 'Barcha menejerlar',
       role: 'manager',
-      member_employees: managers
+      member_employees: activeManagers
     },
     rank: row.rank || null,
     companies: [],
     summary: {
       closed_requests: closedRequests,
       open_requests: 0,
-      company_total: Number(row.company_total || row.assigned_company_count || 0),
+      company_total: activeManagers.length,
       avg_close_minutes: weightedAverageBy(summaries, 'avg_close_minutes', 'closed_requests'),
       close_rate: closedRequests > 0 ? 100 : 0,
       sla: closedRequests > 0 ? 100 : 0,
