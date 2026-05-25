@@ -4489,6 +4489,38 @@ tbody tr:hover {
 
 .employee-profile-avatar-wrap {
   display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.employee-manager-toggle {
+  width: 28px;
+  height: 28px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted-strong);
+  cursor: pointer;
+  transition: transform .18s ease, border-color .18s ease, color .18s ease, background .18s ease;
+}
+
+.employee-manager-toggle:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: rgba(37, 99, 235, .08);
+}
+
+.employee-manager-toggle.open {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: rgba(37, 99, 235, .1);
+}
+
+.employee-manager-toggle span {
+  font-size: 16px;
+  line-height: 1;
 }
 
 .employee-profile-avatar,
@@ -4546,6 +4578,11 @@ tbody tr:hover {
   flex-direction: column;
   gap: 8px;
   margin-top: 8px;
+}
+
+.employee-manager-details {
+  display: flex;
+  flex-direction: column;
 }
 
 .employee-profile-members small {

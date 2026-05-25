@@ -1749,6 +1749,16 @@
         <div class="employee-support-modal">
           <header class="employee-support-head">
             <span class="employee-profile-avatar-wrap">
+              <button
+                v-if="employeeProfile.employee?.member_employees?.length || employeeProfile.member_stats?.length"
+                type="button"
+                class="employee-manager-toggle"
+                :class="{ open: employeeManagerDetailsOpen }"
+                :title="employeeManagerDetailsOpen ? 'Menejer ma’lumotlarini yopish' : 'Menejer ma’lumotlarini ochish'"
+                @click="employeeManagerDetailsOpen = !employeeManagerDetailsOpen"
+              >
+                <span aria-hidden="true">{{ employeeManagerDetailsOpen ? '▾' : '▸' }}</span>
+              </button>
               <img v-if="employeeAvatarUrl(employeeProfile.employee)" class="employee-profile-avatar"
                 :class="{ premium: isEmployeePremium(employeeProfile.employee) }"
                 :data-tooltip="employeePremiumTooltip(employeeProfile.employee) || null"
@@ -1763,22 +1773,27 @@
               <h2>{{ employeeProfile.employee?.full_name || employeeProfile.employee?.username || 'Xodim' }}</h2>
               <p>Support yozishmalari</p>
               <span>Davr: {{ selectedPeriodLabel }}</span>
-              <div v-if="employeeProfile.employee?.member_employees?.length" class="employee-profile-members">
-                <small>Ichidagi menejerlar</small>
-                <div class="employee-profile-member-list">
-                  <span v-for="member in employeeProfile.employee.member_employees" :key="supportRowKey(member)"
-                    class="profile-pill member-pill">
-                    {{ member.full_name || member.username || 'Menejer' }}
-                  </span>
+              <div
+                v-if="(employeeProfile.employee?.member_employees?.length || employeeProfile.member_stats?.length) && employeeManagerDetailsOpen"
+                class="employee-manager-details"
+              >
+                <div v-if="employeeProfile.employee?.member_employees?.length" class="employee-profile-members">
+                  <small>Ichidagi menejerlar</small>
+                  <div class="employee-profile-member-list">
+                    <span v-for="member in employeeProfile.employee.member_employees" :key="supportRowKey(member)"
+                      class="profile-pill member-pill">
+                      {{ member.full_name || member.username || 'Menejer' }}
+                    </span>
+                  </div>
                 </div>
+                <section v-if="employeeProfile.member_stats?.length" class="employee-member-breakdown">
+                  <div class="detail-section-head">
+                    <b>Menejerlar bo‘yicha alohida statistika</b>
+                  </div>
+                  <DataTable :columns="managerMemberColumns" :rows="employeeProfile.member_stats"
+                    empty="Menejer statistikasi topilmadi" :on-cell-action="handleTableCellAction" :page-size="10" />
+                </section>
               </div>
-              <section v-if="employeeProfile.member_stats?.length" class="employee-member-breakdown">
-                <div class="detail-section-head">
-                  <b>Menejerlar bo‘yicha alohida statistika</b>
-                </div>
-                <DataTable :columns="managerMemberColumns" :rows="employeeProfile.member_stats"
-                  empty="Menejer statistikasi topilmadi" :on-cell-action="handleTableCellAction" :page-size="10" />
-              </section>
               <div class="employee-profile-mini-stats">
                 <span>
                   <small>Yopilgan</small>
@@ -2365,6 +2380,7 @@ const employeeDrilldown = ref(null);
 const employeeActivity = ref({ employee: null, summary: {}, groups: [], closed_requests: [], messages: [] });
 const employeeCompanyDetail = ref({ employee: null, summary: {}, companies: [] });
 const employeeProfile = ref({ employee: null, rank: null, summary: {}, groups: [], companies: [] });
+const employeeManagerDetailsOpen = ref(false);
 const employeeProfileTab = ref('private');
 const employeeProfileSelectedChatKey = ref('');
 const employeeProfileChatDetail = ref({ chat: null, requests: [], conversation: [] });
@@ -5698,6 +5714,7 @@ async function openEmployeeCompanies(row = {}) {
   const employee = resolveEmployeeForCompany(row);
   const companies = (row.assigned_companies || visibleCompanyInfoRows.value
     .filter(company => companyMatchesEmployee(company, employee)));
+  employeeManagerDetailsOpen.value = false;
   employeeCompanyDetail.value = {
     employee,
     companies,
