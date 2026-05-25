@@ -8,7 +8,8 @@ const FAREWELL_RE = /\b(xayr|hayr|hayir|hayrli\s+kun|xayrli\s+kun|ko'?rishguncha
 const FAREWELL_ONLY_RE = /^(xayr|hayr|hayir|hayrli\s+kun|xayrli\s+kun|ko'?rishguncha|ko'rishguncha|sog'\s+bo'?ling|sog\s+boling|yaxshi\s+qoling|yaxshi\s+dam\s+oling|до\s+свидания|пока|goodbye|bye)[!.\s]*$/i;
 const SMALL_TALK_RE = /^(rahmat|raxmat|tashakkur|minnatdorman|minnatdor|ok|okay|xo'p|xop|hop|ha|yo'q|yoq|mayli|tushunarli|yaxshi|zor|zo'r|ajoyib|barakalla|barakalloh|alhamdulillah|alhamdulilah|spasibo|спасибо|ок|хорошо|понятно|thanks|thank you)(\s+(rahmat|raxmat|tashakkur|ok|okay|xo'p|xop|hop|ha|mayli|tushunarli|yaxshi|zor|zo'r|ajoyib|spasibo|спасибо|ок|хорошо|понятно|thanks|uziz|aziz|aka|uka|opa))*[!.\s]*$/i;
 const SOCIAL_QUESTION_RE = /^(qalaysiz|qalesiz|qandaysiz|yaxshimisiz|yaxshimisz|ishlar\s+qalay|ahvollar\s+qalay|ahvolingiz\s+qanday|как\s+дела|как\s+вы|how\s+are\s+you)[?!. \s]*$/i;
-const CONVERSATIONAL_TOKEN_RE = /\b(alhamdulillah|alhamdulilah|bismillah|barakallahu?fik|barakalla|rahmat|raxmat|tashakkur|minnatdorman|salom|salomlar|assalomu|assalamu|alaykum|aleykum|yaxshi|yaxshimisiz|yaxshimisz|qalaysiz|qalesiz|qandaysiz|uziz|aziz|aka|uka|opa|ustoz|do'stim|xayr|hayr|hayir|ko'?rishguncha|sog'|boling|oling|hammaga|barchaga|спасибо|привет|пока|здравствуйте)\b/gi;
+const CONVERSATIONAL_TOKEN_RE = /\b(alhamdulillah|alhamdulilah|bismillah|barakallahu?fik|barakalla|rahmat|raxmat|tashakkur|minnatdorman|salom|salomlar|assalomu|assalamu|alaykum|aleykum|yaxshi|yaxshimisiz|yaxshimisz|qalaysiz|qalesiz|qandaysiz|uziz|aziz|aka|uka|opa|ustoz|do'stim|xayr|hayr|hayir|ko'?rishguncha|sog'|boling|oling|hammaga|barchaga|admin|adminlar|operator|operatorlar|support|manager|menejer|menedjer|админ|оператор|поддержка|менеджер|спасибо|привет|пока|здравствуйте)\b/gi;
+const STAFF_PING_TOKEN_RE = /\b(admin|adminlar|operator|operatorlar|support|manager|managerlar|menejer|menejerlar|menedjer|menedjerlar|админ|оператор|поддержка|менеджер)\b/gi;
 const MEDIA_PLACEHOLDER_RE = /^(stikerli xabar|videoli xabar|audio xabar|video xabar|animatsiyali xabar|faylli xabar|fayl xabar|media xabar)$/i;
 const VOICE_PLACEHOLDER_RE = /^ovozli xabar$/i;
 const COMPLETION_RE = /\b(hal\s+bo'?ldi|hal\s+qilindi|bajarildi|tayyor|yechildi|echildi|yopildi|qilindi|решено|готово|сделано|закрыто|исправлено|done|fixed|resolved|completed)\b/i;
@@ -153,7 +154,7 @@ function isGreetingOnly(text = '') {
   if (!value) return false;
   const withoutGreeting = value
     .replace(GREETING_RE, '')
-    .replace(/\b(alaykum|aleykum|aka|uka|opa|admin|ustoz|do'stlar|barchaga|hammaga|azizlar)\b/gi, '')
+    .replace(/\b(alaykum|aleykum|aka|uka|opa|admin|adminlar|operator|operatorlar|support|manager|menejer|menedjer|ustoz|do'stlar|barchaga|hammaga|azizlar)\b/gi, '')
     .replace(/[!?.\s,]+/g, '');
   return GREETING_ONLY_RE.test(value) || (GREETING_RE.test(value) && withoutGreeting.length === 0);
 }
@@ -180,6 +181,17 @@ function isFarewellOnly(text = '') {
   return FAREWELL_RE.test(value) && withoutFarewell.length === 0;
 }
 
+function isStaffPingOnly(text = '') {
+  const value = normalizedLower(text);
+  if (!value) return false;
+  const withoutPing = value
+    .replace(GREETING_RE, '')
+    .replace(STAFF_PING_TOKEN_RE, '')
+    .replace(/\b(iltimos|please|plz|aka|uka|opa|ustoz|azizlar|hammaga|barchaga|hurmatli)\b/gi, '')
+    .replace(/[!?.\s,]+/g, '');
+  return STAFF_PING_TOKEN_RE.test(value) && withoutPing.length === 0;
+}
+
 function stripConversationalTokens(text = '') {
   return normalizedLower(text)
     .replace(CONVERSATIONAL_TOKEN_RE, '')
@@ -191,7 +203,7 @@ function isConversationalOnly(text = '') {
   const value = normalizedLower(text);
   if (!value) return true;
   if (isMediaPlaceholder(value)) return true;
-  if (isGreetingOnly(value) || isSmallTalk(value) || isFarewellOnly(value)) return true;
+  if (isGreetingOnly(value) || isSmallTalk(value) || isFarewellOnly(value) || isStaffPingOnly(value)) return true;
 
   const stripped = stripConversationalTokens(value);
   if (!stripped.length) return true;
@@ -273,9 +285,10 @@ function isCustomerPhotoRequest({ mediaKind = '', isKnownEmployee = false } = {}
 }
 
 function isCustomerVoiceWithoutTranscript({ text = '', mediaKind = '', isKnownEmployee = false } = {}) {
+  const normalized = normalizedLower(text);
   return !isKnownEmployee
     && (mediaKind === 'voice' || mediaKind === 'audio')
-    && VOICE_PLACEHOLDER_RE.test(normalizedLower(text));
+    && (!normalized || VOICE_PLACEHOLDER_RE.test(normalized));
 }
 
 function classifyMessage({
@@ -291,13 +304,13 @@ function classifyMessage({
 }) {
   const cleaned = normalizeText(text);
   const options = { doneTag, requestDetectionMode, minTextLength, aiMode };
+  if (isCustomerPhotoRequest({ mediaKind, isKnownEmployee })) return 'request';
+  if (isCustomerVoiceWithoutTranscript({ text: cleaned, mediaKind, isKnownEmployee })) return 'request';
   if (!cleaned || isNoiseOnly(cleaned)) return 'ignore';
   if (isDoneMessage(cleaned, options)) return 'done';
   if (isCommand(cleaned)) return 'command';
   if (isKnownEmployee && isCompletionIntent(cleaned)) return 'done';
   if (isKnownEmployee) return 'employee_message';
-  if (isCustomerPhotoRequest({ mediaKind, isKnownEmployee })) return 'request';
-  if (isCustomerVoiceWithoutTranscript({ text: cleaned, mediaKind, isKnownEmployee })) return 'request';
   if (isConversationalOnly(cleaned)) return 'message';
   if ((isBusiness || chatType === 'private') && shouldOpenPrivateRequest(cleaned, options)) return 'request';
   if (['group', 'supergroup'].includes(chatType) && isRequestIntent(cleaned, { ...options, strict: true })) return 'request';

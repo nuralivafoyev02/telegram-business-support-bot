@@ -2068,7 +2068,8 @@ async function classifyIncomingMessage({ text, chat, sourceType, updateKind, mes
     }
   }
 
-  if (!employee && message && !['request', 'ticket', 'done', 'command'].includes(classification)) {
+  if (!employee && message && !['request', 'ticket', 'done', 'command'].includes(classification)
+    && (updateKind.includes('business') || chat.type === 'private')) {
     const hasMedia = message.video
       || message.document
       || message.video_note
