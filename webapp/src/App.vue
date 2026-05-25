@@ -3075,9 +3075,10 @@ const supportPerformanceRows = computed(() => {
     });
   });
 
-  const managerRows = candidateRows.filter(row => isManagerEmployee(row) && hasEmployeeActivity(row));
-  if (managerRows.length) {
-    const closedRequests = managerRows.reduce((sum, row) => sum + Number(row.closed_requests || 0), 0);
+  const allManagerRows = candidateRows.filter(isManagerEmployee);
+  const activeManagerRows = allManagerRows.filter(hasEmployeeActivity);
+  if (allManagerRows.length) {
+    const closedRequests = activeManagerRows.reduce((sum, row) => sum + Number(row.closed_requests || 0), 0);
     const openRequests = 0;
     const totalRequests = closedRequests + openRequests;
     rows.push({
@@ -3092,27 +3093,27 @@ const supportPerformanceRows = computed(() => {
       telegram_is_premium: false,
       is_uyqur_employee: false,
       is_manager_group: true,
-      handled_chats: managerRows.reduce((sum, row) => sum + Number(row.handled_chats || 0), 0),
+      handled_chats: activeManagerRows.reduce((sum, row) => sum + Number(row.handled_chats || 0), 0),
       closed_requests: closedRequests,
       open_requests: openRequests,
       total_requests: totalRequests,
-      assigned_company_count: managerRows.length,
-      company_total: managerRows.length,
-      avg_close_minutes: weightedAverageBy(managerRows, 'avg_close_minutes', 'closed_requests'),
+      assigned_company_count: activeManagerRows.length,
+      company_total: activeManagerRows.length,
+      avg_close_minutes: weightedAverageBy(activeManagerRows, 'avg_close_minutes', 'closed_requests'),
       close_rate: totalRequests > 0 ? (closedRequests / totalRequests) * 100 : 0,
       sla: totalRequests > 0 ? (closedRequests / totalRequests) * 100 : 0,
-      prev_closed_requests: managerRows.reduce((sum, row) => sum + Number(row.prev_closed_requests || 0), 0),
+      prev_closed_requests: activeManagerRows.reduce((sum, row) => sum + Number(row.prev_closed_requests || 0), 0),
       prev_open_requests: 0,
-      prev_avg_close_minutes: weightedAverageBy(managerRows, 'prev_avg_close_minutes', 'prev_closed_requests'),
+      prev_avg_close_minutes: weightedAverageBy(activeManagerRows, 'prev_avg_close_minutes', 'prev_closed_requests'),
       prev_close_rate: (() => {
-        const prevClosed = managerRows.reduce((sum, row) => sum + Number(row.prev_closed_requests || 0), 0);
+        const prevClosed = activeManagerRows.reduce((sum, row) => sum + Number(row.prev_closed_requests || 0), 0);
         const prevOpen = 0;
         const prevTotal = prevClosed + prevOpen;
         return prevTotal > 0 ? (prevClosed / prevTotal) * 100 : 0;
       })(),
       grade: performanceGrade(
         totalRequests > 0 ? (closedRequests / totalRequests) * 100 : 0,
-        weightedAverageBy(managerRows, 'avg_close_minutes', 'closed_requests')
+        weightedAverageBy(activeManagerRows, 'avg_close_minutes', 'closed_requests')
       )
     });
   }
