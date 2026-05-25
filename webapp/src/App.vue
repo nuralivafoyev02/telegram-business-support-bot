@@ -349,7 +349,7 @@
                 <div class="card-header chart-card-head">
                   <div>
                     <div class="card-title">Kompaniyalar bo‘yicha ticketlar</div>
-                    <div class="card-note">Guruhga biriktirilgan kompaniyalar kesimida ticket va xabarlar</div>
+                    <div class="card-note">Tanlangan davr bo‘yicha kompaniyalar kesimida ticketlar</div>
                   </div>
                 </div>
                 <div v-if="companyTicketRows.length" class="company-ticket-bars">
@@ -2687,7 +2687,17 @@ const ticketTrendMax = computed(() => Math.max(1, ...ticketTrendRows.value.map(r
 const companyTicketRows = computed(() => {
   const rows = mergeCompanyTicketRows([
     ...(analytics.value.companyTickets?.[selectedStatsPeriod.value] || []),
-    ...companyApiTicketRows()
+    ...companyApiTicketRows(),
+    ...visibleCompanyInfoRows.value.map(company => ({
+      company_id: company.id || company.company_id || '',
+      name: company.name || company.company_name || 'Kompaniya',
+      total_requests: 0,
+      closed_requests: 0,
+      open_requests: 0,
+      message_count: 0,
+      ticket_like_messages: 0,
+      close_rate: 0
+    }))
   ]);
   return rows
     .filter(row => Number(row.total_requests || 0) > 0
@@ -3848,10 +3858,11 @@ function companyApiTicketRows() {
     companyInfo.value.tickets
   ];
   for (const source of explicitSources) {
+    if (Array.isArray(source)) continue;
     const rows = periodScopedRows(source);
     if (rows.length) return rows;
   }
-  return companyInfoRows.value.filter(hasCompanyTicketMetric);
+  return [];
 }
 
 function normalizeCompanyTicketRow(row = {}) {
