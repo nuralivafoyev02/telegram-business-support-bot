@@ -4541,6 +4541,78 @@ tbody tr:hover {
   font-weight: 800;
 }
 
+.employee-profile-members {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.employee-profile-members small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.employee-profile-member-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.member-pill {
+  font-size: 12px;
+}
+
+.employee-member-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.employee-member-stats small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.employee-member-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.employee-member-stat-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-soft);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.employee-member-stat-card:hover,
+.employee-member-stat-card:focus-visible {
+  border-color: rgba(142, 199, 255, .6);
+  background: rgba(142, 199, 255, .12);
+}
+
+.employee-member-stat-card b {
+  color: var(--text);
+  font-size: 14px;
+}
+
+.employee-member-stat-card span {
+  color: var(--muted-strong);
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .employee-profile-mini-stats {
   display: flex;
   align-items: center;
