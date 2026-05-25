@@ -2687,7 +2687,6 @@ const ticketTrendMax = computed(() => Math.max(1, ...ticketTrendRows.value.map(r
 const companyTicketRows = computed(() => {
   const rows = mergeCompanyTicketRows([
     ...(analytics.value.companyTickets?.[selectedStatsPeriod.value] || []),
-    ...companyApiTicketRows(),
     ...visibleCompanyInfoRows.value.map(company => ({
       company_id: company.id || company.company_id || '',
       name: company.name || company.company_name || 'Kompaniya',
@@ -3841,28 +3840,6 @@ function hasCompanyTicketMetric(row = {}) {
     'open_requests', 'open_ticket_count', 'open_tickets'
   ];
   return keys.some(key => row[key] !== undefined && row[key] !== null && row[key] !== '');
-}
-
-function periodScopedRows(source) {
-  if (Array.isArray(source)) return source;
-  if (!source || typeof source !== 'object') return [];
-  const scoped = source[selectedStatsPeriod.value] || source.rows || source.data || source.items;
-  return Array.isArray(scoped) ? scoped : [];
-}
-
-function companyApiTicketRows() {
-  const explicitSources = [
-    companyInfo.value.companyTickets,
-    companyInfo.value.company_tickets,
-    companyInfo.value.ticket_stats,
-    companyInfo.value.tickets
-  ];
-  for (const source of explicitSources) {
-    if (Array.isArray(source)) continue;
-    const rows = periodScopedRows(source);
-    if (rows.length) return rows;
-  }
-  return [];
 }
 
 function normalizeCompanyTicketRow(row = {}) {

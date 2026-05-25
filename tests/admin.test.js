@@ -1455,6 +1455,86 @@ async function testDashboardCompanyTicketsUseRegisteredGroupCompany() {
   }
 }
 
+async function testDashboardCompanyTicketsUseCompanyInfoGroupMapping() {
+  const originalSelect = supabase.select;
+  const originalEmployeeStats = stats.selectEmployeeStatistics;
+  const originalChatStats = stats.selectChatStatistics;
+  const originalTodaySummary = stats.selectTodaySummary;
+  const chatId = -100805;
+  const companyId = 'company-external-map';
+  const snapshot = {
+    companies: [{
+      id: companyId,
+      name: 'External Mapped LLC',
+      uyqur_support_username: 'ali',
+      groups: [{ chat_id: chatId, title: 'External mapped group', company_id: companyId }]
+    }],
+    groups: [],
+    cached_at: '2026-05-25T10:00:00.000Z'
+  };
+  const request = {
+    id: 'request-external-map',
+    source_type: 'group',
+    chat_id: chatId,
+    company_id: null,
+    customer_tg_id: 909,
+    customer_name: 'Mijoz',
+    status: 'open',
+    created_at: '2026-04-30T10:00:00.000Z',
+    closed_at: null
+  };
+
+  supabase.select = async (table, query = {}) => {
+    if (table === 'support_requests') {
+      return query.status === 'eq.open' ? [request] : [request];
+    }
+    if (table === 'tg_chats') {
+      return [{
+        chat_id: chatId,
+        title: 'External mapped group',
+        source_type: 'group',
+        company_id: null,
+        is_active: true,
+        last_message_at: '2026-04-30T10:00:00.000Z'
+      }];
+    }
+    if (table === 'companies') return [];
+    if (table === 'employees') return [];
+    if (table === 'messages') return [];
+    if (table === 'bot_settings') {
+      return query.key === 'eq.uyqur_company_info_cache'
+        ? [{ key: 'uyqur_company_info_cache', value: snapshot, updated_at: snapshot.cached_at }]
+        : [];
+    }
+    return [];
+  };
+  stats.selectEmployeeStatistics = async () => [];
+  stats.selectChatStatistics = async () => [{
+    chat_id: chatId,
+    title: 'External mapped group',
+    source_type: 'group',
+    company_id: null,
+    is_active: true
+  }];
+  stats.selectTodaySummary = async () => [{ total_requests: 1, open_requests: 1, closed_requests: 0 }];
+
+  try {
+    const result = await callAdmin('dashboard', { query: { period: 'all' } });
+    assert.strictEqual(result.status, 200);
+    const rows = result.payload.data.analytics.companyTickets.all;
+    assert.strictEqual(rows.length, 1);
+    assert.strictEqual(rows[0].company_id, companyId);
+    assert.strictEqual(rows[0].name, 'External Mapped LLC');
+    assert.strictEqual(rows[0].total_requests, 1);
+    assert.strictEqual(rows[0].open_requests, 1);
+  } finally {
+    supabase.select = originalSelect;
+    stats.selectEmployeeStatistics = originalEmployeeStats;
+    stats.selectChatStatistics = originalChatStats;
+    stats.selectTodaySummary = originalTodaySummary;
+  }
+}
+
 async function testDashboardCompanyTicketsIgnoreRequestsCreatedBeforeSelectedPeriod() {
   const originalSelect = supabase.select;
   const originalEmployeeStats = stats.selectEmployeeStatistics;
@@ -3718,6 +3798,82 @@ async function testCompanyGroupActivityFiltersByPeriod() {
   }
 }
 
+async function testCompanyGroupActivityUsesCompanyInfoGroupMapping() {
+  const originalSelect = supabase.select;
+  const originalChatStats = stats.selectChatStatistics;
+  const chatId = -100806;
+  const companyId = 'company-external-activity';
+  const snapshot = {
+    companies: [{
+      id: companyId,
+      name: 'External Activity LLC',
+      groups: [{ chat_id: chatId, title: 'External activity group', company_id: companyId }]
+    }],
+    groups: [],
+    cached_at: '2026-05-25T10:00:00.000Z'
+  };
+  const request = {
+    id: 'req-external-activity',
+    source_type: 'group',
+    chat_id: chatId,
+    company_id: null,
+    customer_tg_id: 321,
+    customer_name: 'Mijoz',
+    customer_username: '',
+    initial_message_id: 41,
+    initial_text: 'External mapped request',
+    status: 'open',
+    business_connection_id: null,
+    closed_at: null,
+    closed_by_employee_id: null,
+    closed_by_tg_id: null,
+    closed_by_name: '',
+    done_message_id: null,
+    created_at: '2026-05-25T09:00:00.000Z'
+  };
+
+  supabase.select = async (table, query = {}) => {
+    if (table === 'tg_chats') {
+      return [{
+        chat_id: chatId,
+        title: 'External activity group',
+        source_type: 'group',
+        type: 'supergroup',
+        company_id: null,
+        is_active: true,
+        last_message_at: '2026-05-25T09:00:00.000Z'
+      }];
+    }
+    if (table === 'companies') return [];
+    if (table === 'employees') return [];
+    if (table === 'support_requests') return [request];
+    if (table === 'messages') return [];
+    if (table === 'request_events') return [];
+    if (table === 'bot_settings') {
+      return query.key === 'eq.uyqur_company_info_cache'
+        ? [{ key: 'uyqur_company_info_cache', value: snapshot, updated_at: snapshot.cached_at }]
+        : [];
+    }
+    return [];
+  };
+  stats.selectChatStatistics = async () => [];
+
+  try {
+    const result = await callAdmin('companyGroupActivity', { query: { period: 'all', company_id: companyId } });
+    assert.strictEqual(result.status, 200);
+    const companies = result.payload.data.companies || [];
+    assert.strictEqual(companies.length, 1);
+    assert.strictEqual(companies[0].company_id, companyId);
+    assert.strictEqual(companies[0].name, 'External Activity LLC');
+    assert.strictEqual(companies[0].groups.length, 1);
+    assert.strictEqual(companies[0].groups[0].total_requests, 1);
+    assert.strictEqual(companies[0].groups[0].requests[0].id, request.id);
+  } finally {
+    supabase.select = originalSelect;
+    stats.selectChatStatistics = originalChatStats;
+  }
+}
+
 async function run() {
   await testAiModeEnableSendsMainGroupNotice();
   await testAiModeDisableSendsMainGroupNotice();
@@ -3741,6 +3897,7 @@ async function run() {
   await testCompanyGroupActivityReturnsLinkedGroupMessagesWithTickets();
   await testCompanyGroupActivityLimitsLargeConversationPayload();
   await testDashboardCompanyTicketsUseRegisteredGroupCompany();
+  await testDashboardCompanyTicketsUseCompanyInfoGroupMapping();
   await testDashboardCompanyTicketsIncludeLinkedGroupMessagesWithoutRequests();
   await testDashboardCompanyTicketsUseLinkedGroupOrdinaryMessages();
   await testDashboardCompanyTicketsIgnoreRequestsCreatedBeforeSelectedPeriod();
@@ -3780,6 +3937,7 @@ async function run() {
   await testClickUpIntegrationSaveMasksToken();
   await testDashboardCompanyTicketsNoFallbackForTicketUsingCompany();
   await testCompanyGroupActivityFiltersByPeriod();
+  await testCompanyGroupActivityUsesCompanyInfoGroupMapping();
   console.log('Admin tests passed');
 }
 

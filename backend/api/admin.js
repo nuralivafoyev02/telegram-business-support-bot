@@ -1073,9 +1073,11 @@ async function getDashboardAnalytics(query = {}) {
     getCachedCompanyInfo().catch(() => null)
   ]);
   const companyInfoCompanies = companyInfoCache?.companies || [];
+  const analyticsCompanies = mergeCompanyDirectoryRows(companies, companyInfoCompanies);
+  const analyticsChats = enrichChatsWithCompanyAssignments(chats, companyInfoCompanies, analyticsCompanies);
   const chatIds = [...new Set([
     ...requests.map(request => request.chat_id),
-    ...chats
+    ...analyticsChats
       .filter(chat => chat.company_id && (chat.source_type === 'group' || ['group', 'supergroup'].includes(chat.type)))
       .map(chat => chat.chat_id)
   ].filter(value => value !== undefined && value !== null))];
@@ -1118,12 +1120,12 @@ async function getDashboardAnalytics(query = {}) {
   return {
     periods: Object.fromEntries(periodContext.map(p => [p.key, p.summary])),
     periodDates: Object.fromEntries(periodContext.map(p => [p.key, { current: p.currentLabel, prev: p.prevLabel }])),
-    employeePerformance: Object.fromEntries(periods.map(([key]) => [key, buildEmployeePerformance({ requests, employees, messages, periodKey: key, keys, chats, companyMembers, companyInfoCompanies })])),
-    chatPerformance: Object.fromEntries(periods.map(([key]) => [key, buildChatPerformance({ requests, chats, periodKey: key, keys })])),
-    groupPerformance: Object.fromEntries(periods.map(([key]) => [key, buildGroupPerformance({ requests, chats, periodKey: key, keys })])),
+    employeePerformance: Object.fromEntries(periods.map(([key]) => [key, buildEmployeePerformance({ requests, employees, messages, periodKey: key, keys, chats: analyticsChats, companyMembers, companyInfoCompanies })])),
+    chatPerformance: Object.fromEntries(periods.map(([key]) => [key, buildChatPerformance({ requests, chats: analyticsChats, periodKey: key, keys })])),
+    groupPerformance: Object.fromEntries(periods.map(([key]) => [key, buildGroupPerformance({ requests, chats: analyticsChats, periodKey: key, keys })])),
     responseTimeTrend: Object.fromEntries(periods.map(([key]) => [key, buildResponseTimeTrend(requests, key, keys, messages, employeeMaps)])),
     ticketAnswerTrend: Object.fromEntries(periods.map(([key]) => [key, buildTicketAnswerTrend(requests, key, keys)])),
-    companyTickets: Object.fromEntries(periods.map(([key]) => [key, buildCompanyTicketPerformance({ requests, chats, companies, messages, periodKey: key, keys })])),
+    companyTickets: Object.fromEntries(periods.map(([key]) => [key, buildCompanyTicketPerformance({ requests, chats: analyticsChats, companies: analyticsCompanies, messages, periodKey: key, keys })])),
     custom_period: customPeriod,
     generated_at: new Date().toISOString()
   };
@@ -1513,6 +1515,64 @@ function buildCompanySupportByCompanyId(companies = [], employeeMaps = buildEmpl
     if (employee) map.set(companyId, employeeSummary(employee));
   });
   return map;
+}
+
+function companyDirectoryId(company = {}) {
+  return String(company.id || company.company_id || '').trim();
+}
+
+function mergeCompanyDirectoryRows(companies = [], companyInfoCompanies = []) {
+  const rowsById = new Map();
+  [...companies, ...companyInfoCompanies].forEach(company => {
+    const companyId = companyDirectoryId(company);
+    if (!companyId) return;
+    const current = rowsById.get(companyId) || {};
+    rowsById.set(companyId, {
+      ...current,
+      ...company,
+      id: current.id || company.id || company.company_id || companyId,
+      company_id: current.company_id || company.company_id || company.id || companyId,
+      name: current.name || company.name || company.company_name || '',
+      legal_name: current.legal_name || company.legal_name || '',
+      is_active: current.is_active !== undefined ? current.is_active : company.is_active
+    });
+  });
+  return [...rowsById.values()];
+}
+
+function buildCompanyInfoChatMap(companyInfoCompanies = []) {
+  const map = new Map();
+  companyInfoCompanies.forEach(company => {
+    const companyId = companyDirectoryId(company) || String(company.company_id || '').trim();
+    const companyName = String(company.name || company.company_name || '').trim();
+    const groups = Array.isArray(company.groups) ? company.groups : [];
+    groups.forEach(group => {
+      const chatKey = telegramIdKey(group.chat_id);
+      if (!chatKey) return;
+      const groupCompanyId = String(group.company_id || '').trim();
+      map.set(chatKey, {
+        company_id: companyId || groupCompanyId,
+        company_name: companyName || String(group.company_name || '').trim()
+      });
+    });
+  });
+  return map;
+}
+
+function enrichChatsWithCompanyAssignments(chats = [], companyInfoCompanies = [], companies = []) {
+  const externalChatCompanyMap = buildCompanyInfoChatMap(companyInfoCompanies);
+  const companyRows = mergeCompanyDirectoryRows(companies, companyInfoCompanies);
+  const companyMap = new Map(companyRows.map(company => [companyDirectoryId(company), company]).filter(([id]) => id));
+  return chats.map(chat => {
+    const external = externalChatCompanyMap.get(telegramIdKey(chat.chat_id)) || {};
+    const companyId = String(chat.company_id || external.company_id || '').trim();
+    const company = companyMap.get(companyId) || null;
+    return {
+      ...chat,
+      company_id: companyId || null,
+      company_name: chat.company_name || external.company_name || company?.name || ''
+    };
+  });
 }
 
 function resolveCompanyIdForRequest(request = {}, chatMap = new Map()) {
@@ -2562,7 +2622,7 @@ async function getCompanyGroupActivity(query = {}) {
   const companyNameFilter = String(query.company_name || query.name || '').trim().toLowerCase();
   const isUnassignedFilter = companyIdFilter === UNASSIGNED_COMPANY_ID || companyNameFilter === 'biriktirilmagan';
 
-  const [companies, chats, employeeLookup] = await Promise.all([
+  const [companies, chats, employeeLookup, companyInfoCache] = await Promise.all([
     selectPaged('companies', {
       select: 'id,name,legal_name,is_active,notes'
     }, { maxRows: 10000 }),
@@ -2572,12 +2632,15 @@ async function getCompanyGroupActivity(query = {}) {
       is_active: 'eq.true',
       order: supabase.order('last_message_at', false)
     }, { maxRows: 20000 }),
-    getEmployeeLookup()
+    getEmployeeLookup(),
+    getCachedCompanyInfo().catch(() => null)
   ]);
-
-  const companyMap = new Map(companies.map(company => [String(company.id || ''), company]).filter(([id]) => id));
-  const linkedChats = chats.filter(chat => chat.company_id);
-  const scopedChats = isUnassignedFilter ? chats.filter(chat => !chat.company_id) : linkedChats;
+  const companyInfoCompanies = companyInfoCache?.companies || [];
+  const activityCompanies = mergeCompanyDirectoryRows(companies, companyInfoCompanies);
+  const activityChats = enrichChatsWithCompanyAssignments(chats, companyInfoCompanies, activityCompanies);
+  const companyMap = new Map(activityCompanies.map(company => [companyDirectoryId(company), company]).filter(([id]) => id));
+  const linkedChats = activityChats.filter(chat => chat.company_id);
+  const scopedChats = isUnassignedFilter ? activityChats.filter(chat => !chat.company_id) : linkedChats;
   const chatIds = scopedChats.map(chat => chat.chat_id).filter(value => value !== undefined && value !== null);
 
   const [requests, messages] = chatIds.length
@@ -2844,8 +2907,8 @@ async function getCompanyGroupActivity(query = {}) {
     }];
   }
 
-  const cachedCompanyInfo = isUnassignedFilter ? null : await getCachedCompanyInfo().catch(() => null);
-  if (cachedCompanyInfo) {
+  const cachedCompanyInfo = isUnassignedFilter ? null : companyInfoCache;
+  if (cachedCompanyInfo && period === 'all' && !rows.length) {
     rows = mergeCompanyActivityRows(rows, externalCompanyActivityRows(cachedCompanyInfo))
       .sort((a, b) => b.total_requests - a.total_requests || b.total_messages - a.total_messages || a.name.localeCompare(b.name));
   }
