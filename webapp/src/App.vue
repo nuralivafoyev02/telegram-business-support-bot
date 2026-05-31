@@ -2699,6 +2699,7 @@ const companyTicketRows = computed(() => {
     }))
   ]);
   return rows
+    .filter(row => !isUnassignedCompanyTicketRow(row))
     .filter(row => Number(row.total_requests || 0) > 0 || !!row.company_id)
     .sort((a, b) => b.total_requests - a.total_requests || b.closed_requests - a.closed_requests || a.name.localeCompare(b.name))
     .slice(0, 30);
@@ -2897,6 +2898,13 @@ function isUnassignedRankingRow(row = {}) {
   const name = String(row.full_name || row.name || '').trim().toLowerCase();
   return row.is_unassigned === true
     || row.key === 'unassigned:open'
+    || name === 'biriktirilmagan';
+}
+
+function isUnassignedCompanyTicketRow(row = {}) {
+  const name = String(row.name || row.company_name || '').trim().toLowerCase();
+  return row.is_unassigned === true
+    || row.company_id === '__unassigned__'
     || name === 'biriktirilmagan';
 }
 

@@ -1807,7 +1807,7 @@ async function testDashboardCompanyTicketsUseLinkedGroupOrdinaryMessages() {
   }
 }
 
-async function testDashboardCompanyTicketsIncludeUnassignedRequests() {
+async function testDashboardCompanyTicketsExcludeUnassignedRequests() {
   const originalSelect = supabase.select;
   const originalEmployeeStats = stats.selectEmployeeStatistics;
   const originalChatStats = stats.selectChatStatistics;
@@ -1856,13 +1856,9 @@ async function testDashboardCompanyTicketsIncludeUnassignedRequests() {
     const result = await callAdmin('dashboard', { query: { period: 'all' } });
     assert.strictEqual(result.status, 200);
     const rows = result.payload.data.analytics.companyTickets.all;
-    const row = rows.find(item => item.company_id === '__unassigned__');
-    assert.ok(row, 'Unassigned company row should be present');
-    assert.strictEqual(row.name, 'Biriktirilmagan');
-    assert.strictEqual(row.total_requests, 2);
-    assert.strictEqual(row.closed_requests, 1);
-    assert.strictEqual(row.open_requests, 1);
-    assert.strictEqual(row.is_unassigned, true);
+    assert.strictEqual(rows.find(item => item.company_id === '__unassigned__'), undefined);
+    assert.strictEqual(rows.find(item => item.name === 'Biriktirilmagan'), undefined);
+    assert.strictEqual(rows.length, 0);
   } finally {
     supabase.select = originalSelect;
     stats.selectEmployeeStatistics = originalEmployeeStats;
@@ -4019,7 +4015,7 @@ async function run() {
   await testDashboardCompanyTicketsIncludeLinkedGroupMessagesWithoutRequests();
   await testDashboardCompanyTicketsUseLinkedGroupOrdinaryMessages();
   await testDashboardCompanyTicketsIgnoreRequestsCreatedBeforeSelectedPeriod();
-  await testDashboardCompanyTicketsIncludeUnassignedRequests();
+  await testDashboardCompanyTicketsExcludeUnassignedRequests();
   await testDashboardEmployeePerformanceCountsOpenAndSlaPerEmployee();
   await testDashboardEmployeePerformanceAssignsOpenByCompanySupport();
   await testDashboardPeriodCountsOnlyRequestsCreatedInSelectedRange();

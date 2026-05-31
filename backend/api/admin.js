@@ -745,39 +745,41 @@ function buildTicketAnswerTrend(requests, periodKey, keys) {
     }));
 }
 
-function buildCompanyTicketPerformance({ requests, chats = [], companies, messages = [], periodKey, keys }) {
-  const UNASSIGNED_COMPANY_ID = '__unassigned__';
-  const companyMap = new Map(companies.map(company => [company.id, company]).filter(([id]) => id));
-  const linkedGroupChats = chats.filter(chat => chat.company_id && (chat.source_type === 'group' || ['group', 'supergroup'].includes(chat.type)));
-  const chatCompanyMap = new Map(linkedGroupChats
-    .map(chat => [telegramIdKey(chat.chat_id), chat.company_id])
-    .filter(([, companyId]) => companyId));
+function buildCompanyTicketPerformance({ requests, chats = [], companies, companyInfoCompanies = [], messages = [], periodKey, keys }) {
+  const companyMap = new Map(companies.map(company => [companyDirectoryId(company), company]).filter(([id]) => id));
+  const chatMap = new Map(chats.map(chat => [telegramIdKey(chat.chat_id), chat]));
+  const externalChatCompanyMap = buildCompanyInfoChatMap(companyInfoCompanies);
 
   const totals = new Map();
 
   function ensureCompanyTotal(companyId) {
-    if (!companyId) return null;
-    const company = companyMap.get(companyId) || null;
-    const key = company?.id || companyId;
+    const normalizedId = String(companyId || '').trim();
+    if (!normalizedId || normalizedId === '__unassigned__') return null;
+    const company = companyMap.get(normalizedId) || null;
+    const key = companyDirectoryId(company) || normalizedId;
     const current = totals.get(key) || {
-      company_id: company?.id || companyId,
-      name: companyId === UNASSIGNED_COMPANY_ID ? 'Biriktirilmagan' : (company?.name || 'Kompaniya'),
+      company_id: key,
+      name: company?.name || company?.company_name || 'Kompaniya',
       total_requests: 0,
       closed_requests: 0,
       open_requests: 0,
       message_count: 0,
       ticket_like_messages: 0,
-      is_unassigned: companyId === UNASSIGNED_COMPANY_ID
+      is_unassigned: false
     };
     totals.set(key, current);
     return current;
+  }
+
+  function resolveCompanyId(row = {}) {
+    return resolveCompanyIdForRequest(row, chatMap, externalChatCompanyMap);
   }
 
   requests.forEach(request => {
     const createdInPeriod = request.created_at && inCurrentPeriod(request.created_at, periodKey, keys);
     if (!createdInPeriod) return;
 
-    const companyId = request.company_id || chatCompanyMap.get(telegramIdKey(request.chat_id)) || UNASSIGNED_COMPANY_ID;
+    const companyId = resolveCompanyId(request);
     const current = ensureCompanyTotal(companyId);
     if (!current) return;
 
@@ -792,7 +794,7 @@ function buildCompanyTicketPerformance({ requests, chats = [], companies, messag
   messages
     .filter(message => message.created_at && inCurrentPeriod(message.created_at, periodKey, keys))
     .forEach(message => {
-      const companyId = chatCompanyMap.get(telegramIdKey(message.chat_id));
+      const companyId = resolveCompanyId(message);
       const current = ensureCompanyTotal(companyId);
       if (!current) return;
       current.message_count += 1;
@@ -813,7 +815,7 @@ function buildCompanyTicketPerformance({ requests, chats = [], companies, messag
         close_rate: percent(closedRequests, totalRequests)
       };
     })
-    .filter(row => Number(row.total_requests || 0) > 0)
+    .filter(row => !row.is_unassigned && row.company_id !== '__unassigned__' && Number(row.total_requests || 0) > 0)
     .sort((a, b) => b.total_requests - a.total_requests || b.closed_requests - a.closed_requests || a.name.localeCompare(b.name))
     .slice(0, 30);
 }
@@ -1128,7 +1130,7 @@ async function getDashboardAnalytics(query = {}) {
     groupPerformance: Object.fromEntries(periods.map(([key]) => [key, buildGroupPerformance({ requests, chats: analyticsChats, periodKey: key, keys })])),
     responseTimeTrend: Object.fromEntries(periods.map(([key]) => [key, buildResponseTimeTrend(requests, key, keys, messages, employeeMaps)])),
     ticketAnswerTrend: Object.fromEntries(periods.map(([key]) => [key, buildTicketAnswerTrend(requests, key, keys)])),
-    companyTickets: Object.fromEntries(periods.map(([key]) => [key, buildCompanyTicketPerformance({ requests, chats: analyticsChats, companies: analyticsCompanies, messages, periodKey: key, keys })])),
+    companyTickets: Object.fromEntries(periods.map(([key]) => [key, buildCompanyTicketPerformance({ requests, chats: analyticsChats, companies: analyticsCompanies, companyInfoCompanies, messages, periodKey: key, keys })])),
     custom_period: customPeriod,
     generated_at: new Date().toISOString()
   };
