@@ -2885,11 +2885,8 @@ function isAdminLikeEmployee(row = {}) {
   return ['admin', 'system admin', 'tizim admini'].includes(name);
 }
 
-// Faqat "Uyqur" nomli/usernameli xodimlar haqiqiy natija ko'rsatadi
-function isUyqurEmployee(row = {}) {
-  const name = String(row.full_name || '').toLowerCase();
-  const username = String(row.username || '').toLowerCase();
-  return name.includes('uyqur') || username.includes('uyqur');
+function isSupportEmployee(row = {}) {
+  return String(row.role || '').trim().toLowerCase() === 'support';
 }
 
 function isManagerEmployee(row = {}) {
@@ -2906,10 +2903,9 @@ function isUnassignedRankingRow(row = {}) {
 function shouldShowInSupportRanking(row = {}) {
   if (isUnassignedRankingRow(row)) return false;
   if (row.is_manager_group === true) return true;
-  const role = String(row.role || '').trim().toLowerCase();
-  if (role === 'manager') return false;
-  if (!isUyqurEmployee(row)) return false;
-  return Boolean(row.employee_id || row.tg_user_id || row.username);
+  if (isManagerEmployee(row)) return false;
+  if (!isSupportEmployee(row)) return false;
+  return Boolean(row.employee_id || row.id || row.tg_user_id || row.username);
 }
 
 function hasEmployeeActivity(row = {}) {
@@ -2981,8 +2977,10 @@ const supportPerformanceRows = computed(() => {
 
   // Faqat ma'lum bo'lgan xodimlarning kalitlarini yig'ib olamiz
   const knownEmployeeKeys = new Set([
-    ...employees.value.map(supportRowKey),
-    ...visibleCompanyInfoRows.value.filter(hasCompanySupport).map(c => 
+    ...employees.value
+      .filter(row => !isAdminLikeEmployee(row) && (isSupportEmployee(row) || isManagerEmployee(row)))
+      .map(supportRowKey),
+    ...visibleCompanyInfoRows.value.filter(hasCompanySupport).map(c =>
       supportRowKey({ username: c.uyqur_support_username, phone: c.uyqur_support_phone })
     )
   ].filter(Boolean));
@@ -2994,7 +2992,10 @@ const supportPerformanceRows = computed(() => {
   });
 
   employees.value
-    .filter(row => !isAdminLikeEmployee(row) && isUyqurEmployee(row) && !isManagerEmployee(row))
+    .filter(row => !isAdminLikeEmployee(row) && isSupportEmployee(row))
+    .forEach(row => mergeSupportCandidate(merged, row, 'employee'));
+  employees.value
+    .filter(row => !isAdminLikeEmployee(row) && isManagerEmployee(row))
     .forEach(row => mergeSupportCandidate(merged, row, 'employee'));
   (dashboard.employeeStats || []).forEach(row => {
     if (isUnassignedRankingRow(row)) return;
@@ -3019,6 +3020,9 @@ const supportPerformanceRows = computed(() => {
     .map((row, index) => {
     const stat = employeeStatsMap.value.get(employeeLookupKey(row)) || row;
     const candidate = { ...row, ...stat };
+    const rowKey = supportRowKey(candidate) || supportRowKey(row);
+    const employeeRef = employees.value.find(item => supportRowKey(item) === rowKey) || null;
+    const resolvedRole = row.role || stat.role || employeeRef?.role || '';
     const key = employeeSummaryKey(candidate) || employeeSummaryKey(row) || employeeSummaryKey(stat);
     const periodRow = key ? periodStatsMap.get(key) : null;
     const openSummary = key ? openSummaryMap.get(key) : null;
@@ -3051,10 +3055,10 @@ const supportPerformanceRows = computed(() => {
       tg_user_id: row.tg_user_id || stat.tg_user_id || '',
       username: row.username || stat.username || '',
       phone: row.phone || stat.phone || '',
-      role: row.role || stat.role || '',
-      full_name: row.full_name || stat.full_name || 'Xodim',
+      role: resolvedRole,
+      full_name: row.full_name || stat.full_name || employeeRef?.full_name || 'Xodim',
       telegram_is_premium: row.telegram_is_premium === true || stat.telegram_is_premium === true,
-      is_uyqur_employee: isUyqurEmployee(row),
+      is_support_employee: isSupportEmployee({ role: resolvedRole }),
       handled_chats: handledChats,
       closed_requests: closed,
       open_requests: open,
@@ -3080,7 +3084,7 @@ const supportPerformanceRows = computed(() => {
     if (isUnassignedRankingRow(summary)) return;
     const summarySupportKey = supportRowKey(summary);
     if (summarySupportKey && !knownEmployeeKeys.has(summarySupportKey)) return;
-    if (!isUyqurEmployee(summary)) return;
+    if (!isSupportEmployee(summary)) return;
     rows.push({
       key: summary.key,
       id: summary.employee_id || '',
@@ -3091,7 +3095,7 @@ const supportPerformanceRows = computed(() => {
       role: 'support',
       full_name: summary.full_name || 'Xodim',
       telegram_is_premium: false,
-      is_uyqur_employee: true,
+      is_support_employee: true,
       is_unassigned: false,
       handled_chats: summary.chat_keys?.size || 0,
       closed_requests: 0,
@@ -3110,11 +3114,17 @@ const supportPerformanceRows = computed(() => {
     });
   });
 
-  const allManagerRows = candidateRows.filter(isManagerEmployee);
-  const activeManagerRows = allManagerRows.filter(hasEmployeeActivity);
+  const registeredManagers = employees.value.filter(row => !isAdminLikeEmployee(row) && isManagerEmployee(row));
+  const managerStatsByKey = new Map(
+    candidateRows.filter(isManagerEmployee).map(row => [supportRowKey(row), row])
+  );
+  const allManagerRows = registeredManagers.map(manager => {
+    const stats = managerStatsByKey.get(supportRowKey(manager)) || {};
+    return { ...manager, ...stats, role: 'manager' };
+  });
   if (allManagerRows.length) {
-    const closedRequests = activeManagerRows.reduce((sum, row) => sum + Number(row.closed_requests || 0), 0);
-    const openRequests = 0;
+    const closedRequests = allManagerRows.reduce((sum, row) => sum + Number(row.closed_requests || 0), 0);
+    const openRequests = allManagerRows.reduce((sum, row) => sum + Number(row.open_requests || 0), 0);
     const totalRequests = closedRequests + openRequests;
     rows.push({
       key: 'manager:all',
@@ -3126,29 +3136,29 @@ const supportPerformanceRows = computed(() => {
       role: 'manager',
       full_name: 'Barcha menejerlar',
       telegram_is_premium: false,
-      is_uyqur_employee: false,
+      is_support_employee: false,
       is_manager_group: true,
-      handled_chats: activeManagerRows.reduce((sum, row) => sum + Number(row.handled_chats || 0), 0),
+      handled_chats: allManagerRows.reduce((sum, row) => sum + Number(row.handled_chats || 0), 0),
       closed_requests: closedRequests,
       open_requests: openRequests,
       total_requests: totalRequests,
-      assigned_company_count: activeManagerRows.length,
-      company_total: activeManagerRows.length,
-      avg_close_minutes: weightedAverageBy(activeManagerRows, 'avg_close_minutes', 'closed_requests'),
+      assigned_company_count: allManagerRows.length,
+      company_total: allManagerRows.length,
+      avg_close_minutes: weightedAverageBy(allManagerRows, 'avg_close_minutes', 'closed_requests'),
       close_rate: totalRequests > 0 ? (closedRequests / totalRequests) * 100 : 0,
       sla: totalRequests > 0 ? (closedRequests / totalRequests) * 100 : 0,
-      prev_closed_requests: activeManagerRows.reduce((sum, row) => sum + Number(row.prev_closed_requests || 0), 0),
-      prev_open_requests: 0,
-      prev_avg_close_minutes: weightedAverageBy(activeManagerRows, 'prev_avg_close_minutes', 'prev_closed_requests'),
+      prev_closed_requests: allManagerRows.reduce((sum, row) => sum + Number(row.prev_closed_requests || 0), 0),
+      prev_open_requests: allManagerRows.reduce((sum, row) => sum + Number(row.prev_open_requests || 0), 0),
+      prev_avg_close_minutes: weightedAverageBy(allManagerRows, 'prev_avg_close_minutes', 'prev_closed_requests'),
       prev_close_rate: (() => {
-        const prevClosed = activeManagerRows.reduce((sum, row) => sum + Number(row.prev_closed_requests || 0), 0);
-        const prevOpen = 0;
+        const prevClosed = allManagerRows.reduce((sum, row) => sum + Number(row.prev_closed_requests || 0), 0);
+        const prevOpen = allManagerRows.reduce((sum, row) => sum + Number(row.prev_open_requests || 0), 0);
         const prevTotal = prevClosed + prevOpen;
         return prevTotal > 0 ? (prevClosed / prevTotal) * 100 : 0;
       })(),
       grade: performanceGrade(
         totalRequests > 0 ? (closedRequests / totalRequests) * 100 : 0,
-        weightedAverageBy(activeManagerRows, 'avg_close_minutes', 'closed_requests')
+        weightedAverageBy(allManagerRows, 'avg_close_minutes', 'closed_requests')
       )
     });
   }
@@ -3172,7 +3182,7 @@ const filteredMetricDetailRows = computed(() => {
 });
 
 // Top hodim faqat Uyqur xodimlaridan tanlanadi
-const topPerformer = computed(() => supportPerformanceRows.value.find(row => row.is_uyqur_employee) || null);
+const topPerformer = computed(() => supportPerformanceRows.value.find(row => row.is_support_employee && !row.is_manager_group) || null);
 const topPerformerName = computed(() => topPerformer.value?.full_name || '');
 const currentPeriodDates = computed(() => analytics.value.periodDates?.[selectedStatsPeriod.value] || { current: '', prev: '' });
 const openRequestsTitle = computed(() => `Ochiq so‘rovlar (${fmtNumber((filteredOpenRequests.value || []).length)})`);
@@ -5650,21 +5660,19 @@ function mergeManagerActivityGroups(groups = []) {
 }
 
 function buildManagerAggregateProfile(row = {}, managers = [], payloads = []) {
-  const activeEntries = managers
-    .map((manager, index) => ({ manager, payload: payloads[index] || {} }))
-    .filter(({ payload }) => hasEmployeeActivity(payload.summary || payload));
-  const activeManagers = activeEntries.map(entry => entry.manager);
-  const activePayloads = activeEntries.map(entry => entry.payload);
-  const groups = mergeManagerActivityGroups(activePayloads.flatMap(payload => Array.isArray(payload.groups) ? payload.groups : []));
-  const summaries = activePayloads.map(payload => payload.summary || {});
+  const groups = mergeManagerActivityGroups(payloads.flatMap(payload => Array.isArray(payload.groups) ? payload.groups : []));
+  const summaries = payloads.map(payload => payload.summary || {});
   const closedRequests = summaries.reduce((sum, summary) => sum + Number(summary.closed_requests || 0), 0);
+  const openRequests = summaries.reduce((sum, summary) => sum + Number(summary.open_requests || 0), 0);
+  const totalRequests = closedRequests + openRequests;
   const handledChats = new Set(groups.map(group => employeeProfileChatKey(group)).filter(Boolean)).size;
   const messageCount = summaries.reduce((sum, summary) => sum + Number(summary.message_count || 0), 0);
   const customerCount = summaries.reduce((sum, summary) => sum + Number(summary.customer_count || 0), 0);
-  const memberStats = activeManagers.map((manager, index) => {
-    const payload = activePayloads[index] || {};
-    const summary = payload.summary || {};
+  const memberStats = managers.map((manager, index) => {
+    const summary = summaries[index] || {};
     const closed = Number(summary.closed_requests || 0);
+    const open = Number(summary.open_requests || 0);
+    const total = closed + open;
     return {
       ...manager,
       id: manager.id || manager.employee_id || '',
@@ -5672,12 +5680,12 @@ function buildManagerAggregateProfile(row = {}, managers = [], payloads = []) {
       full_name: manager.full_name || manager.username || 'Menejer',
       role: 'manager',
       closed_requests: closed,
-      open_requests: 0,
-      total_requests: closed,
+      open_requests: open,
+      total_requests: total,
       handled_chats: Number(summary.handled_chats || 0),
       avg_close_minutes: Number(summary.avg_close_minutes || 0),
-      sla: closed > 0 ? 100 : 0,
-      close_rate: closed > 0 ? 100 : 0
+      sla: total > 0 ? (closed / total) * 100 : 0,
+      close_rate: total > 0 ? (closed / total) * 100 : 0
     };
   });
   return {
@@ -5685,17 +5693,17 @@ function buildManagerAggregateProfile(row = {}, managers = [], payloads = []) {
       ...row,
       full_name: row.full_name || 'Barcha menejerlar',
       role: 'manager',
-      member_employees: activeManagers
+      member_employees: managers
     },
     rank: row.rank || null,
     companies: [],
     summary: {
       closed_requests: closedRequests,
-      open_requests: 0,
-      company_total: activeManagers.length,
+      open_requests: openRequests,
+      company_total: managers.length,
       avg_close_minutes: weightedAverageBy(summaries, 'avg_close_minutes', 'closed_requests'),
-      close_rate: closedRequests > 0 ? 100 : 0,
-      sla: closedRequests > 0 ? 100 : 0,
+      close_rate: totalRequests > 0 ? (closedRequests / totalRequests) * 100 : 0,
+      sla: totalRequests > 0 ? (closedRequests / totalRequests) * 100 : 0,
       handled_chats: handledChats,
       message_count: messageCount,
       customer_count: customerCount
@@ -6137,7 +6145,7 @@ function resolveCompanySupportMappingForRequest(request = {}, employeeMappings =
   if (!mapping) {
     const employee = employees.value.find(row => !isAdminLikeEmployee(row)
       && normalizeSupportUsername(row.username) === username);
-    if (!employee || !isUyqurEmployee(employee)) return null;
+    if (!employee || !isSupportEmployee(employee)) return null;
     mapping = {
       employee,
       key: employeeSummaryKey(employee),
@@ -6215,7 +6223,7 @@ function employeeOpenRequestSummaryMap() {
 
   (filteredOpenRequests.value || []).forEach(request => {
     const matchedEmp = findEmployeeMappingForOpenRequest(request, employeeMappings);
-    if (!matchedEmp || !isUyqurEmployee(matchedEmp.employee)) return;
+    if (!matchedEmp || !isSupportEmployee(matchedEmp.employee)) return;
 
     const key = matchedEmp.key;
     const current = map.get(key) || {
