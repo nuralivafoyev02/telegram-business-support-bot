@@ -6045,7 +6045,10 @@ async function scrollCompanyGroupToEnd() {
 
 watch(chatConversation, () => scrollChatDetailToEnd(), { flush: 'post' });
 watch(metricChatConversation, () => scrollMetricChatToEnd(), { flush: 'post' });
-watch(employeeProfileConversation, () => scrollEmployeeProfileChatToEnd(), { flush: 'post' });
+watch(employeeProfileConversation, conversation => {
+  scrollEmployeeProfileChatToEnd();
+  loadConversationMedia(conversation).catch(error => showToast(error.message));
+}, { flush: 'post' });
 watch(companyGroupConversation, () => scrollCompanyGroupToEnd(), { flush: 'post' });
 
 async function loadMetricChatDetail(row = {}) {

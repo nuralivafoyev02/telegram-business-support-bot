@@ -1099,6 +1099,51 @@ async function testChatDetailExtractsVoiceMediaFromJsonRaw() {
   }
 }
 
+async function testChatDetailExtractsImageDocumentAsPhoto() {
+  const originalSelect = supabase.select;
+  const chatId = -100902;
+  const imageRaw = JSON.stringify({
+    message_id: 78,
+    document: {
+      file_id: 'image-doc-1',
+      mime_type: 'image/jpeg',
+      file_name: 'photo.jpg',
+      file_size: 12000
+    }
+  });
+
+  supabase.select = async (table) => {
+    if (table === 'tg_chats') {
+      return [{ chat_id: chatId, title: 'Test guruh', source_type: 'group', is_active: true }];
+    }
+    if (table === 'support_requests') return [];
+    if (table === 'messages') {
+      return [{
+        tg_message_id: 78,
+        chat_id: chatId,
+        from_tg_user_id: 502,
+        from_name: 'Aziz',
+        source_type: 'group',
+        text: 'Rasmli xabar',
+        classification: 'request',
+        raw: imageRaw,
+        created_at: '2026-05-23T14:40:00.000Z'
+      }];
+    }
+    if (table === 'employees' || table === 'request_events') return [];
+    throw new Error(`Unexpected table ${table}`);
+  };
+
+  try {
+    const result = await callAdmin('chatDetail', { query: { chat_id: chatId } });
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.data.conversation[0].media.kind, 'photo');
+    assert.strictEqual(result.payload.data.conversation[0].media.file_id, 'image-doc-1');
+  } finally {
+    supabase.select = originalSelect;
+  }
+}
+
 async function testChatDetailFiltersBusinessConnection() {
   const originalSelect = supabase.select;
   const chatId = 303;
@@ -4005,6 +4050,7 @@ async function run() {
   await testGroupsIncludeMessageStatsForChatPreview();
   await testChatDetailIncludesTicketSolutionAndTimeline();
   await testChatDetailExtractsVoiceMediaFromJsonRaw();
+  await testChatDetailExtractsImageDocumentAsPhoto();
   await testChatDetailFiltersBusinessConnection();
   await testChatDetailShowsTelegramMemberServiceMessages();
   await testCompanyGroupActivityReturnsLinkedGroupMessagesWithTickets();

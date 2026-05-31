@@ -74,7 +74,9 @@ async function requestBlob(action, { query = {} } = {}) {
     logApiError(action, error, { method: 'GET', query: safeQuery(query), status: response.status, stage: 'response' });
     throw error;
   }
-  return response.blob();
+  const contentType = String(response.headers.get('content-type') || '').split(';')[0].trim();
+  const buffer = await response.arrayBuffer();
+  return contentType ? new Blob([buffer], { type: contentType }) : new Blob([buffer]);
 }
 
 function telegramFileQuery(mediaOrFileId) {

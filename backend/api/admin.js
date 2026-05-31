@@ -1,7 +1,7 @@
 'use strict';
 
-const { Readable } = require('stream');
 const supabase = require('../lib/supabase');
+const { bestPhotoSize, extractMessageMedia } = require('../lib/message-media');
 const { allowCors, sendJson, readBody, getQuery } = require('../lib/http');
 const { login, requireAdmin, hashPassword } = require('../lib/auth');
 const { sendMessage, sendBusinessMessage, getWebhookInfo, setWebhook, deleteWebhook, getUpdates, getFile, getUserProfilePhotos, downloadFile, tgUserName, escapeHtml } = require('../lib/telegram');
@@ -1813,97 +1813,6 @@ function eventRank(type) {
   if (type === 'note') return 2;
   if (type === 'closed') return 3;
   return 4;
-}
-
-function bestPhotoSize(photos = []) {
-  return [...photos].filter(photo => photo && photo.file_id).sort((a, b) => {
-    const areaA = Number(a.width || 0) * Number(a.height || 0);
-    const areaB = Number(b.width || 0) * Number(b.height || 0);
-    return (Number(a.file_size || areaA) || 0) - (Number(b.file_size || areaB) || 0);
-  }).at(-1) || null;
-}
-
-function buildMediaPayload(kind, source = {}, extra = {}) {
-  if (!source || !source.file_id) return null;
-  const mimeType = source.mime_type || null;
-  let fileName = source.file_name || null;
-  if (!fileName && kind === 'voice') {
-    fileName = mimeType && mimeType.includes('mpeg') ? 'voice.mp3'
-      : mimeType && mimeType.includes('m4a') ? 'voice.m4a'
-      : mimeType && mimeType.includes('wav') ? 'voice.wav'
-      : 'voice.ogg';
-  } else if (!fileName && kind === 'audio') {
-    fileName = mimeType && mimeType.includes('mpeg') ? 'audio.mp3'
-      : mimeType && mimeType.includes('m4a') ? 'audio.m4a'
-      : mimeType && mimeType.includes('wav') ? 'audio.wav'
-      : 'audio.ogg';
-  }
-  return {
-    kind,
-    file_id: source.file_id,
-    file_unique_id: source.file_unique_id || null,
-    file_name: fileName,
-    mime_type: mimeType,
-    file_size: source.file_size || null,
-    width: source.width || null,
-    height: source.height || null,
-    duration: source.duration || null,
-    ...extra
-  };
-}
-
-function normalizeTelegramRaw(raw = {}) {
-  if (!raw) return {};
-  if (typeof raw === 'string') {
-    try {
-      const parsed = JSON.parse(raw);
-      return normalizeTelegramRaw(parsed);
-    } catch (_error) {
-      return {};
-    }
-  }
-  if (typeof raw !== 'object') return {};
-  if (raw.message && typeof raw.message === 'object') return normalizeTelegramRaw(raw.message);
-  return raw;
-}
-
-function extractMessageMedia(raw = {}) {
-  const normalized = normalizeTelegramRaw(raw);
-  if (!normalized || Object.keys(normalized).length === 0 || normalized.source === 'admin_send') return null;
-  const photo = bestPhotoSize(normalized.photo || []);
-  if (photo) return buildMediaPayload('photo', photo);
-  if (normalized.sticker) {
-    return buildMediaPayload('sticker', normalized.sticker, {
-      emoji: normalized.sticker.emoji || null,
-      set_name: normalized.sticker.set_name || null,
-      sticker_type: normalized.sticker.type || null,
-      custom_emoji_id: normalized.sticker.custom_emoji_id || null,
-      thumbnail_file_id: normalized.sticker.thumbnail && normalized.sticker.thumbnail.file_id || null
-    });
-  }
-  if (normalized.video) {
-    return buildMediaPayload('video', normalized.video, {
-      thumbnail_file_id: normalized.video.thumbnail && normalized.video.thumbnail.file_id || null
-    });
-  }
-  if (normalized.voice) return buildMediaPayload('voice', normalized.voice);
-  if (normalized.audio) return buildMediaPayload('audio', normalized.audio);
-  if (normalized.video_note) {
-    return buildMediaPayload('video_note', normalized.video_note, {
-      thumbnail_file_id: normalized.video_note.thumbnail && normalized.video_note.thumbnail.file_id || null
-    });
-  }
-  if (normalized.animation) {
-    return buildMediaPayload('animation', normalized.animation, {
-      thumbnail_file_id: normalized.animation.thumbnail && normalized.animation.thumbnail.file_id || null
-    });
-  }
-  if (normalized.document) {
-    return buildMediaPayload('document', normalized.document, {
-      thumbnail_file_id: normalized.document.thumbnail && normalized.document.thumbnail.file_id || null
-    });
-  }
-  return null;
 }
 
 function messageRawSource(message = {}) {
@@ -3825,34 +3734,28 @@ function contentDispositionFor(contentType = '', fileName = '') {
 async function sendTelegramFile(query, res) {
   const fileId = String(query.file_id || '').trim();
   if (!fileId) throw new Error('file_id majburiy');
-  const file = await getFile(fileId);
+
+  let file;
+  try {
+    file = await getFile(fileId);
+  } catch (error) {
+    const description = error?.telegram?.description || error.message || 'Telegram fayl topilmadi';
+    throw new Error(description.includes('file_id') ? `${description}. BOT_TOKEN webhook bilan bir xil ekanini tekshiring.` : description);
+  }
   if (!file || !file.file_path) throw new Error('Telegram fayl topilmadi');
 
   const response = await downloadFile(file.file_path);
+  const buffer = Buffer.from(await response.arrayBuffer());
   const requestedType = safeMimeType(query.mime_type);
   const pathType = contentTypeFromPath(query.file_name || file.file_path);
   const upstreamType = safeMimeType(response.headers.get('content-type'));
   const contentType = isGenericContentType(upstreamType) ? (requestedType || pathType || upstreamType) : upstreamType;
   const fileName = query.file_name || safeHeaderFileName(file.file_path);
+
   res.statusCode = 200;
   res.setHeader('Content-Type', contentType);
   res.setHeader('Content-Disposition', contentDispositionFor(contentType, fileName));
   res.setHeader('Cache-Control', 'private, max-age=86400');
-  const contentLength = response.headers.get('content-length');
-  if (contentLength) res.setHeader('Content-Length', contentLength);
-
-  if (response.body && Readable.fromWeb) {
-    await new Promise((resolve, reject) => {
-      Readable.fromWeb(response.body)
-        .on('error', reject)
-        .pipe(res)
-        .on('error', reject)
-        .on('finish', resolve);
-    });
-    return;
-  }
-
-  const buffer = Buffer.from(await response.arrayBuffer());
   res.setHeader('Content-Length', String(buffer.length));
   res.end(buffer);
 }
