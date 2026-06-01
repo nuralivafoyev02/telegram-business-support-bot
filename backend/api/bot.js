@@ -2437,14 +2437,12 @@ async function processMessage(updateKind, message, options = {}) {
     return;
   }
 
-  if (options.sourceBot) {
-    try {
-      await enrichMessageMediaWithStorage(message, options.sourceBot, {
-        onError: (error, kind) => logBackgroundError(`media-relay:${kind}`, error)
-      });
-    } catch (error) {
-      logBackgroundError('media-relay', error);
-    }
+  try {
+    await enrichMessageMediaWithStorage(message, options.sourceBot, {
+      onError: (error, kind) => logBackgroundError(`media-relay:${kind}`, error)
+    });
+  } catch (error) {
+    logBackgroundError('media-relay', error);
   }
 
   const sourceType = metrics.sourceTypeFrom(updateKind, chat.type);

@@ -11,8 +11,12 @@ const {
 } = require('./storage');
 
 const SOURCE_BOT_TOKENS = Object.freeze({
-  bot_a: 'BOT_A_TOKEN'
+  bot_a: 'BOT_A_TOKEN',
+  bot: 'BOT_TOKEN',
+  main: 'BOT_TOKEN'
 });
+
+const DEFAULT_TOKEN_ENV = 'BOT_TOKEN';
 
 const SINGLE_MEDIA_KINDS = Object.freeze([
   'voice',
@@ -28,10 +32,19 @@ const MAX_RELAY_BYTES = 20 * 1024 * 1024;
 
 function resolveSourceBotToken(sourceBot = '') {
   const normalized = String(sourceBot || '').trim().toLowerCase();
-  if (!normalized) return '';
-  const envName = SOURCE_BOT_TOKENS[normalized];
-  if (!envName) return '';
-  return optionalEnv(envName, '');
+  if (normalized) {
+    const envName = SOURCE_BOT_TOKENS[normalized];
+    if (envName) {
+      const token = optionalEnv(envName, '');
+      if (token) return token;
+    }
+  }
+  return optionalEnv(DEFAULT_TOKEN_ENV, '');
+}
+
+function isRelayDisabled() {
+  const flag = String(optionalEnv('TELEGRAM_MEDIA_RELAY', '') || '').trim().toLowerCase();
+  return ['0', 'off', 'false', 'disabled', 'no'].includes(flag);
 }
 
 function shouldRelaySize(file = {}, source = {}) {
@@ -81,6 +94,7 @@ async function relayOne({ kind, source, token, bucket, chatId, tgMessageId }) {
 
 async function enrichMessageMediaWithStorage(message, sourceBot, { onError } = {}) {
   if (!message || typeof message !== 'object') return { relayed: 0, skipped: 0, errors: [] };
+  if (isRelayDisabled()) return { relayed: 0, skipped: 0, errors: [] };
   const token = resolveSourceBotToken(sourceBot);
   if (!token) return { relayed: 0, skipped: 0, errors: [] };
 
