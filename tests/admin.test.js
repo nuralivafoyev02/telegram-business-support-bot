@@ -1852,7 +1852,7 @@ async function testDashboardCompanyTicketsUseLinkedGroupOrdinaryMessages() {
   }
 }
 
-async function testDashboardCompanyTicketsExcludeUnassignedRequests() {
+async function testDashboardCompanyTicketsGroupUnassignedBucket() {
   const originalSelect = supabase.select;
   const originalEmployeeStats = stats.selectEmployeeStatistics;
   const originalChatStats = stats.selectChatStatistics;
@@ -1901,9 +1901,11 @@ async function testDashboardCompanyTicketsExcludeUnassignedRequests() {
     const result = await callAdmin('dashboard', { query: { period: 'all' } });
     assert.strictEqual(result.status, 200);
     const rows = result.payload.data.analytics.companyTickets.all;
-    assert.strictEqual(rows.find(item => item.company_id === '__unassigned__'), undefined);
-    assert.strictEqual(rows.find(item => item.name === 'Biriktirilmagan'), undefined);
-    assert.strictEqual(rows.length, 0);
+    const unassigned = rows.find(item => item.company_id === '__unassigned__');
+    assert.ok(unassigned, 'group tickets without company should appear as Biriktirilmagan');
+    assert.strictEqual(unassigned.total_requests, 1);
+    assert.strictEqual(unassigned.open_requests, 1);
+    assert.strictEqual(rows.length, 1);
   } finally {
     supabase.select = originalSelect;
     stats.selectEmployeeStatistics = originalEmployeeStats;
@@ -4095,7 +4097,7 @@ async function run() {
   await testDashboardCompanyTicketsIncludeLinkedGroupMessagesWithoutRequests();
   await testDashboardCompanyTicketsUseLinkedGroupOrdinaryMessages();
   await testDashboardCompanyTicketsIgnoreRequestsCreatedBeforeSelectedPeriod();
-  await testDashboardCompanyTicketsExcludeUnassignedRequests();
+  await testDashboardCompanyTicketsGroupUnassignedBucket();
   await testDashboardEmployeePerformanceCountsOpenAndSlaPerEmployee();
   await testDashboardEmployeePerformanceAssignsOpenByCompanySupport();
   await testDashboardPeriodCountsOnlyRequestsCreatedInSelectedRange();

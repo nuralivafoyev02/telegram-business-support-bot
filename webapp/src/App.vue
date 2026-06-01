@@ -349,7 +349,12 @@
                 <div class="card-header chart-card-head">
                   <div>
                     <div class="card-title">Kompaniyalar bo‘yicha ticketlar</div>
-                    <div class="card-note">Tanlangan davr bo‘yicha kompaniyalar kesimida ticketlar</div>
+                    <div class="card-note">
+                      Guruh ticketlari · {{ selectedPeriodLabel }}:
+                      jami {{ fmtNumber(companyTicketTotals.total) }}
+                      (yopilgan {{ fmtNumber(companyTicketTotals.closed) }},
+                      ochiq {{ fmtNumber(companyTicketTotals.open) }})
+                    </div>
                   </div>
                 </div>
                 <div v-if="companyTicketRows.length" class="company-ticket-bars">
@@ -1281,7 +1286,9 @@
           <p class="modal-subtitle">Tanlangan davr bo‘yicha jami, ochiq va yopilgan ticketlar</p>
           <div class="ticket-filter-tabs source-tabs">
             <button :class="{ active: ticketList.source === 'all' }" @click="ticketList.source = 'all'">Umumiy</button>
-            <button :class="{ active: ticketList.source === 'group' }" @click="ticketList.source = 'group'">Guruh</button>
+            <button :class="{ active: ticketList.source === 'group' }" @click="ticketList.source = 'group'">
+              Guruh <span>{{ fmtNumber(ticketListCounts.group) }}</span>
+            </button>
             <button :class="{ active: ticketList.source === 'private' }" @click="ticketList.source = 'private'">Shaxsiy</button>
           </div>
           <div class="ticket-filter-tabs">
@@ -2714,25 +2721,22 @@ const ticketTrendMax = computed(() => Math.max(1, ...ticketTrendRows.value.map(r
   Number(row.open_requests || 0)
 ))));
 const companyTicketRows = computed(() => {
-  const rows = mergeCompanyTicketRows([
-    ...(analytics.value.companyTickets?.[selectedStatsPeriod.value] || []),
-    ...visibleCompanyInfoRows.value.map(company => ({
-      company_id: company.id || company.company_id || '',
-      name: company.name || company.company_name || 'Kompaniya',
-      total_requests: 0,
-      closed_requests: 0,
-      open_requests: 0,
-      message_count: 0,
-      ticket_like_messages: 0,
-      close_rate: 0
-    }))
-  ]);
-  return rows
-    .filter(row => !isUnassignedCompanyTicketRow(row))
-    .filter(row => Number(row.total_requests || 0) > 0)
-    .sort((a, b) => b.total_requests - a.total_requests || b.closed_requests - a.closed_requests || a.name.localeCompare(b.name))
-    .slice(0, 30);
+  const rows = (analytics.value.companyTickets?.[selectedStatsPeriod.value] || [])
+    .map(normalizeCompanyTicketRow)
+    .filter(row => Number(row.total_requests || 0) > 0);
+  return rows.sort((a, b) => {
+    if (a.is_unassigned) return 1;
+    if (b.is_unassigned) return -1;
+    return b.total_requests - a.total_requests
+      || b.closed_requests - a.closed_requests
+      || String(a.name || '').localeCompare(String(b.name || ''));
+  });
 });
+const companyTicketTotals = computed(() => companyTicketRows.value.reduce((totals, row) => ({
+  total: totals.total + Number(row.total_requests || 0),
+  closed: totals.closed + Number(row.closed_requests || 0),
+  open: totals.open + Number(row.open_requests || 0)
+}), { total: 0, closed: 0, open: 0 }));
 const companyTicketMax = computed(() => Math.max(1, ...companyTicketRows.value.map(row => Number(row.total_requests || 0))));
 const supportSummaryCards = computed(() => {
   const stats = selectedPeriodStats.value;
@@ -4257,12 +4261,20 @@ const metricChatTitle = computed(() => {
   const chat = metricChatDetail.value.chat;
   return chat ? chat.title || chat.username || chat.chat_id || 'Chat' : 'Chat tanlanmagan';
 });
+function countTicketListRows(rows = [], { source = 'all', status = 'all' } = {}) {
+  return rows.filter(row => ticketMatchesSource(row, source) && ticketMatchesStatus(row, status)).length;
+}
+
 const ticketListCounts = computed(() => {
   const rows = ticketList.value.rows || [];
   return {
     all: rows.length,
-    open: rows.filter(row => row.status === 'open').length,
-    closed: rows.filter(row => row.status === 'closed').length
+    open: countTicketListRows(rows, { status: 'open' }),
+    closed: countTicketListRows(rows, { status: 'closed' }),
+    group: countTicketListRows(rows, { source: 'group' }),
+    group_open: countTicketListRows(rows, { source: 'group', status: 'open' }),
+    group_closed: countTicketListRows(rows, { source: 'group', status: 'closed' }),
+    private: countTicketListRows(rows, { source: 'private' })
   };
 });
 const ticketListSupportOptions = computed(() => {
