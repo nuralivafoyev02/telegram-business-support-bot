@@ -2535,6 +2535,40 @@ async function testTelegramFileUsesPlayableMimeTypeAndFilename() {
   }
 }
 
+async function testTelegramFileRejectsLargeVideoBeforeDownload() {
+  const originalFetch = global.fetch;
+  let downloadCalled = false;
+
+  global.fetch = async (url) => {
+    if (/\/getFile$/.test(url)) {
+      return {
+        ok: true,
+        json: async () => ({
+          ok: true,
+          result: {
+            file_id: 'big-video',
+            file_path: 'videos/file_99.mp4',
+            file_size: 9 * 1024 * 1024
+          }
+        })
+      };
+    }
+    downloadCalled = true;
+    throw new Error('download should not run');
+  };
+
+  try {
+    const result = await callAdmin('telegramFile', {
+      query: { file_id: 'big-video', mime_type: 'video/mp4', file_name: 'clip.mp4' }
+    });
+    assert.strictEqual(result.status, 400);
+    assert.match(result.payload.error, /juda katta|4 MB/i);
+    assert.strictEqual(downloadCalled, false);
+  } finally {
+    global.fetch = originalFetch;
+  }
+}
+
 async function testSyncTelegramUpdatesDeletesActiveWebhookThenProcessesUpdates() {
   const originalSelect = supabase.select;
   const originalInsert = supabase.insert;
@@ -4073,6 +4107,7 @@ async function run() {
   await testSetWebhookRejectsCompanyInfoUrl();
   await testSetWebhookPrefersExplicitAppUrl();
   await testTelegramFileUsesPlayableMimeTypeAndFilename();
+  await testTelegramFileRejectsLargeVideoBeforeDownload();
   await testSyncTelegramUpdatesDeletesActiveWebhookThenProcessesUpdates();
   await testSyncTelegramUpdatesIgnoresStaleOffsetAndAcknowledgesFetchedUpdates();
   await testSendToChatStoresOutgoingAdminMessage();

@@ -1,7 +1,11 @@
 'use strict';
 
+const { Readable } = require('stream');
+const { pipeline } = require('stream/promises');
 const supabase = require('../lib/supabase');
 const { bestPhotoSize, extractMessageMedia } = require('../lib/message-media');
+
+const TELEGRAM_FILE_PROXY_MAX_BYTES = 4 * 1024 * 1024;
 const { allowCors, sendJson, readBody, getQuery } = require('../lib/http');
 const { login, requireAdmin, hashPassword } = require('../lib/auth');
 const { sendMessage, sendBusinessMessage, getWebhookInfo, setWebhook, deleteWebhook, getUpdates, getFile, getUserProfilePhotos, downloadFile, tgUserName, escapeHtml } = require('../lib/telegram');
@@ -3731,6 +3735,22 @@ function contentDispositionFor(contentType = '', fileName = '') {
   return `${disposition}; filename="${asciiName}"; filename*=UTF-8''${encodeURIComponent(name)}`;
 }
 
+function formatTelegramFileSizeMb(bytes = 0) {
+  const value = Number(bytes || 0);
+  if (!value) return '';
+  return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function telegramFileTooLargeError(file = {}, requestedType = '') {
+  const sizeLabel = formatTelegramFileSizeMb(file.file_size);
+  const kind = String(requestedType || '').startsWith('video/') || /\.(mp4|mov|webm|mkv)$/i.test(file.file_path || '')
+    ? 'Video'
+    : 'Fayl';
+  return new Error(sizeLabel
+    ? `${kind} juda katta (${sizeLabel}). Panelda ko‘rish limiti 4 MB. Telegram guruhida oching.`
+    : `${kind} juda katta. Panelda ko‘rish limiti 4 MB. Telegram guruhida oching.`);
+}
+
 async function sendTelegramFile(query, res) {
   const fileId = String(query.file_id || '').trim();
   if (!fileId) throw new Error('file_id majburiy');
@@ -3744,18 +3764,38 @@ async function sendTelegramFile(query, res) {
   }
   if (!file || !file.file_path) throw new Error('Telegram fayl topilmadi');
 
-  const response = await downloadFile(file.file_path);
-  const buffer = Buffer.from(await response.arrayBuffer());
   const requestedType = safeMimeType(query.mime_type);
+  const fileSize = Number(file.file_size || 0);
+  if (fileSize > TELEGRAM_FILE_PROXY_MAX_BYTES) {
+    throw telegramFileTooLargeError(file, requestedType);
+  }
+
+  const response = await downloadFile(file.file_path);
+  if (!response.ok) {
+    throw new Error(`Telegram fayl yuklanmadi: ${response.statusText || response.status}`);
+  }
+
   const pathType = contentTypeFromPath(query.file_name || file.file_path);
   const upstreamType = safeMimeType(response.headers.get('content-type'));
   const contentType = isGenericContentType(upstreamType) ? (requestedType || pathType || upstreamType) : upstreamType;
   const fileName = query.file_name || safeHeaderFileName(file.file_path);
 
   res.statusCode = 200;
-  res.setHeader('Content-Type', contentType);
+  res.setHeader('Content-Type', contentType || 'application/octet-stream');
   res.setHeader('Content-Disposition', contentDispositionFor(contentType, fileName));
   res.setHeader('Cache-Control', 'private, max-age=86400');
+  const contentLength = response.headers.get('content-length');
+  if (contentLength) res.setHeader('Content-Length', contentLength);
+
+  if (response.body && Readable.fromWeb) {
+    await pipeline(Readable.fromWeb(response.body), res);
+    return;
+  }
+
+  const buffer = Buffer.from(await response.arrayBuffer());
+  if (buffer.length > TELEGRAM_FILE_PROXY_MAX_BYTES) {
+    throw telegramFileTooLargeError({ ...file, file_size: buffer.length }, requestedType);
+  }
   res.setHeader('Content-Length', String(buffer.length));
   res.end(buffer);
 }

@@ -1453,7 +1453,9 @@
                             <video v-else-if="isVideoMedia(message.media) && mediaUrl(message.media)"
                               class="chat-media-video" :src="mediaUrl(message.media)" controls playsinline></video>
                             <button v-else-if="isVideoMedia(message.media)" type="button"
-                              class="chat-media-placeholder chat-media-open" @click="retryMediaLoad(message.media)">{{
+                              class="chat-media-placeholder chat-media-open"
+                              :title="mediaErrors[message.media.file_id] || undefined"
+                              @click="retryMediaLoad(message.media)">{{
                                 mediaPlaceholder(message.media) }}</button>
                             <template v-else-if="isAudioMedia(message.media)">
                               <audio v-if="mediaUrl(message.media)" class="chat-media-audio"
@@ -1646,7 +1648,9 @@
                             <video v-else-if="isVideoMedia(message.media) && mediaUrl(message.media)"
                               class="chat-media-video" :src="mediaUrl(message.media)" controls playsinline></video>
                             <button v-else-if="isVideoMedia(message.media)" type="button"
-                              class="chat-media-placeholder chat-media-open" @click="retryMediaLoad(message.media)">{{
+                              class="chat-media-placeholder chat-media-open"
+                              :title="mediaErrors[message.media.file_id] || undefined"
+                              @click="retryMediaLoad(message.media)">{{
                                 mediaPlaceholder(message.media) }}</button>
                             <template v-else-if="isAudioMedia(message.media)">
                               <audio v-if="mediaUrl(message.media)" class="chat-media-audio"
@@ -1933,7 +1937,9 @@
                             <video v-else-if="isVideoMedia(message.media) && mediaUrl(message.media)"
                               class="chat-media-video" :src="mediaUrl(message.media)" controls playsinline></video>
                             <button v-else-if="isVideoMedia(message.media)" type="button"
-                              class="chat-media-placeholder chat-media-open" @click="retryMediaLoad(message.media)">{{
+                              class="chat-media-placeholder chat-media-open"
+                              :title="mediaErrors[message.media.file_id] || undefined"
+                              @click="retryMediaLoad(message.media)">{{
                                 mediaPlaceholder(message.media) }}</button>
                             <template v-else-if="isAudioMedia(message.media)">
                               <audio v-if="mediaUrl(message.media)" class="chat-media-audio"
@@ -2158,7 +2164,9 @@
                       <video v-else-if="isVideoMedia(message.media) && mediaUrl(message.media)" class="chat-media-video"
                         :src="mediaUrl(message.media)" controls playsinline></video>
                       <button v-else-if="isVideoMedia(message.media)" type="button"
-                        class="chat-media-placeholder chat-media-open" @click="retryMediaLoad(message.media)">{{
+                        class="chat-media-placeholder chat-media-open"
+                        :title="mediaErrors[message.media.file_id] || undefined"
+                        @click="retryMediaLoad(message.media)">{{
                           mediaPlaceholder(message.media) }}</button>
                       <template v-else-if="isAudioMedia(message.media)">
                         <audio v-if="mediaUrl(message.media)" class="chat-media-audio" :src="mediaUrl(message.media)"
@@ -4846,7 +4854,9 @@ function mediaPlaceholder(media) {
   };
   const baseLabel = labels[media.kind] || 'Fayl';
   if (mediaErrors.value[media.file_id]) {
-    return `${baseLabel} (Yuklab bo‘lmadi)`;
+    const detail = String(mediaErrors.value[media.file_id] || '').trim();
+    if (detail.length > 72) return `${baseLabel} (Yuklab bo‘lmadi)`;
+    return `${baseLabel} (${detail})`;
   }
   if (mediaLoading.value[media.file_id]) {
     return `${baseLabel} yuklanmoqda...`;
