@@ -194,11 +194,13 @@ function weekdayLabel(dateKey) {
 function currentPeriodKeys(now = new Date()) {
   const today = tashkentDateKey(now);
   const { year, month } = tashkentDateParts(now);
+  const monthStart = addDaysToDateKey(today, -29);
 
   return {
     today,
     weekStart: addDaysToDateKey(today, -6),
-    month: `${year}-${month}`
+    month: `${year}-${month}`,
+    monthStart
   };
 }
 
@@ -225,11 +227,17 @@ function previousPeriodKeys(now = new Date()) {
   prevMonthDate.setUTCMonth(prevMonthDate.getUTCMonth() - 1);
   const { year: prevYear, month: prevMonth } = tashkentDateParts(prevMonthDate);
 
+  const monthStart = addDaysToDateKey(today, -29);
+  const prevMonthEnd = addDaysToDateKey(monthStart, -1);
+  const prevMonthStart = addDaysToDateKey(monthStart, -30);
+
   return {
     yesterday,
     prevWeekStart,
     prevWeekEnd,
-    prevMonth: `${prevYear}-${prevMonth}`
+    prevMonth: `${prevYear}-${prevMonth}`,
+    prevMonthStart,
+    prevMonthEnd
   };
 }
 
@@ -272,7 +280,9 @@ function inDatePeriod(value, periodKey, keys, isPrevious = false) {
       : (dateKey >= keys.weekStart && dateKey <= keys.today);
   }
   if (periodKey === 'month') {
-    return isPrevious ? dateKey.startsWith(keys.prevMonth) : dateKey.startsWith(keys.month);
+    return isPrevious
+      ? (dateKey >= keys.prevMonthStart && dateKey <= keys.prevMonthEnd)
+      : (dateKey >= keys.monthStart && dateKey <= keys.today);
   }
   if (periodKey === 'custom') {
     if (isPrevious) {
@@ -697,7 +707,7 @@ function buildResponseTimeTrend(requests, periodKey, keys, messages = [], employ
 function periodTrendDateKeys(requests, periodKey, keys) {
   if (periodKey === 'today') return [keys.today];
   if (periodKey === 'week') return dateKeyRange(keys.weekStart, keys.today, 7);
-  if (periodKey === 'month') return dateKeyRange(`${keys.month}-01`, keys.today, 31);
+  if (periodKey === 'month') return dateKeyRange(keys.monthStart, keys.today, 31);
   if (periodKey === 'custom' && keys.customStart && keys.customEnd) return dateKeyRange(keys.customStart, keys.customEnd, 62);
 
   const dateKeys = [...new Set(requests.filter(request => request.created_at).map(request => tashkentDateKey(request.created_at)).filter(Boolean))]
@@ -986,16 +996,15 @@ async function sendGroupAuditStats() {
 
 function requestedAnalyticsPeriods(query = {}, customPeriod = null) {
   if (customPeriod) return [['custom', customPeriod.label || 'Ixtiyoriy']];
-  if (query.period) {
-    const requested = normalizePeriodKey(query.period);
-    return [[requested, { today: 'Bugun', week: 'Hafta', month: 'Oy', all: 'Jami' }[requested] || 'Hafta']];
-  }
-  return [
+  const standard = [
     ['today', 'Bugun'],
-    ['week', 'Hafta'],
-    ['month', 'Oy'],
-    ['all', 'Jami']
+    ['week', '7 kun'],
+    ['month', '1 oy']
   ];
+  if (normalizePeriodKey(query.period || '') === 'all') {
+    return [...standard, ['all', 'Jami']];
+  }
+  return standard;
 }
 
 function analyticsWindow(periods = [], keys = {}) {
@@ -1013,7 +1022,7 @@ function analyticsWindow(periods = [], keys = {}) {
     ends.push(keys.today);
   }
   if (periodKeys.includes('month')) {
-    starts.push(`${keys.prevMonth}-01`);
+    starts.push(keys.prevMonthStart);
     ends.push(keys.today);
   }
   if (periodKeys.includes('custom') && keys.customStart && keys.customEnd) {
@@ -1111,8 +1120,8 @@ async function getDashboardAnalytics(query = {}) {
       currentLabel = `${shortDateLabel(keys.weekStart)} - ${shortDateLabel(keys.today)}`;
       prevLabel = `${shortDateLabel(keys.prevWeekStart)} - ${shortDateLabel(keys.prevWeekEnd)}`;
     } else if (key === 'month') {
-      currentLabel = keys.month;
-      prevLabel = keys.prevMonth;
+      currentLabel = `${shortDateLabel(keys.monthStart)} - ${shortDateLabel(keys.today)}`;
+      prevLabel = `${shortDateLabel(keys.prevMonthStart)} - ${shortDateLabel(keys.prevMonthEnd)}`;
     } else if (key === 'custom' && customPeriod) {
       currentLabel = `${shortDateLabel(customPeriod.start)} - ${shortDateLabel(customPeriod.end)}`;
       prevLabel = prevCustomPeriod ? `${shortDateLabel(prevCustomPeriod.start)} - ${shortDateLabel(prevCustomPeriod.end)}` : '';

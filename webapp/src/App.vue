@@ -2706,7 +2706,8 @@ const ticketTrendRows = computed(() => (analytics.value.ticketAnswerTrend?.[sele
     open_requests: Number(row.open_requests || 0),
     sla: Number(row.sla || row.close_rate || 0)
   }))
-  .filter(row => row.date_key || row.total_requests || row.closed_requests || row.open_requests));
+  .filter(row => row.date_key)
+  .filter(row => selectedStatsPeriod.value !== 'month' || row.total_requests || row.closed_requests || row.open_requests));
 const ticketTrendMax = computed(() => Math.max(1, ...ticketTrendRows.value.map(row => Math.max(
   Number(row.total_requests || 0),
   Number(row.closed_requests || 0),
@@ -2728,7 +2729,7 @@ const companyTicketRows = computed(() => {
   ]);
   return rows
     .filter(row => !isUnassignedCompanyTicketRow(row))
-    .filter(row => Number(row.total_requests || 0) > 0 || !!row.company_id)
+    .filter(row => Number(row.total_requests || 0) > 0)
     .sort((a, b) => b.total_requests - a.total_requests || b.closed_requests - a.closed_requests || a.name.localeCompare(b.name))
     .slice(0, 30);
 });
@@ -2802,8 +2803,9 @@ function isInSelectedPeriodDate(dateString) {
     return dateKey >= weekStart && dateKey <= todayKey;
   }
   if (period === 'month') {
-    const { year, month } = tashkentDateParts(new Date());
-    return dateKey.startsWith(`${year}-${month}`);
+    const todayKey = tashkentDateKey(new Date());
+    const monthStart = addDaysToDateKey(todayKey, -29);
+    return dateKey >= monthStart && dateKey <= todayKey;
   }
   if (period === 'custom') {
     const startKey = normalizeDateKey(customPeriodForm.appliedStart);
