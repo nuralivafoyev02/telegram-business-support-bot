@@ -5905,7 +5905,7 @@ async function openEmployeeCompanies(row = {}) {
       const payloads = await Promise.all(managers.map(manager => api.employeeActivity({
         employee_id: manager.id || manager.employee_id || '',
         tg_user_id: manager.tg_user_id || '',
-        period: selectedStatsPeriod.value
+        ...dashboardPeriodQuery()
       })));
       if (loadToken !== employeeProfileLoadToken) return;
       employeeProfile.value = buildManagerAggregateProfile({
@@ -5938,7 +5938,7 @@ async function openEmployeeCompanies(row = {}) {
     const data = await api.employeeActivity({
       employee_id: employeeId,
       tg_user_id: tgUserId,
-      period: selectedStatsPeriod.value
+      ...dashboardPeriodQuery()
     });
     if (loadToken !== employeeProfileLoadToken) return;
     const summary = data.summary || {};
@@ -6034,7 +6034,7 @@ async function openEmployeeActivity(row = {}) {
     const data = await api.employeeActivity({
       employee_id: employeeId,
       tg_user_id: tgUserId,
-      period: selectedStatsPeriod.value
+      ...dashboardPeriodQuery()
     });
     employeeActivity.value = {
       employee: data.employee || employee,

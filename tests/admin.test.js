@@ -3206,7 +3206,7 @@ async function testEmployeeActivityUsesRequestCreatedAtForPeriod() {
       closed_by_employee_id: 'emp-1',
       closed_by_tg_id: 777,
       closed_by_name: 'Mirshod',
-      created_at: '2026-04-29T23:30:00.000Z',
+      created_at: '2026-04-28T12:00:00.000Z',
       closed_at: '2026-04-30T08:05:00.000Z'
     }
   ];
@@ -3233,6 +3233,61 @@ async function testEmployeeActivityUsesRequestCreatedAtForPeriod() {
     assert.strictEqual(result.payload.data.summary.closed_requests, 0);
     assert.strictEqual(result.payload.data.closed_requests.length, 0);
     assert.strictEqual(result.payload.data.groups.length, 0);
+  } finally {
+    supabase.select = originalSelect;
+  }
+}
+
+async function testEmployeeActivityCustomPeriodIncludesCreatedInRange() {
+  const originalSelect = supabase.select;
+  const employees = [
+    { id: 'emp-1', tg_user_id: 777, full_name: 'Mirshod', username: 'mirshod', is_active: true }
+  ];
+  const requests = [
+    {
+      id: 'r-in-range',
+      source_type: 'group',
+      chat_id: -1007,
+      customer_name: 'Mijoz',
+      initial_text: 'Ticket',
+      status: 'closed',
+      closed_by_employee_id: 'emp-1',
+      closed_by_tg_id: 777,
+      closed_by_name: 'Mirshod',
+      created_at: '2026-05-20T10:00:00.000Z',
+      closed_at: '2026-05-20T11:00:00.000Z'
+    }
+  ];
+
+  supabase.select = async (table, params = {}) => {
+    if (table === 'employees') return employees;
+    if (table === 'tg_users') return [];
+    if (table === 'tg_chats') return [{ chat_id: -1007, title: 'Support guruhi', source_type: 'group' }];
+    if (table === 'support_requests') {
+      if (params.status === 'eq.open') return [];
+      if (params.closed_by_employee_id === 'eq.emp-1') return requests;
+      if (params.closed_by_tg_id === 'eq.777') return [];
+      return requests;
+    }
+    if (table === 'messages' || table === 'request_events') return [];
+    throw new Error(`Unexpected table ${table}`);
+  };
+
+  try {
+    const result = await callAdmin('employeeActivity', {
+      query: {
+        employee_id: 'emp-1',
+        period: 'custom',
+        start_date: '2026-05-18',
+        end_date: '2026-06-01'
+      }
+    });
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.data.period, 'custom');
+    assert.strictEqual(result.payload.data.summary.closed_requests, 1);
+    assert.strictEqual(result.payload.data.closed_requests.length, 1);
+    assert.strictEqual(result.payload.data.groups.length, 1);
+    assert.strictEqual(result.payload.data.groups[0].closed_count, 1);
   } finally {
     supabase.select = originalSelect;
   }
@@ -4121,6 +4176,7 @@ async function run() {
   await testEmployeeActivityIsolatesSelectedEmployeeChats();
   await testEmployeeActivitySeparatesBusinessConnections();
   await testEmployeeActivityUsesRequestCreatedAtForPeriod();
+  await testEmployeeActivityCustomPeriodIncludesCreatedInRange();
   await testLogNotificationsCanSendSelectedLevels();
   await testGroupMessageAuditSettingCanBeSaved();
   await testGroupMessageAuditChannelRequiresDestination();

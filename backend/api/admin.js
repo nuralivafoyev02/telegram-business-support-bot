@@ -3199,11 +3199,14 @@ function uniqueRowsBy(rows = [], keyFn) {
 
 function normalizePeriodKey(value = '') {
   const key = String(value || 'today').trim();
-  return ['today', 'week', 'month', 'all'].includes(key) ? key : 'today';
+  return ['today', 'week', 'month', 'all', 'custom'].includes(key) ? key : 'today';
 }
 
 async function getEmployeeActivity(query = {}) {
-  const periodKey = normalizePeriodKey(query.period);
+  const periodContext = queryPeriodContext(query);
+  const periodKey = periodContext.period;
+  const customPeriod = normalizeCustomPeriod(query);
+  const prevCustomPeriod = getPreviousCustomPeriod(customPeriod);
   const employeeId = String(query.employee_id || query.id || '').trim();
   const tgUserId = query.tg_user_id ? normalizeTelegramId(query.tg_user_id) : null;
 
@@ -3230,7 +3233,14 @@ async function getEmployeeActivity(query = {}) {
     telegram_is_premium: premiumByTgId.get(telegramIdKey(employee.tg_user_id)) === true
   };
 
-  const keys = currentPeriodKeys();
+  const keys = {
+    ...currentPeriodKeys(),
+    ...previousPeriodKeys(),
+    customStart: periodContext.keys.customStart || '',
+    customEnd: periodContext.keys.customEnd || '',
+    prevCustomStart: prevCustomPeriod?.start || '',
+    prevCustomEnd: prevCustomPeriod?.end || ''
+  };
   const requestSelect = 'id,source_type,chat_id,customer_tg_id,customer_name,customer_username,initial_message_id,initial_text,status,business_connection_id,closed_at,closed_by_employee_id,closed_by_tg_id,closed_by_name,done_message_id,created_at';
   const [requestsByEmployeeId, requestsByTgId, employeeMessagesById, employeeMessagesByTg, openRequestCandidates] = await Promise.all([
     selectPaged('support_requests', {
