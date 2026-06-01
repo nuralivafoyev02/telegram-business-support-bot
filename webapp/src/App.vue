@@ -2894,6 +2894,10 @@ function isManagerEmployee(row = {}) {
   return String(row.role || '').trim().toLowerCase() === 'manager';
 }
 
+function isManagerPerformanceRow(row = {}) {
+  return row.is_manager_group === true || isManagerEmployee(row);
+}
+
 function isUnassignedRankingRow(row = {}) {
   const name = String(row.full_name || row.name || '').trim().toLowerCase();
   return row.is_unassigned === true
@@ -3048,10 +3052,11 @@ const supportPerformanceRows = computed(() => {
       openSummary?.chat_keys?.size || 0
     );
 
+    const isManager = isManagerEmployee({ role: resolvedRole });
     const closed = closedRaw;
-    const open = openRaw;
-    const total = totalRaw;
-    const sla = slaRaw;
+    const open = isManager ? 0 : openRaw;
+    const total = isManager ? closedRaw : totalRaw;
+    const sla = isManager ? (closedRaw > 0 ? 100 : 0) : slaRaw;
     const avg = avgRaw;
     const handledChats = handledChatsRaw;
 
@@ -3077,10 +3082,10 @@ const supportPerformanceRows = computed(() => {
       close_rate: sla,
       sla,
       prev_closed_requests: periodRow ? Number(periodRow.prev_closed_requests || 0) : 0,
-      prev_open_requests: periodRow ? Number(periodRow.prev_open_requests || 0) : 0,
+      prev_open_requests: isManager ? 0 : (periodRow ? Number(periodRow.prev_open_requests || 0) : 0),
       prev_company_total: periodRow ? Number(periodRow.prev_company_total || 0) : 0,
       prev_avg_close_minutes: periodRow ? Number(periodRow.prev_avg_close_minutes || 0) : 0,
-      prev_close_rate: periodRow ? Number(periodRow.prev_close_rate || 0) : 0,
+      prev_close_rate: isManager ? (Number(periodRow?.prev_closed_requests || 0) > 0 ? 100 : 0) : (periodRow ? Number(periodRow.prev_close_rate || 0) : 0),
       grade
     };
   });
@@ -3128,12 +3133,14 @@ const supportPerformanceRows = computed(() => {
   );
   const allManagerRows = registeredManagers.map(manager => {
     const stats = managerStatsByKey.get(supportRowKey(manager)) || {};
-    return { ...manager, ...stats, role: 'manager' };
+    return { ...manager, ...stats, role: 'manager', open_requests: 0, prev_open_requests: 0 };
   });
   if (allManagerRows.length) {
     const closedRequests = allManagerRows.reduce((sum, row) => sum + Number(row.closed_requests || 0), 0);
-    const openRequests = allManagerRows.reduce((sum, row) => sum + Number(row.open_requests || 0), 0);
-    const totalRequests = closedRequests + openRequests;
+    const openRequests = 0;
+    const totalRequests = closedRequests;
+    const managerSla = closedRequests > 0 ? 100 : 0;
+    const prevClosedRequests = allManagerRows.reduce((sum, row) => sum + Number(row.prev_closed_requests || 0), 0);
     rows.push({
       key: 'manager:all',
       id: '',
@@ -3153,19 +3160,14 @@ const supportPerformanceRows = computed(() => {
       assigned_company_count: allManagerRows.length,
       company_total: allManagerRows.length,
       avg_close_minutes: weightedAverageBy(allManagerRows, 'avg_close_minutes', 'closed_requests'),
-      close_rate: totalRequests > 0 ? (closedRequests / totalRequests) * 100 : 0,
-      sla: totalRequests > 0 ? (closedRequests / totalRequests) * 100 : 0,
-      prev_closed_requests: allManagerRows.reduce((sum, row) => sum + Number(row.prev_closed_requests || 0), 0),
-      prev_open_requests: allManagerRows.reduce((sum, row) => sum + Number(row.prev_open_requests || 0), 0),
+      close_rate: managerSla,
+      sla: managerSla,
+      prev_closed_requests: prevClosedRequests,
+      prev_open_requests: 0,
       prev_avg_close_minutes: weightedAverageBy(allManagerRows, 'prev_avg_close_minutes', 'prev_closed_requests'),
-      prev_close_rate: (() => {
-        const prevClosed = allManagerRows.reduce((sum, row) => sum + Number(row.prev_closed_requests || 0), 0);
-        const prevOpen = allManagerRows.reduce((sum, row) => sum + Number(row.prev_open_requests || 0), 0);
-        const prevTotal = prevClosed + prevOpen;
-        return prevTotal > 0 ? (prevClosed / prevTotal) * 100 : 0;
-      })(),
+      prev_close_rate: prevClosedRequests > 0 ? 100 : 0,
       grade: performanceGrade(
-        totalRequests > 0 ? (closedRequests / totalRequests) * 100 : 0,
+        managerSla,
         weightedAverageBy(allManagerRows, 'avg_close_minutes', 'closed_requests')
       )
     });
@@ -5671,16 +5673,15 @@ function buildManagerAggregateProfile(row = {}, managers = [], payloads = []) {
   const groups = mergeManagerActivityGroups(payloads.flatMap(payload => Array.isArray(payload.groups) ? payload.groups : []));
   const summaries = payloads.map(payload => payload.summary || {});
   const closedRequests = summaries.reduce((sum, summary) => sum + Number(summary.closed_requests || 0), 0);
-  const openRequests = summaries.reduce((sum, summary) => sum + Number(summary.open_requests || 0), 0);
-  const totalRequests = closedRequests + openRequests;
+  const openRequests = 0;
+  const totalRequests = closedRequests;
+  const managerSla = closedRequests > 0 ? 100 : 0;
   const handledChats = new Set(groups.map(group => employeeProfileChatKey(group)).filter(Boolean)).size;
   const messageCount = summaries.reduce((sum, summary) => sum + Number(summary.message_count || 0), 0);
   const customerCount = summaries.reduce((sum, summary) => sum + Number(summary.customer_count || 0), 0);
   const memberStats = managers.map((manager, index) => {
     const summary = summaries[index] || {};
     const closed = Number(summary.closed_requests || 0);
-    const open = Number(summary.open_requests || 0);
-    const total = closed + open;
     return {
       ...manager,
       id: manager.id || manager.employee_id || '',
@@ -5688,12 +5689,12 @@ function buildManagerAggregateProfile(row = {}, managers = [], payloads = []) {
       full_name: manager.full_name || manager.username || 'Menejer',
       role: 'manager',
       closed_requests: closed,
-      open_requests: open,
-      total_requests: total,
+      open_requests: 0,
+      total_requests: closed,
       handled_chats: Number(summary.handled_chats || 0),
       avg_close_minutes: Number(summary.avg_close_minutes || 0),
-      sla: total > 0 ? (closed / total) * 100 : 0,
-      close_rate: total > 0 ? (closed / total) * 100 : 0
+      sla: closed > 0 ? 100 : 0,
+      close_rate: closed > 0 ? 100 : 0
     };
   });
   return {
@@ -5710,8 +5711,8 @@ function buildManagerAggregateProfile(row = {}, managers = [], payloads = []) {
       open_requests: openRequests,
       company_total: managers.length,
       avg_close_minutes: weightedAverageBy(summaries, 'avg_close_minutes', 'closed_requests'),
-      close_rate: totalRequests > 0 ? (closedRequests / totalRequests) * 100 : 0,
-      sla: totalRequests > 0 ? (closedRequests / totalRequests) * 100 : 0,
+      close_rate: managerSla,
+      sla: managerSla,
       handled_chats: handledChats,
       message_count: messageCount,
       customer_count: customerCount
@@ -5811,7 +5812,11 @@ async function openEmployeeCompanies(row = {}) {
         period: selectedStatsPeriod.value
       })));
       if (loadToken !== employeeProfileLoadToken) return;
-      employeeProfile.value = buildManagerAggregateProfile(row, managers, payloads);
+      employeeProfile.value = buildManagerAggregateProfile({
+        ...row,
+        open_requests: 0,
+        prev_open_requests: 0
+      }, managers, payloads);
       await nextTick();
       const first = employeeProfileVisibleChats.value[0] || employeeProfileGroupChats.value[0];
       if (first) {
@@ -6260,10 +6265,13 @@ function employeeSummaryRows(kind = 'requests') {
   topSupportCards.value.forEach(row => {
     const key = employeeSummaryKey(row);
     const openSummary = key ? openMap.get(key) : null;
-    const openRequests = openSummary ? Number(openSummary.open_requests || 0) : Number(row.open_requests || 0);
+    const openRequests = isManagerPerformanceRow(row)
+      ? 0
+      : (openSummary ? Number(openSummary.open_requests || 0) : Number(row.open_requests || 0));
+    const closedRequests = Number(row.closed_requests || 0);
     rowMap.set(key || row.key || row.full_name, {
       ...row,
-      total_requests: Number(row.closed_requests || 0) + openRequests,
+      total_requests: isManagerPerformanceRow(row) ? closedRequests : closedRequests + openRequests,
       open_requests: openRequests,
       handled_chats: Math.max(Number(row.handled_chats || 0), openSummary?.chat_keys?.size || 0)
     });
