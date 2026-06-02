@@ -6156,7 +6156,7 @@ async function scrollThreadToEnd(threadRef) {
 
   setThreadScrollToEnd(thread);
 
-  const attempts = [10, 50, 100, 300, 600, 1000, 1500, 2500, 4000];
+  const attempts = [10, 50, 100, 300, 600, 1000, 1500, 2500, 4000, 6000];
   attempts.forEach(ms => {
     setTimeout(() => {
       const currentThread = threadRef.value;
@@ -6168,19 +6168,29 @@ async function scrollThreadToEnd(threadRef) {
     requestAnimationFrame(() => setThreadScrollToEnd(thread));
   }
 
-  if (typeof ResizeObserver === 'function') {
-    let stop = false;
-    let lastHeight = thread.scrollHeight;
-    const observer = new ResizeObserver(() => {
+  let stopped = false;
+  const stop = () => { stopped = true; };
+  setTimeout(stop, 8000);
+
+  if (typeof MutationObserver === 'function') {
+    const mutationObserver = new MutationObserver(() => {
       const current = threadRef.value;
-      if (!current || stop) return;
-      if (current.scrollHeight === lastHeight) return;
-      lastHeight = current.scrollHeight;
+      if (!current || stopped) return;
       setThreadScrollToEnd(current);
     });
-    observer.observe(thread);
-    setTimeout(() => { stop = true; observer.disconnect(); }, 6000);
+    mutationObserver.observe(thread, { childList: true, subtree: true, attributes: true });
+    setTimeout(() => mutationObserver.disconnect(), 8000);
   }
+
+  thread.querySelectorAll('img, video, audio').forEach(el => {
+    const handler = () => {
+      const current = threadRef.value;
+      if (current && !stopped) setThreadScrollToEnd(current);
+    };
+    el.addEventListener('load', handler, { once: true });
+    el.addEventListener('loadedmetadata', handler, { once: true });
+    el.addEventListener('canplay', handler, { once: true });
+  });
 }
 
 async function scrollMetricChatToEnd() {
