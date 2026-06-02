@@ -250,7 +250,7 @@
 
               <DataTable :columns="supportPerformanceColumns" :rows="topSupportCards"
                 empty="Hozircha natija ma’lumoti yo‘q" :on-cell-action="handleTableCellAction"
-                :row-class="supportPerformanceRowClass" :page-size="12">
+                :row-class="supportPerformanceRowClass" :page-size="5">
                 <template #rank="{ row }">
                   <b class="rank-number">{{ row.rank }}</b>
                 </template>
