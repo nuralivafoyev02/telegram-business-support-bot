@@ -1478,15 +1478,16 @@
                                 rel="noopener noreferrer">{{ mediaOpenLabel(message.media) }}</a>
                             </template>
                             <a v-else-if="isDocumentMedia(message.media) && mediaUrl(message.media)"
-                              class="chat-media-file" :href="mediaUrl(message.media)" target="_blank"
+                              class="chat-media-file" :href="mediaUrl(message.media)"
+                              :download="mediaDownloadName(message.media)" target="_blank"
                               rel="noopener noreferrer">{{ mediaPlaceholder(message.media) }}</a>
                             <div v-else class="chat-media-placeholder"
                               :class="{ sticker: message.media.kind === 'sticker' }">
                               {{ mediaPlaceholder(message.media) }}
                             </div>
                             <a v-if="showMediaOpenLink(message.media)" class="chat-media-link"
-                              :href="mediaUrl(message.media)" target="_blank" rel="noopener noreferrer">{{
-                                mediaOpenLabel(message.media) }}</a>
+                              :href="mediaUrl(message.media)" :download="mediaDownloadName(message.media)"
+                              target="_blank" rel="noopener noreferrer">{{ mediaOpenLabel(message.media) }}</a>
                             <a v-if="showTelegramOpenLink(message)" class="chat-media-link"
                               :href="telegramMessageLink(message)" target="_blank" rel="noopener noreferrer">Telegramda
                               ochish</a>
@@ -1681,15 +1682,16 @@
                                 rel="noopener noreferrer">{{ mediaOpenLabel(message.media) }}</a>
                             </template>
                             <a v-else-if="isDocumentMedia(message.media) && mediaUrl(message.media)"
-                              class="chat-media-file" :href="mediaUrl(message.media)" target="_blank"
+                              class="chat-media-file" :href="mediaUrl(message.media)"
+                              :download="mediaDownloadName(message.media)" target="_blank"
                               rel="noopener noreferrer">{{ mediaPlaceholder(message.media) }}</a>
                             <div v-else class="chat-media-placeholder"
                               :class="{ sticker: message.media.kind === 'sticker' }">
                               {{ mediaPlaceholder(message.media) }}
                             </div>
                             <a v-if="showMediaOpenLink(message.media)" class="chat-media-link"
-                              :href="mediaUrl(message.media)" target="_blank" rel="noopener noreferrer">{{
-                                mediaOpenLabel(message.media) }}</a>
+                              :href="mediaUrl(message.media)" :download="mediaDownloadName(message.media)"
+                              target="_blank" rel="noopener noreferrer">{{ mediaOpenLabel(message.media) }}</a>
                             <a v-if="showTelegramOpenLink(message)" class="chat-media-link"
                               :href="telegramMessageLink(message)" target="_blank" rel="noopener noreferrer">Telegramda
                               ochish</a>
@@ -1978,7 +1980,8 @@
                                 rel="noopener noreferrer">{{ mediaOpenLabel(message.media) }}</a>
                             </template>
                             <a v-else-if="isDocumentMedia(message.media) && mediaUrl(message.media)"
-                              class="chat-media-file" :href="mediaUrl(message.media)" target="_blank"
+                              class="chat-media-file" :href="mediaUrl(message.media)"
+                              :download="mediaDownloadName(message.media)" target="_blank"
                               rel="noopener noreferrer">{{ mediaPlaceholder(message.media) }}</a>
                             <div v-else class="chat-media-placeholder"
                               :class="{ sticker: message.media.kind === 'sticker' }"
@@ -1986,8 +1989,8 @@
                               {{ mediaPlaceholder(message.media) }}
                             </div>
                             <a v-if="showMediaOpenLink(message.media)" class="chat-media-link"
-                              :href="mediaUrl(message.media)" target="_blank" rel="noopener noreferrer">{{
-                                mediaOpenLabel(message.media) }}</a>
+                              :href="mediaUrl(message.media)" :download="mediaDownloadName(message.media)"
+                              target="_blank" rel="noopener noreferrer">{{ mediaOpenLabel(message.media) }}</a>
                             <a v-if="showTelegramOpenLink(message)" class="chat-media-link"
                               :href="telegramMessageLink(message)" target="_blank" rel="noopener noreferrer">Telegramda
                               ochish</a>
@@ -2213,15 +2216,15 @@
                           rel="noopener noreferrer">{{ mediaOpenLabel(message.media) }}</a>
                       </template>
                       <a v-else-if="isDocumentMedia(message.media) && mediaUrl(message.media)" class="chat-media-file"
-                        :href="mediaUrl(message.media)" target="_blank" rel="noopener noreferrer">{{
-                          mediaPlaceholder(message.media) }}</a>
+                        :href="mediaUrl(message.media)" :download="mediaDownloadName(message.media)" target="_blank"
+                        rel="noopener noreferrer">{{ mediaPlaceholder(message.media) }}</a>
                       <div v-else class="chat-media-placeholder" :class="{ sticker: message.media.kind === 'sticker' }"
                            :title="mediaErrors[message.media.file_id] || undefined">
                         {{ mediaPlaceholder(message.media) }}
                       </div>
                       <a v-if="showMediaOpenLink(message.media)" class="chat-media-link"
-                        :href="mediaUrl(message.media)" target="_blank" rel="noopener noreferrer">{{
-                          mediaOpenLabel(message.media) }}</a>
+                        :href="mediaUrl(message.media)" :download="mediaDownloadName(message.media)" target="_blank"
+                        rel="noopener noreferrer">{{ mediaOpenLabel(message.media) }}</a>
                       <a v-if="showTelegramOpenLink(message)" class="chat-media-link"
                         :href="telegramMessageLink(message)" target="_blank" rel="noopener noreferrer">Telegramda
                         ochish</a>
