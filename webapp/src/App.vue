@@ -6149,6 +6149,12 @@ function setThreadScrollToEnd(thread) {
   }
 }
 
+function isThreadNearBottom(thread, tolerance = 80) {
+  if (!thread) return true;
+  const distance = thread.scrollHeight - thread.scrollTop - thread.clientHeight;
+  return distance <= tolerance;
+}
+
 async function scrollThreadToEnd(threadRef) {
   await nextTick();
   const thread = threadRef.value;
@@ -6156,37 +6162,50 @@ async function scrollThreadToEnd(threadRef) {
 
   setThreadScrollToEnd(thread);
 
+  let userScrolledUp = false;
+  let lastScrollTop = thread.scrollTop;
+  const onUserScroll = () => {
+    const current = threadRef.value;
+    if (!current) return;
+    const goingUp = current.scrollTop < lastScrollTop - 4;
+    lastScrollTop = current.scrollTop;
+    if (goingUp && !isThreadNearBottom(current)) userScrolledUp = true;
+    else if (isThreadNearBottom(current)) userScrolledUp = false;
+  };
+  thread.addEventListener('scroll', onUserScroll, { passive: true });
+
+  const safeScroll = () => {
+    const current = threadRef.value;
+    if (!current || userScrolledUp) return;
+    setThreadScrollToEnd(current);
+    lastScrollTop = current.scrollTop;
+  };
+
   const attempts = [10, 50, 100, 300, 600, 1000, 1500, 2500, 4000, 6000];
-  attempts.forEach(ms => {
-    setTimeout(() => {
-      const currentThread = threadRef.value;
-      if (currentThread) setThreadScrollToEnd(currentThread);
-    }, ms);
-  });
+  attempts.forEach(ms => setTimeout(safeScroll, ms));
 
   if (typeof requestAnimationFrame === 'function') {
-    requestAnimationFrame(() => setThreadScrollToEnd(thread));
+    requestAnimationFrame(safeScroll);
   }
 
   let stopped = false;
-  const stop = () => { stopped = true; };
-  setTimeout(stop, 8000);
+  const stopAll = () => {
+    stopped = true;
+    thread.removeEventListener('scroll', onUserScroll);
+  };
+  setTimeout(stopAll, 8000);
 
   if (typeof MutationObserver === 'function') {
     const mutationObserver = new MutationObserver(() => {
-      const current = threadRef.value;
-      if (!current || stopped) return;
-      setThreadScrollToEnd(current);
+      if (stopped) return;
+      safeScroll();
     });
     mutationObserver.observe(thread, { childList: true, subtree: true, attributes: true });
     setTimeout(() => mutationObserver.disconnect(), 8000);
   }
 
   thread.querySelectorAll('img, video, audio').forEach(el => {
-    const handler = () => {
-      const current = threadRef.value;
-      if (current && !stopped) setThreadScrollToEnd(current);
-    };
+    const handler = () => { if (!stopped) safeScroll(); };
     el.addEventListener('load', handler, { once: true });
     el.addEventListener('loadedmetadata', handler, { once: true });
     el.addEventListener('canplay', handler, { once: true });
