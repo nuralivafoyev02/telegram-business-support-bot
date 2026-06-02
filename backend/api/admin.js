@@ -4,7 +4,7 @@ const { Readable } = require('stream');
 const { pipeline } = require('stream/promises');
 const supabase = require('../lib/supabase');
 const { bestPhotoSize, extractMessageMedia } = require('../lib/message-media');
-const { streamStorageObject } = require('../lib/storage');
+const { streamStorageObject, uploadStorageObject, buildStoragePath, contentTypeForKind, getBucketName } = require('../lib/storage');
 
 const TELEGRAM_FILE_PROXY_MAX_BYTES = 20 * 1024 * 1024;
 const { allowCors, sendJson, readBody, getQuery } = require('../lib/http');
@@ -3826,6 +3826,101 @@ function telegramFileTooLargeError(file = {}, requestedType = '', maxBytes = TEL
     : `${kind} juda katta. Panelda ko‘rish limiti ${limitLabel}. Telegram guruhida oching.`);
 }
 
+function preferredContentTypeForKind(kind = '') {
+  switch (String(kind || '').toLowerCase()) {
+    case 'voice': return 'audio/ogg; codecs=opus';
+    case 'audio': return 'audio/mpeg';
+    case 'video': return 'video/mp4';
+    case 'video_note': return 'video/mp4';
+    case 'animation': return 'video/mp4';
+    case 'photo': return 'image/jpeg';
+    case 'sticker': return 'image/webp';
+    default: return '';
+  }
+}
+
+async function persistMediaToStorage({ kind, file, buffer, contentType, query }) {
+  try {
+    const bucket = getBucketName(query.storage_bucket || '');
+    const path = buildStoragePath({
+      kind: kind || 'file',
+      chatId: query.chat_id || 'unknown',
+      tgMessageId: query.tg_message_id || file.file_unique_id || file.file_id,
+      source: {
+        file_id: file.file_id,
+        file_unique_id: file.file_unique_id,
+        file_name: query.file_name || '',
+        mime_type: contentType,
+        file_path: file.file_path
+      }
+    });
+    const finalType = contentTypeForKind(kind || 'file', contentType);
+    const uploaded = await uploadStorageObject(bucket, path, buffer, finalType);
+    await updateMessageMediaStorageRef({
+      kind,
+      fileId: file.file_id,
+      fileUniqueId: file.file_unique_id,
+      chatId: query.chat_id,
+      tgMessageId: query.tg_message_id,
+      bucket: uploaded.bucket,
+      path: uploaded.path,
+      mimeType: finalType,
+      fileSize: buffer.length
+    }).catch(error => console.warn('[admin:media-relay:db]', error.message));
+    return uploaded;
+  } catch (error) {
+    console.warn('[admin:media-relay:upload]', { kind, file_id: file.file_id, error: error.message });
+    return null;
+  }
+}
+
+async function updateMessageMediaStorageRef({ kind, fileId, fileUniqueId, chatId, tgMessageId, bucket, path, mimeType, fileSize }) {
+  if (!fileId || !path) return;
+  const lookup = {};
+  if (chatId) lookup.chat_id = supabase.eq(chatId);
+  if (tgMessageId) lookup.tg_message_id = supabase.eq(tgMessageId);
+  let rows = [];
+  if (Object.keys(lookup).length === 2) {
+    rows = await supabase.select('messages', {
+      select: 'id,raw',
+      ...lookup,
+      limit: '5'
+    }).catch(() => []);
+  }
+  if (!rows.length && fileUniqueId) {
+    rows = await supabase.select('messages', {
+      select: 'id,raw',
+      raw: `cs.{"${kind || 'voice'}":{"file_unique_id":"${String(fileUniqueId).replace(/"/g, '')}"}}`,
+      limit: '5'
+    }).catch(() => []);
+  }
+  if (!rows.length) return;
+
+  const updates = rows.map(row => {
+    const raw = (row && row.raw && typeof row.raw === 'object') ? row.raw : {};
+    const mediaKey = kind && raw[kind] && typeof raw[kind] === 'object' ? kind : detectMediaKeyForFile(raw, fileId);
+    if (!mediaKey) return null;
+    const next = { ...raw, [mediaKey]: { ...raw[mediaKey], storage_path: path, storage_bucket: bucket } };
+    if (!next[mediaKey].mime_type && mimeType) next[mediaKey].mime_type = mimeType;
+    if (!next[mediaKey].file_size && fileSize) next[mediaKey].file_size = fileSize;
+    return supabase.patch('messages', { id: supabase.eq(row.id) }, { raw: next }).catch(() => null);
+  }).filter(Boolean);
+
+  await Promise.all(updates);
+}
+
+function detectMediaKeyForFile(raw = {}, fileId = '') {
+  const candidates = ['voice', 'audio', 'video', 'video_note', 'animation', 'document', 'sticker'];
+  for (const key of candidates) {
+    if (raw[key] && typeof raw[key] === 'object' && raw[key].file_id === fileId) return key;
+  }
+  if (Array.isArray(raw.photo)) {
+    const photo = raw.photo.find(item => item && item.file_id === fileId);
+    if (photo) return 'photo';
+  }
+  return '';
+}
+
 async function sendTelegramFile(query, res) {
   const storagePath = String(query.storage_path || '').trim();
   if (storagePath) {
@@ -3850,6 +3945,7 @@ async function sendTelegramFile(query, res) {
   if (!file || !file.file_path) throw new Error('Telegram fayl topilmadi');
 
   const requestedType = safeMimeType(query.mime_type);
+  const kind = String(query.kind || '').trim().toLowerCase();
   const maxBytes = TELEGRAM_FILE_PROXY_MAX_BYTES;
   const fileSize = Number(file.file_size || 0);
   if (fileSize > maxBytes) {
@@ -3863,27 +3959,28 @@ async function sendTelegramFile(query, res) {
 
   const pathType = contentTypeFromPath(query.file_name || file.file_path);
   const upstreamType = safeMimeType(response.headers.get('content-type'));
-  const contentType = isGenericContentType(upstreamType) ? (requestedType || pathType || upstreamType) : upstreamType;
+  const kindType = preferredContentTypeForKind(kind);
+  const contentType = (kind === 'voice' || kind === 'audio')
+    ? (requestedType || kindType || pathType || upstreamType)
+    : (isGenericContentType(upstreamType) ? (requestedType || pathType || kindType || upstreamType) : upstreamType);
   const fileName = query.file_name || safeHeaderFileName(file.file_path);
-
-  res.statusCode = 200;
-  res.setHeader('Content-Type', contentType || 'application/octet-stream');
-  res.setHeader('Content-Disposition', contentDispositionFor(contentType, fileName));
-  res.setHeader('Cache-Control', 'private, max-age=86400');
-  const contentLength = response.headers.get('content-length');
-  if (contentLength) res.setHeader('Content-Length', contentLength);
-
-  if (response.body && Readable.fromWeb) {
-    await pipeline(Readable.fromWeb(response.body), res);
-    return;
-  }
 
   const buffer = Buffer.from(await response.arrayBuffer());
   if (buffer.length > maxBytes) {
     throw telegramFileTooLargeError({ ...file, file_size: buffer.length }, requestedType, maxBytes);
   }
+
+  res.statusCode = 200;
+  res.setHeader('Content-Type', contentType || 'application/octet-stream');
+  res.setHeader('Content-Disposition', contentDispositionFor(contentType, fileName));
+  res.setHeader('Cache-Control', 'private, max-age=86400');
   res.setHeader('Content-Length', String(buffer.length));
   res.end(buffer);
+
+  if (kind && (query.chat_id || query.tg_message_id || file.file_unique_id)) {
+    persistMediaToStorage({ kind, file, buffer, contentType, query })
+      .catch(error => console.warn('[admin:media-relay]', error.message));
+  }
 }
 
 async function sendTelegramProfilePhoto(query, res) {

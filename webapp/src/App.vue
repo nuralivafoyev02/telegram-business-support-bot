@@ -5080,8 +5080,13 @@ async function retryMediaLoad(media) {
 async function loadConversationMedia(messages = []) {
   const loadToken = mediaLoadToken;
   const mediaItems = messages
-    .map(message => message.media)
-    .filter(media => media && media.file_id && !mediaUrls.value[media.file_id]);
+    .filter(message => message && message.media && message.media.file_id)
+    .map(message => ({
+      ...message.media,
+      chat_id: message.media.chat_id || message.chat_id || null,
+      tg_message_id: message.media.tg_message_id || message.message_id || message.tg_message_id || null
+    }))
+    .filter(media => !mediaUrls.value[media.file_id]);
   const uniqueMedia = [...new Map(mediaItems.map(media => [media.file_id, media])).values()];
   if (!uniqueMedia.length) return;
 

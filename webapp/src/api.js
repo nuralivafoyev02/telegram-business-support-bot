@@ -90,7 +90,10 @@ function telegramFileQuery(mediaOrFileId) {
     mime_type: media.mime_type,
     file_name: media.file_name,
     storage_path: media.storage_path,
-    storage_bucket: media.storage_bucket
+    storage_bucket: media.storage_bucket,
+    kind: media.kind,
+    chat_id: media.chat_id,
+    tg_message_id: media.tg_message_id || media.message_id
   });
 }
 
