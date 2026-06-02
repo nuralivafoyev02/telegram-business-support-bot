@@ -3954,20 +3954,36 @@ async function sendTelegramFile(query, res) {
   const fileId = String(query.file_id || '').trim();
   if (!fileId) throw new Error('file_id majburiy');
 
+  const thumbnailFileId = String(query.thumbnail_file_id || '').trim();
   const candidateTokens = collectTelegramFileTokens();
-  let file = null;
-  let usedToken = '';
-  let lastError = null;
-  for (const token of candidateTokens) {
-    try {
-      file = token
-        ? await getFileWithToken(token, fileId)
-        : await getFile(fileId);
-      usedToken = token;
-      if (file && file.file_path) break;
-    } catch (error) {
-      lastError = error;
-      file = null;
+  const tryGetFileWithFallback = async (id) => {
+    let resolved = null;
+    let token = '';
+    let lastErr = null;
+    for (const candidate of candidateTokens) {
+      try {
+        resolved = candidate
+          ? await getFileWithToken(candidate, id)
+          : await getFile(id);
+        token = candidate;
+        if (resolved && resolved.file_path) return { file: resolved, token, error: null };
+      } catch (err) {
+        lastErr = err;
+        resolved = null;
+      }
+    }
+    return { file: null, token: '', error: lastErr };
+  };
+
+  let { file, token: usedToken, error: lastError } = await tryGetFileWithFallback(fileId);
+  let usedThumbnail = false;
+  const isFileTooBig = err => /file is too big|file_id|too large/i.test(err?.telegram?.description || err?.message || '');
+  if ((!file || !file.file_path) && thumbnailFileId && isFileTooBig(lastError)) {
+    const thumbResult = await tryGetFileWithFallback(thumbnailFileId);
+    if (thumbResult.file && thumbResult.file.file_path) {
+      file = thumbResult.file;
+      usedToken = thumbResult.token;
+      usedThumbnail = true;
     }
   }
   if (!file || !file.file_path) {
@@ -4010,7 +4026,7 @@ async function sendTelegramFile(query, res) {
   res.setHeader('Content-Length', String(buffer.length));
   res.end(buffer);
 
-  if (kind && (query.chat_id || query.tg_message_id || file.file_unique_id)) {
+  if (!usedThumbnail && kind && (query.chat_id || query.tg_message_id || file.file_unique_id)) {
     persistMediaToStorage({ kind, file, buffer, contentType, query })
       .catch(error => console.warn('[admin:media-relay]', error.message));
   }

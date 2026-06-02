@@ -1487,6 +1487,9 @@
                             <a v-if="showMediaOpenLink(message.media)" class="chat-media-link"
                               :href="mediaUrl(message.media)" target="_blank" rel="noopener noreferrer">{{
                                 mediaOpenLabel(message.media) }}</a>
+                            <a v-if="showTelegramOpenLink(message)" class="chat-media-link"
+                              :href="telegramMessageLink(message)" target="_blank" rel="noopener noreferrer">Telegramda
+                              ochish</a>
                           </div>
                           <div v-if="chatMessageBodyText(message)" class="chat-message-text"
                             v-html="chatMessageHtml(message)"></div>
@@ -1687,6 +1690,9 @@
                             <a v-if="showMediaOpenLink(message.media)" class="chat-media-link"
                               :href="mediaUrl(message.media)" target="_blank" rel="noopener noreferrer">{{
                                 mediaOpenLabel(message.media) }}</a>
+                            <a v-if="showTelegramOpenLink(message)" class="chat-media-link"
+                              :href="telegramMessageLink(message)" target="_blank" rel="noopener noreferrer">Telegramda
+                              ochish</a>
                           </div>
                           <div v-if="chatMessageBodyText(message)" class="chat-message-text"
                             v-html="chatMessageHtml(message)"></div>
@@ -1982,6 +1988,9 @@
                             <a v-if="showMediaOpenLink(message.media)" class="chat-media-link"
                               :href="mediaUrl(message.media)" target="_blank" rel="noopener noreferrer">{{
                                 mediaOpenLabel(message.media) }}</a>
+                            <a v-if="showTelegramOpenLink(message)" class="chat-media-link"
+                              :href="telegramMessageLink(message)" target="_blank" rel="noopener noreferrer">Telegramda
+                              ochish</a>
                           </div>
                           <div v-if="chatMessageBodyText(message)" class="chat-message-text"
                             v-html="chatMessageHtml(message)"></div>
@@ -2213,6 +2222,9 @@
                       <a v-if="showMediaOpenLink(message.media)" class="chat-media-link"
                         :href="mediaUrl(message.media)" target="_blank" rel="noopener noreferrer">{{
                           mediaOpenLabel(message.media) }}</a>
+                      <a v-if="showTelegramOpenLink(message)" class="chat-media-link"
+                        :href="telegramMessageLink(message)" target="_blank" rel="noopener noreferrer">Telegramda
+                        ochish</a>
                     </div>
                     <div v-if="chatMessageBodyText(message)" class="chat-message-text"
                       v-html="chatMessageHtml(message)"></div>
@@ -4912,6 +4924,28 @@ function mediaOpenLabel(media) {
   return 'Faylni ochish';
 }
 
+function telegramMessageLink(message = {}) {
+  const tgMessageId = message?.message_id || message?.tg_message_id || message?.media?.tg_message_id;
+  const chatId = message?.chat_id || message?.media?.chat_id;
+  if (!tgMessageId || !chatId) return '';
+  const chatStr = String(chatId);
+  if (chatStr.startsWith('-100')) {
+    return `https://t.me/c/${chatStr.slice(4)}/${tgMessageId}`;
+  }
+  if (chatStr.startsWith('-')) {
+    return `https://t.me/c/${chatStr.slice(1)}/${tgMessageId}`;
+  }
+  return '';
+}
+
+function showTelegramOpenLink(message = {}) {
+  const media = message?.media;
+  if (!media || !media.file_id) return false;
+  const error = String(mediaErrors.value[media.file_id] || '');
+  if (!error) return false;
+  return Boolean(telegramMessageLink(message));
+}
+
 function mediaPlaceholder(media) {
   if (!media) return 'Fayl';
   const labels = {
@@ -5086,7 +5120,8 @@ async function loadConversationMedia(messages = []) {
     .map(message => ({
       ...message.media,
       chat_id: message.media.chat_id || message.chat_id || null,
-      tg_message_id: message.media.tg_message_id || message.message_id || message.tg_message_id || null
+      tg_message_id: message.media.tg_message_id || message.message_id || message.tg_message_id || null,
+      thumbnail_file_id: message.media.thumbnail_file_id || null
     }))
     .filter(media => !mediaUrls.value[media.file_id]);
   const uniqueMedia = [...new Map(mediaItems.map(media => [media.file_id, media])).values()];

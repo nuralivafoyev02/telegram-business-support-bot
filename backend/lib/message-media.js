@@ -65,34 +65,38 @@ function extractMessageMedia(raw = {}) {
   const photo = bestPhotoSize(normalized.photo || []);
   if (photo) return buildMediaPayload('photo', photo);
 
+  const thumbId = source => (source && (source.thumbnail || source.thumb) || {}).file_id || null;
+
   if (normalized.sticker) {
     return buildMediaPayload('sticker', normalized.sticker, {
       emoji: normalized.sticker.emoji || null,
       set_name: normalized.sticker.set_name || null,
       sticker_type: normalized.sticker.type || null,
       custom_emoji_id: normalized.sticker.custom_emoji_id || null,
-      thumbnail_file_id: normalized.sticker.thumbnail && normalized.sticker.thumbnail.file_id || null
+      thumbnail_file_id: thumbId(normalized.sticker)
     });
   }
 
   if (normalized.video) {
     return buildMediaPayload('video', normalized.video, {
-      thumbnail_file_id: normalized.video.thumbnail && normalized.video.thumbnail.file_id || null
+      thumbnail_file_id: thumbId(normalized.video)
     });
   }
 
   if (normalized.voice) return buildMediaPayload('voice', normalized.voice);
-  if (normalized.audio) return buildMediaPayload('audio', normalized.audio);
+  if (normalized.audio) return buildMediaPayload('audio', normalized.audio, {
+    thumbnail_file_id: thumbId(normalized.audio)
+  });
 
   if (normalized.video_note) {
     return buildMediaPayload('video_note', normalized.video_note, {
-      thumbnail_file_id: normalized.video_note.thumbnail && normalized.video_note.thumbnail.file_id || null
+      thumbnail_file_id: thumbId(normalized.video_note)
     });
   }
 
   if (normalized.animation) {
     return buildMediaPayload('animation', normalized.animation, {
-      thumbnail_file_id: normalized.animation.thumbnail && normalized.animation.thumbnail.file_id || null
+      thumbnail_file_id: thumbId(normalized.animation)
     });
   }
 
@@ -104,7 +108,7 @@ function extractMessageMedia(raw = {}) {
       });
     }
     return buildMediaPayload('document', normalized.document, {
-      thumbnail_file_id: normalized.document.thumbnail && normalized.document.thumbnail.file_id || null
+      thumbnail_file_id: thumbId(normalized.document)
     });
   }
 

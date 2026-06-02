@@ -93,7 +93,8 @@ function telegramFileQuery(mediaOrFileId) {
     storage_bucket: media.storage_bucket,
     kind: media.kind,
     chat_id: media.chat_id,
-    tg_message_id: media.tg_message_id || media.message_id
+    tg_message_id: media.tg_message_id || media.message_id,
+    thumbnail_file_id: media.thumbnail_file_id
   });
 }
 
