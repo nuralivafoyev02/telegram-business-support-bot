@@ -9,7 +9,7 @@ const { streamStorageObject, uploadStorageObject, buildStoragePath, contentTypeF
 const TELEGRAM_FILE_PROXY_MAX_BYTES = 20 * 1024 * 1024;
 const { allowCors, sendJson, readBody, getQuery } = require('../lib/http');
 const { login, requireAdmin, hashPassword } = require('../lib/auth');
-const { sendMessage, sendBusinessMessage, getWebhookInfo, setWebhook, deleteWebhook, getUpdates, getFile, getUserProfilePhotos, downloadFile, tgUserName, escapeHtml } = require('../lib/telegram');
+const { sendMessage, sendBusinessMessage, getWebhookInfo, setWebhook, deleteWebhook, getUpdates, getFile, getFileWithToken, getUserProfilePhotos, downloadFile, downloadFileWithToken, tgUserName, escapeHtml } = require('../lib/telegram');
 const { optionalEnv } = require('../lib/env');
 const { normalizeSettings, clearBotSettingsCache } = require('../lib/bot-settings');
 const { normalizeAiIntegration, mergeAiIntegration, sanitizeAiIntegration, isAiIntegrationReady, isAiIntegrationConfigured, aiIntegrationSignature } = require('../lib/ai-config');
@@ -3825,6 +3825,15 @@ function formatTelegramFileSizeMb(bytes = 0) {
   return `${(value / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function collectTelegramFileTokens() {
+  const tokens = [];
+  const main = optionalEnv('BOT_TOKEN', '').trim();
+  const botA = optionalEnv('BOT_A_TOKEN', '').trim();
+  if (main) tokens.push(main);
+  if (botA && botA !== main) tokens.push(botA);
+  return tokens.length ? tokens : [''];
+}
+
 function telegramFileTooLargeError(file = {}, requestedType = '', maxBytes = TELEGRAM_FILE_PROXY_MAX_BYTES) {
   const sizeLabel = formatTelegramFileSizeMb(file.file_size);
   const limitLabel = formatTelegramFileSizeMb(maxBytes) || `${Math.round(maxBytes / (1024 * 1024))} MB`;
@@ -3945,14 +3954,26 @@ async function sendTelegramFile(query, res) {
   const fileId = String(query.file_id || '').trim();
   if (!fileId) throw new Error('file_id majburiy');
 
-  let file;
-  try {
-    file = await getFile(fileId);
-  } catch (error) {
-    const description = error?.telegram?.description || error.message || 'Telegram fayl topilmadi';
+  const candidateTokens = collectTelegramFileTokens();
+  let file = null;
+  let usedToken = '';
+  let lastError = null;
+  for (const token of candidateTokens) {
+    try {
+      file = token
+        ? await getFileWithToken(token, fileId)
+        : await getFile(fileId);
+      usedToken = token;
+      if (file && file.file_path) break;
+    } catch (error) {
+      lastError = error;
+      file = null;
+    }
+  }
+  if (!file || !file.file_path) {
+    const description = lastError?.telegram?.description || lastError?.message || 'Telegram fayl topilmadi';
     throw new Error(description.includes('file_id') ? `${description}. BOT_TOKEN webhook bilan bir xil ekanini tekshiring.` : description);
   }
-  if (!file || !file.file_path) throw new Error('Telegram fayl topilmadi');
 
   const requestedType = safeMimeType(query.mime_type);
   const kind = String(query.kind || '').trim().toLowerCase();
@@ -3962,7 +3983,9 @@ async function sendTelegramFile(query, res) {
     throw telegramFileTooLargeError(file, requestedType, maxBytes);
   }
 
-  const response = await downloadFile(file.file_path);
+  const response = usedToken
+    ? await downloadFileWithToken(usedToken, file.file_path)
+    : await downloadFile(file.file_path);
   if (!response.ok) {
     throw new Error(`Telegram fayl yuklanmadi: ${response.statusText || response.status}`);
   }
