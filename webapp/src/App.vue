@@ -3522,7 +3522,20 @@ function chatAvatarUrl(row = {}) {
   return key ? chatAvatarUrls.value[key] || '' : '';
 }
 
+function isGroupLikeChat(row = {}) {
+  const sourceType = String(row.source_type || row.type || '').toLowerCase();
+  if (sourceType === 'group' || sourceType === 'supergroup' || sourceType === 'channel') return true;
+  const chatId = String(row.chat_id || row.id || '').trim();
+  // Telegram guruhlari uchun chat_id manfiy bo'ladi
+  if (chatId.startsWith('-')) return true;
+  return false;
+}
+
 async function loadChatAvatar(row = {}) {
+  // Guruh / supergroup / channel chatlari uchun profil rasm so'ramaymiz —
+  // bot `getUserProfilePhotos` qila olmaydi (guruh a'zosining rasmi olinmaydi),
+  // shuning uchun behuda HTTP so'rovi va 4xx loglarni oldini olamiz.
+  if (isGroupLikeChat(row)) return;
   const tgUserId = customerTelegramIdFromChat(row);
   const key = chatAvatarKey(row);
   if (!key || !tgUserId || chatAvatarUrls.value[key] || chatAvatarLoading.value[key]) return;
