@@ -6118,11 +6118,10 @@ async function scrollThreadToEnd(threadRef) {
   await nextTick();
   const thread = threadRef.value;
   if (!thread) return;
-  
+
   setThreadScrollToEnd(thread);
-  
-  // Multiple attempts to ensure we reach the bottom as content renders
-  const attempts = [10, 50, 100, 300, 600, 1000];
+
+  const attempts = [10, 50, 100, 300, 600, 1000, 1500, 2500, 4000];
   attempts.forEach(ms => {
     setTimeout(() => {
       const currentThread = threadRef.value;
@@ -6132,6 +6131,20 @@ async function scrollThreadToEnd(threadRef) {
 
   if (typeof requestAnimationFrame === 'function') {
     requestAnimationFrame(() => setThreadScrollToEnd(thread));
+  }
+
+  if (typeof ResizeObserver === 'function') {
+    let stop = false;
+    let lastHeight = thread.scrollHeight;
+    const observer = new ResizeObserver(() => {
+      const current = threadRef.value;
+      if (!current || stop) return;
+      if (current.scrollHeight === lastHeight) return;
+      lastHeight = current.scrollHeight;
+      setThreadScrollToEnd(current);
+    });
+    observer.observe(thread);
+    setTimeout(() => { stop = true; observer.disconnect(); }, 6000);
   }
 }
 
