@@ -2206,6 +2206,101 @@ function filterRequestsCreatedInPeriod(requests = [], periodKey, keys = {}) {
   return requests.filter(request => request.created_at && inCurrentPeriod(request.created_at, periodKey, keys));
 }
 
+function employeePerformanceLookupKeys(row = {}) {
+  const keys = [];
+  const employeeId = String(row.employee_id || row.id || '').trim();
+  if (employeeId) keys.push(`id:${employeeId}`);
+  const tgUserId = String(row.tg_user_id || '').trim();
+  if (tgUserId) keys.push(`tg:${tgUserId}`);
+  const username = String(row.username || '').trim().toLowerCase();
+  if (username) keys.push(`u:${username}`);
+  const fullName = String(row.full_name || '').trim().toLowerCase();
+  if (fullName) keys.push(`n:${fullName}`);
+  return keys;
+}
+
+function buildEmployeePerformanceMap(performance = []) {
+  const map = new Map();
+  performance.forEach(row => {
+    employeePerformanceLookupKeys(row).forEach(key => {
+      if (!map.has(key)) map.set(key, row);
+    });
+  });
+  return map;
+}
+
+function decorateEmployeeStatsForPeriod(employeeStats = [], periodPerformance = []) {
+  const performanceMap = buildEmployeePerformanceMap(periodPerformance);
+  const seenKeys = new Set();
+  const decorated = (employeeStats || []).map(stat => {
+    const lookupKeys = employeePerformanceLookupKeys(stat);
+    const perf = lookupKeys.map(key => performanceMap.get(key)).find(Boolean) || null;
+    if (perf) {
+      lookupKeys.forEach(key => seenKeys.add(key));
+      employeePerformanceLookupKeys(perf).forEach(key => seenKeys.add(key));
+    }
+    return {
+      ...stat,
+      received_requests: perf ? Number(perf.total_requests || 0) : 0,
+      closed_requests: perf ? Number(perf.closed_requests || 0) : 0,
+      open_requests: perf ? Number(perf.open_requests || 0) : 0,
+      handled_chats: perf ? Number(perf.handled_chats || 0) : 0,
+      avg_close_minutes: perf ? Number(perf.avg_close_minutes || 0) : 0,
+      total_requests: perf ? Number(perf.total_requests || 0) : 0,
+      close_rate: perf ? Number(perf.close_rate || 0) : 0,
+      sla: perf ? Number(perf.sla || 0) : 0,
+      close_share_pct: perf ? Number(perf.close_share_pct || 0) : 0,
+      company_total: perf ? Number(perf.company_total || 0) : 0,
+      last_closed_at: perf?.last_closed_at || stat.last_closed_at || null,
+      prev_closed_requests: perf ? Number(perf.prev_closed_requests || 0) : 0,
+      prev_open_requests: perf ? Number(perf.prev_open_requests || 0) : 0,
+      prev_total_requests: perf ? Number(perf.prev_total_requests || 0) : 0,
+      prev_handled_chats: perf ? Number(perf.prev_handled_chats || 0) : 0,
+      prev_company_total: perf ? Number(perf.prev_company_total || 0) : 0,
+      prev_close_rate: perf ? Number(perf.prev_close_rate || 0) : 0,
+      prev_avg_close_minutes: perf ? Number(perf.prev_avg_close_minutes || 0) : 0
+    };
+  });
+
+  // Davr ichida ish qilgan, lekin asosiy `employees` ro'yxatida bo'lmagan xodimlarni ham qo'shamiz
+  (periodPerformance || []).forEach(perf => {
+    const lookupKeys = employeePerformanceLookupKeys(perf);
+    if (lookupKeys.some(key => seenKeys.has(key))) return;
+    decorated.push({
+      employee_id: perf.employee_id || '',
+      tg_user_id: perf.tg_user_id || null,
+      full_name: perf.full_name || 'Xodim',
+      username: perf.username || '',
+      role: perf.role || '',
+      is_active: true,
+      received_requests: Number(perf.total_requests || 0),
+      closed_requests: Number(perf.closed_requests || 0),
+      open_requests: Number(perf.open_requests || 0),
+      handled_chats: Number(perf.handled_chats || 0),
+      avg_close_minutes: Number(perf.avg_close_minutes || 0),
+      total_requests: Number(perf.total_requests || 0),
+      close_rate: Number(perf.close_rate || 0),
+      sla: Number(perf.sla || 0),
+      close_share_pct: Number(perf.close_share_pct || 0),
+      company_total: Number(perf.company_total || 0),
+      last_closed_at: perf.last_closed_at || null,
+      prev_closed_requests: Number(perf.prev_closed_requests || 0),
+      prev_open_requests: Number(perf.prev_open_requests || 0),
+      prev_total_requests: Number(perf.prev_total_requests || 0),
+      prev_handled_chats: Number(perf.prev_handled_chats || 0),
+      prev_company_total: Number(perf.prev_company_total || 0),
+      prev_close_rate: Number(perf.prev_close_rate || 0),
+      prev_avg_close_minutes: Number(perf.prev_avg_close_minutes || 0)
+    });
+  });
+
+  return decorated.sort((a, b) =>
+    Number(b.closed_requests || 0) - Number(a.closed_requests || 0)
+    || Number(b.open_requests || 0) - Number(a.open_requests || 0)
+    || String(a.full_name || '').localeCompare(String(b.full_name || ''))
+  );
+}
+
 async function getDashboard(query = {}) {
   const customPeriod = normalizeCustomPeriod(query);
   const selectedPeriod = customPeriod ? 'custom' : normalizePeriodKey(query.period || 'all');
@@ -2226,9 +2321,15 @@ async function getDashboard(query = {}) {
   ]);
   const periodSummary = analytics.periods?.[selectedPeriod] || analytics.periods?.all || {};
   const periodOpenRequests = filterRequestsCreatedInPeriod(openInsights.openRequests, selectedPeriod, periodKeys);
+  // Davrga mos hodimlar statistikasi ("Hodimlar reytingi" jadvali uchun)
+  // selectedPeriod 'all' bo'lsa, davrsiz (umumiy) ma'lumotlar saqlab qolinadi
+  const periodEmployeePerformance = analytics.employeePerformance?.[selectedPeriod] || [];
+  const dashboardEmployeeStats = selectedPeriod === 'all'
+    ? employeeStats
+    : decorateEmployeeStatsForPeriod(employeeStats, periodEmployeePerformance);
   return {
     summary: today[0] || stats.DEFAULT_SUMMARY,
-    employeeStats,
+    employeeStats: dashboardEmployeeStats,
     chatStats,
     openRequests: periodOpenRequests,
     manager: {
@@ -4035,9 +4136,22 @@ async function sendTelegramFile(query, res) {
 async function sendTelegramProfilePhoto(query, res) {
   const tgUserId = normalizeTelegramId(query.tg_user_id || query.user_id);
   if (!tgUserId) throw new Error('tg_user_id majburiy');
-  const profile = await getUserProfilePhotos(tgUserId, { limit: 1 });
+  let profile;
+  try {
+    profile = await getUserProfilePhotos(tgUserId, { limit: 1 });
+  } catch (error) {
+    const silentError = new Error(error?.telegram?.description || error.message || 'profil rasmi yo\'q');
+    silentError.silent = true;
+    silentError.status = 204;
+    throw silentError;
+  }
   const photo = bestPhotoSize(profile?.photos?.[0] || []);
-  if (!photo?.file_id) throw new Error('Telegram profil rasmi topilmadi');
+  if (!photo?.file_id) {
+    const silentError = new Error('Telegram profil rasmi topilmadi');
+    silentError.silent = true;
+    silentError.status = 204;
+    throw silentError;
+  }
   await sendTelegramFile({ file_id: photo.file_id }, res);
 }
 
@@ -5121,6 +5235,15 @@ async function handler(req, res) {
 
     return sendJson(res, 405, { ok: false, error: 'Method not allowed' });
   } catch (error) {
+    if (error && error.silent) {
+      const silentStatus = Number(error.status) > 0 ? Number(error.status) : 204;
+      if (silentStatus === 204) {
+        res.statusCode = 204;
+        res.end();
+        return;
+      }
+      return sendJson(res, silentStatus, { ok: false, error: error.message });
+    }
     console.error('[admin:error]', error);
     notifyOperationalError('admin:error', error, { action, method: req.method }).catch(logError => console.error('[admin:notify-log:error]', logError));
     const status = error.code === 'AI_CONNECTION_FAILED'
