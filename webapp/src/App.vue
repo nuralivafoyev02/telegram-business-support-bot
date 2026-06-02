@@ -4901,7 +4901,13 @@ function mediaDownloadName(media = {}) {
   if (media?.file_name) return media.file_name;
   if (media?.kind === 'voice') return 'voice.ogg';
   if (media?.kind === 'audio') return 'audio.mp3';
-  return 'telegram-audio';
+  if (media?.kind === 'photo') return 'photo.jpg';
+  if (media?.kind === 'video') return 'video.mp4';
+  if (media?.kind === 'animation') return 'animation.mp4';
+  if (media?.kind === 'video_note') return 'video-note.mp4';
+  if (media?.kind === 'sticker') return 'sticker.webp';
+  if (media?.kind === 'document') return 'document.bin';
+  return 'telegram-file';
 }
 
 function onAudioPlaybackError(media = {}) {
