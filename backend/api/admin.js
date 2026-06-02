@@ -3241,7 +3241,7 @@ async function getEmployeeActivity(query = {}) {
     prevCustomStart: prevCustomPeriod?.start || '',
     prevCustomEnd: prevCustomPeriod?.end || ''
   };
-  const requestSelect = 'id,source_type,chat_id,customer_tg_id,customer_name,customer_username,initial_message_id,initial_text,status,business_connection_id,closed_at,closed_by_employee_id,closed_by_tg_id,closed_by_name,done_message_id,created_at';
+  const requestSelect = 'id,source_type,chat_id,customer_tg_id,customer_name,customer_username,initial_message_id,initial_text,status,business_connection_id,closed_at,closed_by_employee_id,closed_by_tg_id,closed_by_name,done_message_id,created_at,raw';
   const [requestsByEmployeeId, requestsByTgId, employeeMessagesById, employeeMessagesByTg, openRequestCandidates] = await Promise.all([
     selectPaged('support_requests', {
       select: requestSelect,
@@ -3439,6 +3439,15 @@ async function getEmployeeActivity(query = {}) {
       created_at: event.created_at || null
     };
   };
+  const resolveRequestMedia = request => {
+    const fromRaw = extractMessageMedia(request?.raw);
+    if (fromRaw) return fromRaw;
+    const initialId = telegramIdKey(request?.initial_message_id);
+    if (!initialId) return null;
+    const conversationMessages = messagesByConversation.get(conversationScopeKey(request)) || [];
+    const initialMessage = conversationMessages.find(m => telegramIdKey(m.tg_message_id) === initialId);
+    return initialMessage ? extractMessageMedia(initialMessage.raw) : null;
+  };
   const requestSummary = request => ({
     id: request.id,
     source_type: request.source_type || chatMap.get(telegramIdKey(request.chat_id))?.source_type || '',
@@ -3450,6 +3459,7 @@ async function getEmployeeActivity(query = {}) {
     customer_tg_id: request.customer_tg_id || null,
     initial_message_id: request.initial_message_id || null,
     initial_text: request.initial_text || '',
+    media: resolveRequestMedia(request),
     status: request.status,
     closed_by_employee_id: request.closed_by_employee_id || null,
     closed_by_tg_id: request.closed_by_tg_id || null,

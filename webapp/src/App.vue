@@ -4409,6 +4409,7 @@ function employeeRequestConversationItem(request = {}) {
     type: 'ticket',
     request_id: request.id || null,
     message_id: request.initial_message_id || null,
+    chat_id: request.chat_id || null,
     direction: 'inbound',
     actor_type: 'customer',
     origin_type: 'customer',
@@ -4418,6 +4419,7 @@ function employeeRequestConversationItem(request = {}) {
     actor_tg_user_id: request.customer_tg_id || null,
     employee_id: null,
     text: request.initial_text || '',
+    media: request.media || null,
     request_text: request.initial_text || '',
     status: request.status || 'open',
     created_at: request.created_at || request.closed_at || null
