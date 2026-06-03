@@ -29,3 +29,5 @@ create table if not exists public.ticket_notifications (
 
 create index if not exists idx_ticket_notifications_request
   on public.ticket_notifications(request_id);
+
+notify pgrst, 'reload schema';
