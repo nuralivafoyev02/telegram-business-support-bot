@@ -62,7 +62,7 @@ function collectRelayTokens(sourceBot = '') {
 
 function isSkippableRelayError(error) {
   const desc = String(error?.telegram?.description || error?.message || '').toLowerCase();
-  return /wrong file_id|file is temporarily unavailable|file_id/i.test(desc)
+  return /wrong file_id|file is temporarily unavailable|file_id|bucket not found/i.test(desc)
     || Boolean(error?.tooLarge);
 }
 

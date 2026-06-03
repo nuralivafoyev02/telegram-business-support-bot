@@ -114,7 +114,6 @@ function normalizeSettings(rows = []) {
     logNotifications,
     groupMessageAudit,
     messageReactions,
-    ticketNotifications,
     clickUpIntegration,
     autoReply: normalizeBoolean(autoReply.enabled, DEFAULT_SETTINGS.autoReply),
     doneTag: String(done.tag || DEFAULT_SETTINGS.doneTag).trim() || DEFAULT_SETTINGS.doneTag,
