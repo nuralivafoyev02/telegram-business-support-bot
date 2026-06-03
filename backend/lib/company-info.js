@@ -332,8 +332,12 @@ function employeeMatchesSupport(employee = {}, contact = {}) {
 }
 
 async function syncSupportEmployees(companies = []) {
+  // Avtomatik xodim qo'shish o'chirilgan — xodimlar faqat admin panelidan
+  // qo'lda qo'shiladi. Funksiya saqlangan, lekin endi `insert` qilmaydi.
+  // Faqat tashqi manbada uchragan, lekin bazada hali ro'yxatda bo'lmagan
+  // support kontaktlar sonini ma'lumot uchun qaytaramiz.
   const contacts = supportContactsFromCompanies(companies);
-  if (!contacts.length) return { created: 0, skipped: 0 };
+  if (!contacts.length) return { created: 0, skipped: 0, missing: 0, auto_insert: false };
 
   try {
     const employees = await supabase.select('employees', {
@@ -342,22 +346,15 @@ async function syncSupportEmployees(companies = []) {
     });
     const existing = Array.isArray(employees) ? employees : [];
     const missing = contacts.filter(contact => !existing.some(employee => employeeMatchesSupport(employee, contact)));
-    if (!missing.length) return { created: 0, skipped: contacts.length };
-
-    const now = new Date().toISOString();
-    const rows = missing.map(contact => ({
-      full_name: contact.full_name,
-      username: contact.username,
-      phone: contact.phone,
-      role: 'support',
-      is_active: true,
-      last_activity_at: now
-    }));
-    await supabase.insert('employees', rows, { prefer: 'return=minimal' });
-    return { created: rows.length, skipped: contacts.length - rows.length };
+    return {
+      created: 0,
+      skipped: contacts.length,
+      missing: missing.length,
+      auto_insert: false
+    };
   } catch (error) {
     console.warn('[company-info:sync-support-employees:error]', error.message);
-    return { created: 0, skipped: contacts.length, error: error.message };
+    return { created: 0, skipped: contacts.length, missing: 0, auto_insert: false, error: error.message };
   }
 }
 

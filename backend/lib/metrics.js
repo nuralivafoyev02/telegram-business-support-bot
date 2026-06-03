@@ -82,18 +82,13 @@ async function getKnownEmployeeByTelegramId(tgUserId) {
 }
 
 async function ensureEmployee(user = {}) {
+  // Avtomatik xodim qo'shish o'chirilgan — xodimlar faqat admin panelidan
+  // qo'lda qo'shiladi. Bu funksiya endi mavjud xodimni qaytaradi yoki null.
+  // Bot mantig'i o'zgarmaydi: agar xodim ro'yxatda bo'lsa, u so'rovni yopuvchi
+  // sifatida saqlanadi; bo'lmasa `closed_by_employee_id = null` bo'ladi,
+  // lekin `closed_by_tg_id` va `closed_by_name` Telegram'dan to'ldiriladi.
   if (!user || !user.id) return null;
-  const fullName = tgUserName(user);
-  const rows = await supabase.insert('employees', [{
-    tg_user_id: user.id,
-    full_name: fullName,
-    username: user.username || null,
-    clickup_user_id: null,
-    role: 'support',
-    is_active: true,
-    last_activity_at: nowIso()
-  }], { upsert: true, onConflict: 'tg_user_id' });
-  return rows[0];
+  return await getKnownEmployeeByTelegramId(user.id);
 }
 
 async function upsertChat(chat = {}, sourceType = 'group', extra = {}, options = {}) {
