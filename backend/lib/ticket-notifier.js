@@ -3,7 +3,8 @@
 const supabase = require('./supabase');
 const { getBotSettings } = require('./bot-settings');
 const { getCachedCompanyInfo } = require('./company-info');
-const { sendMessage, editMessageText, escapeHtml } = require('./telegram');
+const metrics = require('./metrics');
+const { sendMessage, editMessageText, editMessageReplyMarkup, answerCallbackQuery, escapeHtml } = require('./telegram');
 
 const TICKET_PREFIX = 'tk:';
 const TICKET_ACTIONS = Object.freeze({
@@ -32,6 +33,23 @@ const REQUEST_SELECT = [
   'notification_message_id',
   'created_at'
 ].join(',');
+
+const REQUEST_SELECT_MINIMAL = [
+  'id',
+  'chat_id',
+  'company_id',
+  'customer_name',
+  'customer_username',
+  'initial_message_id',
+  'initial_text',
+  'status',
+  'created_at'
+].join(',');
+
+function isMissingSchemaColumnError(error) {
+  const text = String(error?.message || '').toLowerCase();
+  return text.includes('pgrst204') || text.includes('schema cache') || text.includes('could not find');
+}
 
 function normalizeTicketNotifications(value = {}) {
   return {
@@ -126,12 +144,40 @@ async function loadCompanyContext(companyId) {
 
 async function loadRequestById(requestId) {
   if (!requestId) return null;
-  const rows = await supabase.select('support_requests', {
-    select: REQUEST_SELECT,
-    id: supabase.eq(requestId),
-    limit: '1'
-  }).catch(() => []);
-  return rows[0] || null;
+  try {
+    const rows = await supabase.select('support_requests', {
+      select: REQUEST_SELECT,
+      id: supabase.eq(requestId),
+      limit: '1'
+    });
+    return rows[0] || null;
+  } catch (error) {
+    if (!isMissingSchemaColumnError(error)) throw error;
+    const rows = await supabase.select('support_requests', {
+      select: REQUEST_SELECT_MINIMAL,
+      id: supabase.eq(requestId),
+      limit: '1'
+    }).catch(() => []);
+    return rows[0] || null;
+  }
+}
+
+function syntheticCallbackMessage(query = {}) {
+  const msg = query.message || {};
+  return {
+    chat: msg.chat || { id: msg.chat?.id },
+    from: query.from || {},
+    message_id: msg.message_id,
+    date: Math.floor(Date.now() / 1000),
+    text: ''
+  };
+}
+
+async function resolveCallbackEmployee(query = {}) {
+  const user = query.from || {};
+  if (!user.id) return null;
+  await metrics.upsertTelegramUser(user, {}, { prefer: 'return=minimal' }).catch(() => null);
+  return metrics.getKnownEmployeeByTelegramId(user.id);
 }
 
 function openSourceLabel(source = '') {
@@ -325,6 +371,138 @@ async function loadActiveEmployees() {
   }).catch(() => []);
 }
 
+async function openSupportRequestAndNotify({
+  message,
+  sourceType,
+  companyId = null,
+  openSource = 'ai',
+  openedByEmployee = null
+} = {}) {
+  const request = await metrics.createSupportRequest({
+    message,
+    sourceType,
+    companyId,
+    openSource,
+    openedByEmployeeId: openedByEmployee?.id || null
+  });
+  await notifyTicketOpened({
+    request,
+    message,
+    openSource,
+    openedByEmployee
+  }).catch(error => console.warn('[ticket-notifier:notify]', error.message));
+  return request;
+}
+
+async function handleTicketCallback(query = {}, parsed = {}) {
+  const employee = await resolveCallbackEmployee(query);
+  if (!employee) {
+    await answerCallbackQuery(query.id, 'Faqat faol xodimlar uchun.').catch(() => null);
+    return { ok: false, reason: 'not_employee' };
+  }
+
+  let request = await loadRequestById(parsed.requestId);
+  if (!request) {
+    await answerCallbackQuery(query.id, 'Ticket topilmadi.').catch(() => null);
+    return { ok: false, reason: 'not_found' };
+  }
+
+  const chatId = query.message?.chat?.id;
+  const messageId = query.message?.message_id;
+  const action = parsed.action;
+
+  if (action === TICKET_ACTIONS.REASSIGN) {
+    const page = Number.parseInt(parsed.extra, 10) || 0;
+    const keyboard = await buildReassignKeyboard(request, page);
+    if (chatId && messageId) {
+      await editMessageReplyMarkup(chatId, messageId, keyboard).catch(() => null);
+    }
+    await answerCallbackQuery(query.id).catch(() => null);
+    return { ok: true, handled: 'reassign_menu' };
+  }
+
+  if (action === TICKET_ACTIONS.REASSIGN_BACK) {
+    const keyboard = buildTicketKeyboard(request, 'main');
+    if (chatId && messageId) {
+      await editMessageReplyMarkup(chatId, messageId, keyboard).catch(() => null);
+    }
+    await answerCallbackQuery(query.id).catch(() => null);
+    return { ok: true, handled: 'reassign_back' };
+  }
+
+  if (action === TICKET_ACTIONS.REASSIGN_SELECT) {
+    const target = await metrics.getKnownEmployeeByTelegramId(parsed.extra)
+      || (await loadActiveEmployees()).find(row => String(row.id) === String(parsed.extra));
+    if (!target) {
+      await answerCallbackQuery(query.id, 'Xodim topilmadi.').catch(() => null);
+      return { ok: false, reason: 'employee_not_found' };
+    }
+    const previousId = request.assigned_to_employee_id || null;
+    request = await assignRequestToEmployee({
+      request,
+      employee: target,
+      eventType: 'reassigned',
+      previousEmployeeId: previousId
+    });
+    if (chatId && messageId) {
+      await editMessageReplyMarkup(chatId, messageId, buildTicketKeyboard(request, 'main')).catch(() => null);
+    }
+    await answerCallbackQuery(query.id, `${employeeLabel(target)} ga o‘tkazildi.`).catch(() => null);
+    return { ok: true, handled: 'reassigned', employee_id: target.id };
+  }
+
+  if (action === TICKET_ACTIONS.ACCEPT) {
+    if (request.status !== 'open') {
+      await answerCallbackQuery(query.id, 'Ticket allaqachon yopilgan yoki bekor qilingan.').catch(() => null);
+      return { ok: false, reason: 'not_open' };
+    }
+    request = await assignRequestToEmployee({ request, employee, eventType: 'accepted' });
+    await answerCallbackQuery(query.id, 'Qabul qilindi.').catch(() => null);
+    return { ok: true, handled: 'accepted' };
+  }
+
+  if (action === TICKET_ACTIONS.CLOSE) {
+    if (request.status === 'closed') {
+      await answerCallbackQuery(query.id, 'Allaqachon yopilgan.').catch(() => null);
+      return { ok: true, handled: 'already_closed' };
+    }
+    if (request.status === 'cancelled') {
+      await answerCallbackQuery(query.id, 'Ticket bekor qilingan.').catch(() => null);
+      return { ok: false, reason: 'cancelled' };
+    }
+    const closeMessage = {
+      ...syntheticCallbackMessage(query),
+      text: '🔒 Yopish',
+      chat: { id: request.chat_id }
+    };
+    await metrics.closeRequestRecord({ request, message: closeMessage, employee });
+    request = await loadRequestById(request.id) || { ...request, status: 'closed' };
+    await refreshTicketNotificationMessage(request);
+    await answerCallbackQuery(query.id, 'Yopildi.').catch(() => null);
+    return { ok: true, handled: 'closed' };
+  }
+
+  if (action === TICKET_ACTIONS.NOT_REQUEST) {
+    if (request.status === 'cancelled') {
+      await answerCallbackQuery(query.id, 'Allaqachon “so‘rov emas”.').catch(() => null);
+      return { ok: true, handled: 'already_cancelled' };
+    }
+    const cancelMessage = {
+      ...syntheticCallbackMessage(query),
+      text: 'So‘rov emas',
+      chat: { id: request.chat_id }
+    };
+    await metrics.cancelSupportRequest({ request, employee, message: cancelMessage });
+    request = await loadRequestById(request.id) || { ...request, status: 'cancelled' };
+    await refreshTicketNotificationMessage(request);
+    await answerCallbackQuery(query.id, 'So‘rov emas deb belgilandi.').catch(() => null);
+    return { ok: true, handled: 'cancelled' };
+  }
+
+  await answerCallbackQuery(query.id).catch(() => null);
+  return { ok: true, handled: 'ignored' };
+}
+
 module.exports = {
   TICKET_PREFIX,
   TICKET_ACTIONS,
@@ -339,5 +517,7 @@ module.exports = {
   assignRequestToEmployee,
   buildReassignKeyboard,
   buildTicketKeyboard,
-  buildNotificationText
+  buildNotificationText,
+  openSupportRequestAndNotify,
+  handleTicketCallback
 };

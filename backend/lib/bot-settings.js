@@ -15,6 +15,12 @@ const DEFAULT_SETTINGS = Object.freeze({
   logNotifications: Object.freeze({ enabled: false, levels: ['error'], target: 'main_group' }),
   groupMessageAudit: Object.freeze({ enabled: true, target: 'main_group', channelId: '' }),
   messageReactions: Object.freeze({ enabled: false, ticketClose: true, emoji: '\u26a1' }),
+  ticketNotifications: Object.freeze({
+    enabled: false,
+    target_chat_id: '',
+    notify_on_ai: true,
+    notify_on_reaction: true
+  }),
   clickUpIntegration: normalizeClickUpIntegration({}),
   autoReply: true,
   doneTag: DEFAULT_DONE_TAG,
@@ -90,6 +96,15 @@ function normalizeMessageReactions(value = {}) {
   };
 }
 
+function normalizeTicketNotifications(value = {}) {
+  return {
+    enabled: value.enabled === true,
+    target_chat_id: String(value.target_chat_id || value.targetChatId || '').trim(),
+    notify_on_ai: value.notify_on_ai !== false && value.notifyOnAi !== false,
+    notify_on_reaction: value.notify_on_reaction !== false && value.notifyOnReaction !== false
+  };
+}
+
 function normalizeSettings(rows = []) {
   const ai = settingValue(rows, 'ai_mode');
   const integration = normalizeAiIntegration(settingValue(rows, 'ai_integration'));
@@ -114,6 +129,7 @@ function normalizeSettings(rows = []) {
     logNotifications,
     groupMessageAudit,
     messageReactions,
+    ticketNotifications,
     clickUpIntegration,
     autoReply: normalizeBoolean(autoReply.enabled, DEFAULT_SETTINGS.autoReply),
     doneTag: String(done.tag || DEFAULT_SETTINGS.doneTag).trim() || DEFAULT_SETTINGS.doneTag,
@@ -130,7 +146,7 @@ async function getBotSettings({ force = false } = {}) {
   try {
     const rows = await supabase.select('bot_settings', {
       select: 'key,value',
-      key: 'in.(ai_mode,ai_integration,log_notifications,group_message_audit,message_reactions,clickup_integration,auto_reply,done_tag,request_detection,main_group)'
+      key: 'in.(ai_mode,ai_integration,log_notifications,group_message_audit,message_reactions,ticket_notifications,clickup_integration,auto_reply,done_tag,request_detection,main_group)'
     });
     cachedSettings = normalizeSettings(rows || []);
     cachedAt = now;

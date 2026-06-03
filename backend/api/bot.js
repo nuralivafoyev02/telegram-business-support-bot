@@ -13,6 +13,11 @@ const { enrichMessageMediaWithStorage } = require('../lib/media-relay');
 const { normalizeClickUpIntegration, isClickUpIntegrationReady, createClickUpTask, updateClickUpTaskStatus, attachClickUpTaskFile } = require('../lib/clickup');
 const { notifyIncomingLog, notifyOperationalError } = require('../lib/log-notifier');
 const metrics = require('../lib/metrics');
+const {
+  parseTicketCallbackData,
+  handleTicketCallback,
+  openSupportRequestAndNotify
+} = require('../lib/ticket-notifier');
 
 const START_RE = /^\/start(?:@\w+)?(?:\s|$)/i;
 const HELP_RE = /^\/help(?:@\w+)?(?:\s|$)/i;
@@ -590,11 +595,19 @@ async function handleEyeReaction(reaction = {}, settings = {}) {
     caption: jsonObject(savedMessage.raw).caption || ''
   };
   const sourceType = savedMessage.source_type || 'group';
+  const chatRows = await supabase.select('tg_chats', {
+    select: 'company_id',
+    chat_id: supabase.eq(chat.id),
+    limit: '1'
+  }).catch(() => []);
+  const companyId = chatRows[0]?.company_id || null;
 
-  const supportRequest = await metrics.createSupportRequest({
+  const supportRequest = await openSupportRequestAndNotify({
     message: raw,
     sourceType,
-    companyId: null
+    companyId,
+    openSource: 'reaction',
+    openedByEmployee: employee
   }).catch(error => {
     console.warn('[bot:eye-reaction:support-request:error]', error.message);
     return null;
@@ -1972,6 +1985,8 @@ async function handleBroadcastCallback(query, parsed) {
 }
 
 async function handleCallbackQuery(query = {}) {
+  const ticketParsed = parseTicketCallbackData(query.data);
+  if (ticketParsed) return handleTicketCallback(query, ticketParsed);
   const assistantParsed = parseAssistantCallbackData(query.data);
   if (assistantParsed) return handleAssistantCallback(query, assistantParsed);
   const parsed = parseBroadcastCallbackData(query.data);
@@ -2579,10 +2594,11 @@ async function processMessage(updateKind, message, options = {}) {
 
   if (isSupportRequestClassification(classification)) {
     try {
-      await metrics.createSupportRequest({
+      await openSupportRequestAndNotify({
         message,
         sourceType,
-        companyId: chatRow ? chatRow.company_id : null
+        companyId: chatRow ? chatRow.company_id : null,
+        openSource: 'ai'
       });
     } catch (error) {
       await maybeNotifyMainGroupMessageSaveFailed({

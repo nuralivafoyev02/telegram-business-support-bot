@@ -30,4 +30,8 @@ create table if not exists public.ticket_notifications (
 create index if not exists idx_ticket_notifications_request
   on public.ticket_notifications(request_id);
 
+-- ticket_notifications uchun RLS (backend service_role bypass qiladi)
+alter table public.ticket_notifications enable row level security;
+
+-- PostgREST schema cache yangilash (majburiy — aks holda PGRST204 chiqadi)
 notify pgrst, 'reload schema';

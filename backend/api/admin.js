@@ -5034,7 +5034,7 @@ async function updateSettings(body) {
   if (!items.length) return [];
   const previousRows = await supabase.select('bot_settings', {
     select: 'key,value',
-    key: 'in.(ai_mode,ai_integration,log_notifications,group_message_audit,message_reactions,clickup_integration,auto_reply,done_tag,request_detection,main_group)'
+    key: 'in.(ai_mode,ai_integration,log_notifications,group_message_audit,message_reactions,ticket_notifications,clickup_integration,auto_reply,done_tag,request_detection,main_group)'
   }).catch(() => []);
   const previousSettings = normalizeSettings(previousRows || []);
   const previousAutoReplyExists = hasSetting(previousRows, 'auto_reply');
@@ -5062,6 +5062,11 @@ async function updateSettings(body) {
   if (nextSettings.groupMessageAudit?.enabled && nextSettings.groupMessageAudit.target === 'channel' && !nextSettings.groupMessageAudit.channelId) {
     const error = new Error('Guruh xabari auditi uchun kanal ID yoki username kiritilishi kerak.');
     error.code = 'AUDIT_CHANNEL_REQUIRED';
+    throw error;
+  }
+  if (nextSettings.ticketNotifications?.enabled && !nextSettings.ticketNotifications.target_chat_id) {
+    const error = new Error('Ticket xabarnomalari yoqilgan — Ticket guruh chat ID kiriting.');
+    error.code = 'TICKET_GROUP_REQUIRED';
     throw error;
   }
   if (nextSettings.aiProvider && !isAiIntegrationReady(nextSettings.aiIntegration)) {

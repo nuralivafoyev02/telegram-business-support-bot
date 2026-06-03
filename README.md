@@ -49,6 +49,14 @@ supabase/003_views.sql
 supabase/004_rls.sql
 ```
 
+Ticket guruh xabarnomalari uchun (ixtiyoriy):
+
+```sql
+supabase/007_ticket_notifications.sql
+```
+
+Agar `PGRST204` va `Could not find the 'open_source' column` chiqsa, `007` oxiridagi yoki `008_reload_postgrest_schema.sql` ni bir marta ishga tushiring.
+
 Agar Vercel logida `PGRST205` va `Could not find the table 'public.v_chat_statistics' in the schema cache` xatosi chiqsa, `supabase/003_views.sql` SQL Editor’da qayta ishga tushirilmagan yoki PostgREST schema cache yangilanmagan bo‘ladi. `003_views.sql` oxiridagi `notify pgrst, 'reload schema';` cache’ni yangilaydi.
 
 Default admin:

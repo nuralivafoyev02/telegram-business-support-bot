@@ -244,7 +244,90 @@ async function addRequestNote({ request, message }) {
   return { ...request, appended: true };
 }
 
-async function createSupportRequest({ message, sourceType, companyId = null }) {
+const SUPPORT_REQUEST_OPTIONAL_COLUMNS = Object.freeze([
+  'open_source',
+  'opened_by_employee_id',
+  'assigned_to_employee_id',
+  'assigned_at',
+  'notification_chat_id',
+  'notification_message_id'
+]);
+
+function isMissingSchemaColumnError(error) {
+  const text = String(error?.message || '').toLowerCase();
+  return text.includes('pgrst204') || text.includes('schema cache') || text.includes('could not find');
+}
+
+function buildSupportRequestOptionalFields(options = {}) {
+  const optional = {};
+  const openSource = String(options.openSource || options.open_source || '').trim();
+  if (openSource) optional.open_source = openSource;
+  if (options.openedByEmployeeId || options.opened_by_employee_id) {
+    optional.opened_by_employee_id = options.openedByEmployeeId || options.opened_by_employee_id;
+  }
+  if (options.assignedToEmployeeId || options.assigned_to_employee_id) {
+    optional.assigned_to_employee_id = options.assignedToEmployeeId || options.assigned_to_employee_id;
+  }
+  if (options.assignedAt || options.assigned_at) {
+    optional.assigned_at = options.assignedAt || options.assigned_at;
+  }
+  if (options.notificationChatId || options.notification_chat_id) {
+    optional.notification_chat_id = options.notificationChatId || options.notification_chat_id;
+  }
+  if (options.notificationMessageId || options.notification_message_id) {
+    optional.notification_message_id = options.notificationMessageId || options.notification_message_id;
+  }
+  return optional;
+}
+
+async function insertSupportRequestRow(coreRow, optionalRow = {}) {
+  const optionalKeys = Object.keys(optionalRow);
+  if (!optionalKeys.length) {
+    return supabase.insert('support_requests', [coreRow], {
+      upsert: true,
+      onConflict: 'chat_id,initial_message_id'
+    });
+  }
+  try {
+    return await supabase.insert('support_requests', [{ ...coreRow, ...optionalRow }], {
+      upsert: true,
+      onConflict: 'chat_id,initial_message_id'
+    });
+  } catch (error) {
+    if (!isMissingSchemaColumnError(error)) throw error;
+    const rows = await supabase.insert('support_requests', [coreRow], {
+      upsert: true,
+      onConflict: 'chat_id,initial_message_id'
+    });
+    const request = rows[0];
+    if (request?.id) {
+      await patchSupportRequestMetadata(request.id, optionalRow).catch(patchError => {
+        console.warn('[metrics:support-request:metadata-patch]', patchError.message);
+      });
+    }
+    return rows;
+  }
+}
+
+async function patchSupportRequestMetadata(requestId, fields = {}) {
+  if (!requestId) return null;
+  const patch = {};
+  SUPPORT_REQUEST_OPTIONAL_COLUMNS.forEach(key => {
+    if (fields[key] !== undefined && fields[key] !== null && fields[key] !== '') {
+      patch[key] = fields[key];
+    }
+  });
+  if (!Object.keys(patch).length) return null;
+  try {
+    const rows = await supabase.patch('support_requests', { id: supabase.eq(requestId) }, patch);
+    return rows[0] || null;
+  } catch (error) {
+    if (isMissingSchemaColumnError(error)) return null;
+    throw error;
+  }
+}
+
+async function createSupportRequest({ message, sourceType, companyId = null, ...ticketMeta } = {}) {
   const from = message.from || {};
   const chat = message.chat || {};
   const text = messageDisplayText(message);
@@ -253,7 +336,7 @@ async function createSupportRequest({ message, sourceType, companyId = null }) {
   const existing = await findMergeableOpenRequest({ message, sourceType });
   if (existing) return addRequestNote({ request: existing, message });
 
-  const rows = await supabase.insert('support_requests', [{
+  const coreRow = {
     source_type: sourceType,
     chat_id: chat.id,
     company_id: companyId,
@@ -266,8 +349,18 @@ async function createSupportRequest({ message, sourceType, companyId = null }) {
     business_connection_id: message.business_connection_id || null,
     raw: message,
     created_at: createdAt
-  }], { upsert: true, onConflict: 'chat_id,initial_message_id' });
+  };
+  const optionalRow = buildSupportRequestOptionalFields(ticketMeta);
+  const rows = await insertSupportRequestRow(coreRow, optionalRow);
   const request = rows[0];
+  if (request?.id && Object.keys(optionalRow).length) {
+    const hasOptionalOnRow = SUPPORT_REQUEST_OPTIONAL_COLUMNS.some(key => request[key] !== undefined && request[key] !== null);
+    if (!hasOptionalOnRow) {
+      await patchSupportRequestMetadata(request.id, optionalRow).catch(patchError => {
+        console.warn('[metrics:support-request:metadata-patch]', patchError.message);
+      });
+    }
+  }
   await supabase.insert('request_events', [{
     request_id: request.id,
     chat_id: chat.id,
@@ -360,6 +453,36 @@ async function closeRequestRecord({ request, message, employee }) {
   return { closed: true, request: closedRows[0] || request };
 }
 
+async function cancelSupportRequest({ request, employee = null, message = {} }) {
+  const chat = message.chat || { id: request.chat_id };
+  const from = message.from || {};
+  const cancelledAt = messageDateIso(message);
+
+  const patchPromise = supabase.patch('support_requests', { id: supabase.eq(request.id) }, {
+    status: 'cancelled',
+    closed_at: cancelledAt,
+    closed_by_employee_id: employee ? employee.id : null,
+    closed_by_tg_id: from.id || null,
+    closed_by_name: employee ? tgUserName(employee) : tgUserName(from)
+  });
+
+  const eventPromise = supabase.insert('request_events', [{
+    request_id: request.id,
+    chat_id: chat.id || request.chat_id,
+    tg_message_id: message.message_id || null,
+    event_type: 'cancelled',
+    actor_tg_id: from.id || employee?.tg_user_id || null,
+    actor_name: employee ? tgUserName(employee) : tgUserName(from),
+    employee_id: employee ? employee.id : null,
+    text: messageDisplayText(message) || 'So‘rov emas',
+    raw: message,
+    created_at: cancelledAt
+  }], { prefer: 'return=minimal' }).catch(() => null);
+
+  const [rows] = await Promise.all([patchPromise, eventPromise]);
+  return { cancelled: true, request: rows[0] || request };
+}
+
 async function closeLatestRequest({ message, employee, recordMissing = true }) {
   const chat = message.chat || {};
   const from = message.from || {};
@@ -442,6 +565,9 @@ module.exports = {
   saveBusinessConnection,
   saveMessage,
   createSupportRequest,
+  patchSupportRequestMetadata,
+  closeRequestRecord,
+  cancelSupportRequest,
   closeLatestRequest,
   closeRequestByReply,
   closeRequestByMessage,

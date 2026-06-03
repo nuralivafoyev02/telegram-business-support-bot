@@ -68,6 +68,11 @@ async function requestBlob(action, { query = {} } = {}) {
     logApiError(action, error, { method: 'GET', query: safeQuery(query), stage: 'network' });
     throw error;
   }
+  if (response.status === 204) {
+    const error = new Error('No content');
+    error.silent = true;
+    throw error;
+  }
   if (!response.ok) {
     const data = await response.json().catch(() => ({}));
     const error = new Error(data.error || 'Fayl yuklanmadi');
