@@ -111,6 +111,7 @@ function normalizeSettings(rows = []) {
   const logNotifications = normalizeLogNotifications(settingValue(rows, 'log_notifications'));
   const groupMessageAudit = normalizeGroupMessageAudit(settingValue(rows, 'group_message_audit'));
   const messageReactions = normalizeMessageReactions(settingValue(rows, 'message_reactions'));
+  const ticketNotifications = normalizeTicketNotifications(settingValue(rows, 'ticket_notifications'));
   const clickUpIntegration = normalizeClickUpIntegration(settingValue(rows, 'clickup_integration'));
   const autoReply = settingValue(rows, 'auto_reply');
   const done = settingValue(rows, 'done_tag');
