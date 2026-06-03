@@ -96,10 +96,17 @@ function normalizeMessageReactions(value = {}) {
   };
 }
 
+function normalizeTargetChatId(value = '') {
+  const text = String(value || '').trim().replace(/\s+/g, '');
+  if (!text) return '';
+  if (/^-?\d+$/.test(text)) return text;
+  return text.startsWith('@') ? text : `@${text.replace(/^@/, '')}`;
+}
+
 function normalizeTicketNotifications(value = {}) {
   return {
     enabled: value.enabled === true,
-    target_chat_id: String(value.target_chat_id || value.targetChatId || '').trim(),
+    target_chat_id: normalizeTargetChatId(value.target_chat_id || value.targetChatId || ''),
     notify_on_ai: value.notify_on_ai !== false && value.notifyOnAi !== false,
     notify_on_reaction: value.notify_on_reaction !== false && value.notifyOnReaction !== false
   };
@@ -157,6 +164,8 @@ async function getBotSettings({ force = false } = {}) {
         ...DEFAULT_SETTINGS,
         groupMessageAudit: normalizeGroupMessageAudit(settingValue(rows, 'group_message_audit')),
         logNotifications: normalizeLogNotifications(settingValue(rows, 'log_notifications')),
+        messageReactions: normalizeMessageReactions(settingValue(rows, 'message_reactions')),
+        ticketNotifications: normalizeTicketNotifications(settingValue(rows, 'ticket_notifications')),
         mainGroupId: String(settingValue(rows, 'main_group').chat_id || DEFAULT_SETTINGS.mainGroupId).trim()
       };
     }

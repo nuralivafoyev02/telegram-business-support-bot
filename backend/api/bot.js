@@ -613,23 +613,19 @@ async function handleEyeReaction(reaction = {}, settings = {}) {
     caption: jsonObject(savedMessage.raw).caption || ''
   };
   const sourceType = savedMessage.source_type || 'group';
-  const chatRows = await supabase.select('tg_chats', {
-    select: 'company_id',
-    chat_id: supabase.eq(chat.id),
-    limit: '1'
-  }).catch(() => []);
-  const companyId = chatRows[0]?.company_id || null;
 
   const supportRequest = await openSupportRequestAndNotify({
     message: raw,
     sourceType,
-    companyId,
     openSource: 'reaction',
     openedByEmployee: employee
   }).catch(error => {
     console.warn('[bot:eye-reaction:support-request:error]', error.message);
     return null;
   });
+  if (supportRequest?.id) {
+    console.info('[bot:eye-reaction:ticket]', { request_id: supportRequest.id, chat_id: chat.id });
+  }
   const supportRequestId = supportRequest && supportRequest.id || null;
 
   const clickUpConfig = normalizeClickUpIntegration(settings.clickUpIntegration);

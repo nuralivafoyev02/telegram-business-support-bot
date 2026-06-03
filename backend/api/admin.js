@@ -425,6 +425,10 @@ function buildPeriodSummary(requests, periodKey, label, keys, messages = [], emp
   };
 }
 
+function isManagerEmployeeRecord(employee = {}) {
+  return String(employee.role || '').trim().toLowerCase() === 'manager';
+}
+
 function buildEmployeePerformance({ requests, employees, messages = [], periodKey, keys, chats = [], companyMembers = [], companyInfoCompanies = [], businessConnectionEmployee = new Map() }) {
   const employeeMap = new Map(employees.map(employee => [employee.id, employee]).filter(([id]) => id));
   const employeeByTgId = new Map(employees.map(employee => [telegramIdKey(employee.tg_user_id), employee]).filter(([id]) => id));
@@ -517,7 +521,12 @@ function buildEmployeePerformance({ requests, employees, messages = [], periodKe
   closed.forEach(request => {
     const employee = findEmployee(request.closed_by_employee_id, request.closed_by_tg_id, request.closed_by_name);
     if (!employee) return;
-    const current = ensureEmployeeTotal({ employee, employeeId: request.closed_by_employee_id, tgUserId: request.closed_by_tg_id, name: request.closed_by_name });
+    const current = ensureEmployeeTotal({
+      employee,
+      employeeId: request.closed_by_employee_id,
+      tgUserId: request.closed_by_tg_id,
+      name: request.closed_by_name
+    });
     current.closed_requests += 1;
     if (request.chat_id) current.handled_chats.add(conversationScopeKey(request));
     const companyKey = companyScopeKey(request);
@@ -540,7 +549,7 @@ function buildEmployeePerformance({ requests, employees, messages = [], periodKe
     );
 
     const employee = responsible ? findEmployee(responsible.employee_id, responsible.tg_user_id, responsible.full_name) : null;
-    if (!employee) return;
+    if (!employee || isManagerEmployeeRecord(employee)) return;
     const current = ensureEmployeeTotal({ employee, employeeId: employee.id, tgUserId: employee.tg_user_id, name: employee.full_name });
     current.open_requests += 1;
     if (request.chat_id) current.handled_chats.add(conversationScopeKey(request));
@@ -551,7 +560,12 @@ function buildEmployeePerformance({ requests, employees, messages = [], periodKe
   prevClosed.forEach(request => {
     const employee = findEmployee(request.closed_by_employee_id, request.closed_by_tg_id, request.closed_by_name);
     if (!employee) return;
-    const current = ensureEmployeeTotal({ employee, employeeId: request.closed_by_employee_id, tgUserId: request.closed_by_tg_id, name: request.closed_by_name });
+    const current = ensureEmployeeTotal({
+      employee,
+      employeeId: request.closed_by_employee_id,
+      tgUserId: request.closed_by_tg_id,
+      name: request.closed_by_name
+    });
     current.prev_closed_requests += 1;
     if (request.chat_id) current.prev_handled_chats.add(conversationScopeKey(request));
     const companyKey = companyScopeKey(request);
@@ -573,7 +587,7 @@ function buildEmployeePerformance({ requests, employees, messages = [], periodKe
     );
 
     const employee = responsible ? findEmployee(responsible.employee_id, responsible.tg_user_id, responsible.full_name) : null;
-    if (!employee) return;
+    if (!employee || isManagerEmployeeRecord(employee)) return;
     const current = ensureEmployeeTotal({ employee, employeeId: employee.id, tgUserId: employee.tg_user_id, name: employee.full_name });
     current.prev_open_requests += 1;
     if (request.chat_id) current.prev_handled_chats.add(conversationScopeKey(request));
@@ -1041,15 +1055,22 @@ async function sendGroupAuditStats() {
 
 function requestedAnalyticsPeriods(query = {}, customPeriod = null) {
   if (customPeriod) return [['custom', customPeriod.label || 'Ixtiyoriy']];
+  const selected = normalizePeriodKey(query.period || '');
+  if (selected && selected !== 'all') {
+    const labels = { today: 'Bugun', week: '7 kun', month: '1 oy' };
+    return [[selected, labels[selected] || selected]];
+  }
   const standard = [
     ['today', 'Bugun'],
     ['week', '7 kun'],
     ['month', '1 oy']
   ];
-  if (normalizePeriodKey(query.period || '') === 'all') {
-    return [...standard, ['all', 'Jami']];
-  }
-  return standard;
+  return [...standard, ['all', 'Jami']];
+}
+
+function isDashboardStatsFocus(query = {}) {
+  const selected = normalizePeriodKey(query.period || '');
+  return Boolean(selected && selected !== 'all') || String(query.focus || '').toLowerCase() === 'stats';
 }
 
 function analyticsWindow(periods = [], keys = {}) {
@@ -1089,11 +1110,11 @@ function rangeQuery(field, window) {
   return { [field]: [`gte.${window.start}`, `lt.${window.end}`] };
 }
 
-async function selectAnalyticsRequests(window) {
+async function selectAnalyticsRequests(window, options = {}) {
   const baseQuery = {
-    select: 'id,source_type,chat_id,company_id,customer_tg_id,customer_name,status,closed_by_employee_id,closed_by_tg_id,closed_by_name,created_at,closed_at',
+    select: 'id,source_type,chat_id,company_id,customer_tg_id,customer_name,status,open_source,opened_by_employee_id,assigned_to_employee_id,assigned_at,closed_by_employee_id,closed_by_tg_id,closed_by_name,created_at,closed_at',
     order: supabase.order('created_at', false),
-    limit: '10000'
+    limit: String(options.limit || '10000')
   };
 
   if (!window) return supabase.select('support_requests', baseQuery).catch(() => []);
@@ -1114,6 +1135,7 @@ async function selectAnalyticsRequests(window) {
 
 
 async function getDashboardAnalytics(query = {}) {
+  const statsFocus = isDashboardStatsFocus(query);
   const customPeriod = normalizeCustomPeriod(query);
   const prevCustomPeriod = getPreviousCustomPeriod(customPeriod);
   const keys = {
@@ -1128,28 +1150,43 @@ async function getDashboardAnalytics(query = {}) {
   const window = analyticsWindow(periods, keys);
 
   const [requests, chats, employees, companies, companyMembers, companyInfoCache] = await Promise.all([
-    selectAnalyticsRequests(window),
-    stats.selectChatStatistics({ select: '*', is_active: 'eq.true', limit: '5000' }).catch(() => []),
+    selectAnalyticsRequests(window, { limit: statsFocus ? '6000' : '10000' }),
+    statsFocus
+      ? Promise.resolve([])
+      : stats.selectChatStatistics({ select: '*', is_active: 'eq.true', limit: '5000' }).catch(() => []),
     supabase.select('employees', { select: 'id,tg_user_id,full_name,username,role,is_active', limit: '5000' }).catch(() => []),
-    supabase.select('companies', { select: 'id,name,is_active', limit: '5000' }).catch(() => []),
-    supabase.select('company_members', { select: 'company_id,employee_id,member_type,is_active', limit: '5000' }).catch(() => []),
+    statsFocus
+      ? Promise.resolve([])
+      : supabase.select('companies', { select: 'id,name,is_active', limit: '5000' }).catch(() => []),
+    statsFocus
+      ? Promise.resolve([])
+      : supabase.select('company_members', { select: 'company_id,employee_id,member_type,is_active', limit: '5000' }).catch(() => []),
     getCachedCompanyInfo().catch(() => null)
   ]);
   const companyInfoCompanies = companyInfoCache?.companies || [];
-  const analyticsCompanies = mergeCompanyDirectoryRows(companies, companyInfoCompanies);
-  const analyticsChats = enrichChatsWithCompanyAssignments(chats, companyInfoCompanies, analyticsCompanies);
-  const chatIds = [...new Set([
-    ...requests.map(request => request.chat_id),
-    ...analyticsChats
-      .filter(chat => chat.company_id && (chat.source_type === 'group' || ['group', 'supergroup'].includes(chat.type)))
-      .map(chat => chat.chat_id)
-  ].filter(value => value !== undefined && value !== null))];
+  const analyticsCompanies = statsFocus ? [] : mergeCompanyDirectoryRows(companies, companyInfoCompanies);
+  const analyticsChats = statsFocus
+    ? []
+    : enrichChatsWithCompanyAssignments(chats, companyInfoCompanies, analyticsCompanies);
+  const chatIds = [...new Set(
+    (statsFocus
+      ? requests.map(request => request.chat_id)
+      : [
+        ...requests.map(request => request.chat_id),
+        ...analyticsChats
+          .filter(chat => chat.company_id && (chat.source_type === 'group' || ['group', 'supergroup'].includes(chat.type)))
+          .map(chat => chat.chat_id)
+      ]).filter(value => value !== undefined && value !== null)
+  )];
+  const messageMaxRows = statsFocus ? (window ? 1200 : 4000) : (window ? 15000 : 40000);
   const messages = chatIds.length ? await selectPagedByChunks('messages', {
     select: 'id,tg_message_id,chat_id,from_tg_user_id,from_name,from_username,employee_id,source_type,classification,text,business_connection_id,created_at',
     order: supabase.order('created_at', false),
     ...rangeQuery('created_at', window)
-  }, 'chat_id', chatIds, { maxRows: window ? 15000 : 40000 }) : [];
-  const businessConnectionEmployee = await loadBusinessConnectionEmployeeMap(requests, messages, employees);
+  }, 'chat_id', chatIds, { maxRows: messageMaxRows }) : [];
+  const businessConnectionEmployee = statsFocus
+    ? new Map()
+    : await loadBusinessConnectionEmployeeMap(requests, messages, employees);
 
   const employeeMaps = buildEmployeeMaps(employees);
 
@@ -1181,10 +1218,32 @@ async function getDashboardAnalytics(query = {}) {
     };
   });
 
+  const employeePerformance = Object.fromEntries(periods.map(([key]) => [key, buildEmployeePerformance({
+    requests,
+    employees,
+    messages,
+    periodKey: key,
+    keys,
+    chats: analyticsChats,
+    companyMembers,
+    companyInfoCompanies,
+    businessConnectionEmployee
+  })]));
+
+  if (statsFocus) {
+    return {
+      periods: Object.fromEntries(periodContext.map(p => [p.key, p.summary])),
+      periodDates: Object.fromEntries(periodContext.map(p => [p.key, { current: p.currentLabel, prev: p.prevLabel }])),
+      employeePerformance,
+      custom_period: customPeriod,
+      generated_at: new Date().toISOString()
+    };
+  }
+
   return {
     periods: Object.fromEntries(periodContext.map(p => [p.key, p.summary])),
     periodDates: Object.fromEntries(periodContext.map(p => [p.key, { current: p.currentLabel, prev: p.prevLabel }])),
-    employeePerformance: Object.fromEntries(periods.map(([key]) => [key, buildEmployeePerformance({ requests, employees, messages, periodKey: key, keys, chats: analyticsChats, companyMembers, companyInfoCompanies, businessConnectionEmployee })])),
+    employeePerformance,
     chatPerformance: Object.fromEntries(periods.map(([key]) => [key, buildChatPerformance({ requests, chats: analyticsChats, periodKey: key, keys })])),
     groupPerformance: Object.fromEntries(periods.map(([key]) => [key, buildGroupPerformance({ requests, chats: analyticsChats, periodKey: key, keys })])),
     responseTimeTrend: Object.fromEntries(periods.map(([key]) => [key, buildResponseTimeTrend(requests, key, keys, messages, employeeMaps)])),
@@ -1704,6 +1763,11 @@ function resolveRequestResponsibleEmployee(request, messages = [], employeeMaps 
     externalChatCompanyMap = new Map()
   } = options;
 
+  const assignedId = String(request.assigned_to_employee_id || '').trim();
+  if (assignedId && employeeMaps?.byId?.has(assignedId)) {
+    return employeeSummary(employeeMaps.byId.get(assignedId));
+  }
+
   const companyId = resolveCompanyIdForRequest(request, chatMap, externalChatCompanyMap);
   if (companyId && companySupportByCompanyId.has(companyId)) {
     return companySupportByCompanyId.get(companyId);
@@ -1819,13 +1883,35 @@ function enrichOpenRequests({ requests = [], chats = [], messages = [], employee
   });
 }
 
-async function getOpenRequestInsights() {
+async function getOpenRequestInsights(options = {}) {
+  const lite = Boolean(options.lite);
   const requests = await supabase.select('support_requests', {
-    select: 'id,source_type,chat_id,company_id,customer_tg_id,customer_name,customer_username,initial_message_id,initial_text,status,business_connection_id,created_at',
+    select: 'id,source_type,chat_id,company_id,customer_tg_id,customer_name,customer_username,initial_message_id,initial_text,status,open_source,assigned_to_employee_id,business_connection_id,created_at',
     status: 'eq.open',
     order: supabase.order('created_at', false),
     limit: '500'
   }).catch(() => []);
+
+  if (lite) {
+    const now = new Date();
+    const enriched = requests.map(request => ({
+      ...request,
+      responsible_employee_id: request.assigned_to_employee_id || null,
+      open_minutes: round(minutesSince(request.created_at, now), 1)
+    }));
+    const groupOpen = enriched.filter(request => request.source_type === 'group').length;
+    const chatOpen = enriched.filter(request => request.source_type !== 'group').length;
+    return {
+      openRequests: enriched,
+      manager: {
+        open_requests: enriched.length,
+        group_open_requests: groupOpen,
+        chat_open_requests: chatOpen,
+        oldest_open_minutes: enriched.reduce((max, request) => Math.max(max, Number(request.open_minutes || 0)), 0),
+        assigned_open_requests: 0
+      }
+    };
+  }
 
   const chatIds = [...new Set(requests.map(request => request.chat_id).filter(value => value !== undefined && value !== null))];
   const oldestOpenCreatedAt = requests
@@ -2312,11 +2398,18 @@ async function getDashboard(query = {}) {
     prevCustomStart: getPreviousCustomPeriod(customPeriod)?.start || '',
     prevCustomEnd: getPreviousCustomPeriod(customPeriod)?.end || ''
   };
+  const statsFocus = isDashboardStatsFocus(query);
   const [employeeStats, chatStats, openInsights, today, analytics] = await Promise.all([
-    stats.selectEmployeeStatistics({ select: '*', order: 'closed_requests.desc', limit: '100' }),
-    stats.selectChatStatistics({ select: '*', order: 'total_requests.desc', limit: '100' }),
-    getOpenRequestInsights(),
-    stats.selectTodaySummary({ select: '*' }),
+    statsFocus
+      ? Promise.resolve([])
+      : stats.selectEmployeeStatistics({ select: '*', order: 'closed_requests.desc', limit: '100' }),
+    statsFocus
+      ? Promise.resolve([])
+      : stats.selectChatStatistics({ select: '*', order: 'total_requests.desc', limit: '100' }),
+    getOpenRequestInsights({ lite: statsFocus }),
+    statsFocus
+      ? Promise.resolve([stats.DEFAULT_SUMMARY])
+      : stats.selectTodaySummary({ select: '*' }),
     getDashboardAnalytics(query)
   ]);
   const periodSummary = analytics.periods?.[selectedPeriod] || analytics.periods?.all || {};

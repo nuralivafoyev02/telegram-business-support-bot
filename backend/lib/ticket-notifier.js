@@ -54,10 +54,17 @@ function isMissingSchemaColumnError(error) {
 function normalizeTicketNotifications(value = {}) {
   return {
     enabled: value.enabled === true,
-    target_chat_id: String(value.target_chat_id || value.targetChatId || '').trim(),
+    target_chat_id: normalizeTargetChatId(value.target_chat_id || value.targetChatId || ''),
     notify_on_ai: value.notify_on_ai !== false && value.notifyOnAi !== false,
     notify_on_reaction: value.notify_on_reaction !== false && value.notifyOnReaction !== false
   };
+}
+
+function normalizeTargetChatId(value = '') {
+  const text = String(value || '').trim().replace(/\s+/g, '');
+  if (!text) return '';
+  if (/^-?\d+$/.test(text)) return text;
+  return text.startsWith('@') ? text : `@${text.replace(/^@/, '')}`;
 }
 
 function telegramMessageLink(chat = {}, messageId) {
@@ -114,6 +121,28 @@ async function loadChatRow(chatId) {
     limit: '1'
   }).catch(() => []);
   return rows[0] || null;
+}
+
+async function resolveCompanyAndSupportEmployee({ companyId = null, chatId = null } = {}) {
+  const chat = chatId ? await loadChatRow(chatId) : null;
+  let resolvedCompanyId = companyId || chat?.company_id || null;
+  const cached = await getCachedCompanyInfo().catch(() => null);
+  const externalRows = Array.isArray(cached?.companies) ? cached.companies : [];
+
+  if (!resolvedCompanyId && chatId) {
+    const match = externalRows.find(company => {
+      const groups = Array.isArray(company.groups) ? company.groups : [];
+      return groups.some(group => String(group.chat_id) === String(chatId));
+    });
+    if (match) resolvedCompanyId = String(match.id || match.company_id || '').trim() || null;
+  }
+
+  const companyCtx = await loadCompanyContext(resolvedCompanyId);
+  return {
+    companyId: resolvedCompanyId,
+    companyName: companyCtx.name,
+    supportEmployee: companyCtx.supportEmployee
+  };
 }
 
 async function loadCompanyContext(companyId) {
@@ -248,6 +277,25 @@ async function buildReassignKeyboard(request = {}, page = 0) {
   return { inline_keyboard: rows };
 }
 
+async function loadNotificationCompany(request = {}, messageChat = {}) {
+  const ctx = await resolveCompanyAndSupportEmployee({
+    companyId: request.company_id,
+    chatId: request.chat_id || messageChat?.id
+  });
+  return {
+    name: ctx.companyName,
+    supportEmployee: ctx.supportEmployee
+  };
+}
+
+function enrichRequestForNotification(request = {}, { openSource = '', companyId = null } = {}) {
+  return {
+    ...request,
+    open_source: request.open_source || openSource || '',
+    company_id: request.company_id || companyId || null
+  };
+}
+
 async function buildNotificationText({ request, chat, company, openedByEmployee, assignedEmployee }) {
   const companySupport = employeeLabel(company.supportEmployee, '—');
   const markedBy = employeeLabel(openedByEmployee, '—');
@@ -261,10 +309,12 @@ async function buildNotificationText({ request, chat, company, openedByEmployee,
   const lines = [
     `<b>${statusLabel}</b>`,
     '',
-    `🏢 <b>Kompaniya:</b> ${escapeHtml(company.name)}`,
+    `🏢 <b>Kompaniya:</b> ${escapeHtml(company.name || 'Biriktirilmagan')}`,
     `👤 <b>Kompaniya mas'uli:</b> ${escapeHtml(companySupport)}`,
     openedByEmployee ? `👁 <b>Belgilagan:</b> ${escapeHtml(markedBy)}` : null,
-    assignedEmployee ? `✅ <b>Mas'ul (ishlayapti):</b> ${escapeHtml(assigned)}` : null,
+    assignedEmployee && assignedEmployee.id !== openedByEmployee?.id
+      ? `✅ <b>Mas'ul (ishlayapti):</b> ${escapeHtml(assigned)}`
+      : null,
     `📩 <b>Murojaat:</b> ${escapeHtml(truncateText(request.initial_text))}`,
     link ? `🔗 <a href="${escapeHtml(link)}">Xabarni Telegramda ochish</a>` : null,
     `📌 <b>Manba:</b> ${escapeHtml(openSourceLabel(request.open_source))}`,
@@ -274,15 +324,25 @@ async function buildNotificationText({ request, chat, company, openedByEmployee,
 }
 
 async function saveTicketNotification({ requestId, chatId, messageId }) {
-  await supabase.insert('ticket_notifications', [{
-    request_id: requestId,
-    chat_id: chatId,
-    message_id: messageId
-  }], { upsert: true, onConflict: 'request_id', prefer: 'return=minimal' }).catch(() => null);
-  await supabase.patch('support_requests', { id: supabase.eq(requestId) }, {
-    notification_chat_id: chatId,
-    notification_message_id: messageId
-  }).catch(() => null);
+  try {
+    await supabase.insert('ticket_notifications', [{
+      request_id: requestId,
+      chat_id: chatId,
+      message_id: messageId
+    }], { upsert: true, onConflict: 'request_id', prefer: 'return=minimal' });
+  } catch (error) {
+    console.warn('[ticket-notifier:save-row]', { requestId, error: error.message });
+  }
+  try {
+    await supabase.patch('support_requests', { id: supabase.eq(requestId) }, {
+      notification_chat_id: chatId,
+      notification_message_id: messageId
+    });
+  } catch (error) {
+    if (!isMissingSchemaColumnError(error)) {
+      console.warn('[ticket-notifier:save-request-meta]', { requestId, error: error.message });
+    }
+  }
 }
 
 async function refreshTicketNotificationMessage(request = {}) {
@@ -290,12 +350,14 @@ async function refreshTicketNotificationMessage(request = {}) {
   const messageId = request.notification_message_id;
   if (!chatId || !messageId) return;
   const chat = await loadChatRow(request.chat_id);
-  const company = await loadCompanyContext(request.company_id);
+  const company = await loadNotificationCompany(request, chat || { id: request.chat_id });
   const openedByEmployee = await loadEmployeeById(request.opened_by_employee_id);
   const assignedEmployee = await loadEmployeeById(request.assigned_to_employee_id);
   const text = await buildNotificationText({ request, chat: chat || { id: request.chat_id }, company, openedByEmployee, assignedEmployee });
   const keyboard = request.status === 'open' ? buildTicketKeyboard(request, 'main') : { inline_keyboard: [] };
-  await editMessageText(chatId, messageId, text, { reply_markup: keyboard, parse_mode: 'HTML' }).catch(() => null);
+  await editMessageText(chatId, messageId, text, { reply_markup: keyboard, parse_mode: 'HTML' }).catch(error => {
+    console.warn('[ticket-notifier:refresh]', { request_id: request.id, error: error.message });
+  });
 }
 
 async function shouldNotifyTicket({ settings, openSource }) {
@@ -310,7 +372,19 @@ async function notifyTicketOpened({ request, message, openSource = 'ai', openedB
   if (!request || !request.id) return { sent: false, reason: 'no_request' };
   const settings = await getBotSettings();
   const config = await shouldNotifyTicket({ settings, openSource });
-  if (!config) return { sent: false, reason: 'disabled' };
+  if (!config) {
+    return {
+      sent: false,
+      reason: 'disabled',
+      detail: !settings.ticketNotifications?.enabled
+        ? 'ticket_notifications_off'
+        : !normalizeTargetChatId(settings.ticketNotifications?.target_chat_id)
+          ? 'missing_target_chat_id'
+          : openSource === 'reaction'
+            ? 'reaction_notify_off'
+            : 'ai_notify_off'
+    };
+  }
 
   const existing = await supabase.select('ticket_notifications', {
     select: 'id,message_id,chat_id',
@@ -320,25 +394,43 @@ async function notifyTicketOpened({ request, message, openSource = 'ai', openedB
   if (existing[0]) return { sent: false, reason: 'duplicate', notification: existing[0] };
 
   const chat = message?.chat || await loadChatRow(request.chat_id) || { id: request.chat_id };
-  const company = await loadCompanyContext(request.company_id);
+  const company = await loadNotificationCompany(request, chat);
   const openedBy = openedByEmployee || await loadEmployeeById(request.opened_by_employee_id);
   const assigned = await loadEmployeeById(request.assigned_to_employee_id);
   const text = await buildNotificationText({ request, chat, company, openedByEmployee: openedBy, assignedEmployee: assigned });
   const keyboard = buildTicketKeyboard(request, 'main');
+  const targetChatId = normalizeTargetChatId(config.target_chat_id);
 
-  const result = await sendMessage(config.target_chat_id, text, {
-    parse_mode: 'HTML',
-    disable_web_page_preview: false,
-    reply_markup: keyboard
-  });
+  let result;
+  try {
+    result = await sendMessage(targetChatId, text, {
+      parse_mode: 'HTML',
+      disable_web_page_preview: false,
+      reply_markup: keyboard
+    });
+  } catch (error) {
+    console.warn('[ticket-notifier:send]', {
+      request_id: request.id,
+      target_chat_id: targetChatId,
+      open_source: openSource,
+      error: error.message
+    });
+    return { sent: false, reason: 'telegram_error', error: error.message };
+  }
   if (!result?.message_id) return { sent: false, reason: 'send_failed' };
 
   await saveTicketNotification({
     requestId: request.id,
-    chatId: config.target_chat_id,
+    chatId: targetChatId,
     messageId: result.message_id
   });
-  return { sent: true, chat_id: config.target_chat_id, message_id: result.message_id };
+  console.info('[ticket-notifier:sent]', {
+    request_id: request.id,
+    chat_id: targetChatId,
+    message_id: result.message_id,
+    open_source: openSource
+  });
+  return { sent: true, chat_id: targetChatId, message_id: result.message_id };
 }
 
 async function assignRequestToEmployee({ request, employee, eventType = 'accepted', previousEmployeeId = null }) {
@@ -378,20 +470,41 @@ async function openSupportRequestAndNotify({
   openSource = 'ai',
   openedByEmployee = null
 } = {}) {
+  const chatId = message?.chat?.id || null;
+  const companyCtx = await resolveCompanyAndSupportEmployee({ companyId, chatId });
+  const supportEmployee = companyCtx.supportEmployee;
+  const assignedAt = supportEmployee?.id ? new Date().toISOString() : null;
   const request = await metrics.createSupportRequest({
     message,
     sourceType,
-    companyId,
+    companyId: companyCtx.companyId || companyId,
     openSource,
     openedByEmployeeId: openedByEmployee?.id || null,
+    assignedToEmployeeId: supportEmployee?.id || null,
+    assignedAt,
     skipMerge: openSource === 'reaction'
   });
-  await notifyTicketOpened({
-    request,
+  const fresh = request?.id ? await loadRequestById(request.id) : null;
+  const notifyRequest = enrichRequestForNotification(fresh || request, {
+    openSource,
+    companyId: companyCtx.companyId || companyId
+  });
+  const notifyResult = await notifyTicketOpened({
+    request: notifyRequest,
     message,
     openSource,
     openedByEmployee
-  }).catch(error => console.warn('[ticket-notifier:notify]', error.message));
+  }).catch(error => {
+    console.warn('[ticket-notifier:notify]', { request_id: request?.id, error: error.message });
+    return { sent: false, reason: 'error', error: error.message };
+  });
+  if (!notifyResult?.sent) {
+    console.warn('[ticket-notifier:notify:skipped]', {
+      request_id: request?.id,
+      open_source: openSource,
+      ...notifyResult
+    });
+  }
   return request;
 }
 
