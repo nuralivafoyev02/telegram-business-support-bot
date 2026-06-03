@@ -149,7 +149,17 @@ async function getBotSettings({ force = false } = {}) {
       select: 'key,value',
       key: 'in.(ai_mode,ai_integration,log_notifications,group_message_audit,message_reactions,ticket_notifications,clickup_integration,auto_reply,done_tag,request_detection,main_group)'
     });
-    cachedSettings = normalizeSettings(rows || []);
+    try {
+      cachedSettings = normalizeSettings(rows || []);
+    } catch (normalizeError) {
+      console.error('[bot:settings:normalize:error]', normalizeError);
+      cachedSettings = {
+        ...DEFAULT_SETTINGS,
+        groupMessageAudit: normalizeGroupMessageAudit(settingValue(rows, 'group_message_audit')),
+        logNotifications: normalizeLogNotifications(settingValue(rows, 'log_notifications')),
+        mainGroupId: String(settingValue(rows, 'main_group').chat_id || DEFAULT_SETTINGS.mainGroupId).trim()
+      };
+    }
     cachedAt = now;
     return cachedSettings;
   } catch (error) {
