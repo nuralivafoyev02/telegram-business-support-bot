@@ -323,16 +323,27 @@ function jsonObject(value) {
   return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
 }
 
+const EYE_REACTION_EMOJIS = Object.freeze(['👀', '👁', '👁️']);
+
 function reactionEmojiSet(reactions = []) {
-  return new Set((Array.isArray(reactions) ? reactions : [])
-    .filter(item => item && item.type === 'emoji' && item.emoji)
-    .map(item => item.emoji));
+  const set = new Set();
+  for (const item of Array.isArray(reactions) ? reactions : []) {
+    if (!item) continue;
+    if ((item.type === 'emoji' || item.type === 'custom_emoji') && item.emoji) {
+      set.add(item.emoji);
+    }
+  }
+  return set;
 }
 
 function reactionWasAdded(reaction = {}, emoji) {
   const oldSet = reactionEmojiSet(reaction.old_reaction);
   const newSet = reactionEmojiSet(reaction.new_reaction);
   return !oldSet.has(emoji) && newSet.has(emoji);
+}
+
+function reactionWasAddedEye(reaction = {}) {
+  return EYE_REACTION_EMOJIS.some(emoji => reactionWasAdded(reaction, emoji));
 }
 
 function bestPhotoSize(photo = []) {
@@ -571,6 +582,7 @@ async function handleEyeReaction(reaction = {}, settings = {}) {
     ? await metrics.getKnownEmployeeByTelegramId(actor.id).catch(() => null)
     : null;
   if (!employee) {
+    console.warn('[bot:eye-reaction]', { skipped: 'not_employee', actor_id: actor.id || null, chat_id: chat.id });
     return { ok: false, skipped: 'not_employee' };
   }
 
@@ -578,6 +590,12 @@ async function handleEyeReaction(reaction = {}, settings = {}) {
 
   const savedMessage = await getSavedReactionMessage(chat.id, reaction.message_id);
   if (!savedMessage) {
+    console.warn('[bot:eye-reaction]', {
+      error: 'message_not_found',
+      chat_id: chat.id,
+      message_id: reaction.message_id,
+      hint: 'Bot avval mijoz xabarini DB ga saqlagan bo‘lishi kerak (guruhda admin + privacy off)'
+    });
     return { ok: false, error: 'message_not_found' };
   }
 
@@ -737,8 +755,11 @@ async function handleMessageReaction(reaction = {}) {
     const result = await handleDoneReaction(reaction, settings);
     return { ok: true, handled: 'message_reaction_done', ...result };
   }
-  if (reactionWasAdded(reaction, '👀')) {
+  if (reactionWasAddedEye(reaction)) {
     const result = await handleEyeReaction(reaction, settings);
+    if (result.skipped || result.error) {
+      console.warn('[bot:eye-reaction:result]', result);
+    }
     return { ok: true, handled: 'message_reaction_eye', ...result };
   }
   return { ok: true, handled: 'message_reaction_ignored' };

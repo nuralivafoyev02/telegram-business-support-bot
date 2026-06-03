@@ -383,7 +383,8 @@ async function openSupportRequestAndNotify({
     sourceType,
     companyId,
     openSource,
-    openedByEmployeeId: openedByEmployee?.id || null
+    openedByEmployeeId: openedByEmployee?.id || null,
+    skipMerge: openSource === 'reaction'
   });
   await notifyTicketOpened({
     request,

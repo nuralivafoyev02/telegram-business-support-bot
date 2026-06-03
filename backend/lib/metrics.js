@@ -327,14 +327,43 @@ async function patchSupportRequestMetadata(requestId, fields = {}) {
   }
 }
 
-async function createSupportRequest({ message, sourceType, companyId = null, ...ticketMeta } = {}) {
+async function findOpenRequestByInitialMessage(chatId, messageId) {
+  if (!chatId || !messageId) return null;
+  const rows = await supabase.select('support_requests', {
+    select: 'id,source_type,chat_id,company_id,customer_tg_id,customer_name,initial_message_id,initial_text,status,created_at',
+    chat_id: supabase.eq(chatId),
+    initial_message_id: supabase.eq(messageId),
+    order: supabase.order('created_at', false),
+    limit: '1'
+  }).catch(() => []);
+  return rows[0] || null;
+}
+
+async function createSupportRequest({ message, sourceType, companyId = null, skipMerge = false, ...ticketMeta } = {}) {
   const from = message.from || {};
   const chat = message.chat || {};
   const text = messageDisplayText(message);
   const createdAt = messageDateIso(message);
+  const openSource = String(ticketMeta.openSource || ticketMeta.open_source || '').trim();
+  const reactionOpen = openSource === 'reaction' || skipMerge === true;
 
-  const existing = await findMergeableOpenRequest({ message, sourceType });
-  if (existing) return addRequestNote({ request: existing, message });
+  if (reactionOpen && chat.id && message.message_id) {
+    const sameMessage = await findOpenRequestByInitialMessage(chat.id, message.message_id);
+    if (sameMessage) {
+      const optionalRow = buildSupportRequestOptionalFields(ticketMeta);
+      if (sameMessage.id && Object.keys(optionalRow).length) {
+        await patchSupportRequestMetadata(sameMessage.id, optionalRow).catch(patchError => {
+          console.warn('[metrics:support-request:reaction-metadata]', patchError.message);
+        });
+      }
+      return sameMessage;
+    }
+  }
+
+  if (!reactionOpen) {
+    const existing = await findMergeableOpenRequest({ message, sourceType });
+    if (existing) return addRequestNote({ request: existing, message });
+  }
 
   const coreRow = {
     source_type: sourceType,
@@ -565,6 +594,7 @@ module.exports = {
   saveBusinessConnection,
   saveMessage,
   createSupportRequest,
+  findOpenRequestByInitialMessage,
   patchSupportRequestMetadata,
   closeRequestRecord,
   cancelSupportRequest,
