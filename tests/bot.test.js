@@ -1357,7 +1357,7 @@ async function testEyeReactionCreatesClickUpTask() {
         date: 1777100100,
         user: { id: 777, first_name: 'Ali', username: 'ali', is_bot: false },
         old_reaction: [],
-        new_reaction: [{ type: 'emoji', emoji: '👁' }]
+        new_reaction: [{ type: 'emoji', emoji: '👀' }]
       }
     });
 

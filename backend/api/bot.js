@@ -576,7 +576,7 @@ async function handleEyeReaction(reaction = {}, settings = {}) {
   if (!target || !target.listId) return { ok: false, skipped: 'unsupported_chat' };
   await ensureReactionContext(reaction);
 
-  const existing = await getClickUpTracking(chat.id, reaction.message_id, '👁');
+  const existing = await getClickUpTracking(chat.id, reaction.message_id, '👀');
   if (existing && ['created', 'closed'].includes(existing.status)) {
     return { ok: true, duplicate: true, task_id: existing.clickup_task_id || null };
   }
@@ -590,7 +590,7 @@ async function handleEyeReaction(reaction = {}, settings = {}) {
       clickup_list_id: target.listId,
       clickup_list_key: target.key,
       status: 'error',
-      reaction_emoji: '👁',
+      reaction_emoji: '👀',
       created_by_tg_user_id: actor.id && !actor.type ? actor.id : null,
       error: 'Reaction bosilgan xabar bazadan topilmadi. Bot avval shu xabarni saqlagan bo‘lishi kerak.',
       raw: { reaction }
@@ -670,7 +670,7 @@ async function handleEyeReaction(reaction = {}, settings = {}) {
       mentioned_usernames: assignment.mentionedUsernames,
       message_link: messageLink,
       media,
-      reaction_emoji: '👁',
+      reaction_emoji: '👀',
       created_by_tg_user_id: actor.id && !actor.type ? actor.id : null,
       error: '',
       raw: { reaction, clickup_task: clickUpTask, attachments: attachmentResults }
@@ -708,7 +708,7 @@ async function handleEyeReaction(reaction = {}, settings = {}) {
       mentioned_usernames: assignment.mentionedUsernames,
       message_link: messageLink,
       media,
-      reaction_emoji: '👁',
+      reaction_emoji: '👀',
       created_by_tg_user_id: actor.id && !actor.type ? actor.id : null,
       error: error.message,
       raw: { reaction }
@@ -724,7 +724,7 @@ async function handleMessageReaction(reaction = {}) {
     const result = await handleDoneReaction(reaction, settings);
     return { ok: true, handled: 'message_reaction_done', ...result };
   }
-  if (reactionWasAdded(reaction, '👁')) {
+  if (reactionWasAdded(reaction, '👀')) {
     const result = await handleEyeReaction(reaction, settings);
     return { ok: true, handled: 'message_reaction_eye', ...result };
   }
