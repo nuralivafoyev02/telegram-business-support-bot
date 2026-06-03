@@ -87,14 +87,21 @@ function buildSystemPrompt(config) {
   ].filter(Boolean).join('\n\n');
 }
 
+const CLASSIFY_JSON_SUFFIX = [
+  'Faqat JSON formatida javob bering.',
+  '{"classification":"ticket|request|message|ignore","confidence":0.0,"reason":"qisqa sabab"}'
+].join(' ');
+
 function buildClassifyPrompt(config) {
   // Klassifikatsiya uchun maxsus, kichik prompt: knowledge_text qo'shilmaydi
-  // (TPM limitidan oshib ketmaslik uchun). Asosiy ko'rsatma juda uzun bo'lsa,
-  // uning boshlang'ich qismi ishlatiladi.
+  // (TPM limitidan oshib ketmaslik uchun). Groq/OpenAI json_object uchun
+  // messages ichida "json" so'zi bo'lishi shart — suffix har doim qo'shiladi.
   const prompt = String(config.system_prompt || DEFAULT_AI_SYSTEM_PROMPT || '');
-  return prompt.length > MAX_CLASSIFY_PROMPT_CHARS
+  const trimmed = prompt.length > MAX_CLASSIFY_PROMPT_CHARS
     ? prompt.slice(0, MAX_CLASSIFY_PROMPT_CHARS)
     : prompt;
+  if (/\bjson\b/i.test(trimmed)) return trimmed;
+  return `${trimmed}\n\n${CLASSIFY_JSON_SUFFIX}`;
 }
 
 function shouldUseExternalAi(settings = {}) {

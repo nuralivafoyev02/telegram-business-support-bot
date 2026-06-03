@@ -42,6 +42,44 @@ function resolveSourceBotToken(sourceBot = '') {
   return optionalEnv(DEFAULT_TOKEN_ENV, '');
 }
 
+function collectRelayTokens(sourceBot = '') {
+  const seen = new Set();
+  const tokens = [];
+  const primary = resolveSourceBotToken(sourceBot);
+  if (primary) {
+    tokens.push(primary);
+    seen.add(primary);
+  }
+  for (const envName of ['BOT_TOKEN', 'BOT_A_TOKEN']) {
+    const token = optionalEnv(envName, '').trim();
+    if (token && !seen.has(token)) {
+      tokens.push(token);
+      seen.add(token);
+    }
+  }
+  return tokens;
+}
+
+function isSkippableRelayError(error) {
+  const desc = String(error?.telegram?.description || error?.message || '').toLowerCase();
+  return /wrong file_id|file is temporarily unavailable|file_id/i.test(desc)
+    || Boolean(error?.tooLarge);
+}
+
+async function resolveTelegramFile(tokens = [], fileId = '') {
+  let lastError = null;
+  for (const token of tokens) {
+    try {
+      const file = await getFileWithToken(token, fileId);
+      if (file && file.file_path) return { file, token };
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  if (lastError) throw lastError;
+  throw new Error('telegram getFile returned no file_path');
+}
+
 function isRelayDisabled() {
   const flag = String(optionalEnv('TELEGRAM_MEDIA_RELAY', '') || '').trim().toLowerCase();
   return ['0', 'off', 'false', 'disabled', 'no'].includes(flag);
@@ -53,11 +91,11 @@ function shouldRelaySize(file = {}, source = {}) {
   return true;
 }
 
-async function relayOne({ kind, source, token, bucket, chatId, tgMessageId }) {
+async function relayOne({ kind, source, tokens = [], bucket, chatId, tgMessageId }) {
   if (!source || !source.file_id) return null;
   if (source.storage_path) return source;
 
-  const file = await getFileWithToken(token, source.file_id);
+  const { file, token } = await resolveTelegramFile(tokens, source.file_id);
   if (!file || !file.file_path) {
     throw new Error('telegram getFile returned no file_path');
   }
@@ -95,8 +133,8 @@ async function relayOne({ kind, source, token, bucket, chatId, tgMessageId }) {
 async function enrichMessageMediaWithStorage(message, sourceBot, { onError } = {}) {
   if (!message || typeof message !== 'object') return { relayed: 0, skipped: 0, errors: [] };
   if (isRelayDisabled()) return { relayed: 0, skipped: 0, errors: [] };
-  const token = resolveSourceBotToken(sourceBot);
-  if (!token) return { relayed: 0, skipped: 0, errors: [] };
+  const tokens = collectRelayTokens(sourceBot);
+  if (!tokens.length) return { relayed: 0, skipped: 0, errors: [] };
 
   const chatId = message.chat && message.chat.id;
   const tgMessageId = message.message_id;
@@ -122,7 +160,7 @@ async function enrichMessageMediaWithStorage(message, sourceBot, { onError } = {
       const result = await relayOne({
         kind: task.kind,
         source: task.source,
-        token,
+        tokens,
         bucket,
         chatId,
         tgMessageId
@@ -130,6 +168,10 @@ async function enrichMessageMediaWithStorage(message, sourceBot, { onError } = {
       if (result) summary.relayed += 1;
       else summary.skipped += 1;
     } catch (error) {
+      if (isSkippableRelayError(error)) {
+        summary.skipped += 1;
+        continue;
+      }
       summary.errors.push({ kind: task.kind, message: error.message });
       if (typeof onError === 'function') {
         try { onError(error, task.kind); } catch (_notifyError) { /* best-effort */ }
