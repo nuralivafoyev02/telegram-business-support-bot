@@ -6,6 +6,11 @@ const ALLOWED_CLASSIFICATIONS = new Set(['ticket', 'request', 'message', 'ignore
 const MAX_KNOWLEDGE_CHARS = 60000;
 const MAX_AUTO_REPLY_CHARS = 1800;
 const MAX_LOCAL_REPLY_CHARS = 650;
+// Klassifikatsiya so'rovi uchun TPM limitiga (Groq: 8000) sig'ish maqsadida qisqartiramiz.
+// Klassifikatsiya uchun bilim bazasi (knowledge_text) kerak emas — u faqat ticket/request/
+// message/ignore tanlovi. Faqat asosiy ko'rsatma + xabar matni jo'natiladi.
+const MAX_CLASSIFY_PROMPT_CHARS = 4000;
+const MAX_CLASSIFY_TEXT_CHARS = 2000;
 const QUESTION_LABEL_PATTERN = String.raw`(?:savol|question|q)(?:\s*[#№-]?\s*\d+)?`;
 const ANSWER_LABEL_PATTERN = String.raw`(?:javob|answer|a)(?:\s*[#№-]?\s*\d+)?`;
 const QUESTION_LABEL_RE = new RegExp(`^\\s*${QUESTION_LABEL_PATTERN}\\s*[:\\-]\\s*`, 'i');
@@ -80,6 +85,16 @@ function buildSystemPrompt(config) {
     config.system_prompt,
     knowledge ? ['Uyqur dasturi bo‘yicha ichki bilim bazasi:', knowledge].join('\n') : ''
   ].filter(Boolean).join('\n\n');
+}
+
+function buildClassifyPrompt(config) {
+  // Klassifikatsiya uchun maxsus, kichik prompt: knowledge_text qo'shilmaydi
+  // (TPM limitidan oshib ketmaslik uchun). Asosiy ko'rsatma juda uzun bo'lsa,
+  // uning boshlang'ich qismi ishlatiladi.
+  const prompt = String(config.system_prompt || DEFAULT_AI_SYSTEM_PROMPT || '');
+  return prompt.length > MAX_CLASSIFY_PROMPT_CHARS
+    ? prompt.slice(0, MAX_CLASSIFY_PROMPT_CHARS)
+    : prompt;
 }
 
 function shouldUseExternalAi(settings = {}) {
@@ -193,6 +208,10 @@ async function classifyWithAi({ text, chatType, sourceType, settings }) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 8500);
 
+  // Uzun xabar matnini qisqartiramiz — TPM limitiga (8k token) sig'ishi uchun.
+  // Klassifikatsiya uchun matnning birinchi qismi yetarli (asosiy niyat odatda boshda bo'ladi).
+  const safeText = String(text || '').slice(0, MAX_CLASSIFY_TEXT_CHARS);
+
   try {
     const response = await fetch(chatCompletionsUrl(config.base_url), {
       method: 'POST',
@@ -206,11 +225,11 @@ async function classifyWithAi({ text, chatType, sourceType, settings }) {
         temperature: 0,
         response_format: { type: 'json_object' },
         messages: [
-          { role: 'system', content: buildSystemPrompt(config) },
+          { role: 'system', content: buildClassifyPrompt(config) },
           {
             role: 'user',
             content: JSON.stringify({
-              text,
+              text: safeText,
               chat_type: chatType,
               source_type: sourceType,
               required_output: {
