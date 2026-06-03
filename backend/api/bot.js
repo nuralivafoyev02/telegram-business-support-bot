@@ -54,13 +54,6 @@ function clampInt(value, fallback, min, max) {
   return Math.min(Math.max(parsed, min), max);
 }
 
-function isUyqurEmployee(employee = null) {
-  if (!employee) return false;
-  const name = String(employee.full_name || '').toLowerCase();
-  const username = String(employee.username || '').toLowerCase();
-  return name.includes('uyqur') || username.includes('uyqur');
-}
-
 async function mapWithConcurrency(items, limit, worker) {
   const results = new Array(items.length);
   let nextIndex = 0;
@@ -532,10 +525,10 @@ async function handleDoneReaction(reaction = {}, settings = {}) {
   const actor = reactionActor(reaction);
   await ensureReactionContext(reaction);
   const employee = actor.id && !actor.type
-    ? await metrics.getKnownEmployeeByTelegramId(actor.id).catch(() => null) || await metrics.ensureEmployee(actor).catch(() => null)
+    ? await metrics.getKnownEmployeeByTelegramId(actor.id).catch(() => null)
     : null;
-  if (employee && !isUyqurEmployee(employee)) {
-    return { ok: false, skipped: 'not_support_employee' };
+  if (!employee) {
+    return { ok: false, skipped: 'not_employee' };
   }
   const closeMessage = {
     message_id: reaction.message_id,
@@ -574,6 +567,15 @@ async function handleEyeReaction(reaction = {}, settings = {}) {
   }
   const target = resolveClickUpReactionList(clickUpConfig, chat);
   if (!target || !target.listId) return { ok: false, skipped: 'unsupported_chat' };
+
+  const actor = reactionActor(reaction);
+  const employee = actor.id && !actor.type
+    ? await metrics.getKnownEmployeeByTelegramId(actor.id).catch(() => null)
+    : null;
+  if (!employee) {
+    return { ok: false, skipped: 'not_employee' };
+  }
+
   await ensureReactionContext(reaction);
 
   const existing = await getClickUpTracking(chat.id, reaction.message_id, '👀');
@@ -581,7 +583,6 @@ async function handleEyeReaction(reaction = {}, settings = {}) {
     return { ok: true, duplicate: true, task_id: existing.clickup_task_id || null };
   }
 
-  const actor = reactionActor(reaction);
   const savedMessage = await getSavedReactionMessage(chat.id, reaction.message_id);
   if (!savedMessage) {
     await saveClickUpTracking({
