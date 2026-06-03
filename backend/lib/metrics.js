@@ -244,14 +244,23 @@ async function addRequestNote({ request, message }) {
   return { ...request, appended: true };
 }
 
-async function createSupportRequest({ message, sourceType, companyId = null }) {
+async function createSupportRequest({
+  message,
+  sourceType,
+  companyId = null,
+  openSource = 'ai',
+  openedByEmployee = null
+} = {}) {
   const from = message.from || {};
   const chat = message.chat || {};
   const text = messageDisplayText(message);
   const createdAt = messageDateIso(message);
 
   const existing = await findMergeableOpenRequest({ message, sourceType });
-  if (existing) return addRequestNote({ request: existing, message });
+  if (existing) {
+    const noted = await addRequestNote({ request: existing, message });
+    return { request: noted, created: false };
+  }
 
   const rows = await supabase.insert('support_requests', [{
     source_type: sourceType,
@@ -263,6 +272,8 @@ async function createSupportRequest({ message, sourceType, companyId = null }) {
     initial_message_id: message.message_id,
     initial_text: text,
     status: 'open',
+    open_source: openSource || 'ai',
+    opened_by_employee_id: openedByEmployee && openedByEmployee.id ? openedByEmployee.id : null,
     business_connection_id: message.business_connection_id || null,
     raw: message,
     created_at: createdAt
@@ -275,11 +286,12 @@ async function createSupportRequest({ message, sourceType, companyId = null }) {
     event_type: 'opened',
     actor_tg_id: from.id || null,
     actor_name: tgUserName(from),
+    employee_id: openedByEmployee && openedByEmployee.id ? openedByEmployee.id : null,
     text,
     raw: message,
     created_at: createdAt
   }], { prefer: 'return=minimal' }).catch(() => null);
-  return request;
+  return { request, created: true };
 }
 
 async function findOpenRequestById(requestId) {
@@ -363,14 +375,28 @@ async function closeRequestRecord({ request, message, employee }) {
 async function closeLatestRequest({ message, employee, recordMissing = true }) {
   const chat = message.chat || {};
   const from = message.from || {};
-  const open = await supabase.select('support_requests', {
-    select: 'id,chat_id,status,created_at,initial_text,customer_name,customer_tg_id,initial_message_id',
-    chat_id: supabase.eq(chat.id),
-    status: 'eq.open',
-    order: supabase.order('created_at', false),
-    limit: '1'
-  });
-  const request = open[0];
+  let request = null;
+  if (employee && employee.id) {
+    const assignedRows = await supabase.select('support_requests', {
+      select: 'id,chat_id,status,created_at,initial_text,customer_name,customer_tg_id,initial_message_id,assigned_to_employee_id',
+      chat_id: supabase.eq(chat.id),
+      status: 'eq.open',
+      assigned_to_employee_id: supabase.eq(employee.id),
+      order: supabase.order('created_at', false),
+      limit: '1'
+    }).catch(() => []);
+    request = assignedRows[0] || null;
+  }
+  if (!request) {
+    const open = await supabase.select('support_requests', {
+      select: 'id,chat_id,status,created_at,initial_text,customer_name,customer_tg_id,initial_message_id,assigned_to_employee_id',
+      chat_id: supabase.eq(chat.id),
+      status: 'eq.open',
+      order: supabase.order('created_at', false),
+      limit: '1'
+    });
+    request = open[0] || null;
+  }
   if (!request) {
     if (!recordMissing) return { closed: false, request: null };
     await supabase.insert('request_events', [{
@@ -401,7 +427,7 @@ async function closeRequestByReply({ message, employee }) {
 async function findOpenRequestByMessage({ chatId, messageId }) {
   if (!chatId || !messageId) return null;
   const rows = await supabase.select('support_requests', {
-    select: 'id,chat_id,status,created_at,initial_text,customer_tg_id,customer_name,initial_message_id',
+    select: 'id,chat_id,status,created_at,initial_text,customer_tg_id,customer_name,initial_message_id,assigned_to_employee_id',
     chat_id: supabase.eq(chatId),
     initial_message_id: supabase.eq(messageId),
     status: 'eq.open',
@@ -417,6 +443,29 @@ async function closeRequestByMessage({ message, targetMessageId, employee }) {
   if (!request) return { closed: false, request: null };
   const closer = employee || await ensureEmployee(message.from || {});
   return closeRequestRecord({ request, message, employee: closer });
+}
+
+async function cancelSupportRequest({ request, employee = null, reason = '' }) {
+  if (!request || !request.id) return null;
+  const now = new Date().toISOString();
+  await supabase.patch('support_requests', { id: supabase.eq(request.id) }, {
+    status: 'cancelled',
+    closed_at: now,
+    closed_by_employee_id: employee && employee.id ? employee.id : null,
+    closed_by_tg_id: employee && employee.tg_user_id ? employee.tg_user_id : null,
+    closed_by_name: employee ? employee.full_name || employee.username || 'Xodim' : null
+  });
+  await supabase.insert('request_events', [{
+    request_id: request.id,
+    chat_id: request.chat_id,
+    event_type: 'cancelled',
+    employee_id: employee && employee.id ? employee.id : null,
+    actor_tg_id: employee && employee.tg_user_id ? employee.tg_user_id : null,
+    actor_name: employee ? tgUserName(employee) : null,
+    text: reason || 'So‘rov emas',
+    created_at: now
+  }], { prefer: 'return=minimal' }).catch(() => null);
+  return { ...request, status: 'cancelled' };
 }
 
 async function registerChatMemberUpdate(update = {}) {
@@ -442,6 +491,8 @@ module.exports = {
   saveBusinessConnection,
   saveMessage,
   createSupportRequest,
+  closeRequestRecord,
+  cancelSupportRequest,
   closeLatestRequest,
   closeRequestByReply,
   closeRequestByMessage,

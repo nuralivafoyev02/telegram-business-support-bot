@@ -3,7 +3,7 @@
 const { sendJson, readBody, getQuery } = require('../lib/http');
 const { optionalEnv, boolEnv } = require('../lib/env');
 const supabase = require('../lib/supabase');
-const { sendMessage, deleteMessage, reactToMessage, answerCallbackQuery, editMessageReplyMarkup, escapeHtml, tgUserName, getWebhookInfo, getMe, getChatMember, getFile, downloadFile } = require('../lib/telegram');
+const { sendMessage, deleteMessage, reactToMessage, answerCallbackQuery, editMessageText, editMessageReplyMarkup, escapeHtml, tgUserName, getWebhookInfo, getMe, getChatMember, getFile, downloadFile } = require('../lib/telegram');
 const { getMessageText, normalizeText, classifyMessage, isGreetingOnly, isSmallTalk, isCompletionIntent } = require('../lib/parser');
 const { getBotSettings } = require('../lib/bot-settings');
 const { resolveMainStatsChatId, sendMainStatsReport, buildMainStatsQuestionReply, isMainStatsQuestion } = require('../lib/report');
@@ -13,6 +13,17 @@ const { enrichMessageMediaWithStorage } = require('../lib/media-relay');
 const { normalizeClickUpIntegration, isClickUpIntegrationReady, createClickUpTask, updateClickUpTaskStatus, attachClickUpTaskFile } = require('../lib/clickup');
 const { notifyIncomingLog, notifyOperationalError } = require('../lib/log-notifier');
 const metrics = require('../lib/metrics');
+const {
+  TICKET_ACTIONS,
+  parseTicketCallbackData,
+  notifyTicketOpened,
+  refreshTicketNotificationMessage,
+  loadRequestById,
+  loadEmployeeById,
+  assignRequestToEmployee,
+  buildReassignKeyboard,
+  buildTicketKeyboard
+} = require('../lib/ticket-notifier');
 
 const START_RE = /^\/start(?:@\w+)?(?:\s|$)/i;
 const HELP_RE = /^\/help(?:@\w+)?(?:\s|$)/i;
@@ -561,13 +572,6 @@ async function handleDoneReaction(reaction = {}, settings = {}) {
 
 async function handleEyeReaction(reaction = {}, settings = {}) {
   const chat = reaction.chat || {};
-  const clickUpConfig = normalizeClickUpIntegration(settings.clickUpIntegration);
-  if (!isClickUpIntegrationReady(clickUpConfig)) {
-    return { ok: false, skipped: 'clickup_not_ready' };
-  }
-  const target = resolveClickUpReactionList(clickUpConfig, chat);
-  if (!target || !target.listId) return { ok: false, skipped: 'unsupported_chat' };
-
   const actor = reactionActor(reaction);
   const employee = actor.id && !actor.type
     ? await metrics.getKnownEmployeeByTelegramId(actor.id).catch(() => null)
@@ -578,24 +582,8 @@ async function handleEyeReaction(reaction = {}, settings = {}) {
 
   await ensureReactionContext(reaction);
 
-  const existing = await getClickUpTracking(chat.id, reaction.message_id, '👀');
-  if (existing && ['created', 'closed'].includes(existing.status)) {
-    return { ok: true, duplicate: true, task_id: existing.clickup_task_id || null };
-  }
-
   const savedMessage = await getSavedReactionMessage(chat.id, reaction.message_id);
   if (!savedMessage) {
-    await saveClickUpTracking({
-      chat_id: chat.id,
-      tg_message_id: reaction.message_id,
-      clickup_list_id: target.listId,
-      clickup_list_key: target.key,
-      status: 'error',
-      reaction_emoji: '👀',
-      created_by_tg_user_id: actor.id && !actor.type ? actor.id : null,
-      error: 'Reaction bosilgan xabar bazadan topilmadi. Bot avval shu xabarni saqlagan bo‘lishi kerak.',
-      raw: { reaction }
-    });
     return { ok: false, error: 'message_not_found' };
   }
 
@@ -613,14 +601,64 @@ async function handleEyeReaction(reaction = {}, settings = {}) {
     caption: jsonObject(savedMessage.raw).caption || ''
   };
   const sourceType = savedMessage.source_type || 'group';
-  const supportRequest = await metrics.createSupportRequest({
+
+  const chatRow = await supabase.select('tg_chats', {
+    select: 'chat_id,company_id,title,username',
+    chat_id: supabase.eq(chat.id),
+    limit: '1'
+  }).catch(() => []);
+  const companyId = chatRow[0] && chatRow[0].company_id || null;
+
+  // Har doim "savol" sifatida saqlaymiz — ClickUp yoqilmagan bo'lsa ham
+  const supportResult = await metrics.createSupportRequest({
     message: raw,
     sourceType,
-    companyId: null
+    companyId,
+    openSource: 'reaction',
+    openedByEmployee: employee
   }).catch(error => {
-    console.warn('[bot:clickup:support-request:error]', error.message);
+    console.warn('[bot:eye-reaction:support-request:error]', error.message);
     return null;
   });
+  const supportRequest = supportResult && supportResult.request || null;
+  const supportRequestId = supportRequest && supportRequest.id || null;
+  if (supportResult && supportResult.created && supportRequest) {
+    await notifyTicketOpened({
+      request: supportRequest,
+      message: raw,
+      openSource: 'reaction',
+      openedByEmployee: employee
+    }).catch(error => logBackgroundError('ticket-notify-reaction', error));
+  }
+
+  // ClickUp ready bo'lmasa, faqat savol qoldiriladi va to'xtaymiz
+  const clickUpConfig = normalizeClickUpIntegration(settings.clickUpIntegration);
+  if (!isClickUpIntegrationReady(clickUpConfig)) {
+    return {
+      ok: true,
+      support_request_id: supportRequestId,
+      clickup_skipped: 'clickup_not_ready'
+    };
+  }
+  const target = resolveClickUpReactionList(clickUpConfig, chat);
+  if (!target || !target.listId) {
+    return {
+      ok: true,
+      support_request_id: supportRequestId,
+      clickup_skipped: 'unsupported_chat'
+    };
+  }
+
+  const existing = await getClickUpTracking(chat.id, reaction.message_id, '👀');
+  if (existing && ['created', 'closed'].includes(existing.status)) {
+    return {
+      ok: true,
+      duplicate: true,
+      task_id: existing.clickup_task_id || null,
+      support_request_id: supportRequestId
+    };
+  }
+
   const media = extractReactionMedia(raw);
   const messageLink = telegramMessageLink(raw.chat || chat, savedMessage.tg_message_id);
   const text = savedMessage.text || getMessageText(raw);
@@ -1972,7 +2010,125 @@ async function handleBroadcastCallback(query, parsed) {
   return true;
 }
 
+function ticketCallbackMessage(query = {}) {
+  return {
+    message_id: query.message && query.message.message_id,
+    date: Math.floor(Date.now() / 1000),
+    chat: query.message && query.message.chat || {},
+    from: query.from || {},
+    text: ''
+  };
+}
+
+async function handleTicketCallback(query = {}, parsed = {}) {
+  const callbackMessage = query.message || {};
+  const notifyChat = callbackMessage.chat || {};
+  const employee = await getCallbackEmployee(query).catch(() => null);
+  if (!employee) {
+    await answerCallbackQuery(query.id, 'Bu amal faqat xodimlar ro‘yxatidagi hodimlar uchun.').catch(() => null);
+    return true;
+  }
+
+  const request = await loadRequestById(parsed.requestId);
+  if (!request) {
+    await answerCallbackQuery(query.id, 'Ticket topilmadi.').catch(() => null);
+    return true;
+  }
+
+  const action = parsed.action;
+  const notifyChatId = request.notification_chat_id || notifyChat.id;
+  const notifyMessageId = request.notification_message_id || callbackMessage.message_id;
+
+  if (action === TICKET_ACTIONS.REASSIGN) {
+    const page = Number(parsed.extra || 0) || 0;
+    const keyboard = await buildReassignKeyboard(request, page);
+    if (notifyChatId && notifyMessageId) {
+      await editMessageReplyMarkup(notifyChatId, notifyMessageId, keyboard).catch(error => logBackgroundError('ticket-reassign-keyboard', error));
+    }
+    await answerCallbackQuery(query.id, 'Hodimni tanlang.').catch(() => null);
+    return true;
+  }
+
+  if (action === TICKET_ACTIONS.REASSIGN_BACK) {
+    if (notifyChatId && notifyMessageId) {
+      await editMessageReplyMarkup(notifyChatId, notifyMessageId, buildTicketKeyboard(request, 'main'))
+        .catch(error => logBackgroundError('ticket-reassign-back', error));
+    }
+    await answerCallbackQuery(query.id).catch(() => null);
+    return true;
+  }
+
+  if (request.status !== 'open' && [TICKET_ACTIONS.ACCEPT, TICKET_ACTIONS.REASSIGN, TICKET_ACTIONS.REASSIGN_SELECT, TICKET_ACTIONS.REASSIGN].includes(action)) {
+    await answerCallbackQuery(query.id, 'Ticket ochiq emas.').catch(() => null);
+    return true;
+  }
+
+  if (action === TICKET_ACTIONS.REASSIGN_SELECT) {
+    const targetKey = String(parsed.extra || '').trim();
+    let targetEmployee = null;
+    if (/^\d+$/.test(targetKey)) {
+      targetEmployee = await metrics.getKnownEmployeeByTelegramId(Number(targetKey)).catch(() => null);
+    }
+    if (!targetEmployee) targetEmployee = await loadEmployeeById(targetKey);
+    if (!targetEmployee) {
+      await answerCallbackQuery(query.id, 'Xodim topilmadi.').catch(() => null);
+      return true;
+    }
+    const previousId = request.assigned_to_employee_id || null;
+    await assignRequestToEmployee({
+      request,
+      employee: targetEmployee,
+      eventType: 'reassigned',
+      previousEmployeeId: previousId
+    });
+    await answerCallbackQuery(query.id, `${targetEmployee.full_name || 'Xodim'} ga topshirildi.`).catch(() => null);
+    return true;
+  }
+
+  if (action === TICKET_ACTIONS.ACCEPT) {
+    await assignRequestToEmployee({ request, employee, eventType: 'accepted' });
+    await answerCallbackQuery(query.id, 'Qabul qilindi.').catch(() => null);
+    return true;
+  }
+
+  if (action === TICKET_ACTIONS.CLOSE) {
+    if (request.status !== 'open') {
+      await answerCallbackQuery(query.id, 'Ticket allaqachon yopilgan.').catch(() => null);
+      return true;
+    }
+    const closeMessage = {
+      ...ticketCallbackMessage(query),
+      chat: { id: request.chat_id },
+      text: '🔒 Ticket yopildi'
+    };
+    await metrics.closeRequestRecord({ request, message: closeMessage, employee });
+    const updated = await loadRequestById(request.id);
+    await refreshTicketNotificationMessage(updated || request);
+    await answerCallbackQuery(query.id, 'Yopildi.').catch(() => null);
+    return true;
+  }
+
+  if (action === TICKET_ACTIONS.NOT_REQUEST) {
+    await metrics.cancelSupportRequest({ request, employee, reason: 'So‘rov emas' });
+    const updated = await loadRequestById(request.id);
+    if (updated) {
+      await refreshTicketNotificationMessage({ ...updated, status: 'cancelled' });
+      if (notifyChatId && notifyMessageId) {
+        await editMessageReplyMarkup(notifyChatId, notifyMessageId, { inline_keyboard: [] })
+          .catch(() => null);
+      }
+    }
+    await answerCallbackQuery(query.id, 'So‘rov emas deb belgilandi.').catch(() => null);
+    return true;
+  }
+
+  await answerCallbackQuery(query.id).catch(() => null);
+  return true;
+}
+
 async function handleCallbackQuery(query = {}) {
+  const ticketParsed = parseTicketCallbackData(query.data);
+  if (ticketParsed) return handleTicketCallback(query, ticketParsed);
   const assistantParsed = parseAssistantCallbackData(query.data);
   if (assistantParsed) return handleAssistantCallback(query, assistantParsed);
   const parsed = parseBroadcastCallbackData(query.data);
@@ -2580,11 +2736,19 @@ async function processMessage(updateKind, message, options = {}) {
 
   if (isSupportRequestClassification(classification)) {
     try {
-      await metrics.createSupportRequest({
+      const createResult = await metrics.createSupportRequest({
         message,
         sourceType,
-        companyId: chatRow ? chatRow.company_id : null
+        companyId: chatRow ? chatRow.company_id : null,
+        openSource: 'ai'
       });
+      if (createResult && createResult.created && createResult.request) {
+        await notifyTicketOpened({
+          request: createResult.request,
+          message,
+          openSource: 'ai'
+        }).catch(notifyError => logBackgroundError('ticket-notify-ai', notifyError));
+      }
     } catch (error) {
       await maybeNotifyMainGroupMessageSaveFailed({
         updateKind,

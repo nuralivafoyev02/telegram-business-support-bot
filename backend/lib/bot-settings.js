@@ -15,6 +15,12 @@ const DEFAULT_SETTINGS = Object.freeze({
   logNotifications: Object.freeze({ enabled: false, levels: ['error'], target: 'main_group' }),
   groupMessageAudit: Object.freeze({ enabled: true, target: 'main_group', channelId: '' }),
   messageReactions: Object.freeze({ enabled: false, ticketClose: true, emoji: '\u26a1' }),
+  ticketNotifications: Object.freeze({
+    enabled: false,
+    target_chat_id: '',
+    notify_on_ai: true,
+    notify_on_reaction: true
+  }),
   clickUpIntegration: normalizeClickUpIntegration({}),
   autoReply: true,
   doneTag: DEFAULT_DONE_TAG,
@@ -90,12 +96,22 @@ function normalizeMessageReactions(value = {}) {
   };
 }
 
+function normalizeTicketNotifications(value = {}) {
+  return {
+    enabled: normalizeBoolean(value.enabled, DEFAULT_SETTINGS.ticketNotifications.enabled),
+    target_chat_id: String(value.target_chat_id || value.targetChatId || '').trim(),
+    notify_on_ai: normalizeBoolean(value.notify_on_ai ?? value.notifyOnAi, DEFAULT_SETTINGS.ticketNotifications.notify_on_ai),
+    notify_on_reaction: normalizeBoolean(value.notify_on_reaction ?? value.notifyOnReaction, DEFAULT_SETTINGS.ticketNotifications.notify_on_reaction)
+  };
+}
+
 function normalizeSettings(rows = []) {
   const ai = settingValue(rows, 'ai_mode');
   const integration = normalizeAiIntegration(settingValue(rows, 'ai_integration'));
   const logNotifications = normalizeLogNotifications(settingValue(rows, 'log_notifications'));
   const groupMessageAudit = normalizeGroupMessageAudit(settingValue(rows, 'group_message_audit'));
   const messageReactions = normalizeMessageReactions(settingValue(rows, 'message_reactions'));
+  const ticketNotifications = normalizeTicketNotifications(settingValue(rows, 'ticket_notifications'));
   const clickUpIntegration = normalizeClickUpIntegration(settingValue(rows, 'clickup_integration'));
   const autoReply = settingValue(rows, 'auto_reply');
   const done = settingValue(rows, 'done_tag');
@@ -114,6 +130,7 @@ function normalizeSettings(rows = []) {
     logNotifications,
     groupMessageAudit,
     messageReactions,
+    ticketNotifications,
     clickUpIntegration,
     autoReply: normalizeBoolean(autoReply.enabled, DEFAULT_SETTINGS.autoReply),
     doneTag: String(done.tag || DEFAULT_SETTINGS.doneTag).trim() || DEFAULT_SETTINGS.doneTag,
@@ -130,7 +147,7 @@ async function getBotSettings({ force = false } = {}) {
   try {
     const rows = await supabase.select('bot_settings', {
       select: 'key,value',
-      key: 'in.(ai_mode,ai_integration,log_notifications,group_message_audit,message_reactions,clickup_integration,auto_reply,done_tag,request_detection,main_group)'
+      key: 'in.(ai_mode,ai_integration,log_notifications,group_message_audit,message_reactions,ticket_notifications,clickup_integration,auto_reply,done_tag,request_detection,main_group)'
     });
     cachedSettings = normalizeSettings(rows || []);
     cachedAt = now;

@@ -77,6 +77,18 @@ async function answerCallbackQuery(callbackQueryId, text = '') {
   return telegram('answerCallbackQuery', { callback_query_id: callbackQueryId, text });
 }
 
+async function editMessageText(chatId, messageId, text, options = {}) {
+  const payload = {
+    chat_id: chatId,
+    message_id: messageId,
+    text,
+    disable_web_page_preview: false,
+    ...options
+  };
+  if (payload.parse_mode === null) delete payload.parse_mode;
+  return telegram('editMessageText', payload);
+}
+
 async function editMessageReplyMarkup(chatId, messageId, replyMarkup = null) {
   return telegram('editMessageReplyMarkup', {
     chat_id: chatId,
@@ -156,4 +168,26 @@ function escapeHtml(str = '') {
     .replaceAll('"', '&quot;');
 }
 
-module.exports = { telegram, sendMessage, deleteMessage, reactToMessage, sendBusinessMessage, answerCallbackQuery, editMessageReplyMarkup, getWebhookInfo, getMe, getChatMember, setWebhook, deleteWebhook, getUpdates, getFile, getFileWithToken, getUserProfilePhotos, downloadFile, downloadFileWithToken, tgUserName, escapeHtml };
+module.exports = {
+  telegram,
+  sendMessage,
+  deleteMessage,
+  reactToMessage,
+  sendBusinessMessage,
+  answerCallbackQuery,
+  editMessageText,
+  editMessageReplyMarkup,
+  getWebhookInfo,
+  getMe,
+  getChatMember,
+  setWebhook,
+  deleteWebhook,
+  getUpdates,
+  getFile,
+  getFileWithToken,
+  getUserProfilePhotos,
+  downloadFile,
+  downloadFileWithToken,
+  tgUserName,
+  escapeHtml
+};

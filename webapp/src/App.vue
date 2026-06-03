@@ -807,6 +807,15 @@
                   <label class="label">Asosiy guruh raqami
                     <input v-model.trim="settingsForm.main_group_id" class="input" placeholder="-1001234567890" />
                   </label>
+                  <label class="label">Ticket xabarnomalari
+                    <select v-model="settingsForm.ticket_notifications" class="select">
+                      <option value="false">O‘chirilgan</option>
+                      <option value="true">Yoqilgan</option>
+                    </select>
+                  </label>
+                  <label class="label wide">Ticket guruh ID (alohida guruh)
+                    <input v-model.trim="settingsForm.ticket_group_id" class="input" placeholder="-1001234567890" />
+                  </label>
                   <label class="label">Guruh xabari saqlansa
                     <select v-model="settingsForm.group_message_audit" class="select">
                       <option value="channel">Kanalga xabar berish</option>
@@ -2478,7 +2487,7 @@ const floatingTooltipStyle = computed(() => ({
   transform: floatingTooltip.value.placement === 'top' ? 'translate(-50%, -100%)' : 'translate(-50%, 0)'
 }));
 
-const settingsForm = reactive({ ai_mode: 'false', auto_reply: 'true', message_reactions: 'false', done_tag: '#done', main_group_id: '', group_message_audit: 'main_group', group_message_audit_channel_id: '', request_detection: 'keyword' });
+const settingsForm = reactive({ ai_mode: 'false', auto_reply: 'true', message_reactions: 'false', ticket_notifications: 'false', ticket_group_id: '', done_tag: '#done', main_group_id: '', group_message_audit: 'main_group', group_message_audit_channel_id: '', request_detection: 'keyword' });
 const isManagerMode = computed(() => false);
 const mainTabs = computed(() => tabs.filter(tab => mainTabKeys.includes(tab.key)));
 const otherTabs = computed(() => tabs.filter(tab => otherTabKeys.includes(tab.key) && (tab.key !== 'clickup' || clickUpIntegrationReady.value)));
@@ -5249,6 +5258,7 @@ async function loadSettings() {
   const logNotifications = data.settings?.find(s => s.key === 'log_notifications')?.value;
   const groupMessageAudit = data.settings?.find(s => s.key === 'group_message_audit')?.value;
   const messageReactions = data.settings?.find(s => s.key === 'message_reactions')?.value;
+  const ticketNotifications = data.settings?.find(s => s.key === 'ticket_notifications')?.value;
   const done = data.settings?.find(s => s.key === 'done_tag')?.value;
   const mainGroup = data.settings?.find(s => s.key === 'main_group')?.value;
   const detect = data.settings?.find(s => s.key === 'request_detection')?.value;
@@ -5297,6 +5307,10 @@ async function loadSettings() {
   settingsForm.message_reactions = messageReactions === undefined
     ? 'false'
     : String(!!messageReactions?.enabled);
+  settingsForm.ticket_notifications = ticketNotifications === undefined
+    ? 'false'
+    : String(!!ticketNotifications?.enabled);
+  settingsForm.ticket_group_id = ticketNotifications?.target_chat_id || ticketNotifications?.targetChatId || '';
   settingsForm.done_tag = done?.tag || '#done';
   settingsForm.main_group_id = mainGroup?.chat_id || '';
   settingsForm.group_message_audit = groupMessageAudit === undefined
@@ -7288,6 +7302,15 @@ async function saveSettings() {
         },
         { key: 'auto_reply', value: { enabled: settingsForm.auto_reply === 'true' } },
         { key: 'message_reactions', value: { enabled: settingsForm.message_reactions === 'true', ticket_close: true, emoji: '⚡' } },
+        {
+          key: 'ticket_notifications',
+          value: {
+            enabled: settingsForm.ticket_notifications === 'true',
+            target_chat_id: settingsForm.ticket_group_id,
+            notify_on_ai: true,
+            notify_on_reaction: true
+          }
+        },
         { key: 'done_tag', value: { tag: settingsForm.done_tag, auto_reply: true } },
         { key: 'main_group', value: { chat_id: settingsForm.main_group_id } },
         {
