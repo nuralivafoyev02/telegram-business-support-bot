@@ -774,6 +774,34 @@ function buildTicketAnswerTrend(requests, periodKey, keys) {
     }));
 }
 
+function buildCompanyNameLookup(companies = [], companyInfoCompanies = [], externalChatCompanyMap = new Map()) {
+  const lookup = new Map();
+  const register = (rawId, rawName) => {
+    const id = String(rawId || '').trim();
+    const name = String(rawName || '').trim();
+    if (!id) return;
+    const current = lookup.get(id) || { key: id, name: '' };
+    lookup.set(id, {
+      key: current.key || id,
+      name: name || current.name || ''
+    });
+  };
+
+  [...companies, ...companyInfoCompanies].forEach(company => {
+    if (!company || typeof company !== 'object') return;
+    const label = String(company.name || company.company_name || company.legal_name || '').trim();
+    register(companyDirectoryId(company), label);
+    register(company.id, label);
+    register(company.company_id, label);
+  });
+
+  externalChatCompanyMap.forEach(meta => {
+    register(meta?.company_id, meta?.company_name);
+  });
+
+  return lookup;
+}
+
 function emptyCompanyTicketBucket(extra = {}) {
   return {
     company_id: '',
@@ -801,6 +829,7 @@ function buildCompanyTicketPerformance({
   const companyMap = new Map(companies.map(company => [companyDirectoryId(company), company]).filter(([id]) => id));
   const chatMap = new Map(chats.map(chat => [telegramIdKey(chat.chat_id), chat]));
   const externalChatCompanyMap = buildCompanyInfoChatMap(companyInfoCompanies);
+  const companyNameLookup = buildCompanyNameLookup(companies, companyInfoCompanies, externalChatCompanyMap);
   const normalizedSourceType = String(sourceType || '').trim().toLowerCase();
 
   const totals = new Map();
@@ -810,17 +839,57 @@ function buildCompanyTicketPerformance({
     is_unassigned: true
   });
 
-  function ensureCompanyTotal(companyId) {
+  function resolveCompanyMeta(row = {}) {
+    const companyId = resolveCompanyIdForRequest(row, chatMap, externalChatCompanyMap);
+    const normalizedId = String(companyId || '').trim();
+    if (!normalizedId) return { companyId: '', key: '', name: '' };
+
+    const company = companyMap.get(normalizedId) || null;
+    const lookup = companyNameLookup.get(normalizedId) || null;
+    const chat = chatMap.get(telegramIdKey(row.chat_id)) || {};
+    const external = externalChatCompanyMap.get(telegramIdKey(row.chat_id)) || {};
+
+    const name = String(
+      company?.name
+      || company?.company_name
+      || company?.legal_name
+      || lookup?.name
+      || chat.company_name
+      || external.company_name
+      || ''
+    ).trim();
+    const key = (company ? companyDirectoryId(company) : '') || lookup?.key || normalizedId;
+    return { companyId: normalizedId, key, name };
+  }
+
+  function ensureCompanyTotal(companyId, preferredName = '') {
     const normalizedId = String(companyId || '').trim();
     if (!normalizedId || normalizedId === '__unassigned__') return null;
     const company = companyMap.get(normalizedId) || null;
-    const key = (company ? companyDirectoryId(company) : '') || normalizedId;
-    const current = totals.get(key) || emptyCompanyTicketBucket({
-      company_id: key,
-      name: company?.name || company?.company_name || 'Kompaniya'
-    });
-    totals.set(key, current);
-    return current;
+    const lookup = companyNameLookup.get(normalizedId) || null;
+    const key = (company ? companyDirectoryId(company) : '') || lookup?.key || normalizedId;
+    const resolvedName = String(
+      preferredName
+      || company?.name
+      || company?.company_name
+      || company?.legal_name
+      || lookup?.name
+      || ''
+    ).trim();
+    const fallbackName = resolvedName || `ID ${key.slice(0, 8)}`;
+    const existing = totals.get(key);
+    if (!existing) {
+      const created = emptyCompanyTicketBucket({
+        company_id: key,
+        name: fallbackName
+      });
+      totals.set(key, created);
+      return created;
+    }
+    if (resolvedName && (!existing.name || existing.name === 'Kompaniya' || String(existing.name).startsWith('ID '))) {
+      existing.name = resolvedName;
+    }
+    return existing;
   }
 
   function resolveCompanyId(row = {}) {
@@ -843,8 +912,8 @@ function buildCompanyTicketPerformance({
     const createdInPeriod = request.created_at && inCurrentPeriod(request.created_at, periodKey, keys);
     if (!createdInPeriod) return;
 
-    const companyId = resolveCompanyId(request);
-    const current = ensureCompanyTotal(companyId);
+    const meta = resolveCompanyMeta(request);
+    const current = ensureCompanyTotal(meta.companyId, meta.name);
     if (!current) {
       addRequestToBucket(unassigned, request);
       return;
@@ -856,8 +925,8 @@ function buildCompanyTicketPerformance({
     .filter(message => message.created_at && inCurrentPeriod(message.created_at, periodKey, keys))
     .filter(message => matchesSourceType(message))
     .forEach(message => {
-      const companyId = resolveCompanyId(message);
-      const current = ensureCompanyTotal(companyId);
+      const meta = resolveCompanyMeta(message);
+      const current = ensureCompanyTotal(meta.companyId, meta.name);
       if (!current) return;
       current.message_count += 1;
       if (['request', 'ticket'].includes(String(message.classification || '').toLowerCase())) {
@@ -1164,7 +1233,18 @@ async function getDashboardAnalytics(query = {}) {
     getCachedCompanyInfo().catch(() => null)
   ]);
   const companyInfoCompanies = companyInfoCache?.companies || [];
-  const analyticsCompanies = mergeCompanyDirectoryRows(statsFocus ? [] : companies, companyInfoCompanies);
+  const requestCompanyIds = [...new Set(requests.map(request => request.company_id).filter(Boolean))];
+  const requestCompanies = requestCompanyIds.length
+    ? await supabase.select('companies', {
+      select: 'id,name,legal_name,is_active',
+      id: supabase.inList(requestCompanyIds.slice(0, 500)),
+      limit: '500'
+    }).catch(() => [])
+    : [];
+  const analyticsCompanies = mergeCompanyDirectoryRows(
+    statsFocus ? requestCompanies : companies,
+    companyInfoCompanies
+  );
   let analyticsChats = [];
   if (statsFocus) {
     const requestChatIds = [...new Set(requests.map(request => request.chat_id).filter(value => value !== undefined && value !== null))];
