@@ -814,7 +814,7 @@ function buildCompanyTicketPerformance({
     const normalizedId = String(companyId || '').trim();
     if (!normalizedId || normalizedId === '__unassigned__') return null;
     const company = companyMap.get(normalizedId) || null;
-    const key = companyDirectoryId(company) || normalizedId;
+    const key = (company ? companyDirectoryId(company) : '') || normalizedId;
     const current = totals.get(key) || emptyCompanyTicketBucket({
       company_id: key,
       name: company?.name || company?.company_name || 'Kompaniya'
@@ -1699,12 +1699,14 @@ function buildCompanySupportByCompanyId(companies = [], employeeMaps = buildEmpl
 }
 
 function companyDirectoryId(company = {}) {
+  if (!company || typeof company !== 'object') return '';
   return String(company.id || company.company_id || '').trim();
 }
 
 function mergeCompanyDirectoryRows(companies = [], companyInfoCompanies = []) {
   const rowsById = new Map();
   [...companies, ...companyInfoCompanies].forEach(company => {
+    if (!company || typeof company !== 'object') return;
     const companyId = companyDirectoryId(company);
     if (!companyId) return;
     const current = rowsById.get(companyId) || {};
