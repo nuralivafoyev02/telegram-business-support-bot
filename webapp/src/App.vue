@@ -1848,9 +1848,9 @@
                   <b>{{ fmtNumber(employeeProfile.summary?.open_requests) }}</b>
                 </span>
                 <button type="button" class="employee-profile-stat-card"
-                  :disabled="!employeeCompanyDetail.companies?.length" @click="openEmployeeCompanyList">
+                  :disabled="employeeProfileCompanyTotal <= 0" @click="openEmployeeCompanyList">
                   <small>Kompaniya</small>
-                  <b>{{ fmtNumber(employeeProfile.summary?.company_total) }}</b>
+                  <b>{{ fmtNumber(employeeProfileCompanyTotal) }}</b>
                 </button>
                 <span>
                   <small>O‘rtacha</small>
@@ -2675,6 +2675,7 @@ const periodOptions = [
 const emptyPeriodStats = {
   total_requests: 0,
   open_requests: 0,
+  overdue_open_requests: 0,
   closed_requests: 0,
   close_rate: 0,
   avg_close_minutes: 0,
@@ -2767,6 +2768,12 @@ const companyTicketTotals = computed(() => companyTicketRows.value.reduce((total
   open: totals.open + Number(row.open_requests || 0)
 }), { total: 0, closed: 0, open: 0 }));
 const companyTicketMax = computed(() => Math.max(1, ...companyTicketRows.value.map(row => Number(row.total_requests || 0))));
+const supportPeriodAvgCloseMinutes = computed(() => {
+  const statsAvg = Number(selectedPeriodStats.value.avg_close_minutes || 0);
+  if (statsAvg > 0) return statsAvg;
+  const rows = topEmployeeRows.value.filter(row => !isManagerEmployee(row));
+  return weightedAverageBy(rows, 'avg_close_minutes', 'closed_requests');
+});
 const supportSummaryCards = computed(() => {
   const stats = selectedPeriodStats.value;
   const previousLabel = currentPeriodDates.value.prev || 'oldingi davr';
@@ -2797,7 +2804,7 @@ const supportSummaryCards = computed(() => {
       key: 'open',
       title: 'Javobsiz',
       value: fmtNumber(rankingOpenRequestsTotal.value),
-      note: `${fmtNumber(overdueOpenRequestsTotal.value || 0)} tasi 30 daqiqadan oshgan`,
+      note: `${fmtNumber(rankingOverdueOpenRequestsTotal.value)} tasi 30 daqiqadan oshgan`,
       comparison: attachPreviousLabel(compareValue(rankingOpenRequestsTotal.value, stats.prev_open_requests, { invert: true, unit: 'ta' })),
       icon: '⚠️',
       tone: 'danger',
@@ -2806,9 +2813,9 @@ const supportSummaryCards = computed(() => {
     {
       key: 'avg',
       title: 'O‘rtacha javob',
-      value: fmtMinutes(stats.avg_close_minutes),
+      value: fmtMinutes(supportPeriodAvgCloseMinutes.value),
       note: `SLA: ${fmtPercent(stats.close_rate)}`,
-      comparison: attachPreviousLabel(compareValue(stats.avg_close_minutes, stats.prev_avg_close_minutes, { invert: true, unit: 'min' })),
+      comparison: attachPreviousLabel(compareValue(supportPeriodAvgCloseMinutes.value, stats.prev_avg_close_minutes, { invert: true, unit: 'min' })),
       icon: '⏱️',
       action: 'avg'
     }
@@ -3139,8 +3146,11 @@ const supportPerformanceRows = computed(() => {
       closed_requests: closed,
       open_requests: open,
       total_requests: total,
-      company_total: periodRow ? Number(periodRow.company_total || 0) : assignedCompanyCount,
+      company_total: selectedStatsPeriod.value === 'all'
+        ? assignedCompanyCount
+        : (periodRow ? Number(periodRow.company_total || 0) : 0),
       assigned_company_count: assignedCompanyCount,
+      period_company_total: periodRow ? Number(periodRow.company_total || 0) : 0,
       avg_close_minutes: avg,
       close_rate: sla,
       sla,
@@ -3902,6 +3912,43 @@ function companyMatchesEmployee(company = {}, employee = {}) {
   return Boolean(employeeUsername && companyUsername && employeeUsername === companyUsername);
 }
 
+function companyScopeKeyFromCompany(company = {}) {
+  const companyId = String(company.id || company.company_id || '').trim();
+  if (companyId) return `id:${companyId}`;
+  const companyName = normalizedCompanyName(company.name);
+  return companyName ? `name:${companyName}` : '';
+}
+
+function mergePeriodCompaniesWithAssigned(periodCompanies = [], allAssigned = []) {
+  if (!periodCompanies.length) return [];
+  const keys = new Set(periodCompanies.map(company => companyScopeKeyFromCompany(company)).filter(Boolean));
+  const matched = allAssigned.filter(company => keys.has(companyScopeKeyFromCompany(company)));
+  return matched.length ? matched : periodCompanies;
+}
+
+function applyEmployeePeriodCompanies({ row = {}, allAssigned = [], periodCompaniesFromApi = [] } = {}) {
+  if (selectedStatsPeriod.value === 'all') {
+    return {
+      companies: allAssigned,
+      total: allAssigned.length,
+      summary: companyPortfolioSummary(allAssigned)
+    };
+  }
+  const companies = mergePeriodCompaniesWithAssigned(periodCompaniesFromApi, allAssigned);
+  const total = companies.length || Number(row.period_company_total ?? row.company_total ?? 0);
+  return {
+    companies,
+    total,
+    summary: companies.length ? companyPortfolioSummary(companies) : {
+      total,
+      active: 0,
+      churn: 0,
+      expiring_soon: 0,
+      expired: 0
+    }
+  };
+}
+
 function isCompanyChurn(row = {}) {
   return String(row.business_status || '').toUpperCase() === 'PAUSED';
 }
@@ -4264,7 +4311,7 @@ const topSupportCards = computed(() => supportPerformanceRows.value
     rank: index + 1,
     assigned_companies: companies,
     company_summary: companySummary,
-    company_total: Number(row.company_total ?? row.assigned_company_count ?? companySummary.total ?? 0),
+    company_total: Number(row.company_total ?? row.period_company_total ?? 0),
     company_active: companySummary.active,
     company_churn: companySummary.churn,
     company_expiring_soon: companySummary.expiring_soon,
@@ -4280,6 +4327,8 @@ const rankingOpenRequestsTotal = computed(() => topSupportCards.value.reduce(
   (sum, row) => sum + Number(row.open_requests || 0),
   0
 ));
+
+const rankingOverdueOpenRequestsTotal = computed(() => countAssignedOverdueOpenRequests(filteredOpenRequests.value || []));
 
 watch(topSupportCards, rows => {
   rows.slice(0, 20).forEach(row => loadEmployeeAvatar(row));
@@ -4347,6 +4396,11 @@ const employeeSupportTitle = computed(() => {
   const employee = employeeProfile.value.employee || {};
   return employee.full_name || employee.username ? `Xodim: ${employee.full_name || employee.username}` : 'Xodim tafsiloti';
 });
+const employeeProfileCompanyTotal = computed(() => Number(
+  employeeCompanyDetail.value.summary?.total
+  ?? employeeProfile.value.summary?.company_total
+  ?? 0
+));
 function isGenericCompanyName(value = '') {
   return !String(value || '').trim() || String(value || '').trim().toLowerCase() === 'kompaniya';
 }
@@ -5899,7 +5953,7 @@ function buildManagerAggregateProfile(row = {}, managers = [], payloads = []) {
 }
 
 function openEmployeeCompanyList() {
-  if (!employeeCompanyDetail.value.companies?.length) return showToast('Bu xodimga biriktirilgan kompaniya topilmadi');
+  if (employeeProfileCompanyTotal.value <= 0) return showToast('Tanlangan davrda kompaniya topilmadi');
   modal.value = 'employeeCompanyList';
 }
 
@@ -5945,13 +5999,14 @@ async function selectEmployeeProfileChat(row = {}) {
 
 async function openEmployeeCompanies(row = {}) {
   const employee = resolveEmployeeForCompany(row);
-  const companies = (row.assigned_companies || visibleCompanyInfoRows.value
+  const allAssigned = (row.assigned_companies || visibleCompanyInfoRows.value
     .filter(company => companyMatchesEmployee(company, employee)));
+  const periodPack = applyEmployeePeriodCompanies({ row, allAssigned });
   employeeManagerDetailsOpen.value = false;
   employeeCompanyDetail.value = {
     employee,
-    companies,
-    summary: companyPortfolioSummary(companies)
+    companies: periodPack.companies,
+    summary: periodPack.summary
   };
   employeeProfileLoadToken += 1;
   const loadToken = employeeProfileLoadToken;
@@ -5960,11 +6015,11 @@ async function openEmployeeCompanies(row = {}) {
   employeeProfile.value = {
     employee,
     rank: row.rank || null,
-    companies,
+    companies: periodPack.companies,
     summary: {
       closed_requests: Number(row.closed_requests || 0),
       open_requests: Number(row.open_requests || 0),
-      company_total: Number(row.company_total ?? row.assigned_company_count ?? companies.length ?? 0),
+      company_total: periodPack.total,
       avg_close_minutes: Number(row.avg_close_minutes || 0),
       close_rate: Number(row.close_rate || row.sla || 0),
       sla: Number(row.sla || row.close_rate || 0)
@@ -6022,14 +6077,24 @@ async function openEmployeeCompanies(row = {}) {
     });
     if (loadToken !== employeeProfileLoadToken) return;
     const summary = data.summary || {};
+    const periodPack = applyEmployeePeriodCompanies({
+      row,
+      allAssigned,
+      periodCompaniesFromApi: data.period_companies || []
+    });
+    employeeCompanyDetail.value = {
+      employee: { ...employee, ...(data.employee || {}) },
+      companies: periodPack.companies,
+      summary: periodPack.summary
+    };
     employeeProfile.value = {
       employee: { ...employee, ...(data.employee || {}) },
       rank: row.rank || null,
-      companies,
+      companies: periodPack.companies,
       summary: {
         closed_requests: Number(summary.closed_requests ?? row.closed_requests ?? 0),
         open_requests: Number(summary.open_requests ?? row.open_requests ?? 0),
-        company_total: Number(summary.company_total ?? row.company_total ?? row.assigned_company_count ?? companies.length ?? 0),
+        company_total: Number(summary.company_total ?? periodPack.total ?? 0),
         avg_close_minutes: Number(summary.avg_close_minutes ?? row.avg_close_minutes ?? 0),
         close_rate: Number(row.close_rate || row.sla || 0),
         sla: Number(row.sla || row.close_rate || 0),
@@ -6426,14 +6491,11 @@ function findEmployeeMappingForOpenRequest(request = {}, employeeMappings = []) 
   return resolveCompanySupportMappingForRequest(request, employeeMappings);
 }
 
-function employeeOpenRequestSummaryMap() {
-  const map = new Map();
-
-  const employeeMappings = (employees.value || []).filter(emp => !isAdminLikeEmployee(emp)).map(emp => {
+function buildEmployeeOpenRequestMappings() {
+  return (employees.value || []).filter(emp => !isAdminLikeEmployee(emp)).map(emp => {
     const companies = (visibleCompanyInfoRows.value || []).filter(c => companyMatchesEmployee(c, emp));
     const companyIds = new Set(companies.map(c => String(c.id || c.company_id || '').trim()).filter(Boolean));
     const companyNames = new Set(companies.map(c => normalizedCompanyName(c.name)).filter(Boolean));
-    
     const chatIds = new Set();
     companies.forEach(company => {
       if (company.chat_id) chatIds.add(String(company.chat_id));
@@ -6441,7 +6503,6 @@ function employeeOpenRequestSummaryMap() {
         if (chat.chat_id) chatIds.add(String(chat.chat_id));
       });
     });
-    
     return {
       employee: emp,
       key: employeeSummaryKey(emp),
@@ -6454,6 +6515,20 @@ function employeeOpenRequestSummaryMap() {
       chatIds
     };
   });
+}
+
+function countAssignedOverdueOpenRequests(requests = []) {
+  const employeeMappings = buildEmployeeOpenRequestMappings();
+  return requests.filter(request => {
+    const matchedEmp = findEmployeeMappingForOpenRequest(request, employeeMappings);
+    if (!matchedEmp || !isSupportEmployee(matchedEmp.employee) || isManagerEmployee(matchedEmp.employee)) return false;
+    return openMinutes(request.created_at) > 30;
+  }).length;
+}
+
+function employeeOpenRequestSummaryMap() {
+  const map = new Map();
+  const employeeMappings = buildEmployeeOpenRequestMappings();
 
   (filteredOpenRequests.value || []).forEach(request => {
     const matchedEmp = findEmployeeMappingForOpenRequest(request, employeeMappings);
