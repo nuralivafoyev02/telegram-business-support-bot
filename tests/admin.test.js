@@ -1946,6 +1946,7 @@ async function testDashboardEmployeePerformanceCountsOpenAndSlaPerEmployee() {
       initial_message_id: 40,
       initial_text: 'Hisobot chiqmayapti',
       status: 'open',
+      assigned_to_employee_id: 'emp-1',
       closed_by_employee_id: null,
       closed_by_tg_id: null,
       closed_by_name: null,
@@ -1989,7 +1990,7 @@ async function testDashboardEmployeePerformanceCountsOpenAndSlaPerEmployee() {
   }
 }
 
-async function testDashboardEmployeePerformanceAssignsOpenByCompanySupport() {
+async function testDashboardEmployeePerformanceCountsOpenOnlyWhenAssigned() {
   const originalSelect = supabase.select;
   const originalEmployeeStats = stats.selectEmployeeStatistics;
   const originalChatStats = stats.selectChatStatistics;
@@ -2000,7 +2001,7 @@ async function testDashboardEmployeePerformanceAssignsOpenByCompanySupport() {
   const employees = [{ id: 'emp-1', tg_user_id: 777, full_name: 'Uyqur | Nurali', username: 'uyqur_nurali', role: 'support', is_active: true }];
   const requests = [
     {
-      id: 'request-open-company',
+      id: 'request-open-unassigned',
       source_type: 'group',
       chat_id: chatId,
       company_id: companyId,
@@ -2008,6 +2009,18 @@ async function testDashboardEmployeePerformanceAssignsOpenByCompanySupport() {
       customer_name: 'Mijoz',
       status: 'open',
       created_at: '2026-05-24T10:00:00.000Z',
+      closed_at: null
+    },
+    {
+      id: 'request-open-assigned',
+      source_type: 'group',
+      chat_id: chatId,
+      company_id: companyId,
+      customer_tg_id: 502,
+      customer_name: 'Mijoz 2',
+      status: 'open',
+      assigned_to_employee_id: 'emp-1',
+      created_at: '2026-05-24T11:00:00.000Z',
       closed_at: null
     }
   ];
@@ -2035,9 +2048,96 @@ async function testDashboardEmployeePerformanceAssignsOpenByCompanySupport() {
       query: { period: 'custom', start_date: '2026-05-24', end_date: '2026-05-24' }
     });
     assert.strictEqual(result.status, 200);
-    const row = result.payload.data.analytics.employeePerformance.custom.find(item => item.employee_id === 'emp-1');
+    const period = result.payload.data.analytics.periods.custom;
+    assert.strictEqual(period.open_requests, 2);
+    const performance = result.payload.data.analytics.employeePerformance.custom;
+    const row = performance.find(item => item.employee_id === 'emp-1');
     assert.ok(row);
     assert.strictEqual(row.open_requests, 1);
+    const assignedOpenTotal = performance.reduce((sum, item) => sum + Number(item.open_requests || 0), 0);
+    assert.strictEqual(assignedOpenTotal, 1);
+    assert.ok(period.open_requests >= assignedOpenTotal);
+  } finally {
+    supabase.select = originalSelect;
+    stats.selectEmployeeStatistics = originalEmployeeStats;
+    stats.selectChatStatistics = originalChatStats;
+    stats.selectTodaySummary = originalTodaySummary;
+  }
+}
+
+async function testDashboardEmployeePerformanceAvgIncludesAssignedOpenWait() {
+  const originalSelect = supabase.select;
+  const originalEmployeeStats = stats.selectEmployeeStatistics;
+  const originalChatStats = stats.selectChatStatistics;
+  const originalTodaySummary = stats.selectTodaySummary;
+  const openChatId = -100905;
+  const closedChatId = -100906;
+  const createdAt = new Date(Date.now() - 45 * 60000).toISOString();
+  const employees = [{ id: 'emp-1', tg_user_id: 777, full_name: 'Uyqur | Ali', username: 'ali', role: 'support', is_active: true }];
+  const requests = [
+    {
+      id: 'request-open-assigned',
+      source_type: 'group',
+      chat_id: openChatId,
+      customer_tg_id: 501,
+      customer_name: 'Mijoz',
+      status: 'open',
+      assigned_to_employee_id: 'emp-1',
+      created_at: createdAt,
+      closed_at: null
+    },
+    {
+      id: 'request-closed-fast',
+      source_type: 'group',
+      chat_id: closedChatId,
+      customer_tg_id: 502,
+      customer_name: 'Mijoz 2',
+      status: 'closed',
+      assigned_to_employee_id: 'emp-1',
+      closed_by_employee_id: 'emp-1',
+      closed_by_tg_id: 777,
+      closed_by_name: 'Uyqur | Ali',
+      created_at: createdAt,
+      closed_at: new Date(Date.parse(createdAt) + 5 * 60000).toISOString()
+    }
+  ];
+  const messages = [
+    { id: 'm1', tg_message_id: 1, chat_id: closedChatId, from_tg_user_id: 502, from_name: 'Mijoz 2', employee_id: null, text: 'Savol', created_at: createdAt },
+    { id: 'm2', tg_message_id: 2, chat_id: closedChatId, from_tg_user_id: 777, from_name: 'Ali', from_username: 'ali', employee_id: 'emp-1', text: 'Javob', created_at: new Date(Date.parse(createdAt) + 5 * 60000).toISOString() }
+  ];
+
+  supabase.select = async (table) => {
+    if (table === 'support_requests') return requests;
+    if (table === 'tg_chats') return [
+      { chat_id: openChatId, title: 'Open chat', source_type: 'group', is_active: true },
+      { chat_id: closedChatId, title: 'Closed chat', source_type: 'group', is_active: true }
+    ];
+    if (table === 'employees') return employees;
+    if (table === 'messages') return messages;
+    if (table === 'companies') return [];
+    if (table === 'company_members') return [];
+    return [];
+  };
+  stats.selectEmployeeStatistics = async () => [];
+  stats.selectChatStatistics = async () => [
+    { chat_id: openChatId, title: 'Open chat', source_type: 'group', is_active: true },
+    { chat_id: closedChatId, title: 'Closed chat', source_type: 'group', is_active: true }
+  ];
+  stats.selectTodaySummary = async () => [{ total_requests: 0, open_requests: 0, closed_requests: 0 }];
+
+  try {
+    const result = await callAdmin('dashboard', {
+      query: { period: 'today' }
+    });
+    assert.strictEqual(result.status, 200);
+    const row = result.payload.data.analytics.employeePerformance.today.find(item => item.employee_id === 'emp-1');
+    assert.ok(row);
+    assert.strictEqual(row.closed_requests, 1);
+    assert.strictEqual(row.open_requests, 1);
+    assert.ok(row.avg_close_minutes >= 20, 'avg should blend closed (5m) and open wait (~45m)');
+    assert.ok(row.avg_close_minutes <= 50);
+    assert.strictEqual(row.close_rate, 50);
+    assert.strictEqual(row.sla, 50);
   } finally {
     supabase.select = originalSelect;
     stats.selectEmployeeStatistics = originalEmployeeStats;
@@ -2073,6 +2173,7 @@ async function testDashboardPeriodCountsOnlyRequestsCreatedInSelectedRange() {
       initial_message_id: 51,
       initial_text: 'Bugungi ochiq',
       status: 'open',
+      assigned_to_employee_id: 'emp-1',
       created_at: '2026-05-24T10:00:00.000Z',
       closed_at: null
     },
@@ -2128,10 +2229,9 @@ async function testDashboardPeriodCountsOnlyRequestsCreatedInSelectedRange() {
     assert.strictEqual(row.closed_requests, 1);
     assert.strictEqual(period.open_requests, 1);
     assert.strictEqual(period.closed_requests, row.closed_requests);
-    assert.strictEqual(
-      period.open_requests,
-      performance.reduce((sum, item) => sum + Number(item.open_requests || 0), 0)
-    );
+    const assignedOpenTotal = performance.reduce((sum, item) => sum + Number(item.open_requests || 0), 0);
+    assert.strictEqual(assignedOpenTotal, 1);
+    assert.ok(period.open_requests >= assignedOpenTotal);
     const trend = result.payload.data.analytics.ticketAnswerTrend.custom || [];
     const trendTotal = trend.reduce((sum, item) => sum + Number(item.total_requests || 0), 0);
     assert.strictEqual(trendTotal, period.total_requests);
@@ -4189,7 +4289,8 @@ async function run() {
   await testDashboardCompanyTicketsIgnoreRequestsCreatedBeforeSelectedPeriod();
   await testDashboardCompanyTicketsGroupUnassignedBucket();
   await testDashboardEmployeePerformanceCountsOpenAndSlaPerEmployee();
-  await testDashboardEmployeePerformanceAssignsOpenByCompanySupport();
+  await testDashboardEmployeePerformanceCountsOpenOnlyWhenAssigned();
+  await testDashboardEmployeePerformanceAvgIncludesAssignedOpenWait();
   await testDashboardPeriodCountsOnlyRequestsCreatedInSelectedRange();
   await testDashboardEmployeePerformanceCountsClosedByCreatedDate();
   await testRequestsListEnrichesCompanyFromRegisteredGroup();

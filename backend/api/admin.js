@@ -343,10 +343,19 @@ function calculateFirstResponseMinutes(request, messages = [], employeeMaps = bu
 
   const convKey = conversationScopeKey(request);
   const convMessages = messages.filter(msg => msg && conversationScopeKey(msg) === convKey);
+  let anchorTime = requestTime;
+  const initialMessageId = Number(request.initial_message_id || 0);
+  if (initialMessageId) {
+    const anchorMessage = convMessages.find(message => Number(message.tg_message_id) === initialMessageId);
+    if (anchorMessage) {
+      const anchorMessageTime = new Date(anchorMessage.created_at || 0).getTime();
+      if (Number.isFinite(anchorMessageTime)) anchorTime = Math.max(anchorTime, anchorMessageTime);
+    }
+  }
   const closeTime = request.status === 'closed' && request.closed_at
     ? new Date(request.closed_at).getTime()
     : null;
-  const maxMessageTime = closeTime || (requestTime + MAX_SUPPORT_RESPONSE_MINUTES * 60000);
+  const maxMessageTime = closeTime || (anchorTime + MAX_SUPPORT_RESPONSE_MINUTES * 60000);
   const restrictEmployeeId = String(options.employeeId || request.closed_by_employee_id || '').trim();
   const restrictTgUserId = telegramIdKey(options.tgUserId || request.closed_by_tg_id || '');
 
@@ -354,7 +363,7 @@ function calculateFirstResponseMinutes(request, messages = [], employeeMaps = bu
     .filter(message => {
       if (!message) return false;
       const messageTime = new Date(message.created_at || 0).getTime();
-      if (!Number.isFinite(messageTime) || messageTime < requestTime || messageTime > maxMessageTime) return false;
+      if (!Number.isFinite(messageTime) || messageTime < anchorTime || messageTime > maxMessageTime) return false;
       const messageEmployeeId = String(message.employee_id || '').trim();
       const messageTgUserId = telegramIdKey(message.from_tg_user_id);
       if (restrictEmployeeId || restrictTgUserId) {
@@ -378,7 +387,7 @@ function calculateFirstResponseMinutes(request, messages = [], employeeMaps = bu
     .sort((a, b) => a.time - b.time);
 
   if (employeeMessages.length > 0) {
-    return Math.max(0, Math.round((employeeMessages[0].time - requestTime) / 60000));
+    return Math.max(0, Math.round((employeeMessages[0].time - anchorTime) / 60000));
   }
 
   return null;
@@ -396,11 +405,20 @@ function resolveResponseMinutes(request, messages = [], employeeMaps = buildEmpl
   return null;
 }
 
+function responseMinutesForPeriodAverage(request, messages = [], employeeMaps = buildEmployeeMaps([]), options = {}) {
+  const minutes = resolveResponseMinutes(request, messages, employeeMaps, options);
+  if (minutes !== null) return minutes;
+  if (request.status === 'open') {
+    return normalizeSupportResponseMinutes(minutesBetween(request.created_at, new Date()));
+  }
+  return null;
+}
+
 function averageResponseMinutesForPeriodRequests(requests = [], messages = [], employeeMaps = buildEmployeeMaps([]), options = {}) {
   if (!requests.length) return 0;
   let sum = 0;
   requests.forEach(request => {
-    const minutes = resolveResponseMinutes(request, messages, employeeMaps, options);
+    const minutes = responseMinutesForPeriodAverage(request, messages, employeeMaps, options);
     if (minutes !== null) sum += minutes;
   });
   return Math.round(sum / requests.length);
@@ -433,8 +451,6 @@ function alignPeriodSummaryWithRanking(summary, performance = []) {
   const prevOpenRequests = Number(summary.prev_open_requests || 0);
   const handledTotal = closedRequests + openRequests;
   const prevHandledTotal = prevClosedRequests + prevOpenRequests;
-  const rankingOpenTotal = sumEmployeePerformanceOpenRequests(performance, 'open_requests');
-  const rankingPrevOpenTotal = sumEmployeePerformanceOpenRequests(performance, 'prev_open_requests');
   return {
     ...summary,
     total_requests: handledTotal,
@@ -443,10 +459,8 @@ function alignPeriodSummaryWithRanking(summary, performance = []) {
     prev_open_requests: prevOpenRequests,
     close_rate: handledTotal ? percent(closedRequests, handledTotal) : summary.close_rate,
     prev_close_rate: prevHandledTotal ? percent(prevClosedRequests, prevHandledTotal) : summary.prev_close_rate,
-    overdue_open_requests: sumEmployeePerformanceOpenRequests(performance, 'overdue_open_requests'),
-    prev_overdue_open_requests: sumEmployeePerformanceOpenRequests(performance, 'prev_overdue_open_requests'),
-    ranking_open_requests: rankingOpenTotal,
-    ranking_prev_open_requests: rankingPrevOpenTotal
+    overdue_open_requests: Number(summary.overdue_open_requests || 0),
+    prev_overdue_open_requests: Number(summary.prev_overdue_open_requests || 0)
   };
 }
 
@@ -564,29 +578,21 @@ function buildEmployeePerformance({ requests, employees, messages = [], periodKe
   const prevOpen = requests.filter(request => request.status === 'open' && inPreviousPeriod(request.created_at, periodKey, keys));
 
   const totals = new Map();
-  const unassigned = {
-    employee_id: '',
-    tg_user_id: null,
-    full_name: 'Biriktirilmagan',
-    username: '',
-    role: 'unassigned',
-    is_unassigned: true,
-    closed_requests: 0,
-    open_requests: 0,
-    overdue_open_requests: 0,
-    close_minutes: [],
-    prev_closed_requests: 0,
-    prev_open_requests: 0,
-    prev_overdue_open_requests: 0,
-    prev_close_minutes: [],
-    handled_chats: new Set(),
-    prev_handled_chats: new Set(),
-    companies: new Set(),
-    prev_companies: new Set(),
-    last_closed_at: null
-  };
 
-  function trackOpenRequest(target, request, { previous = false } = {}) {
+  function trackAssignedOpenResponseMinutes(target, request, employee, { previous = false } = {}) {
+    const minutesField = previous ? 'prev_response_minutes' : 'response_minutes';
+    const conversationMessages = messagesByConversation.get(conversationScopeKey(request)) || [];
+    let minutes = resolveResponseMinutes(request, conversationMessages, employeeMaps, {
+      employeeId: employee.id,
+      tgUserId: employee.tg_user_id
+    });
+    if (minutes === null) {
+      minutes = normalizeSupportResponseMinutes(minutesBetween(request.created_at, new Date()));
+    }
+    if (minutes !== null) target[minutesField].push(minutes);
+  }
+
+  function trackOpenRequest(target, request, employee, { previous = false } = {}) {
     const openField = previous ? 'prev_open_requests' : 'open_requests';
     const overdueField = previous ? 'prev_overdue_open_requests' : 'overdue_open_requests';
     const chatsField = previous ? 'prev_handled_chats' : 'handled_chats';
@@ -597,43 +603,25 @@ function buildEmployeePerformance({ requests, employees, messages = [], periodKe
     if (request.chat_id) target[chatsField].add(conversationScopeKey(request));
     const companyKey = companyScopeKey(request);
     if (companyKey) target[companiesField].add(companyKey);
+    trackAssignedOpenResponseMinutes(target, request, employee, { previous });
   }
 
-  function assignOpenRequest(request, { previous = false } = {}) {
-    const assignedId = String(request.assigned_to_employee_id || '').trim();
-    if (assignedId) {
-      const assignedEmployee = findEmployee(assignedId, '', '');
-      if (assignedEmployee && !isManagerEmployeeRecord(assignedEmployee)) {
-        const current = ensureEmployeeTotal({
-          employee: assignedEmployee,
-          employeeId: assignedEmployee.id,
-          tgUserId: assignedEmployee.tg_user_id,
-          name: assignedEmployee.full_name
-        });
-        trackOpenRequest(current, request, { previous });
-        return;
-      }
-    }
-
-    const responsible = resolveRequestResponsibleEmployee(
-      request,
-      messagesByConversation.get(conversationScopeKey(request)) || [],
-      employeeMaps,
-      chatToEmployeeId,
-      resolveOptions
-    );
-    const employee = responsible ? findEmployee(responsible.employee_id, responsible.tg_user_id, responsible.full_name) : null;
-    if (!employee || isManagerEmployeeRecord(employee)) {
-      trackOpenRequest(unassigned, request, { previous });
-      return;
-    }
+  function assignOpenToEmployee(employee, request, { previous = false } = {}) {
+    if (!employee || isManagerEmployeeRecord(employee)) return false;
     const current = ensureEmployeeTotal({
       employee,
       employeeId: employee.id,
       tgUserId: employee.tg_user_id,
       name: employee.full_name
     });
-    trackOpenRequest(current, request, { previous });
+    trackOpenRequest(current, request, employee, { previous });
+    return true;
+  }
+
+  function assignOpenRequest(request, { previous = false } = {}) {
+    const assignedId = String(request.assigned_to_employee_id || '').trim();
+    if (!assignedId) return;
+    assignOpenToEmployee(findEmployee(assignedId, '', ''), request, { previous });
   }
 
   function ensureEmployeeTotal({ employee = null, employeeId = '', tgUserId = '', name = '' } = {}) {
@@ -648,11 +636,11 @@ function buildEmployeePerformance({ requests, employees, messages = [], periodKe
         closed_requests: 0,
         open_requests: 0,
         overdue_open_requests: 0,
-        close_minutes: [],
+        response_minutes: [],
         prev_closed_requests: 0,
         prev_open_requests: 0,
         prev_overdue_open_requests: 0,
-        prev_close_minutes: [],
+        prev_response_minutes: [],
         handled_chats: new Set(),
         prev_handled_chats: new Set(),
         companies: new Set(),
@@ -700,7 +688,7 @@ function buildEmployeePerformance({ requests, employees, messages = [], periodKe
       employeeId: employee.id,
       tgUserId: employee.tg_user_id
     });
-    if (closeMinute !== null) current.close_minutes.push(closeMinute);
+    if (closeMinute !== null) current.response_minutes.push(closeMinute);
     if (!current.last_closed_at || String(request.closed_at || '') > String(current.last_closed_at || '')) current.last_closed_at = request.closed_at || null;
   });
 
@@ -724,31 +712,17 @@ function buildEmployeePerformance({ requests, employees, messages = [], periodKe
       employeeId: employee.id,
       tgUserId: employee.tg_user_id
     });
-    if (closeMinute !== null) current.prev_close_minutes.push(closeMinute);
+    if (closeMinute !== null) current.prev_response_minutes.push(closeMinute);
   });
 
   prevOpen.forEach(request => assignOpenRequest(request, { previous: true }));
 
-  const attributedOpen = [...totals.values()].reduce((sum, row) => sum + Number(row.open_requests || 0), 0)
-    + Number(unassigned.open_requests || 0);
-  if (open.length > attributedOpen) {
-    unassigned.open_requests += open.length - attributedOpen;
-  }
-
-  const attributedPrevOpen = [...totals.values()].reduce((sum, row) => sum + Number(row.prev_open_requests || 0), 0)
-    + Number(unassigned.prev_open_requests || 0);
-  if (prevOpen.length > attributedPrevOpen) {
-    unassigned.prev_open_requests += prevOpen.length - attributedPrevOpen;
-  }
-
-  const performanceRows = [...totals.values()];
   const mapPerformanceRow = row => ({
       employee_id: row.employee_id,
       tg_user_id: row.tg_user_id || null,
       full_name: row.full_name,
       username: row.username,
       role: row.role,
-      is_unassigned: row.is_unassigned === true,
       total_requests: row.closed_requests + row.open_requests,
       closed_requests: row.closed_requests,
       open_requests: row.open_requests,
@@ -757,7 +731,7 @@ function buildEmployeePerformance({ requests, employees, messages = [], periodKe
       close_share_pct: percent(row.closed_requests, periodClosedRequests.length),
       close_rate: percent(row.closed_requests, row.closed_requests + row.open_requests),
       sla: percent(row.closed_requests, row.closed_requests + row.open_requests),
-      avg_close_minutes: average(row.close_minutes),
+      avg_close_minutes: average(row.response_minutes),
       company_total: row.companies.size,
       last_closed_at: row.last_closed_at,
       // Previous stats for comparison
@@ -768,18 +742,13 @@ function buildEmployeePerformance({ requests, employees, messages = [], periodKe
       prev_handled_chats: row.prev_handled_chats.size,
       prev_company_total: row.prev_companies.size,
       prev_close_rate: percent(row.prev_closed_requests, row.prev_closed_requests + row.prev_open_requests),
-      prev_avg_close_minutes: average(row.prev_close_minutes)
+      prev_avg_close_minutes: average(row.prev_response_minutes)
     });
 
-  const mappedRows = performanceRows.map(mapPerformanceRow);
-  const unassignedMapped = mapPerformanceRow(unassigned);
-  const sortedRows = mappedRows
-    .sort((a, b) => b.total_requests - a.total_requests || b.closed_requests - a.closed_requests || a.full_name.localeCompare(b.full_name));
-  const limitedRows = sortedRows.slice(0, (Number(unassignedMapped.open_requests || 0) > 0 || Number(unassignedMapped.prev_open_requests || 0) > 0) ? 49 : 50);
-  if (Number(unassignedMapped.open_requests || 0) > 0 || Number(unassignedMapped.prev_open_requests || 0) > 0) {
-    limitedRows.push(unassignedMapped);
-  }
-  return limitedRows;
+  return [...totals.values()]
+    .map(mapPerformanceRow)
+    .sort((a, b) => b.total_requests - a.total_requests || b.closed_requests - a.closed_requests || a.full_name.localeCompare(b.full_name))
+    .slice(0, 50);
 }
 
 function buildChatPerformance({ requests, chats, periodKey, keys, sourceType = '' }) {
@@ -2241,7 +2210,7 @@ async function getOpenRequestInsights(options = {}) {
       group_open_requests: groupOpen,
       chat_open_requests: chatOpen,
       oldest_open_minutes: enriched.reduce((max, request) => Math.max(max, Number(request.open_minutes || 0)), 0),
-      assigned_open_requests: enriched.filter(request => request.responsible_employee_name).length
+      assigned_open_requests: enriched.filter(request => request.assigned_to_employee_id).length
     }
   };
 }
@@ -2714,7 +2683,7 @@ async function getDashboard(query = {}) {
       group_open_requests: periodOpenRequests.filter(request => request.source_type === 'group').length,
       chat_open_requests: periodOpenRequests.filter(request => request.source_type !== 'group').length,
       oldest_open_minutes: periodOpenRequests.reduce((max, request) => Math.max(max, Number(request.open_minutes || 0)), 0),
-      assigned_open_requests: periodOpenRequests.filter(request => request.responsible_employee_name).length,
+      assigned_open_requests: periodOpenRequests.filter(request => request.assigned_to_employee_id).length,
       total_requests: periodSummary.total_requests || 0,
       closed_requests: periodSummary.closed_requests || 0,
       group_requests: periodSummary.group_requests || 0,
