@@ -819,7 +819,7 @@
                     <input v-model.trim="settingsForm.ticket_group_id" class="input" placeholder="-1001234567890" />
                   </label>
                   <p v-if="settingsForm.ticket_notifications === 'true'" class="card-note wide">
-                    Yangi ticket ochilganda shu guruhga xabar ketadi: kompaniya, mas’ul, murojaat, Telegram link va 4 ta tugma (Qabul, Yopish, Boshqa hodimga, So‘rov emas).
+                    Yangi ticket ochilganda shu guruhga xabar ketadi. Shaxsiy chat ticketlari faqat mijoz va support ikkalasi bir quruvchi guruhda bo‘lsa ochiladi. «Boshqa hodimga» da faqat support xodimlar (kompaniya mas’uli va menejerlar yo‘q).
                   </p>
                   <label class="label">Guruh xabari saqlansa
                     <select v-model="settingsForm.group_message_audit" class="select">

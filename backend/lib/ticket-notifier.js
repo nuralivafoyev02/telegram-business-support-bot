@@ -4,6 +4,7 @@ const supabase = require('./supabase');
 const { getBotSettings } = require('./bot-settings');
 const { getCachedCompanyInfo } = require('./company-info');
 const metrics = require('./metrics');
+const { canCreateTicketFromPrivateMessage } = require('./private-ticket-gate');
 const { sendMessage, editMessageText, editMessageReplyMarkup, answerCallbackQuery, escapeHtml } = require('./telegram');
 
 const TICKET_PREFIX = 'tk:';
@@ -89,6 +90,27 @@ function employeeLabel(employee = null, fallback = '—') {
 
 function normalizeUsername(value = '') {
   return String(value || '').replace(/^@/, '').trim().toLowerCase();
+}
+
+function isSupportRoleEmployee(employee = {}) {
+  return String(employee.role || '').trim().toLowerCase() === 'support';
+}
+
+function isSameEmployeeRecord(left = {}, right = {}) {
+  if (!left?.id || !right?.id) return false;
+  return String(left.id) === String(right.id);
+}
+
+function shouldExcludeFromReassignPicker(employee = {}, request = {}, companySupport = null) {
+  if (!employee?.id || !isSupportRoleEmployee(employee)) return true;
+  if (isSameEmployeeRecord(employee, { id: request.assigned_to_employee_id })) return true;
+  if (companySupport?.id && isSameEmployeeRecord(employee, companySupport)) return true;
+  const supportUsername = normalizeUsername(companySupport?.username);
+  const employeeUsername = normalizeUsername(employee.username);
+  if (supportUsername && employeeUsername && supportUsername === employeeUsername) return true;
+  if (companySupport?.tg_user_id && employee.tg_user_id
+    && String(companySupport.tg_user_id) === String(employee.tg_user_id)) return true;
+  return false;
 }
 
 async function loadEmployeeById(employeeId) {
@@ -252,13 +274,18 @@ function buildTicketKeyboard(request = {}, mode = 'main') {
 
 async function buildReassignKeyboard(request = {}, page = 0) {
   const pageSize = 6;
+  const companyCtx = await resolveCompanyAndSupportEmployee({
+    companyId: request.company_id,
+    chatId: request.chat_id
+  });
   const employees = await supabase.select('employees', {
-    select: 'id,tg_user_id,full_name,username,is_active',
+    select: 'id,tg_user_id,full_name,username,role,is_active',
     is_active: 'eq.true',
+    role: 'eq.support',
     order: supabase.order('full_name', true),
     limit: '500'
   }).catch(() => []);
-  const filtered = employees.filter(row => row.id !== request.assigned_to_employee_id);
+  const filtered = employees.filter(row => !shouldExcludeFromReassignPicker(row, request, companyCtx.supportEmployee));
   const start = page * pageSize;
   const slice = filtered.slice(start, start + pageSize);
   const rows = slice.map(employee => [{
@@ -456,8 +483,9 @@ async function assignRequestToEmployee({ request, employee, eventType = 'accepte
 
 async function loadActiveEmployees() {
   return supabase.select('employees', {
-    select: 'id,tg_user_id,full_name,username,is_active',
+    select: 'id,tg_user_id,full_name,username,role,is_active',
     is_active: 'eq.true',
+    role: 'eq.support',
     order: supabase.order('full_name', true),
     limit: '500'
   }).catch(() => []);
@@ -470,6 +498,21 @@ async function openSupportRequestAndNotify({
   openSource = 'ai',
   openedByEmployee = null
 } = {}) {
+  const allowedPrivate = await canCreateTicketFromPrivateMessage({
+    message,
+    sourceType,
+    knownEmployee: openedByEmployee
+  });
+  if (!allowedPrivate) {
+    console.info('[ticket-notifier:private-skipped]', {
+      chat_id: message?.chat?.id || null,
+      source_type: sourceType,
+      open_source: openSource,
+      from_id: message?.from?.id || null
+    });
+    return null;
+  }
+
   const chatId = message?.chat?.id || null;
   const companyCtx = await resolveCompanyAndSupportEmployee({ companyId, chatId });
   const supportEmployee = companyCtx.supportEmployee;
@@ -545,10 +588,14 @@ async function handleTicketCallback(query = {}, parsed = {}) {
   }
 
   if (action === TICKET_ACTIONS.REASSIGN_SELECT) {
+    const companyCtx = await resolveCompanyAndSupportEmployee({
+      companyId: request.company_id,
+      chatId: request.chat_id
+    });
     const target = await metrics.getKnownEmployeeByTelegramId(parsed.extra)
       || (await loadActiveEmployees()).find(row => String(row.id) === String(parsed.extra));
-    if (!target) {
-      await answerCallbackQuery(query.id, 'Xodim topilmadi.').catch(() => null);
+    if (!target || shouldExcludeFromReassignPicker(target, request, companyCtx.supportEmployee)) {
+      await answerCallbackQuery(query.id, 'Faqat boshqa support xodimiga o‘tkazish mumkin.').catch(() => null);
       return { ok: false, reason: 'employee_not_found' };
     }
     const previousId = request.assigned_to_employee_id || null;
@@ -633,5 +680,7 @@ module.exports = {
   buildTicketKeyboard,
   buildNotificationText,
   openSupportRequestAndNotify,
-  handleTicketCallback
+  handleTicketCallback,
+  isSupportRoleEmployee,
+  shouldExcludeFromReassignPicker
 };

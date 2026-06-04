@@ -5,6 +5,8 @@ const {
   parseTicketCallbackData,
   buildTicketKeyboard,
   normalizeTicketNotifications,
+  shouldExcludeFromReassignPicker,
+  isSupportRoleEmployee,
   TICKET_ACTIONS
 } = require('../backend/lib/ticket-notifier');
 
@@ -24,6 +26,20 @@ function testKeyboardHasFourActions() {
   assert.ok(labels.some(text => /So‘rov emas|Sorov emas/i.test(text)));
 }
 
+function testReassignPickerOnlySupportAndNotCompanySupport() {
+  const request = { assigned_to_employee_id: 'emp-current' };
+  const companySupport = { id: 'emp-support', tg_user_id: 9001, username: 'uyqur_nurali' };
+  assert.strictEqual(isSupportRoleEmployee({ role: 'support' }), true);
+  assert.strictEqual(isSupportRoleEmployee({ role: 'manager' }), false);
+  assert.strictEqual(shouldExcludeFromReassignPicker({ id: 'emp-manager', role: 'manager' }, request, companySupport), true);
+  assert.strictEqual(shouldExcludeFromReassignPicker(companySupport, request, companySupport), true);
+  assert.strictEqual(shouldExcludeFromReassignPicker({
+    id: 'emp-other',
+    role: 'support',
+    username: 'ali_support'
+  }, request, companySupport), false);
+}
+
 function testNormalizeTicketNotifications() {
   const config = normalizeTicketNotifications({
     enabled: true,
@@ -38,6 +54,7 @@ function testNormalizeTicketNotifications() {
 async function main() {
   testParseTicketCallback();
   testKeyboardHasFourActions();
+  testReassignPickerOnlySupportAndNotCompanySupport();
   testNormalizeTicketNotifications();
   console.log('ticket-notifier tests passed');
 }
