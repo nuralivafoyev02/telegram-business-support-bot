@@ -396,6 +396,16 @@ function resolveResponseMinutes(request, messages = [], employeeMaps = buildEmpl
   return null;
 }
 
+function averageResponseMinutesForPeriodRequests(requests = [], messages = [], employeeMaps = buildEmployeeMaps([]), options = {}) {
+  if (!requests.length) return 0;
+  let sum = 0;
+  requests.forEach(request => {
+    const minutes = resolveResponseMinutes(request, messages, employeeMaps, options);
+    if (minutes !== null) sum += minutes;
+  });
+  return Math.round(sum / requests.length);
+}
+
 function sumEmployeePerformanceOpenRequests(performance = [], field = 'open_requests') {
   return performance.reduce((sum, row) => sum + Number(row[field] || 0), 0);
 }
@@ -417,26 +427,24 @@ function weightedPerformanceAverage(performance = [], valueField = 'avg_close_mi
 
 function alignPeriodSummaryWithRanking(summary, performance = []) {
   if (!summary) return summary;
-  const closedTotal = sumEmployeePerformanceOpenRequests(performance, 'closed_requests');
   const openTotal = sumEmployeePerformanceOpenRequests(performance, 'open_requests');
-  const prevClosedTotal = sumEmployeePerformanceOpenRequests(performance, 'prev_closed_requests');
   const prevOpenTotal = sumEmployeePerformanceOpenRequests(performance, 'prev_open_requests');
-  const handledTotal = closedTotal + openTotal;
-  const prevHandledTotal = prevClosedTotal + prevOpenTotal;
-  const avgCloseMinutes = weightedPerformanceAverage(performance, 'avg_close_minutes', 'closed_requests');
-  const prevAvgCloseMinutes = weightedPerformanceAverage(performance, 'prev_avg_close_minutes', 'prev_closed_requests');
+  const closedRequests = Number(summary.closed_requests || 0);
+  const openRequests = openTotal;
+  const prevClosedRequests = Number(summary.prev_closed_requests || 0);
+  const prevOpenRequests = prevOpenTotal;
+  const handledTotal = closedRequests + openRequests;
+  const prevHandledTotal = prevClosedRequests + prevOpenRequests;
   return {
     ...summary,
-    closed_requests: closedTotal,
-    prev_closed_requests: prevClosedTotal,
-    close_rate: handledTotal ? percent(closedTotal, handledTotal) : summary.close_rate,
-    prev_close_rate: prevHandledTotal ? percent(prevClosedTotal, prevHandledTotal) : summary.prev_close_rate,
-    open_requests: openTotal,
-    prev_open_requests: prevOpenTotal,
+    total_requests: handledTotal,
+    prev_total_requests: prevHandledTotal,
+    open_requests: openRequests,
+    prev_open_requests: prevOpenRequests,
+    close_rate: handledTotal ? percent(closedRequests, handledTotal) : summary.close_rate,
+    prev_close_rate: prevHandledTotal ? percent(prevClosedRequests, prevHandledTotal) : summary.prev_close_rate,
     overdue_open_requests: sumEmployeePerformanceOpenRequests(performance, 'overdue_open_requests'),
-    prev_overdue_open_requests: sumEmployeePerformanceOpenRequests(performance, 'prev_overdue_open_requests'),
-    avg_close_minutes: avgCloseMinutes || summary.avg_close_minutes,
-    prev_avg_close_minutes: prevAvgCloseMinutes || summary.prev_avg_close_minutes
+    prev_overdue_open_requests: sumEmployeePerformanceOpenRequests(performance, 'prev_overdue_open_requests')
   };
 }
 
@@ -450,15 +458,7 @@ function buildPeriodSummary(requests, periodKey, label, keys, messages = [], emp
     return min !== null && min > 30;
   });
 
-  const closedInPeriod = requests.filter(request =>
-    request.status === 'closed'
-    && request.closed_at
-    && inCurrentPeriod(request.closed_at, periodKey, keys)
-  );
   const closed = created.filter(request => request.status === 'closed');
-  const closeMinutes = closedInPeriod
-    .map(request => resolveResponseMinutes(request, messages, employeeMaps))
-    .filter(value => value !== null);
 
   const prevCreated = requests.filter(request => inPreviousPeriod(request.created_at, periodKey, keys));
   const prevOpenRequests = prevCreated.filter(request => request.status === 'open');
@@ -468,15 +468,7 @@ function buildPeriodSummary(requests, periodKey, label, keys, messages = [], emp
     return min !== null && min > 30;
   });
 
-  const prevClosedInPeriod = requests.filter(request =>
-    request.status === 'closed'
-    && request.closed_at
-    && inPreviousPeriod(request.closed_at, periodKey, keys)
-  );
   const prevClosed = prevCreated.filter(request => request.status === 'closed');
-  const prevCloseMinutes = prevClosedInPeriod
-    .map(request => resolveResponseMinutes(request, messages, employeeMaps))
-    .filter(value => value !== null);
 
   return {
     ...emptyPeriod(periodKey, label),
@@ -485,7 +477,7 @@ function buildPeriodSummary(requests, periodKey, label, keys, messages = [], emp
     overdue_open_requests: overdueOpenRequests.length,
     closed_requests: closed.length,
     close_rate: percent(closed.length, created.length),
-    avg_close_minutes: average(closeMinutes),
+    avg_close_minutes: averageResponseMinutesForPeriodRequests(created, messages, employeeMaps),
     group_requests: created.filter(request => request.source_type === 'group').length,
     private_requests: created.filter(request => request.source_type === 'private').length,
     business_requests: created.filter(request => request.source_type === 'business').length,
@@ -496,7 +488,7 @@ function buildPeriodSummary(requests, periodKey, label, keys, messages = [], emp
     prev_open_requests: prevCreated.filter(request => request.status === 'open').length,
     prev_overdue_open_requests: prevOverdueOpenRequests.length,
     prev_close_rate: percent(prevClosed.length, prevCreated.length),
-    prev_avg_close_minutes: average(prevCloseMinutes),
+    prev_avg_close_minutes: averageResponseMinutesForPeriodRequests(prevCreated, messages, employeeMaps),
     prev_unique_customers: new Set(prevCreated.map(request => request.customer_tg_id).filter(Boolean)).size
   };
 }
@@ -534,18 +526,20 @@ function buildEmployeePerformance({ requests, employees, messages = [], periodKe
     return companyName ? `name:${companyName}` : '';
   }
 
-  const closed = requests.filter(request => {
-    if (request.status !== 'closed') return false;
-    if (!request.closed_at || !inCurrentPeriod(request.closed_at, periodKey, keys)) return false;
-    return Boolean(request.closed_by_employee_id || request.closed_by_tg_id || request.closed_by_name);
-  });
+  const periodClosedRequests = requests.filter(request =>
+    request.status === 'closed' && inCurrentPeriod(request.created_at, periodKey, keys)
+  );
+  const closed = periodClosedRequests.filter(request =>
+    Boolean(request.closed_by_employee_id || request.closed_by_tg_id || request.closed_by_name)
+  );
   const open = requests.filter(request => request.status === 'open' && inCurrentPeriod(request.created_at, periodKey, keys));
 
-  const prevClosed = requests.filter(request => {
-    if (request.status !== 'closed') return false;
-    if (!request.closed_at || !inPreviousPeriod(request.closed_at, periodKey, keys)) return false;
-    return Boolean(request.closed_by_employee_id || request.closed_by_tg_id || request.closed_by_name);
-  });
+  const prevPeriodClosedRequests = requests.filter(request =>
+    request.status === 'closed' && inPreviousPeriod(request.created_at, periodKey, keys)
+  );
+  const prevClosed = prevPeriodClosedRequests.filter(request =>
+    Boolean(request.closed_by_employee_id || request.closed_by_tg_id || request.closed_by_name)
+  );
   const prevOpen = requests.filter(request => request.status === 'open' && inPreviousPeriod(request.created_at, periodKey, keys));
 
   const totals = new Map();
@@ -691,7 +685,7 @@ function buildEmployeePerformance({ requests, employees, messages = [], periodKe
       open_requests: row.open_requests,
       overdue_open_requests: row.overdue_open_requests,
       handled_chats: row.handled_chats.size,
-      close_share_pct: percent(row.closed_requests, closed.length),
+      close_share_pct: percent(row.closed_requests, periodClosedRequests.length),
       close_rate: percent(row.closed_requests, row.closed_requests + row.open_requests),
       sla: percent(row.closed_requests, row.closed_requests + row.open_requests),
       avg_close_minutes: average(row.close_minutes),
@@ -778,12 +772,11 @@ function buildGroupPerformance(args) {
 function buildResponseTimeTrend(requests, periodKey, keys, messages = [], employeeMaps = buildEmployeeMaps([])) {
   const buckets = new Map();
   requests
-    .filter(request => request.status === 'closed' && request.closed_at && inCurrentPeriod(request.closed_at, periodKey, keys))
+    .filter(request => inCurrentPeriod(request.created_at, periodKey, keys))
     .forEach(request => {
-      if (!inCurrentPeriod(request.created_at, periodKey, keys)) return;
       const closeMinute = resolveResponseMinutes(request, messages, employeeMaps);
       if (closeMinute === null) return;
-      const hourLabel = tashkentHourKey(request.closed_at);
+      const hourLabel = tashkentHourKey(request.created_at);
       const current = buckets.get(hourLabel) || {
         hour_label: hourLabel,
         response_minutes: [],

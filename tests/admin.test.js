@@ -2118,6 +2118,7 @@ async function testDashboardPeriodCountsOnlyRequestsCreatedInSelectedRange() {
     assert.strictEqual(period.total_requests, 2);
     assert.strictEqual(period.open_requests, 1);
     assert.strictEqual(period.closed_requests, 1);
+    assert.strictEqual(period.total_requests, period.closed_requests + period.open_requests);
     assert.strictEqual(result.payload.data.openRequests.some(request => request.id === 'request-old-open'), false);
     assert.strictEqual(result.payload.data.openRequests.some(request => request.id === 'request-day-open'), true);
     const row = result.payload.data.analytics.employeePerformance.custom.find(item => item.employee_id === 'emp-1');
@@ -2133,7 +2134,7 @@ async function testDashboardPeriodCountsOnlyRequestsCreatedInSelectedRange() {
   }
 }
 
-async function testDashboardEmployeePerformanceCountsClosedByCloseDate() {
+async function testDashboardEmployeePerformanceCountsClosedByCreatedDate() {
   const originalSelect = supabase.select;
   const originalEmployeeStats = stats.selectEmployeeStatistics;
   const originalChatStats = stats.selectChatStatistics;
@@ -2172,15 +2173,27 @@ async function testDashboardEmployeePerformanceCountsClosedByCloseDate() {
   stats.selectTodaySummary = async () => [{ total_requests: 1, open_requests: 0, closed_requests: 1 }];
 
   try {
-    const result = await callAdmin('dashboard', { query: { period: 'custom', start_date: '2026-04-30', end_date: '2026-04-30' } });
-    assert.strictEqual(result.status, 200);
-    const period = result.payload.data.analytics.periods.custom;
-    const performance = result.payload.data.analytics.employeePerformance.custom;
+    const resultCloseDay = await callAdmin('dashboard', { query: { period: 'custom', start_date: '2026-04-30', end_date: '2026-04-30' } });
+    assert.strictEqual(resultCloseDay.status, 200);
+    const periodCloseDay = resultCloseDay.payload.data.analytics.periods.custom;
+    assert.strictEqual(periodCloseDay.total_requests, 0);
+    assert.strictEqual(periodCloseDay.closed_requests, 0);
+    assert.strictEqual(periodCloseDay.open_requests, 0);
+    assert.strictEqual(periodCloseDay.total_requests, periodCloseDay.closed_requests + periodCloseDay.open_requests);
+
+    const resultCreateDay = await callAdmin('dashboard', { query: { period: 'custom', start_date: '2026-04-29', end_date: '2026-04-29' } });
+    assert.strictEqual(resultCreateDay.status, 200);
+    const periodCreateDay = resultCreateDay.payload.data.analytics.periods.custom;
+    const performance = resultCreateDay.payload.data.analytics.employeePerformance.custom;
     const row = performance.find(item => item.employee_id === 'emp-1');
     assert.ok(row);
     assert.strictEqual(row.closed_requests, 1);
+    assert.strictEqual(periodCreateDay.total_requests, 1);
+    assert.strictEqual(periodCreateDay.closed_requests, 1);
+    assert.strictEqual(periodCreateDay.open_requests, 0);
+    assert.strictEqual(periodCreateDay.total_requests, periodCreateDay.closed_requests + periodCreateDay.open_requests);
     assert.strictEqual(
-      period.closed_requests,
+      periodCreateDay.closed_requests,
       performance.reduce((sum, item) => sum + Number(item.closed_requests || 0), 0)
     );
   } finally {
@@ -4164,7 +4177,7 @@ async function run() {
   await testDashboardEmployeePerformanceCountsOpenAndSlaPerEmployee();
   await testDashboardEmployeePerformanceAssignsOpenByCompanySupport();
   await testDashboardPeriodCountsOnlyRequestsCreatedInSelectedRange();
-  await testDashboardEmployeePerformanceCountsClosedByCloseDate();
+  await testDashboardEmployeePerformanceCountsClosedByCreatedDate();
   await testRequestsListEnrichesCompanyFromRegisteredGroup();
   await testRequestsListShowsResponsibleEmployeeFromTicketMessages();
   await testWebhookInfoWarnsWhenMessageUpdatesMissing();

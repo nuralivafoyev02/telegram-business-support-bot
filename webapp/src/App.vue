@@ -2768,12 +2768,7 @@ const companyTicketTotals = computed(() => companyTicketRows.value.reduce((total
   open: totals.open + Number(row.open_requests || 0)
 }), { total: 0, closed: 0, open: 0 }));
 const companyTicketMax = computed(() => Math.max(1, ...companyTicketRows.value.map(row => Number(row.total_requests || 0))));
-const supportPeriodAvgCloseMinutes = computed(() => {
-  const statsAvg = Number(selectedPeriodStats.value.avg_close_minutes || 0);
-  if (statsAvg > 0) return statsAvg;
-  const rows = topEmployeeRows.value.filter(row => !isManagerEmployee(row));
-  return weightedAverageBy(rows, 'avg_close_minutes', 'closed_requests');
-});
+const supportPeriodAvgCloseMinutes = computed(() => Number(selectedPeriodStats.value.avg_close_minutes || 0));
 const supportSummaryCards = computed(() => {
   const stats = selectedPeriodStats.value;
   const previousLabel = currentPeriodDates.value.prev || 'oldingi davr';
@@ -2794,18 +2789,18 @@ const supportSummaryCards = computed(() => {
     {
       key: 'closed',
       title: 'Javob berilgan',
-      value: fmtNumber(rankingClosedRequestsTotal.value),
-      note: `${fmtPercent(rankingCloseRate.value)} so‘rov yopilgan`,
-      comparison: attachPreviousLabel(compareValue(rankingClosedRequestsTotal.value, rankingPrevClosedRequestsTotal.value, { unit: 'ta' })),
+      value: fmtNumber(stats.closed_requests),
+      note: `${fmtPercent(stats.close_rate)} so‘rov yopilgan`,
+      comparison: attachPreviousLabel(compareValue(stats.closed_requests, stats.prev_closed_requests, { unit: 'ta' })),
       icon: '✅',
       action: 'closed'
     },
     {
       key: 'open',
       title: 'Javobsiz',
-      value: fmtNumber(rankingOpenRequestsTotal.value),
-      note: `${fmtNumber(rankingOverdueOpenRequestsTotal.value)} tasi 30 daqiqadan oshgan`,
-      comparison: attachPreviousLabel(compareValue(rankingOpenRequestsTotal.value, stats.prev_open_requests, { invert: true, unit: 'ta' })),
+      value: fmtNumber(stats.open_requests),
+      note: `${fmtNumber(stats.overdue_open_requests)} tasi 30 daqiqadan oshgan`,
+      comparison: attachPreviousLabel(compareValue(stats.open_requests, stats.prev_open_requests, { invert: true, unit: 'ta' })),
       icon: '⚠️',
       tone: 'danger',
       action: 'open'
@@ -2814,7 +2809,7 @@ const supportSummaryCards = computed(() => {
       key: 'avg',
       title: 'O‘rtacha javob',
       value: fmtMinutes(supportPeriodAvgCloseMinutes.value),
-      note: `SLA: ${fmtPercent(rankingCloseRate.value)}`,
+      note: `SLA: ${fmtPercent(stats.close_rate)}`,
       comparison: attachPreviousLabel(compareValue(supportPeriodAvgCloseMinutes.value, stats.prev_avg_close_minutes, { invert: true, unit: 'min' })),
       icon: '⏱️',
       action: 'avg'
