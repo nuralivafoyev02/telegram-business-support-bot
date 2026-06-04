@@ -4053,6 +4053,7 @@ async function getEmployeeActivity(query = {}) {
     const key = companyScopeKeyForRequest(request, chat);
     if (key) periodCompanyKeys.add(key);
   });
+  const assignedCompanies = assignedCompaniesForEmployee(enrichedEmployee, companyInfoCompanies);
   const periodCompanies = resolvePeriodCompaniesForEmployee({
     employee: enrichedEmployee,
     periodKey,
@@ -4069,9 +4070,11 @@ async function getEmployeeActivity(query = {}) {
       closed_requests: visibleClosedRequests.length,
       open_requests: visibleOpenRequests.length,
       avg_close_minutes: average(visibleCloseMinutes),
-      company_total: periodCompanies.length,
+      company_total: assignedCompanies.length,
+      period_company_active: periodCompanies.length,
       customer_count: new Set([...visibleClosedRequests, ...visibleOpenRequests].map(request => request.customer_tg_id || request.customer_name).filter(Boolean)).size
     },
+    assigned_companies: assignedCompanies,
     period_companies: periodCompanies,
     groups,
     closed_requests: visibleClosedRequests.map(requestSummary),

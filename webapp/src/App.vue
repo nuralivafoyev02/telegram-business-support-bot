@@ -2040,7 +2040,8 @@
             <div><span>Churn/Pauza</span><b>{{ fmtNumber(employeeCompanyDetail.summary?.churn) }}</b></div>
           </section>
           <DataTable :columns="employeeCompanyColumns" :rows="employeeCompanyDetail.companies || []"
-            empty="Bu xodimga biriktirilgan kompaniya topilmadi" :page-size="12">
+            empty="Bu xodimga biriktirilgan kompaniya topilmadi" :page-size="12"
+            :on-cell-action="handleTableCellAction">
             <template #businessStatus="{ row }">
               <span class="status-pill mini" :class="businessStatusClass(row.business_status)">{{
                 businessStatusLabel(row.business_status) }}</span>
@@ -3981,20 +3982,20 @@ function mergePeriodCompaniesWithAssigned(periodCompanies = [], allAssigned = []
 }
 
 function applyEmployeePeriodCompanies({ row = {}, allAssigned = [], periodCompaniesFromApi = [] } = {}) {
-  if (selectedStatsPeriod.value === 'all') {
-    return {
-      companies: allAssigned,
-      total: allAssigned.length,
-      summary: companyPortfolioSummary(allAssigned)
-    };
-  }
-  const companies = mergePeriodCompaniesWithAssigned(periodCompaniesFromApi, allAssigned);
-  const total = companies.length || Number(row.period_company_total ?? row.company_total ?? 0);
+  const assigned = allAssigned.length
+    ? allAssigned
+    : (periodCompaniesFromApi.length ? periodCompaniesFromApi : []);
+  const periodKeys = new Set((periodCompaniesFromApi || []).map(company => companyScopeKeyFromCompany(company)).filter(Boolean));
+  const companies = assigned.map(company => ({
+    ...company,
+    period_active: selectedStatsPeriod.value === 'all' || periodKeys.has(companyScopeKeyFromCompany(company))
+  }));
   return {
     companies,
-    total,
+    total: companies.length,
+    period_active_total: periodCompaniesFromApi.length,
     summary: companies.length ? companyPortfolioSummary(companies) : {
-      total,
+      total: 0,
       active: 0,
       churn: 0,
       expiring_soon: 0,
@@ -4467,11 +4468,17 @@ const employeeSupportTitle = computed(() => {
   const employee = employeeProfile.value.employee || {};
   return employee.full_name || employee.username ? `Xodim: ${employee.full_name || employee.username}` : 'Xodim tafsiloti';
 });
-const employeeProfileCompanyTotal = computed(() => Number(
-  employeeCompanyDetail.value.summary?.total
-  ?? employeeProfile.value.summary?.company_total
-  ?? 0
-));
+const employeeProfileCompanyTotal = computed(() => {
+  const companies = employeeCompanyDetail.value.companies?.length
+    ? employeeCompanyDetail.value.companies
+    : (employeeProfile.value.companies || []);
+  if (companies.length) return companies.length;
+  return Number(
+    employeeCompanyDetail.value.summary?.total
+    ?? employeeProfile.value.summary?.company_total
+    ?? 0
+  );
+});
 function isGenericCompanyName(value = '') {
   return !String(value || '').trim() || String(value || '').trim().toLowerCase() === 'kompaniya';
 }
@@ -4903,11 +4910,11 @@ const companyMetricColumns = [
 ];
 
 const employeeCompanyColumns = [
-  { key: 'name', label: 'Kompaniya' },
-  { key: 'brand', label: 'Brend', format: v => v || '—' },
-  { key: 'business_status', label: 'Biznes holati', slot: 'businessStatus' },
-  { key: 'expired', label: 'Obuna', format: (_, row) => expiryStatusLabel(row) },
-  { key: 'phone', label: 'Telefon', format: v => v || '—' }
+  { key: 'name', label: 'Kompaniya', action: 'companyGroups' },
+  { key: 'brand', label: 'Brend', format: v => v || '—', action: 'companyGroups' },
+  { key: 'business_status', label: 'Biznes holati', slot: 'businessStatus', action: 'companyGroups' },
+  { key: 'expired', label: 'Obuna', format: (_, row) => expiryStatusLabel(row), action: 'companyGroups' },
+  { key: 'phone', label: 'Telefon', format: v => v || '—', action: 'companyGroups' }
 ];
 
 const privateColumns = [
@@ -6024,7 +6031,7 @@ function buildManagerAggregateProfile(row = {}, managers = [], payloads = []) {
 }
 
 function openEmployeeCompanyList() {
-  if (employeeProfileCompanyTotal.value <= 0) return showToast('Tanlangan davrda kompaniya topilmadi');
+  if (employeeProfileCompanyTotal.value <= 0) return showToast('Bu xodimga biriktirilgan kompaniya topilmadi');
   modal.value = 'employeeCompanyList';
 }
 
@@ -6068,10 +6075,16 @@ async function selectEmployeeProfileChat(row = {}) {
   }
 }
 
+function assignedCompaniesForEmployeeRow(row = {}, apiCompanies = []) {
+  const employee = resolveEmployeeForCompany(row);
+  if (apiCompanies.length) return apiCompanies;
+  if (row.assigned_companies?.length) return row.assigned_companies;
+  return visibleCompanyInfoRows.value.filter(company => companyMatchesEmployee(company, employee));
+}
+
 async function openEmployeeCompanies(row = {}) {
   const employee = resolveEmployeeForCompany(row);
-  const allAssigned = (row.assigned_companies || visibleCompanyInfoRows.value
-    .filter(company => companyMatchesEmployee(company, employee)));
+  const allAssigned = assignedCompaniesForEmployeeRow(row);
   const periodPack = applyEmployeePeriodCompanies({ row, allAssigned });
   employeeManagerDetailsOpen.value = false;
   employeeCompanyDetail.value = {
@@ -6148,6 +6161,7 @@ async function openEmployeeCompanies(row = {}) {
     });
     if (loadToken !== employeeProfileLoadToken) return;
     const summary = data.summary || {};
+    const allAssigned = assignedCompaniesForEmployeeRow(row, data.assigned_companies || []);
     const periodPack = applyEmployeePeriodCompanies({
       row,
       allAssigned,
