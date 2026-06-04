@@ -2735,18 +2735,23 @@ const responseTrendYTicks = computed(() => chartYTicks(responseTrendMax.value, {
   top: 24,
   bottom: 176
 }));
-const ticketTrendRows = computed(() => (analytics.value.ticketAnswerTrend?.[selectedStatsPeriod.value] || [])
-  .map(row => ({
-    date_key: row.date_key || row.date || row.label,
-    date_label: row.date_label || row.date || '—',
-    weekday_label: row.weekday_label || row.weekday || '—',
-    total_requests: Number(row.total_requests || 0),
-    closed_requests: Number(row.closed_requests || 0),
-    open_requests: Number(row.open_requests || 0),
-    sla: Number(row.sla || row.close_rate || 0)
-  }))
-  .filter(row => row.date_key)
-  .filter(row => selectedStatsPeriod.value !== 'month' || row.total_requests || row.closed_requests || row.open_requests));
+const ticketTrendRows = computed(() => {
+  const rows = (analytics.value.ticketAnswerTrend?.[selectedStatsPeriod.value] || [])
+    .map(row => ({
+      date_key: row.date_key || row.date || row.label,
+      date_label: row.date_label || row.date || '—',
+      weekday_label: row.weekday_label || row.weekday || '—',
+      total_requests: Number(row.total_requests || 0),
+      closed_requests: Number(row.closed_requests || 0),
+      open_requests: Number(row.open_requests || 0),
+      sla: Number(row.sla || row.close_rate || 0)
+    }))
+    .filter(row => row.date_key);
+  if (rows.length) {
+    return rows.filter(row => selectedStatsPeriod.value !== 'month' || row.total_requests || row.closed_requests || row.open_requests);
+  }
+  return buildTicketTrendFallbackRows(selectedStatsPeriod.value);
+});
 const ticketTrendMax = computed(() => Math.max(1, ...ticketTrendRows.value.map(row => Math.max(
   Number(row.total_requests || 0),
   Number(row.closed_requests || 0),
@@ -2800,9 +2805,9 @@ const supportSummaryCards = computed(() => {
     {
       key: 'open',
       title: 'Javobsiz',
-      value: fmtNumber(rankingOpenRequestsTotal.value),
+      value: fmtNumber(stats.open_requests),
       note: `${fmtNumber(stats.overdue_open_requests)} tasi 30 daqiqadan oshgan`,
-      comparison: attachPreviousLabel(compareValue(rankingOpenRequestsTotal.value, stats.prev_open_requests, { invert: true, unit: 'ta' })),
+      comparison: attachPreviousLabel(compareValue(stats.open_requests, stats.prev_open_requests, { invert: true, unit: 'ta' })),
       icon: '⚠️',
       tone: 'danger',
       action: 'open'
@@ -2825,6 +2830,100 @@ const topEmployeeChartMax = computed(() => Math.max(1, ...topEmployeeChartRows.v
 const groupChartRows = computed(() => groupPerformanceRows.value.slice(0, 6));
 const groupChartMax = computed(() => Math.max(1, ...groupChartRows.value.map(row => Number(row.total_requests || 0))));
 const managerStats = computed(() => dashboard.manager || {});
+function buildTicketTrendFallbackRows(period = 'week') {
+  const todayKey = tashkentDateKey(new Date());
+  let dateKeys = [];
+  if (period === 'today') {
+    dateKeys = [todayKey];
+  } else if (period === 'week') {
+    dateKeys = [];
+    let cursor = addDaysToDateKey(todayKey, -6);
+    let guard = 0;
+    while (cursor && cursor <= todayKey && guard < 7) {
+      dateKeys.push(cursor);
+      cursor = addDaysToDateKey(cursor, 1);
+      guard += 1;
+    }
+  } else if (period === 'month') {
+    dateKeys = [];
+    let cursor = addDaysToDateKey(todayKey, -29);
+    let guard = 0;
+    while (cursor && cursor <= todayKey && guard < 31) {
+      dateKeys.push(cursor);
+      cursor = addDaysToDateKey(cursor, 1);
+      guard += 1;
+    }
+  } else if (period === 'custom') {
+    const startKey = normalizeDateKey(customPeriodForm.appliedStart);
+    const endKey = normalizeDateKey(customPeriodForm.appliedEnd);
+    if (!startKey || !endKey) return [];
+    let cursor = startKey <= endKey ? startKey : endKey;
+    const lastKey = startKey <= endKey ? endKey : startKey;
+    let guard = 0;
+    while (cursor && cursor <= lastKey && guard < 62) {
+      dateKeys.push(cursor);
+      cursor = addDaysToDateKey(cursor, 1);
+      guard += 1;
+    }
+  }
+  return dateKeys.map(dateKey => ({
+    date_key: dateKey,
+    date_label: dateKey.split('-').slice(1).reverse().join('.') + '.' + dateKey.slice(0, 4),
+    weekday_label: '—',
+    total_requests: 0,
+    closed_requests: 0,
+    open_requests: 0,
+    sla: 0
+  }));
+}
+
+function reconcileRankingOpenCounts(rows = []) {
+  const targetOpen = Number(selectedPeriodStats.value.open_requests || 0);
+  if (!targetOpen) return rows;
+  const current = rows.reduce((sum, row) => sum + Number(row.open_requests || 0), 0);
+  if (current === targetOpen) return rows;
+  const gap = targetOpen - current;
+  if (gap <= 0) return rows;
+  const existing = rows.find(isUnassignedRankingRow);
+  if (existing) {
+    existing.open_requests = Number(existing.open_requests || 0) + gap;
+    existing.total_requests = Number(existing.closed_requests || 0) + Number(existing.open_requests || 0);
+    existing.close_rate = existing.total_requests > 0
+      ? (Number(existing.closed_requests || 0) / existing.total_requests) * 100
+      : 0;
+    existing.sla = existing.close_rate;
+    return rows;
+  }
+  rows.push({
+    key: 'unassigned:open',
+    id: '',
+    employee_id: '',
+    tg_user_id: '',
+    username: '',
+    phone: '',
+    role: 'support',
+    full_name: 'Biriktirilmagan',
+    telegram_is_premium: false,
+    is_support_employee: false,
+    is_unassigned: true,
+    handled_chats: 0,
+    closed_requests: 0,
+    open_requests: gap,
+    total_requests: gap,
+    company_total: 0,
+    assigned_company_count: 0,
+    avg_close_minutes: 0,
+    close_rate: 0,
+    sla: 0,
+    prev_closed_requests: 0,
+    prev_open_requests: 0,
+    prev_avg_close_minutes: 0,
+    prev_close_rate: 0,
+    grade: performanceGrade(0, 0)
+  });
+  return rows;
+}
+
 function isInSelectedPeriodDate(dateString) {
   if (!dateString) return false;
   const dateKey = tashkentDateKey(dateString);
@@ -3068,6 +3167,9 @@ const supportPerformanceRows = computed(() => {
     ...employees.value
       .filter(row => !isAdminLikeEmployee(row) && (isSupportEmployee(row) || isManagerEmployee(row)))
       .map(supportRowKey),
+    ...topEmployeeRows.value
+      .filter(row => Number(row.open_requests || 0) > 0 || Number(row.closed_requests || 0) > 0 || row.is_unassigned)
+      .map(row => supportRowKey(row) || (row.is_unassigned ? 'unassigned:open' : '')),
     ...visibleCompanyInfoRows.value.filter(hasCompanySupport).map(c =>
       supportRowKey({ username: c.uyqur_support_username, phone: c.uyqur_support_phone })
     )
@@ -3126,8 +3228,7 @@ const supportPerformanceRows = computed(() => {
     const assignedCompanyCount = visibleCompanyInfoRows.value.filter(company => companyMatchesEmployee(company, candidate)).length;
 
     const closedRaw = periodRow ? Number(periodRow.closed_requests || 0) : 0;
-    const backendOpenRaw = periodRow ? Number(periodRow.open_requests || 0) : 0;
-    const openRaw = openSummary ? Number(openSummary.open_requests || 0) : backendOpenRaw;
+    const openRaw = periodRow ? Number(periodRow.open_requests || 0) : 0;
     const totalRaw = closedRaw + openRaw;
     const slaRaw = totalRaw > 0 ? (closedRaw / totalRaw) * 100 : 100;
     const avgRaw = periodRow ? Number(periodRow.avg_close_minutes || 0) : 0;
@@ -3292,11 +3393,12 @@ const supportPerformanceRows = computed(() => {
     });
   }
 
-  return rows
+  return reconcileRankingOpenCounts(rows
     .filter(shouldShowInSupportRanking)
     .sort((a, b) => b.closed_requests - a.closed_requests
+      || b.open_requests - a.open_requests
       || b.assigned_company_count - a.assigned_company_count
-      || a.full_name.localeCompare(b.full_name));
+      || a.full_name.localeCompare(b.full_name)));
 });
 const filteredMetricDetailRows = computed(() => {
   const rows = Array.isArray(metricDetail.value.rows) ? metricDetail.value.rows : [];
