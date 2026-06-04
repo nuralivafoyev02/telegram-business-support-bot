@@ -1164,10 +1164,21 @@ async function getDashboardAnalytics(query = {}) {
     getCachedCompanyInfo().catch(() => null)
   ]);
   const companyInfoCompanies = companyInfoCache?.companies || [];
-  const analyticsCompanies = statsFocus ? [] : mergeCompanyDirectoryRows(companies, companyInfoCompanies);
-  const analyticsChats = statsFocus
-    ? []
-    : enrichChatsWithCompanyAssignments(chats, companyInfoCompanies, analyticsCompanies);
+  const analyticsCompanies = mergeCompanyDirectoryRows(statsFocus ? [] : companies, companyInfoCompanies);
+  let analyticsChats = [];
+  if (statsFocus) {
+    const requestChatIds = [...new Set(requests.map(request => request.chat_id).filter(value => value !== undefined && value !== null))];
+    const minimalChats = requestChatIds.length
+      ? await supabase.select('tg_chats', {
+        select: 'chat_id,title,username,company_id,source_type,type,is_active',
+        chat_id: supabase.inList(requestChatIds.slice(0, 500)),
+        limit: '1000'
+      }).catch(() => [])
+      : [];
+    analyticsChats = enrichChatsWithCompanyAssignments(minimalChats, companyInfoCompanies, analyticsCompanies);
+  } else {
+    analyticsChats = enrichChatsWithCompanyAssignments(chats, companyInfoCompanies, analyticsCompanies);
+  }
   const chatIds = [...new Set(
     (statsFocus
       ? requests.map(request => request.chat_id)
@@ -1235,6 +1246,18 @@ async function getDashboardAnalytics(query = {}) {
       periods: Object.fromEntries(periodContext.map(p => [p.key, p.summary])),
       periodDates: Object.fromEntries(periodContext.map(p => [p.key, { current: p.currentLabel, prev: p.prevLabel }])),
       employeePerformance,
+      ticketAnswerTrend: Object.fromEntries(periods.map(([key]) => [key, buildTicketAnswerTrend(requests, key, keys)])),
+      responseTimeTrend: Object.fromEntries(periods.map(([key]) => [key, buildResponseTimeTrend(requests, key, keys, messages, employeeMaps)])),
+      companyTickets: Object.fromEntries(periods.map(([key]) => [key, buildCompanyTicketPerformance({
+        requests,
+        chats: analyticsChats,
+        companies: analyticsCompanies,
+        companyInfoCompanies,
+        messages,
+        periodKey: key,
+        keys,
+        sourceType: 'group'
+      })])),
       custom_period: customPeriod,
       generated_at: new Date().toISOString()
     };
