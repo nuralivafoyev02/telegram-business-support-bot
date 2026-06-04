@@ -2124,6 +2124,7 @@ async function testDashboardPeriodCountsOnlyRequestsCreatedInSelectedRange() {
     assert.ok(row);
     assert.strictEqual(row.open_requests, 1);
     assert.strictEqual(row.closed_requests, 1);
+    assert.strictEqual(period.closed_requests, row.closed_requests);
   } finally {
     supabase.select = originalSelect;
     stats.selectEmployeeStatistics = originalEmployeeStats;
@@ -2173,9 +2174,15 @@ async function testDashboardEmployeePerformanceCountsClosedByCloseDate() {
   try {
     const result = await callAdmin('dashboard', { query: { period: 'custom', start_date: '2026-04-30', end_date: '2026-04-30' } });
     assert.strictEqual(result.status, 200);
-    const row = result.payload.data.analytics.employeePerformance.custom.find(item => item.employee_id === 'emp-1');
+    const period = result.payload.data.analytics.periods.custom;
+    const performance = result.payload.data.analytics.employeePerformance.custom;
+    const row = performance.find(item => item.employee_id === 'emp-1');
     assert.ok(row);
     assert.strictEqual(row.closed_requests, 1);
+    assert.strictEqual(
+      period.closed_requests,
+      performance.reduce((sum, item) => sum + Number(item.closed_requests || 0), 0)
+    );
   } finally {
     supabase.select = originalSelect;
     stats.selectEmployeeStatistics = originalEmployeeStats;

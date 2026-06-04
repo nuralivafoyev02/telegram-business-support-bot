@@ -417,12 +417,22 @@ function weightedPerformanceAverage(performance = [], valueField = 'avg_close_mi
 
 function alignPeriodSummaryWithRanking(summary, performance = []) {
   if (!summary) return summary;
+  const closedTotal = sumEmployeePerformanceOpenRequests(performance, 'closed_requests');
+  const openTotal = sumEmployeePerformanceOpenRequests(performance, 'open_requests');
+  const prevClosedTotal = sumEmployeePerformanceOpenRequests(performance, 'prev_closed_requests');
+  const prevOpenTotal = sumEmployeePerformanceOpenRequests(performance, 'prev_open_requests');
+  const handledTotal = closedTotal + openTotal;
+  const prevHandledTotal = prevClosedTotal + prevOpenTotal;
   const avgCloseMinutes = weightedPerformanceAverage(performance, 'avg_close_minutes', 'closed_requests');
   const prevAvgCloseMinutes = weightedPerformanceAverage(performance, 'prev_avg_close_minutes', 'prev_closed_requests');
   return {
     ...summary,
-    open_requests: sumEmployeePerformanceOpenRequests(performance, 'open_requests'),
-    prev_open_requests: sumEmployeePerformanceOpenRequests(performance, 'prev_open_requests'),
+    closed_requests: closedTotal,
+    prev_closed_requests: prevClosedTotal,
+    close_rate: handledTotal ? percent(closedTotal, handledTotal) : summary.close_rate,
+    prev_close_rate: prevHandledTotal ? percent(prevClosedTotal, prevHandledTotal) : summary.prev_close_rate,
+    open_requests: openTotal,
+    prev_open_requests: prevOpenTotal,
     overdue_open_requests: sumEmployeePerformanceOpenRequests(performance, 'overdue_open_requests'),
     prev_overdue_open_requests: sumEmployeePerformanceOpenRequests(performance, 'prev_overdue_open_requests'),
     avg_close_minutes: avgCloseMinutes || summary.avg_close_minutes,

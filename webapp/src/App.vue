@@ -2794,9 +2794,9 @@ const supportSummaryCards = computed(() => {
     {
       key: 'closed',
       title: 'Javob berilgan',
-      value: fmtNumber(stats.closed_requests),
-      note: `${fmtPercent(stats.close_rate)} so‘rov yopilgan`,
-      comparison: attachPreviousLabel(compareValue(stats.closed_requests, stats.prev_closed_requests, { unit: 'ta' })),
+      value: fmtNumber(rankingClosedRequestsTotal.value),
+      note: `${fmtPercent(rankingCloseRate.value)} so‘rov yopilgan`,
+      comparison: attachPreviousLabel(compareValue(rankingClosedRequestsTotal.value, rankingPrevClosedRequestsTotal.value, { unit: 'ta' })),
       icon: '✅',
       action: 'closed'
     },
@@ -2814,7 +2814,7 @@ const supportSummaryCards = computed(() => {
       key: 'avg',
       title: 'O‘rtacha javob',
       value: fmtMinutes(supportPeriodAvgCloseMinutes.value),
-      note: `SLA: ${fmtPercent(stats.close_rate)}`,
+      note: `SLA: ${fmtPercent(rankingCloseRate.value)}`,
       comparison: attachPreviousLabel(compareValue(supportPeriodAvgCloseMinutes.value, stats.prev_avg_close_minutes, { invert: true, unit: 'min' })),
       icon: '⏱️',
       action: 'avg'
@@ -4327,6 +4327,23 @@ const topSupportCards = computed(() => supportPerformanceRows.value
     avg_comparison: comparisonEnabled.value ? compareValue(row.avg_close_minutes, row.prev_avg_close_minutes, { invert: true, unit: 'min' }) : null
   };
 }));
+
+const rankingClosedRequestsTotal = computed(() => topSupportCards.value.reduce(
+  (sum, row) => sum + Number(row.closed_requests || 0),
+  0
+));
+
+const rankingPrevClosedRequestsTotal = computed(() => topSupportCards.value.reduce(
+  (sum, row) => sum + Number(row.prev_closed_requests || 0),
+  0
+));
+
+const rankingCloseRate = computed(() => {
+  const closed = rankingClosedRequestsTotal.value;
+  const open = rankingOpenRequestsTotal.value;
+  const total = closed + open;
+  return total > 0 ? (closed / total) * 100 : Number(selectedPeriodStats.value.close_rate || 0);
+});
 
 const rankingOpenRequestsTotal = computed(() => topSupportCards.value.reduce(
   (sum, row) => sum + Number(row.open_requests || 0),
