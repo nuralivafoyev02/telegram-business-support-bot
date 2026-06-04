@@ -2053,10 +2053,10 @@ async function testDashboardEmployeePerformanceCountsOpenOnlyWhenAssigned() {
     const performance = result.payload.data.analytics.employeePerformance.custom;
     const row = performance.find(item => item.employee_id === 'emp-1');
     assert.ok(row);
-    assert.strictEqual(row.open_requests, 1);
+    assert.strictEqual(row.open_requests, 2);
     const assignedOpenTotal = performance.reduce((sum, item) => sum + Number(item.open_requests || 0), 0);
-    assert.strictEqual(assignedOpenTotal, 1);
-    assert.ok(period.open_requests >= assignedOpenTotal);
+    assert.strictEqual(assignedOpenTotal, 2);
+    assert.strictEqual(period.open_requests, assignedOpenTotal);
   } finally {
     supabase.select = originalSelect;
     stats.selectEmployeeStatistics = originalEmployeeStats;

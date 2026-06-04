@@ -6532,9 +6532,21 @@ function resolveCompanySupportMappingForRequest(request = {}, employeeMappings =
 }
 
 function findEmployeeMappingForOpenRequest(request = {}, employeeMappings = []) {
-  const assignedId = String(request.assigned_to_employee_id || '').trim();
-  if (!assignedId) return null;
-  return employeeMappings.find(mapping => mapping.id === assignedId) || null;
+  const assignedId = String(
+    request.assigned_to_employee_id || request.responsible_employee_id || ''
+  ).trim();
+  if (assignedId) {
+    const byId = employeeMappings.find(mapping => mapping.id === assignedId);
+    if (byId) return byId;
+  }
+
+  const byCompanyScope = employeeMappings.find(mapping => {
+    if (request.company_id && mapping.companyIds.has(String(request.company_id).trim())) return true;
+    if (request.company_name && mapping.companyNames.has(normalizedCompanyName(request.company_name))) return true;
+    if (request.chat_id && mapping.chatIds.has(String(request.chat_id).trim())) return true;
+    return false;
+  });
+  return byCompanyScope || null;
 }
 
 function buildEmployeeOpenRequestMappings() {

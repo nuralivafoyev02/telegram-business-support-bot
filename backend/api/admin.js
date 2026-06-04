@@ -620,8 +620,18 @@ function buildEmployeePerformance({ requests, employees, messages = [], periodKe
 
   function assignOpenRequest(request, { previous = false } = {}) {
     const assignedId = String(request.assigned_to_employee_id || '').trim();
-    if (!assignedId) return;
-    assignOpenToEmployee(findEmployee(assignedId, '', ''), request, { previous });
+    if (assignedId && assignOpenToEmployee(findEmployee(assignedId, '', ''), request, { previous })) return;
+
+    const openedId = String(request.opened_by_employee_id || '').trim();
+    if (openedId && assignOpenToEmployee(findEmployee(openedId, '', ''), request, { previous })) return;
+
+    const companyId = resolveCompanyIdForRequest(request, chatMap, externalChatCompanyMap);
+    const companySupport = companyId ? companySupportByCompanyId.get(companyId) : null;
+    if (companySupport && assignOpenToEmployee(
+      findEmployee(companySupport.employee_id, companySupport.tg_user_id, companySupport.full_name),
+      request,
+      { previous }
+    )) return;
   }
 
   function ensureEmployeeTotal({ employee = null, employeeId = '', tgUserId = '', name = '' } = {}) {
