@@ -4,7 +4,11 @@ const supabase = require('./supabase');
 const { getBotSettings } = require('./bot-settings');
 const { getCachedCompanyInfo } = require('./company-info');
 const metrics = require('./metrics');
-const { canCreateTicketFromPrivateMessage } = require('./private-ticket-gate');
+const {
+  canCreateTicketFromPrivateMessage,
+  isPrivateLikeSourceType,
+  resolvePrivateTicketCompanyContext
+} = require('./private-ticket-gate');
 const { sendMessage, editMessageText, editMessageReplyMarkup, answerCallbackQuery, escapeHtml } = require('./telegram');
 
 const TICKET_PREFIX = 'tk:';
@@ -508,19 +512,35 @@ async function openSupportRequestAndNotify({
       chat_id: message?.chat?.id || null,
       source_type: sourceType,
       open_source: openSource,
-      from_id: message?.from?.id || null
+      from_id: message?.from?.id || null,
+      reason: isPrivateLikeSourceType(sourceType) ? 'no_company_group' : 'blocked'
     });
     return null;
   }
 
   const chatId = message?.chat?.id || null;
-  const companyCtx = await resolveCompanyAndSupportEmployee({ companyId, chatId });
+  let resolvedCompanyId = companyId;
+  if (isPrivateLikeSourceType(sourceType)) {
+    const privateCompany = await resolvePrivateTicketCompanyContext(message, openedByEmployee);
+    resolvedCompanyId = privateCompany?.companyId || null;
+    if (!resolvedCompanyId) {
+      console.info('[ticket-notifier:private-skipped]', {
+        chat_id: chatId,
+        source_type: sourceType,
+        open_source: openSource,
+        from_id: message?.from?.id || null,
+        reason: 'company_not_resolved'
+      });
+      return null;
+    }
+  }
+  const companyCtx = await resolveCompanyAndSupportEmployee({ companyId: resolvedCompanyId, chatId });
   const supportEmployee = companyCtx.supportEmployee;
   const assignedAt = supportEmployee?.id ? new Date().toISOString() : null;
   const request = await metrics.createSupportRequest({
     message,
     sourceType,
-    companyId: companyCtx.companyId || companyId,
+    companyId: companyCtx.companyId || resolvedCompanyId || companyId,
     openSource,
     openedByEmployeeId: openedByEmployee?.id || null,
     assignedToEmployeeId: supportEmployee?.id || null,
@@ -530,7 +550,7 @@ async function openSupportRequestAndNotify({
   const fresh = request?.id ? await loadRequestById(request.id) : null;
   const notifyRequest = enrichRequestForNotification(fresh || request, {
     openSource,
-    companyId: companyCtx.companyId || companyId
+    companyId: companyCtx.companyId || resolvedCompanyId || companyId
   });
   const notifyResult = await notifyTicketOpened({
     request: notifyRequest,
