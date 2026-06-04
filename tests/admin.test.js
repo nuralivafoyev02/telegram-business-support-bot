@@ -1980,7 +1980,7 @@ async function testDashboardEmployeePerformanceCountsOpenAndSlaPerEmployee() {
     assert.strictEqual(row.open_requests, 1);
     assert.strictEqual(row.total_requests, 2);
     assert.strictEqual(row.sla, 50);
-    assert.strictEqual(row.avg_close_minutes, 10);
+    assert.strictEqual(row.avg_close_minutes, 2);
   } finally {
     supabase.select = originalSelect;
     stats.selectEmployeeStatistics = originalEmployeeStats;
@@ -2174,7 +2174,8 @@ async function testDashboardEmployeePerformanceCountsClosedByCloseDate() {
     const result = await callAdmin('dashboard', { query: { period: 'custom', start_date: '2026-04-30', end_date: '2026-04-30' } });
     assert.strictEqual(result.status, 200);
     const row = result.payload.data.analytics.employeePerformance.custom.find(item => item.employee_id === 'emp-1');
-    assert.ok(!row || row.closed_requests === 0);
+    assert.ok(row);
+    assert.strictEqual(row.closed_requests, 1);
   } finally {
     supabase.select = originalSelect;
     stats.selectEmployeeStatistics = originalEmployeeStats;
@@ -2934,7 +2935,7 @@ async function testEmployeeActivityReturnsGroupsAndCustomers() {
     source_type: 'group',
     classification: 'employee_message',
     text: index === 0 ? 'Javob berdim' : `Javob ${index + 1}`,
-    created_at: new Date(Date.parse(today) + index * 1000).toISOString()
+    created_at: new Date(Date.parse(today) + 7 * 60000 + index * 1000).toISOString()
   }));
   const customerMessage = {
     id: 'customer-message-1',

@@ -3029,7 +3029,12 @@ function mergeSupportCandidate(map, row = {}, source = 'identity') {
   const periodHandled = source === 'period' ? mergeMetricOnce(current, source, row, 'handled_chats') : 0;
   const statsHandled = source === 'stats' ? mergeMetricOnce(current, source, row, 'handled_chats') : 0;
   mergeWeightedAverage(current, source, row);
-  const avgCloseMinutes = Number(row.avg_close_minutes || current.avg_close_minutes || 0);
+  const weightedAvg = current._avg_weight
+    ? Number(current._avg_total || 0) / Number(current._avg_weight)
+    : 0;
+  const avgCloseMinutes = source === 'period'
+    ? Number(row.avg_close_minutes || weightedAvg || 0)
+    : (weightedAvg || Number(row.avg_close_minutes || current.avg_close_minutes || 0));
   map.set(key, {
     ...current,
     ...row,

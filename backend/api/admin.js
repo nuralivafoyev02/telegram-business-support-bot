@@ -328,44 +328,71 @@ async function resolveEmployeeForAdmin(username) {
   return employees[0] || null;
 }
 
-function calculateFirstResponseMinutes(request, messages = [], employeeMaps = buildEmployeeMaps([])) {
+const MAX_SUPPORT_RESPONSE_MINUTES = 24 * 60;
+
+function normalizeSupportResponseMinutes(value) {
+  if (value === null || value === undefined || !Number.isFinite(value)) return null;
+  const rounded = Math.max(0, Math.round(value));
+  if (rounded > MAX_SUPPORT_RESPONSE_MINUTES) return null;
+  return rounded;
+}
+
+function calculateFirstResponseMinutes(request, messages = [], employeeMaps = buildEmployeeMaps([]), options = {}) {
   const requestTime = new Date(request.created_at || 0).getTime();
   if (!Number.isFinite(requestTime)) return null;
 
   const convKey = conversationScopeKey(request);
   const convMessages = messages.filter(msg => msg && conversationScopeKey(msg) === convKey);
+  const closeTime = request.status === 'closed' && request.closed_at
+    ? new Date(request.closed_at).getTime()
+    : null;
+  const maxMessageTime = closeTime || (requestTime + MAX_SUPPORT_RESPONSE_MINUTES * 60000);
+  const restrictEmployeeId = String(options.employeeId || request.closed_by_employee_id || '').trim();
+  const restrictTgUserId = telegramIdKey(options.tgUserId || request.closed_by_tg_id || '');
 
   const employeeMessages = convMessages
     .filter(message => {
       if (!message) return false;
-      const isEmp = message.employee_id || 
-                    (employeeMaps && employeeMaps.byTgId && employeeMaps.byTgId.has(telegramIdKey(message.from_tg_user_id))) || 
-                    message.classification === 'admin_reply' || 
-                    message.classification === 'admin_send' || 
-                    message.update_kind === 'admin_send' || 
-                    message.update_kind === 'admin_reply' ||
-                    message.update_kind === 'admin_request_reply';
+      const messageTime = new Date(message.created_at || 0).getTime();
+      if (!Number.isFinite(messageTime) || messageTime < requestTime || messageTime > maxMessageTime) return false;
+      const messageEmployeeId = String(message.employee_id || '').trim();
+      const messageTgUserId = telegramIdKey(message.from_tg_user_id);
+      if (restrictEmployeeId || restrictTgUserId) {
+        const matchesEmployee = (restrictEmployeeId && messageEmployeeId === restrictEmployeeId)
+          || (restrictTgUserId && messageTgUserId === restrictTgUserId);
+        if (!matchesEmployee) return false;
+      }
+      const isEmp = messageEmployeeId
+        || (employeeMaps && employeeMaps.byTgId && employeeMaps.byTgId.has(messageTgUserId))
+        || message.classification === 'employee_message'
+        || message.classification === 'admin_reply'
+        || message.classification === 'admin_send'
+        || message.update_kind === 'admin_send'
+        || message.update_kind === 'admin_reply'
+        || message.update_kind === 'admin_request_reply';
       return isEmp;
     })
     .map(message => ({
       time: new Date(message.created_at || 0).getTime()
     }))
-    .filter(item => Number.isFinite(item.time) && item.time >= requestTime)
     .sort((a, b) => a.time - b.time);
 
-  const closeTime = request.status === 'closed' && request.closed_at
-    ? new Date(request.closed_at).getTime()
-    : null;
-
   if (employeeMessages.length > 0) {
-    const firstReply = employeeMessages.find(item => !closeTime || item.time <= closeTime) || employeeMessages[0];
-    return Math.max(0, Math.round((firstReply.time - requestTime) / 60000));
+    return Math.max(0, Math.round((employeeMessages[0].time - requestTime) / 60000));
   }
 
-  if (Number.isFinite(closeTime) && closeTime >= requestTime) {
-    return Math.round((closeTime - requestTime) / 60000);
-  }
+  return null;
+}
 
+function resolveResponseMinutes(request, messages = [], employeeMaps = buildEmployeeMaps([]), options = {}) {
+  const replyMin = normalizeSupportResponseMinutes(
+    calculateFirstResponseMinutes(request, messages, employeeMaps, options)
+  );
+  if (replyMin !== null) return replyMin;
+
+  if (request.status === 'closed' && request.closed_at) {
+    return normalizeSupportResponseMinutes(minutesBetween(request.created_at, request.closed_at));
+  }
   return null;
 }
 
@@ -420,11 +447,8 @@ function buildPeriodSummary(requests, periodKey, label, keys, messages = [], emp
   );
   const closed = created.filter(request => request.status === 'closed');
   const closeMinutes = closedInPeriod
-    .map(request => {
-      const replyMin = calculateFirstResponseMinutes(request, messages, employeeMaps);
-      return replyMin !== null ? replyMin : minutesBetween(request.created_at, request.closed_at);
-    })
-    .filter(value => value !== null && value >= 0);
+    .map(request => resolveResponseMinutes(request, messages, employeeMaps))
+    .filter(value => value !== null);
 
   const prevCreated = requests.filter(request => inPreviousPeriod(request.created_at, periodKey, keys));
   const prevOpenRequests = prevCreated.filter(request => request.status === 'open');
@@ -441,11 +465,8 @@ function buildPeriodSummary(requests, periodKey, label, keys, messages = [], emp
   );
   const prevClosed = prevCreated.filter(request => request.status === 'closed');
   const prevCloseMinutes = prevClosedInPeriod
-    .map(request => {
-      const replyMin = calculateFirstResponseMinutes(request, messages, employeeMaps);
-      return replyMin !== null ? replyMin : minutesBetween(request.created_at, request.closed_at);
-    })
-    .filter(value => value !== null && value >= 0);
+    .map(request => resolveResponseMinutes(request, messages, employeeMaps))
+    .filter(value => value !== null);
 
   return {
     ...emptyPeriod(periodKey, label),
@@ -579,8 +600,10 @@ function buildEmployeePerformance({ requests, employees, messages = [], periodKe
     const companyKey = companyScopeKey(request);
     if (companyKey) current.companies.add(companyKey);
     const conversationMessages = messagesByConversation.get(conversationScopeKey(request)) || [];
-    const replyMin = calculateFirstResponseMinutes(request, conversationMessages, employeeMaps);
-    const closeMinute = replyMin !== null ? replyMin : minutesBetween(request.created_at, request.closed_at);
+    const closeMinute = resolveResponseMinutes(request, conversationMessages, employeeMaps, {
+      employeeId: employee.id,
+      tgUserId: employee.tg_user_id
+    });
     if (closeMinute !== null) current.close_minutes.push(closeMinute);
     if (!current.last_closed_at || String(request.closed_at || '') > String(current.last_closed_at || '')) current.last_closed_at = request.closed_at || null;
   });
@@ -619,8 +642,10 @@ function buildEmployeePerformance({ requests, employees, messages = [], periodKe
     const companyKey = companyScopeKey(request);
     if (companyKey) current.prev_companies.add(companyKey);
     const conversationMessages = messagesByConversation.get(conversationScopeKey(request)) || [];
-    const replyMin = calculateFirstResponseMinutes(request, conversationMessages, employeeMaps);
-    const closeMinute = replyMin !== null ? replyMin : minutesBetween(request.created_at, request.closed_at);
+    const closeMinute = resolveResponseMinutes(request, conversationMessages, employeeMaps, {
+      employeeId: employee.id,
+      tgUserId: employee.tg_user_id
+    });
     if (closeMinute !== null) current.prev_close_minutes.push(closeMinute);
   });
 
@@ -746,8 +771,7 @@ function buildResponseTimeTrend(requests, periodKey, keys, messages = [], employ
     .filter(request => request.status === 'closed' && request.closed_at && inCurrentPeriod(request.closed_at, periodKey, keys))
     .forEach(request => {
       if (!inCurrentPeriod(request.created_at, periodKey, keys)) return;
-      const replyMin = calculateFirstResponseMinutes(request, messages, employeeMaps);
-      const closeMinute = replyMin !== null ? replyMin : minutesBetween(request.created_at, request.closed_at);
+      const closeMinute = resolveResponseMinutes(request, messages, employeeMaps);
       if (closeMinute === null) return;
       const hourLabel = tashkentHourKey(request.closed_at);
       const current = buckets.get(hourLabel) || {
@@ -3734,7 +3758,12 @@ async function getEmployeeActivity(query = {}) {
   const visibleMessages = messages.filter(message => !isEmployeePrivateChatId(message.chat_id));
   const visibleOpenRequests = periodOpenRequests.filter(request => !isEmployeePrivateChatId(request.chat_id));
   const visibleCloseMinutes = visibleClosedRequests
-    .map(request => minutesBetween(request.created_at, request.closed_at))
+    .map(request => resolveResponseMinutes(
+      request,
+      messagesByConversation.get(conversationScopeKey(request)) || [],
+      employeeMaps,
+      { employeeId: enrichedEmployee.id, tgUserId: enrichedEmployee.tg_user_id }
+    ))
     .filter(value => value !== null);
   const visibleConversationKeys = new Set([
     ...visibleClosedRequests,
