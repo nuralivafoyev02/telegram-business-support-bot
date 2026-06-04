@@ -2121,11 +2121,17 @@ async function testDashboardPeriodCountsOnlyRequestsCreatedInSelectedRange() {
     assert.strictEqual(period.total_requests, period.closed_requests + period.open_requests);
     assert.strictEqual(result.payload.data.openRequests.some(request => request.id === 'request-old-open'), false);
     assert.strictEqual(result.payload.data.openRequests.some(request => request.id === 'request-day-open'), true);
-    const row = result.payload.data.analytics.employeePerformance.custom.find(item => item.employee_id === 'emp-1');
+    const performance = result.payload.data.analytics.employeePerformance.custom;
+    const row = performance.find(item => item.employee_id === 'emp-1');
     assert.ok(row);
     assert.strictEqual(row.open_requests, 1);
     assert.strictEqual(row.closed_requests, 1);
+    assert.strictEqual(period.open_requests, 1);
     assert.strictEqual(period.closed_requests, row.closed_requests);
+    assert.strictEqual(
+      period.open_requests,
+      performance.reduce((sum, item) => sum + Number(item.open_requests || 0), 0)
+    );
     const trend = result.payload.data.analytics.ticketAnswerTrend.custom || [];
     const trendTotal = trend.reduce((sum, item) => sum + Number(item.total_requests || 0), 0);
     assert.strictEqual(trendTotal, period.total_requests);

@@ -2800,9 +2800,9 @@ const supportSummaryCards = computed(() => {
     {
       key: 'open',
       title: 'Javobsiz',
-      value: fmtNumber(stats.open_requests),
+      value: fmtNumber(rankingOpenRequestsTotal.value),
       note: `${fmtNumber(stats.overdue_open_requests)} tasi 30 daqiqadan oshgan`,
-      comparison: attachPreviousLabel(compareValue(stats.open_requests, stats.prev_open_requests, { invert: true, unit: 'ta' })),
+      comparison: attachPreviousLabel(compareValue(rankingOpenRequestsTotal.value, stats.prev_open_requests, { invert: true, unit: 'ta' })),
       icon: '⚠️',
       tone: 'danger',
       action: 'open'
@@ -2980,7 +2980,11 @@ function isUnassignedCompanyTicketRow(row = {}) {
 }
 
 function shouldShowInSupportRanking(row = {}) {
-  if (isUnassignedRankingRow(row)) return false;
+  if (isUnassignedRankingRow(row)) {
+    return Number(row.open_requests || 0) > 0
+      || Number(row.prev_open_requests || 0) > 0
+      || Number(row.closed_requests || 0) > 0;
+  }
   if (row.is_manager_group === true) return true;
   if (isManagerEmployee(row)) return false;
   if (!isSupportEmployee(row)) return false;
@@ -3070,7 +3074,10 @@ const supportPerformanceRows = computed(() => {
   ].filter(Boolean));
 
   topEmployeeRows.value.forEach(pRow => {
-    if (isUnassignedRankingRow(pRow)) return;
+    if (isUnassignedRankingRow(pRow)) {
+      periodStatsMap.set('unassigned:open', pRow);
+      return;
+    }
     const key = employeeSummaryKey(pRow);
     if (key) periodStatsMap.set(key, pRow);
   });
@@ -3086,7 +3093,10 @@ const supportPerformanceRows = computed(() => {
     mergeSupportCandidate(merged, row, 'stats');
   });
   topEmployeeRows.value.forEach(row => {
-    if (isUnassignedRankingRow(row)) return;
+    if (isUnassignedRankingRow(row)) {
+      mergeSupportCandidate(merged, { ...row, key: 'unassigned:open', is_unassigned: true }, 'period');
+      return;
+    }
     mergeSupportCandidate(merged, row, 'period');
   });
   visibleCompanyInfoRows.value.forEach(company => {
@@ -3108,7 +3118,9 @@ const supportPerformanceRows = computed(() => {
     const employeeRef = employees.value.find(item => supportRowKey(item) === rowKey) || null;
     const resolvedRole = row.role || stat.role || employeeRef?.role || '';
     const key = employeeSummaryKey(candidate) || employeeSummaryKey(row) || employeeSummaryKey(stat);
-    const periodRow = key ? periodStatsMap.get(key) : null;
+    const periodRow = row.is_unassigned || candidate.is_unassigned
+      ? periodStatsMap.get('unassigned:open')
+      : (key ? periodStatsMap.get(key) : null);
     const openSummary = key ? openSummaryMap.get(key) : null;
     if (key) openSummaryMap.delete(key);
     const assignedCompanyCount = visibleCompanyInfoRows.value.filter(company => companyMatchesEmployee(company, candidate)).length;
@@ -3144,6 +3156,7 @@ const supportPerformanceRows = computed(() => {
       full_name: row.full_name || stat.full_name || employeeRef?.full_name || 'Xodim',
       telegram_is_premium: row.telegram_is_premium === true || stat.telegram_is_premium === true,
       is_support_employee: isSupportEmployee({ role: resolvedRole }),
+      is_unassigned: periodRow?.is_unassigned === true || row.is_unassigned === true,
       handled_chats: handledChats,
       closed_requests: closed,
       open_requests: open,
@@ -3166,11 +3179,42 @@ const supportPerformanceRows = computed(() => {
   });
 
   const rows = candidateRows
-    .filter(row => shouldShowInSupportRanking(row) && knownEmployeeKeys.has(supportRowKey(row)));
+    .filter(row => shouldShowInSupportRanking(row)
+      && (row.is_unassigned || knownEmployeeKeys.has(supportRowKey(row))));
 
   openSummaryMap.forEach(summary => {
-    if (isUnassignedRankingRow(summary)) return;
     const summarySupportKey = supportRowKey(summary);
+    if (isUnassignedRankingRow(summary)) {
+      if (rows.some(isUnassignedRankingRow)) return;
+      rows.push({
+        key: summary.key || 'unassigned:open',
+        id: '',
+        employee_id: '',
+        tg_user_id: '',
+        username: '',
+        phone: '',
+        role: 'support',
+        full_name: summary.full_name || 'Biriktirilmagan',
+        telegram_is_premium: false,
+        is_support_employee: false,
+        is_unassigned: true,
+        handled_chats: summary.chat_keys?.size || 0,
+        closed_requests: 0,
+        open_requests: Number(summary.open_requests || 0),
+        total_requests: Number(summary.open_requests || 0),
+        company_total: 0,
+        assigned_company_count: 0,
+        avg_close_minutes: 0,
+        close_rate: 0,
+        sla: 0,
+        prev_closed_requests: 0,
+        prev_open_requests: 0,
+        prev_avg_close_minutes: 0,
+        prev_close_rate: 0,
+        grade: performanceGrade(0, 0)
+      });
+      return;
+    }
     if (summarySupportKey && !knownEmployeeKeys.has(summarySupportKey)) return;
     if (!isSupportEmployee(summary)) return;
     rows.push({
@@ -6551,7 +6595,22 @@ function employeeOpenRequestSummaryMap() {
 
   (filteredOpenRequests.value || []).forEach(request => {
     const matchedEmp = findEmployeeMappingForOpenRequest(request, employeeMappings);
-    if (!matchedEmp || !isSupportEmployee(matchedEmp.employee)) return;
+    if (!matchedEmp || !isSupportEmployee(matchedEmp.employee) || isManagerEmployee(matchedEmp.employee)) {
+      const unassignedKey = 'unassigned:open';
+      const current = map.get(unassignedKey) || {
+        key: unassignedKey,
+        employee_id: '',
+        username: '',
+        full_name: 'Biriktirilmagan',
+        is_unassigned: true,
+        open_requests: 0,
+        chat_keys: new Set()
+      };
+      current.open_requests += 1;
+      if (request.chat_id) current.chat_keys.add(String(request.chat_id));
+      map.set(unassignedKey, current);
+      return;
+    }
 
     const key = matchedEmp.key;
     const current = map.get(key) || {

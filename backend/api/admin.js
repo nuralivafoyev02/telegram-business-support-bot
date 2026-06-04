@@ -428,15 +428,17 @@ function weightedPerformanceAverage(performance = [], valueField = 'avg_close_mi
 function alignPeriodSummaryWithRanking(summary, performance = []) {
   if (!summary) return summary;
   const closedRequests = Number(summary.closed_requests || 0);
-  const openRequests = Number(summary.open_requests || 0);
+  const openRequests = sumEmployeePerformanceOpenRequests(performance, 'open_requests');
   const prevClosedRequests = Number(summary.prev_closed_requests || 0);
-  const prevOpenRequests = Number(summary.prev_open_requests || 0);
+  const prevOpenRequests = sumEmployeePerformanceOpenRequests(performance, 'prev_open_requests');
   const handledTotal = closedRequests + openRequests;
   const prevHandledTotal = prevClosedRequests + prevOpenRequests;
   return {
     ...summary,
     total_requests: handledTotal,
     prev_total_requests: prevHandledTotal,
+    open_requests: openRequests,
+    prev_open_requests: prevOpenRequests,
     close_rate: handledTotal ? percent(closedRequests, handledTotal) : summary.close_rate,
     prev_close_rate: prevHandledTotal ? percent(prevClosedRequests, prevHandledTotal) : summary.prev_close_rate,
     overdue_open_requests: sumEmployeePerformanceOpenRequests(performance, 'overdue_open_requests'),
@@ -558,6 +560,77 @@ function buildEmployeePerformance({ requests, employees, messages = [], periodKe
   const prevOpen = requests.filter(request => request.status === 'open' && inPreviousPeriod(request.created_at, periodKey, keys));
 
   const totals = new Map();
+  const unassigned = {
+    employee_id: '',
+    tg_user_id: null,
+    full_name: 'Biriktirilmagan',
+    username: '',
+    role: 'unassigned',
+    is_unassigned: true,
+    closed_requests: 0,
+    open_requests: 0,
+    overdue_open_requests: 0,
+    close_minutes: [],
+    prev_closed_requests: 0,
+    prev_open_requests: 0,
+    prev_overdue_open_requests: 0,
+    prev_close_minutes: [],
+    handled_chats: new Set(),
+    prev_handled_chats: new Set(),
+    companies: new Set(),
+    prev_companies: new Set(),
+    last_closed_at: null
+  };
+
+  function trackOpenRequest(target, request, { previous = false } = {}) {
+    const openField = previous ? 'prev_open_requests' : 'open_requests';
+    const overdueField = previous ? 'prev_overdue_open_requests' : 'overdue_open_requests';
+    const chatsField = previous ? 'prev_handled_chats' : 'handled_chats';
+    const companiesField = previous ? 'prev_companies' : 'companies';
+    target[openField] += 1;
+    const openMinutes = minutesBetween(request.created_at, new Date());
+    if (openMinutes !== null && openMinutes > 30) target[overdueField] += 1;
+    if (request.chat_id) target[chatsField].add(conversationScopeKey(request));
+    const companyKey = companyScopeKey(request);
+    if (companyKey) target[companiesField].add(companyKey);
+  }
+
+  function assignOpenRequest(request, { previous = false } = {}) {
+    const assignedId = String(request.assigned_to_employee_id || '').trim();
+    if (assignedId) {
+      const assignedEmployee = findEmployee(assignedId, '', '');
+      if (assignedEmployee && !isManagerEmployeeRecord(assignedEmployee)) {
+        const current = ensureEmployeeTotal({
+          employee: assignedEmployee,
+          employeeId: assignedEmployee.id,
+          tgUserId: assignedEmployee.tg_user_id,
+          name: assignedEmployee.full_name
+        });
+        trackOpenRequest(current, request, { previous });
+        return;
+      }
+    }
+
+    const responsible = resolveRequestResponsibleEmployee(
+      request,
+      messagesByConversation.get(conversationScopeKey(request)) || [],
+      employeeMaps,
+      chatToEmployeeId,
+      resolveOptions
+    );
+    const employee = responsible ? findEmployee(responsible.employee_id, responsible.tg_user_id, responsible.full_name) : null;
+    if (!employee || isManagerEmployeeRecord(employee)) {
+      trackOpenRequest(unassigned, request, { previous });
+      return;
+    }
+    const current = ensureEmployeeTotal({
+      employee,
+      employeeId: employee.id,
+      tgUserId: employee.tg_user_id,
+      name: employee.full_name
+    });
+    trackOpenRequest(current, request, { previous });
+  }
 
   function ensureEmployeeTotal({ employee = null, employeeId = '', tgUserId = '', name = '' } = {}) {
     const key = employee?.id || employeeId || (tgUserId ? `tg:${tgUserId}` : `name:${name || 'Xodim'}`);
@@ -627,25 +700,7 @@ function buildEmployeePerformance({ requests, employees, messages = [], periodKe
     if (!current.last_closed_at || String(request.closed_at || '') > String(current.last_closed_at || '')) current.last_closed_at = request.closed_at || null;
   });
 
-  open.forEach(request => {
-    const responsible = resolveRequestResponsibleEmployee(
-      request,
-      messagesByConversation.get(conversationScopeKey(request)) || [],
-      employeeMaps,
-      chatToEmployeeId,
-      resolveOptions
-    );
-
-    const employee = responsible ? findEmployee(responsible.employee_id, responsible.tg_user_id, responsible.full_name) : null;
-    if (!employee || isManagerEmployeeRecord(employee)) return;
-    const current = ensureEmployeeTotal({ employee, employeeId: employee.id, tgUserId: employee.tg_user_id, name: employee.full_name });
-    current.open_requests += 1;
-    const openMinutes = minutesBetween(request.created_at, new Date());
-    if (openMinutes !== null && openMinutes > 30) current.overdue_open_requests += 1;
-    if (request.chat_id) current.handled_chats.add(conversationScopeKey(request));
-    const companyKey = companyScopeKey(request);
-    if (companyKey) current.companies.add(companyKey);
-  });
+  open.forEach(request => assignOpenRequest(request));
 
   prevClosed.forEach(request => {
     const employee = findEmployee(request.closed_by_employee_id, request.closed_by_tg_id, request.closed_by_name);
@@ -668,33 +723,21 @@ function buildEmployeePerformance({ requests, employees, messages = [], periodKe
     if (closeMinute !== null) current.prev_close_minutes.push(closeMinute);
   });
 
-  prevOpen.forEach(request => {
-    const responsible = resolveRequestResponsibleEmployee(
-      request,
-      messagesByConversation.get(conversationScopeKey(request)) || [],
-      employeeMaps,
-      chatToEmployeeId,
-      resolveOptions
-    );
+  prevOpen.forEach(request => assignOpenRequest(request, { previous: true }));
 
-    const employee = responsible ? findEmployee(responsible.employee_id, responsible.tg_user_id, responsible.full_name) : null;
-    if (!employee || isManagerEmployeeRecord(employee)) return;
-    const current = ensureEmployeeTotal({ employee, employeeId: employee.id, tgUserId: employee.tg_user_id, name: employee.full_name });
-    current.prev_open_requests += 1;
-    const openMinutes = minutesBetween(request.created_at, new Date());
-    if (openMinutes !== null && openMinutes > 30) current.prev_overdue_open_requests += 1;
-    if (request.chat_id) current.prev_handled_chats.add(conversationScopeKey(request));
-    const companyKey = companyScopeKey(request);
-    if (companyKey) current.prev_companies.add(companyKey);
-  });
+  const performanceRows = [...totals.values()];
+  if (Number(unassigned.open_requests || 0) > 0 || Number(unassigned.prev_open_requests || 0) > 0) {
+    performanceRows.push(unassigned);
+  }
 
-  return [...totals.values()]
+  return performanceRows
     .map(row => ({
       employee_id: row.employee_id,
       tg_user_id: row.tg_user_id || null,
       full_name: row.full_name,
       username: row.username,
       role: row.role,
+      is_unassigned: row.is_unassigned === true,
       total_requests: row.closed_requests + row.open_requests,
       closed_requests: row.closed_requests,
       open_requests: row.open_requests,
