@@ -3200,9 +3200,7 @@ const supportPerformanceRows = computed(() => {
       closed_requests: closed,
       open_requests: open,
       total_requests: total,
-      company_total: selectedStatsPeriod.value === 'all'
-        ? assignedCompanyCount
-        : (periodRow ? Number(periodRow.company_total || 0) : 0),
+      company_total: assignedCompanyCount,
       assigned_company_count: assignedCompanyCount,
       period_company_total: periodRow ? Number(periodRow.company_total || 0) : 0,
       avg_close_minutes: avg,
@@ -3974,26 +3972,11 @@ function companyScopeKeyFromCompany(company = {}) {
   return companyName ? `name:${companyName}` : '';
 }
 
-function mergePeriodCompaniesWithAssigned(periodCompanies = [], allAssigned = []) {
-  if (!periodCompanies.length) return [];
-  const keys = new Set(periodCompanies.map(company => companyScopeKeyFromCompany(company)).filter(Boolean));
-  const matched = allAssigned.filter(company => keys.has(companyScopeKeyFromCompany(company)));
-  return matched.length ? matched : periodCompanies;
-}
-
-function applyEmployeePeriodCompanies({ row = {}, allAssigned = [], periodCompaniesFromApi = [] } = {}) {
-  const assigned = allAssigned.length
-    ? allAssigned
-    : (periodCompaniesFromApi.length ? periodCompaniesFromApi : []);
-  const periodKeys = new Set((periodCompaniesFromApi || []).map(company => companyScopeKeyFromCompany(company)).filter(Boolean));
-  const companies = assigned.map(company => ({
-    ...company,
-    period_active: selectedStatsPeriod.value === 'all' || periodKeys.has(companyScopeKeyFromCompany(company))
-  }));
+function employeeAssignedCompaniesPack(allAssigned = []) {
+  const companies = Array.isArray(allAssigned) ? allAssigned : [];
   return {
     companies,
     total: companies.length,
-    period_active_total: periodCompaniesFromApi.length,
     summary: companies.length ? companyPortfolioSummary(companies) : {
       total: 0,
       active: 0,
@@ -4366,7 +4349,7 @@ const topSupportCards = computed(() => supportPerformanceRows.value
     rank: index + 1,
     assigned_companies: companies,
     company_summary: companySummary,
-    company_total: Number(row.company_total ?? row.period_company_total ?? 0),
+    company_total: companies.length,
     company_active: companySummary.active,
     company_churn: companySummary.churn,
     company_expiring_soon: companySummary.expiring_soon,
@@ -6085,12 +6068,12 @@ function assignedCompaniesForEmployeeRow(row = {}, apiCompanies = []) {
 async function openEmployeeCompanies(row = {}) {
   const employee = resolveEmployeeForCompany(row);
   const allAssigned = assignedCompaniesForEmployeeRow(row);
-  const periodPack = applyEmployeePeriodCompanies({ row, allAssigned });
+  const companyPack = employeeAssignedCompaniesPack(allAssigned);
   employeeManagerDetailsOpen.value = false;
   employeeCompanyDetail.value = {
     employee,
-    companies: periodPack.companies,
-    summary: periodPack.summary
+    companies: companyPack.companies,
+    summary: companyPack.summary
   };
   employeeProfileLoadToken += 1;
   const loadToken = employeeProfileLoadToken;
@@ -6099,11 +6082,11 @@ async function openEmployeeCompanies(row = {}) {
   employeeProfile.value = {
     employee,
     rank: row.rank || null,
-    companies: periodPack.companies,
+    companies: companyPack.companies,
     summary: {
       closed_requests: Number(row.closed_requests || 0),
       open_requests: Number(row.open_requests || 0),
-      company_total: periodPack.total,
+      company_total: companyPack.total,
       avg_close_minutes: Number(row.avg_close_minutes || 0),
       close_rate: Number(row.close_rate || row.sla || 0),
       sla: Number(row.sla || row.close_rate || 0)
@@ -6162,24 +6145,20 @@ async function openEmployeeCompanies(row = {}) {
     if (loadToken !== employeeProfileLoadToken) return;
     const summary = data.summary || {};
     const allAssigned = assignedCompaniesForEmployeeRow(row, data.assigned_companies || []);
-    const periodPack = applyEmployeePeriodCompanies({
-      row,
-      allAssigned,
-      periodCompaniesFromApi: data.period_companies || []
-    });
+    const companyPack = employeeAssignedCompaniesPack(allAssigned);
     employeeCompanyDetail.value = {
       employee: { ...employee, ...(data.employee || {}) },
-      companies: periodPack.companies,
-      summary: periodPack.summary
+      companies: companyPack.companies,
+      summary: companyPack.summary
     };
     employeeProfile.value = {
       employee: { ...employee, ...(data.employee || {}) },
       rank: row.rank || null,
-      companies: periodPack.companies,
+      companies: companyPack.companies,
       summary: {
         closed_requests: Number(summary.closed_requests ?? row.closed_requests ?? 0),
         open_requests: Number(summary.open_requests ?? row.open_requests ?? 0),
-        company_total: Number(summary.company_total ?? periodPack.total ?? 0),
+        company_total: companyPack.total,
         avg_close_minutes: Number(summary.avg_close_minutes ?? row.avg_close_minutes ?? 0),
         close_rate: Number(row.close_rate || row.sla || 0),
         sla: Number(row.sla || row.close_rate || 0),
