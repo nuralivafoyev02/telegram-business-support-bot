@@ -2688,6 +2688,8 @@ const selectedPeriodLabel = computed(() => {
   if (selectedStatsPeriod.value === 'custom' && customPeriodForm.appliedStart && customPeriodForm.appliedEnd) {
     return `${dateInputLabel(customPeriodForm.appliedStart)} - ${dateInputLabel(customPeriodForm.appliedEnd)}`;
   }
+  const currentRange = String(currentPeriodDates.value?.current || '').trim();
+  if (currentRange) return currentRange;
   return periodOptions.find(period => period.key === selectedStatsPeriod.value)?.label || '7 kun';
 });
 const selectedPeriodStats = computed(() => analytics.value.periods?.[selectedStatsPeriod.value] || emptyPeriodStats);
@@ -2794,9 +2796,9 @@ const supportSummaryCards = computed(() => {
     {
       key: 'open',
       title: 'Javobsiz',
-      value: fmtNumber(filteredOpenRequests.value.length),
+      value: fmtNumber(rankingOpenRequestsTotal.value),
       note: `${fmtNumber(overdueOpenRequestsTotal.value || 0)} tasi 30 daqiqadan oshgan`,
-      comparison: attachPreviousLabel(compareValue(filteredOpenRequests.value.length, stats.prev_open_requests, { invert: true, unit: 'ta' })),
+      comparison: attachPreviousLabel(compareValue(rankingOpenRequestsTotal.value, stats.prev_open_requests, { invert: true, unit: 'ta' })),
       icon: '⚠️',
       tone: 'danger',
       action: 'open'
@@ -4273,6 +4275,12 @@ const topSupportCards = computed(() => supportPerformanceRows.value
     avg_comparison: comparisonEnabled.value ? compareValue(row.avg_close_minutes, row.prev_avg_close_minutes, { invert: true, unit: 'min' }) : null
   };
 }));
+
+const rankingOpenRequestsTotal = computed(() => topSupportCards.value.reduce(
+  (sum, row) => sum + Number(row.open_requests || 0),
+  0
+));
+
 watch(topSupportCards, rows => {
   rows.slice(0, 20).forEach(row => loadEmployeeAvatar(row));
 }, { immediate: true });
@@ -5361,6 +5369,10 @@ async function handleStatsPeriodChange() {
     openCustomPeriodModal();
     return;
   }
+  customPeriodForm.appliedStart = '';
+  customPeriodForm.appliedEnd = '';
+  customPeriodForm.start = '';
+  customPeriodForm.end = '';
   previousStatsPeriod.value = selectedStatsPeriod.value;
   startLoading('period');
   try {

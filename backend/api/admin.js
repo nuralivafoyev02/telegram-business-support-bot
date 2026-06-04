@@ -368,6 +368,19 @@ function calculateFirstResponseMinutes(request, messages = [], employeeMaps = bu
   return null;
 }
 
+function sumEmployeePerformanceOpenRequests(performance = [], field = 'open_requests') {
+  return performance.reduce((sum, row) => sum + Number(row[field] || 0), 0);
+}
+
+function alignPeriodSummaryWithRanking(summary, performance = []) {
+  if (!summary) return summary;
+  return {
+    ...summary,
+    open_requests: sumEmployeePerformanceOpenRequests(performance, 'open_requests'),
+    prev_open_requests: sumEmployeePerformanceOpenRequests(performance, 'prev_open_requests')
+  };
+}
+
 function buildPeriodSummary(requests, periodKey, label, keys, messages = [], employeeMaps = buildEmployeeMaps([])) {
   const created = requests.filter(request => inCurrentPeriod(request.created_at, periodKey, keys));
   const openRequests = created.filter(request => request.status === 'open');
@@ -1323,7 +1336,7 @@ async function getDashboardAnalytics(query = {}) {
 
   if (statsFocus) {
     return {
-      periods: Object.fromEntries(periodContext.map(p => [p.key, p.summary])),
+      periods: Object.fromEntries(periodContext.map(p => [p.key, alignPeriodSummaryWithRanking(p.summary, employeePerformance[p.key] || [])])),
       periodDates: Object.fromEntries(periodContext.map(p => [p.key, { current: p.currentLabel, prev: p.prevLabel }])),
       employeePerformance,
       ticketAnswerTrend: Object.fromEntries(periods.map(([key]) => [key, buildTicketAnswerTrend(requests, key, keys)])),
@@ -1344,7 +1357,7 @@ async function getDashboardAnalytics(query = {}) {
   }
 
   return {
-    periods: Object.fromEntries(periodContext.map(p => [p.key, p.summary])),
+    periods: Object.fromEntries(periodContext.map(p => [p.key, alignPeriodSummaryWithRanking(p.summary, employeePerformance[p.key] || [])])),
     periodDates: Object.fromEntries(periodContext.map(p => [p.key, { current: p.currentLabel, prev: p.prevLabel }])),
     employeePerformance,
     chatPerformance: Object.fromEntries(periods.map(([key]) => [key, buildChatPerformance({ requests, chats: analyticsChats, periodKey: key, keys })])),
