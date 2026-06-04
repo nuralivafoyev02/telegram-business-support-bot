@@ -2126,6 +2126,14 @@ async function testDashboardPeriodCountsOnlyRequestsCreatedInSelectedRange() {
     assert.strictEqual(row.open_requests, 1);
     assert.strictEqual(row.closed_requests, 1);
     assert.strictEqual(period.closed_requests, row.closed_requests);
+    const trend = result.payload.data.analytics.ticketAnswerTrend.custom || [];
+    const trendTotal = trend.reduce((sum, item) => sum + Number(item.total_requests || 0), 0);
+    assert.strictEqual(trendTotal, period.total_requests);
+    if (trend.length === 1) {
+      assert.strictEqual(trend[0].closed_requests, period.closed_requests);
+      assert.strictEqual(trend[0].open_requests, period.open_requests);
+      assert.strictEqual(trend[0].sla, period.close_rate);
+    }
   } finally {
     supabase.select = originalSelect;
     stats.selectEmployeeStatistics = originalEmployeeStats;

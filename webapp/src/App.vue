@@ -350,10 +350,12 @@
                   <div>
                     <div class="card-title">Kompaniyalar bo‘yicha ticketlar</div>
                     <div class="card-note">
-                      Guruh ticketlari · {{ selectedPeriodLabel }}:
-                      jami {{ fmtNumber(companyTicketTotals.total) }}
-                      (yopilgan {{ fmtNumber(companyTicketTotals.closed) }},
-                      ochiq {{ fmtNumber(companyTicketTotals.open) }})
+                      {{ selectedPeriodLabel }}:
+                      barcha kanallar {{ fmtNumber(selectedPeriodStats.total_requests) }}
+                      (yopilgan {{ fmtNumber(selectedPeriodStats.closed_requests) }},
+                      ochiq {{ fmtNumber(selectedPeriodStats.open_requests) }})
+                      · guruhlar {{ fmtNumber(companyTicketTotals.total) }}
+                      ({{ fmtNumber(companyTicketTotals.closed) }}/{{ fmtNumber(companyTicketTotals.open) }})
                     </div>
                   </div>
                 </div>

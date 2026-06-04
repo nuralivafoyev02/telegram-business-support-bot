@@ -427,25 +427,40 @@ function weightedPerformanceAverage(performance = [], valueField = 'avg_close_mi
 
 function alignPeriodSummaryWithRanking(summary, performance = []) {
   if (!summary) return summary;
-  const openTotal = sumEmployeePerformanceOpenRequests(performance, 'open_requests');
-  const prevOpenTotal = sumEmployeePerformanceOpenRequests(performance, 'prev_open_requests');
   const closedRequests = Number(summary.closed_requests || 0);
-  const openRequests = openTotal;
+  const openRequests = Number(summary.open_requests || 0);
   const prevClosedRequests = Number(summary.prev_closed_requests || 0);
-  const prevOpenRequests = prevOpenTotal;
+  const prevOpenRequests = Number(summary.prev_open_requests || 0);
   const handledTotal = closedRequests + openRequests;
   const prevHandledTotal = prevClosedRequests + prevOpenRequests;
   return {
     ...summary,
     total_requests: handledTotal,
     prev_total_requests: prevHandledTotal,
-    open_requests: openRequests,
-    prev_open_requests: prevOpenRequests,
     close_rate: handledTotal ? percent(closedRequests, handledTotal) : summary.close_rate,
     prev_close_rate: prevHandledTotal ? percent(prevClosedRequests, prevHandledTotal) : summary.prev_close_rate,
     overdue_open_requests: sumEmployeePerformanceOpenRequests(performance, 'overdue_open_requests'),
     prev_overdue_open_requests: sumEmployeePerformanceOpenRequests(performance, 'prev_overdue_open_requests')
   };
+}
+
+function alignTicketTrendWithPeriodSummary(trendRows = [], summary = {}, periodKey = '', keys = {}) {
+  if (!summary || !trendRows.length) return trendRows;
+  const trendTotal = trendRows.reduce((sum, row) => sum + Number(row.total_requests || 0), 0);
+  const summaryTotal = Number(summary.total_requests || 0);
+  if (!summaryTotal || trendTotal === summaryTotal) return trendRows;
+
+  const singleDayPeriod = periodKey === 'today'
+    || (periodKey === 'custom' && keys.customStart && keys.customStart === keys.customEnd);
+  if (!singleDayPeriod || trendRows.length !== 1) return trendRows;
+
+  return [{
+    ...trendRows[0],
+    total_requests: summaryTotal,
+    closed_requests: Number(summary.closed_requests || 0),
+    open_requests: Number(summary.open_requests || 0),
+    sla: Number(summary.close_rate || 0)
+  }];
 }
 
 function buildPeriodSummary(requests, periodKey, label, keys, messages = [], employeeMaps = buildEmployeeMaps([])) {
@@ -1264,20 +1279,10 @@ async function selectAnalyticsRequests(window, options = {}) {
     limit: String(options.limit || '10000')
   };
 
-  if (!window) return supabase.select('support_requests', baseQuery).catch(() => []);
-
-  const [createdRows, closedRows] = await Promise.all([
-    supabase.select('support_requests', {
-      ...baseQuery,
-      ...rangeQuery('created_at', window)
-    }).catch(() => []),
-    supabase.select('support_requests', {
-      ...baseQuery,
-      status: 'eq.closed',
-      ...rangeQuery('closed_at', window)
-    }).catch(() => [])
-  ]);
-  return uniqueRowsBy([...createdRows, ...closedRows], row => row.id || `${row.chat_id}:${row.initial_message_id || row.created_at || row.closed_at}`);
+  return supabase.select('support_requests', {
+    ...baseQuery,
+    ...rangeQuery('created_at', window)
+  }).catch(() => []);
 }
 
 
@@ -1399,12 +1404,22 @@ async function getDashboardAnalytics(query = {}) {
     businessConnectionEmployee
   })]));
 
+  const periodSummaries = Object.fromEntries(periodContext.map(p => [
+    p.key,
+    alignPeriodSummaryWithRanking(p.summary, employeePerformance[p.key] || [])
+  ]));
+
   if (statsFocus) {
     return {
-      periods: Object.fromEntries(periodContext.map(p => [p.key, alignPeriodSummaryWithRanking(p.summary, employeePerformance[p.key] || [])])),
+      periods: periodSummaries,
       periodDates: Object.fromEntries(periodContext.map(p => [p.key, { current: p.currentLabel, prev: p.prevLabel }])),
       employeePerformance,
-      ticketAnswerTrend: Object.fromEntries(periods.map(([key]) => [key, buildTicketAnswerTrend(requests, key, keys)])),
+      ticketAnswerTrend: Object.fromEntries(periods.map(([key]) => alignTicketTrendWithPeriodSummary(
+        buildTicketAnswerTrend(requests, key, keys),
+        periodSummaries[key],
+        key,
+        keys
+      ))),
       responseTimeTrend: Object.fromEntries(periods.map(([key]) => [key, buildResponseTimeTrend(requests, key, keys, messages, employeeMaps)])),
       companyTickets: Object.fromEntries(periods.map(([key]) => [key, buildCompanyTicketPerformance({
         requests,
@@ -1422,13 +1437,18 @@ async function getDashboardAnalytics(query = {}) {
   }
 
   return {
-    periods: Object.fromEntries(periodContext.map(p => [p.key, alignPeriodSummaryWithRanking(p.summary, employeePerformance[p.key] || [])])),
+    periods: periodSummaries,
     periodDates: Object.fromEntries(periodContext.map(p => [p.key, { current: p.currentLabel, prev: p.prevLabel }])),
     employeePerformance,
     chatPerformance: Object.fromEntries(periods.map(([key]) => [key, buildChatPerformance({ requests, chats: analyticsChats, periodKey: key, keys })])),
     groupPerformance: Object.fromEntries(periods.map(([key]) => [key, buildGroupPerformance({ requests, chats: analyticsChats, periodKey: key, keys })])),
     responseTimeTrend: Object.fromEntries(periods.map(([key]) => [key, buildResponseTimeTrend(requests, key, keys, messages, employeeMaps)])),
-    ticketAnswerTrend: Object.fromEntries(periods.map(([key]) => [key, buildTicketAnswerTrend(requests, key, keys)])),
+    ticketAnswerTrend: Object.fromEntries(periods.map(([key]) => alignTicketTrendWithPeriodSummary(
+      buildTicketAnswerTrend(requests, key, keys),
+      periodSummaries[key],
+      key,
+      keys
+    ))),
     companyTickets: Object.fromEntries(periods.map(([key]) => [key, buildCompanyTicketPerformance({
       requests,
       chats: analyticsChats,
