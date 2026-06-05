@@ -5120,6 +5120,11 @@ tbody tr.top-performer-row td:first-child {
   box-shadow: inset 3px 0 0 var(--primary);
 }
 
+tbody tr.unassigned-ranking-row td:first-child {
+  color: var(--text-muted);
+  box-shadow: inset 3px 0 0 #f73164;
+}
+
 @media (max-width: 980px) {
   .metric-chat-workspace {
     grid-template-columns: 1fr;

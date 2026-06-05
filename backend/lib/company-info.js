@@ -805,6 +805,16 @@ async function syncCompanyInfo(options = {}) {
   return fetchCompanyInfo({ ...options, persist: true });
 }
 
+function resolveCachedCompanyInfoCompanies(cache = null) {
+  const companies = Array.isArray(cache?.companies) ? cache.companies : [];
+  const groups = Array.isArray(cache?.groups) ? cache.groups : [];
+  if (!companies.length) return [];
+  if (!groups.length) return companies;
+  const hasEmbeddedGroups = companies.some(company => Array.isArray(company.groups) && company.groups.length);
+  if (hasEmbeddedGroups) return companies;
+  return attachExternalGroups(companies, groups);
+}
+
 module.exports = {
   COMPANY_INFO_CACHE_KEY,
   fetchCompanyInfo,
@@ -814,5 +824,6 @@ module.exports = {
   normalizeCompany,
   buildSummary,
   syncSupportEmployees,
-  scopedCompanyInfoUrl
+  scopedCompanyInfoUrl,
+  resolveCachedCompanyInfoCompanies
 };

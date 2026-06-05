@@ -3034,7 +3034,7 @@ function isUnassignedCompanyTicketRow(row = {}) {
 }
 
 function shouldShowInSupportRanking(row = {}) {
-  if (isUnassignedRankingRow(row)) return false;
+  if (isUnassignedRankingRow(row)) return Number(row.open_requests || 0) > 0;
   if (row.is_manager_group === true) return true;
   if (isManagerEmployee(row)) return false;
   if (!isSupportEmployee(row)) return false;
@@ -3169,8 +3169,9 @@ const supportPerformanceRows = computed(() => {
 
     const closedRaw = periodRow ? Number(periodRow.closed_requests || 0) : 0;
     const periodOpen = periodRow ? Number(periodRow.open_requests || 0) : 0;
+    const mergedPeriodOpen = Number(row.period_open_requests || candidate.period_open_requests || 0);
     const mappedOpen = openSummary ? Number(openSummary.open_requests || 0) : 0;
-    const openRaw = Math.max(periodOpen, mappedOpen);
+    const openRaw = mappedOpen > 0 ? mappedOpen : Math.max(periodOpen, mergedPeriodOpen);
     const totalRaw = closedRaw + openRaw;
     const slaRaw = totalRaw > 0 ? (closedRaw / totalRaw) * 100 : 100;
     const avgRaw = periodRow ? Number(periodRow.avg_close_minutes || 0) : 0;
@@ -3263,6 +3264,37 @@ const supportPerformanceRows = computed(() => {
     const stats = managerStatsByKey.get(supportRowKey(manager)) || {};
     return { ...manager, ...stats, role: 'manager', open_requests: 0, prev_open_requests: 0 };
   });
+  const unassignedSummary = openSummaryMap.get('unassigned:open');
+  if (unassignedSummary && Number(unassignedSummary.open_requests || 0) > 0) {
+    rows.push({
+      key: 'unassigned:open',
+      id: '',
+      employee_id: '',
+      tg_user_id: '',
+      username: '',
+      phone: '',
+      role: 'support',
+      full_name: 'Biriktirilmagan',
+      telegram_is_premium: false,
+      is_support_employee: false,
+      is_unassigned: true,
+      handled_chats: unassignedSummary.chat_keys?.size || 0,
+      closed_requests: 0,
+      open_requests: Number(unassignedSummary.open_requests || 0),
+      total_requests: Number(unassignedSummary.open_requests || 0),
+      company_total: 0,
+      assigned_company_count: 0,
+      avg_close_minutes: 0,
+      close_rate: 0,
+      sla: 0,
+      prev_closed_requests: 0,
+      prev_open_requests: 0,
+      prev_avg_close_minutes: 0,
+      prev_close_rate: 0,
+      grade: performanceGrade(0, 0)
+    });
+  }
+
   if (allManagerRows.length) {
     const closedRequests = allManagerRows.reduce((sum, row) => sum + Number(row.closed_requests || 0), 0);
     const openRequests = 0;
@@ -4031,21 +4063,48 @@ function relatedCompanyChatStats(row = {}) {
   const companyName = normalizedCompanyName(row.name);
   return (dashboard.chatStats || []).filter(chat => {
     if (companyId && String(chat.company_id || '').trim() === companyId) return true;
-    return companyName && normalizedCompanyName(chat.company_name) === companyName;
+    if (companyName && normalizedCompanyName(chat.company_name) === companyName) return true;
+    return companyName && normalizedCompanyName(companyNameFromChatTitle(chat.title)) === companyName;
   });
+}
+
+function companyNameFromChatTitle(value = '') {
+  const text = String(value || '').trim();
+  if (!text) return '';
+  const parts = text.split('|').map(part => part.trim()).filter(Boolean);
+  return parts[0] || text;
 }
 
 function companyGroupChatIds(company = {}) {
   const chatIds = new Set();
   const mainChatId = String(company.chat_id || '').trim();
   if (mainChatId) chatIds.add(mainChatId);
+  const companyId = String(company.id || company.company_id || '').trim();
+  const companyName = normalizedCompanyName(company.name);
   (Array.isArray(company.groups) ? company.groups : []).forEach(group => {
     const chatId = String(group.chat_id || group.telegram_chat_id || group.group_id || '').trim();
     if (chatId) chatIds.add(chatId);
   });
+  (companyInfo.value?.groups || []).forEach(group => {
+    const groupCompanyId = String(group.company_id || '').trim();
+    const groupCompanyName = normalizedCompanyName(group.company_name);
+    if ((companyId && groupCompanyId === companyId) || (companyName && groupCompanyName === companyName)) {
+      const chatId = String(group.chat_id || group.telegram_chat_id || group.group_id || '').trim();
+      if (chatId) chatIds.add(chatId);
+    }
+  });
   relatedCompanyChatStats(company).forEach(chat => {
     const chatId = String(chat.chat_id || '').trim();
     if (chatId) chatIds.add(chatId);
+  });
+  (dashboard.chatStats || []).forEach(chat => {
+    const chatId = String(chat.chat_id || '').trim();
+    if (!chatId) return;
+    const chatCompanyId = String(chat.company_id || '').trim();
+    const chatCompanyName = normalizedCompanyName(chat.company_name || companyNameFromChatTitle(chat.title));
+    if ((companyId && chatCompanyId === companyId) || (companyName && chatCompanyName === companyName)) {
+      chatIds.add(chatId);
+    }
   });
   return chatIds;
 }
@@ -4288,7 +4347,27 @@ const filteredEmployees = computed(() => employees.value.filter(includesSearch))
 const filteredClickUpTasks = computed(() => clickupTasks.value.filter(includesSearch));
 const filteredGroups = computed(() => groups.value.filter(includesSearch));
 const filteredPrivates = computed(() => privates.value.filter(includesSearch));
-const companyInfoRows = computed(() => companyInfo.value.companies || []);
+function attachCompanyInfoGroups(companies = [], groups = []) {
+  if (!companies.length || !groups.length) return companies;
+  if (companies.some(company => Array.isArray(company.groups) && company.groups.length)) return companies;
+  const byId = new Map(companies.map(company => [String(company.id || company.company_id || '').trim(), { ...company, groups: [] }]).filter(([id]) => id));
+  const byName = new Map(companies.map(company => [normalizedCompanyName(company.name), company]).filter(([name]) => name));
+  groups.forEach(group => {
+    const company = byId.get(String(group.company_id || '').trim()) || byName.get(normalizedCompanyName(group.company_name));
+    if (!company) return;
+    const chatId = String(group.chat_id || '').trim();
+    if (!chatId) return;
+    if (!company.groups.some(item => String(item.chat_id || '').trim() === chatId)) {
+      company.groups.push(group);
+    }
+  });
+  return companies;
+}
+
+const companyInfoRows = computed(() => attachCompanyInfoGroups(
+  companyInfo.value.companies || [],
+  companyInfo.value.groups || []
+));
 const visibleCompanyInfoRows = computed(() => companyInfoRows.value.filter(hasCompanySupport));
 const filteredCompanyInfoRows = computed(() => visibleCompanyInfoRows.value.filter(includesSearch));
 const filteredCompanies = computed(() => filteredCompanyInfoRows.value);
@@ -5806,7 +5885,10 @@ function handleTableCellAction({ action, row }) {
   }
   if (action === 'employeeCompanies') {
     if (row?.is_unassigned) {
-      showToast('Bu ochiq ticketlar hali xodimga biriktirilmagan');
+      employeeDrilldown.value = row;
+      employeeOpenRequests.value = unassignedOpenRequestsList();
+      if (!employeeOpenRequests.value.length) return showToast('Biriktirilmagan ochiq so‘rov topilmadi');
+      modal.value = 'employeeOpenRequests';
       return;
     }
     openEmployeeCompanies(row);
@@ -6615,10 +6697,22 @@ function findEmployeeMappingForOpenRequest(request = {}, employeeMappings = [], 
     if (byId) return byId;
   }
 
+  const responsibleId = String(request.responsible_employee_id || '').trim();
+  if (responsibleId) {
+    const byResponsible = employeeMappings.find(mapping => mapping.id === responsibleId);
+    if (byResponsible) return byResponsible;
+  }
+
   const openedId = String(request.opened_by_employee_id || '').trim();
   if (openedId) {
     const byOpened = employeeMappings.find(mapping => mapping.id === openedId);
     if (byOpened) return byOpened;
+  }
+
+  const responsibleUsername = normalizeSupportUsername(request.responsible_employee_username || '');
+  if (responsibleUsername) {
+    const byResponsibleUser = employeeMappings.find(mapping => supportIdentitiesMatch(mapping.username, responsibleUsername));
+    if (byResponsibleUser) return byResponsibleUser;
   }
 
   const chatId = String(request.chat_id || '').trim();
@@ -6627,6 +6721,20 @@ function findEmployeeMappingForOpenRequest(request = {}, employeeMappings = [], 
   if (groupEmployee) {
     const byGroup = employeeMappings.find(mapping => mapping.id === String(groupEmployee.id || groupEmployee.employee_id || '').trim());
     if (byGroup) return byGroup;
+  }
+
+  const chatTitleCompany = findCompanyByGroupChatId(chatId)
+    || visibleCompanyInfoRows.value.find(company => {
+      const titleName = normalizedCompanyName(companyNameFromChatTitle(request.chat_title || request.title || ''));
+      return titleName && normalizedCompanyName(company.name) === titleName;
+    });
+  if (chatTitleCompany) {
+    const titleMapping = resolveCompanySupportMappingForRequest({
+      ...request,
+      company_id: request.company_id || chatTitleCompany.id || chatTitleCompany.company_id,
+      company_name: request.company_name || chatTitleCompany.name
+    }, employeeMappings);
+    if (titleMapping) return titleMapping;
   }
   const companyId = String(request.company_id || '').trim();
   const companyName = normalizedCompanyName(request.company_name || request.chat_title || '');
@@ -6673,27 +6781,50 @@ function countAssignedOverdueOpenRequests(requests = []) {
   }).length;
 }
 
+function classifyOpenRequestAssignment(request = {}, employeeMappings = [], groupSupportIndex = null) {
+  const matchedEmp = findEmployeeMappingForOpenRequest(request, employeeMappings, groupSupportIndex);
+  if (!matchedEmp || !isSupportEmployee(matchedEmp.employee) || isManagerEmployee(matchedEmp.employee)) {
+    return { assigned: false, mapping: null };
+  }
+  return { assigned: true, mapping: matchedEmp };
+}
+
 function employeeOpenRequestSummaryMap() {
   const map = new Map();
   const employeeMappings = buildEmployeeOpenRequestMappings();
   const groupSupportIndex = buildCompanyGroupSupportIndex();
+  const unassignedSummary = {
+    key: 'unassigned:open',
+    employee_id: '',
+    username: '',
+    full_name: 'Biriktirilmagan',
+    role: 'support',
+    tg_user_id: '',
+    is_unassigned: true,
+    open_requests: 0,
+    chat_keys: new Set()
+  };
 
   (filteredOpenRequests.value || []).forEach(request => {
-    const matchedEmp = findEmployeeMappingForOpenRequest(request, employeeMappings, groupSupportIndex);
-    if (!matchedEmp || !isSupportEmployee(matchedEmp.employee) || isManagerEmployee(matchedEmp.employee)) return;
+    const { assigned, mapping } = classifyOpenRequestAssignment(request, employeeMappings, groupSupportIndex);
+    if (!assigned) {
+      unassignedSummary.open_requests += 1;
+      if (request.chat_id) unassignedSummary.chat_keys.add(String(request.chat_id));
+      return;
+    }
 
     const summary = {
-      key: matchedEmp.key,
-      employee_id: matchedEmp.employee.id || matchedEmp.employee.employee_id || '',
-      username: matchedEmp.employee.username || '',
-      full_name: matchedEmp.employee.full_name || 'Xodim',
-      role: matchedEmp.employee.role || 'support',
-      tg_user_id: matchedEmp.employee.tg_user_id || '',
+      key: mapping.key,
+      employee_id: mapping.employee.id || mapping.employee.employee_id || '',
+      username: mapping.employee.username || '',
+      full_name: mapping.employee.full_name || 'Xodim',
+      role: mapping.employee.role || 'support',
+      tg_user_id: mapping.employee.tg_user_id || '',
       is_unassigned: false,
       open_requests: 0,
       chat_keys: new Set()
     };
-    employeePerformanceLookupKeys(matchedEmp.employee).forEach(key => {
+    employeePerformanceLookupKeys(mapping.employee).forEach(key => {
       const current = map.get(key) || { ...summary, chat_keys: new Set(summary.chat_keys) };
       current.open_requests += 1;
       if (request.chat_id) current.chat_keys.add(String(request.chat_id));
@@ -6701,7 +6832,17 @@ function employeeOpenRequestSummaryMap() {
     });
   });
 
+  if (unassignedSummary.open_requests > 0) {
+    map.set('unassigned:open', unassignedSummary);
+  }
+
   return map;
+}
+
+function unassignedOpenRequestsList() {
+  const employeeMappings = buildEmployeeOpenRequestMappings();
+  const groupSupportIndex = buildCompanyGroupSupportIndex();
+  return (filteredOpenRequests.value || []).filter(request => !classifyOpenRequestAssignment(request, employeeMappings, groupSupportIndex).assigned);
 }
 
 function employeeSummaryRows(kind = 'requests') {
@@ -6724,7 +6865,7 @@ function employeeSummaryRows(kind = 'requests') {
   });
   const seenOpenKeys = new Set();
   openMap.forEach(row => {
-    if (isUnassignedRankingRow(row)) return;
+    if (isUnassignedRankingRow(row) && Number(row.open_requests || 0) <= 0) return;
     const dedupeKey = supportRowKey(row) || row.key;
     if (!dedupeKey || seenOpenKeys.has(dedupeKey)) return;
     seenOpenKeys.add(dedupeKey);
@@ -6936,6 +7077,7 @@ function requestRowClass(row = {}) {
 }
 
 function supportPerformanceRowClass(row = {}) {
+  if (row.is_unassigned) return 'unassigned-ranking-row';
   return Number(row.sla || 0) >= 100 ? 'top-performer-row' : '';
 }
 
