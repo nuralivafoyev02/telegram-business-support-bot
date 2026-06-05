@@ -478,20 +478,27 @@ function alignPeriodSummaryWithRanking(summary, performance = []) {
 
 function alignTicketTrendWithPeriodSummary(trendRows = [], summary = {}, periodKey = '', keys = {}) {
   if (!summary || !trendRows.length) return trendRows;
-  const trendTotal = trendRows.reduce((sum, row) => sum + Number(row.total_requests || 0), 0);
-  const summaryTotal = Number(summary.total_requests || 0);
-  if (!summaryTotal || trendTotal === summaryTotal) return trendRows;
 
   const singleDayPeriod = periodKey === 'today'
     || (periodKey === 'custom' && keys.customStart && keys.customStart === keys.customEnd);
   if (!singleDayPeriod || trendRows.length !== 1) return trendRows;
 
+  const summaryTotal = Number(summary.total_requests || 0);
+  const summaryClosed = Number(summary.closed_requests || 0);
+  const summaryOpen = Number(summary.open_requests || 0);
+  const row = trendRows[0];
+  const trendTotal = Number(row.total_requests || 0);
+  const trendClosed = Number(row.closed_requests || 0);
+  const trendOpen = Number(row.open_requests || 0);
+  if (!summaryTotal) return trendRows;
+  if (trendTotal === summaryTotal && trendClosed === summaryClosed && trendOpen === summaryOpen) return trendRows;
+
   return [{
-    ...trendRows[0],
+    ...row,
     total_requests: summaryTotal,
-    closed_requests: Number(summary.closed_requests || 0),
-    open_requests: Number(summary.open_requests || 0),
-    sla: Number(summary.close_rate || 0)
+    closed_requests: summaryClosed,
+    open_requests: summaryOpen,
+    sla: Number(summary.close_rate || percent(summaryClosed, summaryTotal))
   }];
 }
 
@@ -910,15 +917,13 @@ function buildTicketAnswerTrend(requests, periodKey, keys) {
 
   requests.forEach(request => {
     const createdInPeriod = request.created_at && inCurrentPeriod(request.created_at, periodKey, keys);
-    const closedInPeriod = request.status === 'closed' && createdInPeriod;
+    if (!createdInPeriod) return;
 
-    if (createdInPeriod) {
-      const dateKey = tashkentDateKey(request.created_at);
-      const current = ensureBucket(dateKey);
-      current.total_requests += 1;
-      if (request.status === 'open') current.open_requests += 1;
-      if (closedInPeriod) current.closed_requests += 1;
-    }
+    const dateKey = tashkentDateKey(request.created_at);
+    const current = ensureBucket(dateKey);
+    current.total_requests += 1;
+    if (isOpenRequestStatus(request.status)) current.open_requests += 1;
+    if (isClosedLikeRequestStatus(request.status)) current.closed_requests += 1;
   });
 
   return [...buckets.values()]
@@ -1058,8 +1063,8 @@ function buildCompanyTicketPerformance({
 
   function addRequestToBucket(bucket, request = {}) {
     bucket.total_requests += 1;
-    if (request.status === 'open') bucket.open_requests += 1;
-    else if (request.status === 'closed') bucket.closed_requests += 1;
+    if (isOpenRequestStatus(request.status)) bucket.open_requests += 1;
+    else if (isClosedLikeRequestStatus(request.status)) bucket.closed_requests += 1;
   }
 
   requests.forEach(request => {
