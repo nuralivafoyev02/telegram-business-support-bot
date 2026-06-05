@@ -1329,7 +1329,7 @@
           <DataTable :columns="ticketListColumns" :rows="filteredTicketListRows" empty="Ticket topilmadi"
             :page-size="10" :on-cell-action="handleTableCellAction" :row-class="requestRowClass">
             <template #requestReply="{ row }">
-              <button v-if="row.status === 'open'" class="btn small primary" type="button"
+              <button v-if="isOpenTicketStatus(row.status)" class="btn small primary" type="button"
                 @click.stop="openRequestReply(row)">Javob berish</button>
               <button v-else class="btn small" type="button" @click.stop="loadChatDetail(row)">Ko‘rish</button>
             </template>
@@ -3872,10 +3872,19 @@ function sourceTypeLabel(value) {
   }[String(value || '').toLowerCase()] || value || '—');
 }
 
+function isOpenTicketStatus(status = '') {
+  return String(status || '').trim().toLowerCase() === 'open';
+}
+
+function isClosedLikeTicketStatus(status = '') {
+  return ['closed', 'cancelled'].includes(String(status || '').trim().toLowerCase());
+}
+
 function statusLabel(value) {
   return ({
     open: 'Ochiq',
     closed: 'Yopilgan',
+    cancelled: 'Bekor qilingan',
     pending: 'Kutilmoqda'
   }[String(value || '').toLowerCase()] || value || '—');
 }
@@ -4529,18 +4538,22 @@ function countTicketListRows(rows = [], { source = 'all', status = 'all' } = {})
 
 const ticketListCounts = computed(() => {
   const rows = ticketList.value.rows || [];
+  const source = ticketList.value.source || 'all';
   return {
-    all: rows.length,
-    open: countTicketListRows(rows, { status: 'open' }),
-    closed: countTicketListRows(rows, { status: 'closed' }),
+    all: countTicketListRows(rows, { source }),
+    open: countTicketListRows(rows, { source, status: 'open' }),
+    closed: countTicketListRows(rows, { source, status: 'closed' }),
     group: countTicketListRows(rows, { source: 'group' }),
     group_open: countTicketListRows(rows, { source: 'group', status: 'open' }),
     group_closed: countTicketListRows(rows, { source: 'group', status: 'closed' }),
-    private: countTicketListRows(rows, { source: 'private' })
+    private: countTicketListRows(rows, { source: 'private' }),
+    private_open: countTicketListRows(rows, { source: 'private', status: 'open' }),
+    private_closed: countTicketListRows(rows, { source: 'private', status: 'closed' })
   };
 });
 const ticketListSupportOptions = computed(() => {
   const names = [...new Set((ticketList.value.rows || [])
+    .filter(row => ticketMatchesSource(row, ticketList.value.source))
     .map(row => row.responsible_employee_name || row.support_name || row.closed_by_name || '')
     .filter(Boolean))].sort((a, b) => a.localeCompare(b));
   return [{ value: 'all', label: 'Barcha supportlar' }, ...names.map(name => ({ value: name, label: name }))];
@@ -7084,8 +7097,8 @@ function ticketFilterFromAction(action = 'requests') {
 }
 
 function ticketMatchesStatus(row = {}, status = 'all') {
-  if (status === 'open') return row.status === 'open';
-  if (status === 'closed') return row.status === 'closed';
+  if (status === 'open') return isOpenTicketStatus(row.status);
+  if (status === 'closed') return isClosedLikeTicketStatus(row.status);
   return true;
 }
 
