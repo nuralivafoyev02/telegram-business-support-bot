@@ -3110,8 +3110,8 @@ function mergeSupportCandidate(map, row = {}, source = 'identity') {
 
 const supportPerformanceRows = computed(() => {
   const merged = new Map();
-  const periodStatsMap = new Map();
   const openSummaryMap = employeeOpenRequestSummaryMap();
+  const periodStatsLookup = buildPerformanceStatsLookup(topEmployeeRows.value);
 
   // Faqat ma'lum bo'lgan xodimlarning kalitlarini yig'ib olamiz
   const knownEmployeeKeys = new Set([
@@ -3125,11 +3125,6 @@ const supportPerformanceRows = computed(() => {
       supportRowKey({ username: c.uyqur_support_username, phone: c.uyqur_support_phone })
     )
   ].filter(Boolean));
-
-  topEmployeeRows.value.forEach(pRow => {
-    const key = employeeSummaryKey(pRow);
-    if (key) periodStatsMap.set(key, pRow);
-  });
 
   employees.value
     .filter(row => !isAdminLikeEmployee(row) && isSupportEmployee(row))
@@ -3160,14 +3155,22 @@ const supportPerformanceRows = computed(() => {
     const rowKey = supportRowKey(candidate) || supportRowKey(row);
     const employeeRef = employees.value.find(item => supportRowKey(item) === rowKey) || null;
     const resolvedRole = row.role || stat.role || employeeRef?.role || '';
-    const key = employeeSummaryKey(candidate) || employeeSummaryKey(row) || employeeSummaryKey(stat);
-    const periodRow = key ? periodStatsMap.get(key) : null;
-    const openSummary = key ? openSummaryMap.get(key) : null;
-    if (key) openSummaryMap.delete(key);
+    const lookupKeys = [...new Set([
+      ...employeePerformanceLookupKeys(candidate),
+      ...employeePerformanceLookupKeys(row),
+      ...employeePerformanceLookupKeys(stat)
+    ])];
+    const periodRow = resolvePerformanceStatsRow(periodStatsLookup, candidate)
+      || resolvePerformanceStatsRow(periodStatsLookup, row)
+      || resolvePerformanceStatsRow(periodStatsLookup, stat);
+    const openSummary = lookupKeys.map(key => openSummaryMap.get(key)).find(Boolean) || null;
+    lookupKeys.forEach(key => openSummaryMap.delete(key));
     const assignedCompanyCount = visibleCompanyInfoRows.value.filter(company => companyMatchesEmployee(company, candidate)).length;
 
     const closedRaw = periodRow ? Number(periodRow.closed_requests || 0) : 0;
-    const openRaw = periodRow ? Number(periodRow.open_requests || 0) : 0;
+    const periodOpen = periodRow ? Number(periodRow.open_requests || 0) : 0;
+    const mappedOpen = openSummary ? Number(openSummary.open_requests || 0) : 0;
+    const openRaw = Math.max(periodOpen, mappedOpen);
     const totalRaw = closedRaw + openRaw;
     const slaRaw = totalRaw > 0 ? (closedRaw / totalRaw) * 100 : 100;
     const avgRaw = periodRow ? Number(periodRow.avg_close_minutes || 0) : 0;
@@ -3960,9 +3963,7 @@ function resolveEmployeeForCompany(row = {}) {
 }
 
 function companyMatchesEmployee(company = {}, employee = {}) {
-  const employeeUsername = normalizeSupportUsername(employee.username);
-  const companyUsername = normalizeSupportUsername(company.uyqur_support_username);
-  return Boolean(employeeUsername && companyUsername && employeeUsername === companyUsername);
+  return employeeMatchesSupportUsername(employee, company.uyqur_support_username);
 }
 
 function companyScopeKeyFromCompany(company = {}) {
@@ -4015,6 +4016,32 @@ function relatedCompanyChatStats(row = {}) {
     if (companyId && String(chat.company_id || '').trim() === companyId) return true;
     return companyName && normalizedCompanyName(chat.company_name) === companyName;
   });
+}
+
+function companyGroupChatIds(company = {}) {
+  const chatIds = new Set();
+  const mainChatId = String(company.chat_id || '').trim();
+  if (mainChatId) chatIds.add(mainChatId);
+  (Array.isArray(company.groups) ? company.groups : []).forEach(group => {
+    const chatId = String(group.chat_id || group.telegram_chat_id || group.group_id || '').trim();
+    if (chatId) chatIds.add(chatId);
+  });
+  relatedCompanyChatStats(company).forEach(chat => {
+    const chatId = String(chat.chat_id || '').trim();
+    if (chatId) chatIds.add(chatId);
+  });
+  return chatIds;
+}
+
+function companyMatchesGroupChat(company = {}, chatId = '') {
+  const normalized = String(chatId || '').trim();
+  return Boolean(normalized && companyGroupChatIds(company).has(normalized));
+}
+
+function findCompanyByGroupChatId(chatId = '') {
+  const normalized = String(chatId || '').trim();
+  if (!normalized) return null;
+  return (visibleCompanyInfoRows.value || []).find(company => companyMatchesGroupChat(company, normalized)) || null;
 }
 
 function firstNumericValue(row = {}, keys = []) {
@@ -5350,11 +5377,10 @@ async function loadEmployeesOptional() {
 }
 
 async function loadSupportPerformance() {
-  await loadDashboard();
-  const secondaryLoads = [];
+  const secondaryLoads = [loadDashboard()];
   if (!companyInfo.value?.companies?.length) secondaryLoads.push(loadCompanyInfoOptional({ cached: true }));
   if (!employees.value.length) secondaryLoads.push(loadEmployeesOptional());
-  if (secondaryLoads.length) Promise.all(secondaryLoads).catch(() => null);
+  await Promise.all(secondaryLoads);
 }
 
 async function loadProductAnalytics() {
@@ -6477,14 +6503,44 @@ function openSupportMetricDetail(kind = 'requests') {
   loadMetricChatDetail(rows[0]);
 }
 
-function employeeSummaryKey(row = {}) {
-  const username = normalizeSupportUsername(row.username || row.responsible_employee_username || '');
-  if (username) return `u:${username}`;
-  const id = String(row.employee_id || row.id || row.responsible_employee_id || '').trim();
-  if (id) return `id:${id}`;
+function employeePerformanceLookupKeys(row = {}) {
+  const keys = [];
+  const employeeId = String(row.employee_id || row.id || row.responsible_employee_id || '').trim();
+  if (employeeId) keys.push(`id:${employeeId}`);
   const tgUserId = String(row.tg_user_id || '').trim();
-  if (tgUserId) return `tg:${tgUserId}`;
-  return String(row.full_name || row.responsible_employee_name || '').trim().toLowerCase();
+  if (tgUserId) keys.push(`tg:${tgUserId}`);
+  const username = normalizeSupportUsername(row.username || row.responsible_employee_username || '');
+  if (username) keys.push(`u:${username}`);
+  const fullName = String(row.full_name || row.responsible_employee_name || '').trim().toLowerCase();
+  if (fullName) keys.push(`n:${fullName}`);
+  return keys;
+}
+
+function employeeSummaryKey(row = {}) {
+  return employeePerformanceLookupKeys(row)[0] || '';
+}
+
+function buildPerformanceStatsLookup(rows = []) {
+  const map = new Map();
+  rows.forEach(row => {
+    employeePerformanceLookupKeys(row).forEach(key => {
+      if (!map.has(key)) map.set(key, row);
+    });
+  });
+  return map;
+}
+
+function resolvePerformanceStatsRow(lookup = new Map(), row = {}) {
+  return employeePerformanceLookupKeys(row).map(key => lookup.get(key)).find(Boolean) || null;
+}
+
+function employeeMatchesSupportUsername(employee = {}, supportUsername = '') {
+  const companyUser = normalizeSupportUsername(supportUsername);
+  if (!companyUser) return false;
+  const empUser = normalizeSupportUsername(employee.username);
+  if (empUser && empUser === companyUser) return true;
+  const empName = String(employee.full_name || '').trim().toLowerCase();
+  return Boolean(empName && (empName === companyUser || empName.includes(companyUser) || companyUser.includes(empName)));
 }
 
 function resolveCompanySupportMappingForRequest(request = {}, employeeMappings = []) {
@@ -6492,13 +6548,12 @@ function resolveCompanySupportMappingForRequest(request = {}, employeeMappings =
   const companyId = String(request.company_id || '').trim();
   const companyName = normalizedCompanyName(request.company_name || request.chat_title || '');
 
-  const company = (visibleCompanyInfoRows.value || []).find(item => {
-    if (companyId && String(item.id || item.company_id || '').trim() === companyId) return true;
-    if (companyName && normalizedCompanyName(item.name) === companyName) return true;
-    if (!chatId) return false;
-    if (String(item.chat_id || '').trim() === chatId) return true;
-    return relatedCompanyChatStats(item).some(chat => String(chat.chat_id || '').trim() === chatId);
-  });
+  const company = findCompanyByGroupChatId(chatId)
+    || (visibleCompanyInfoRows.value || []).find(item => {
+      if (companyId && String(item.id || item.company_id || '').trim() === companyId) return true;
+      if (companyName && normalizedCompanyName(item.name) === companyName) return true;
+      return false;
+    });
   if (!company || !hasCompanySupport(company)) return null;
 
   const username = normalizeSupportUsername(company.uyqur_support_username);
@@ -6507,7 +6562,7 @@ function resolveCompanySupportMappingForRequest(request = {}, employeeMappings =
   let mapping = employeeMappings.find(item => item.username === username);
   if (!mapping) {
     const employee = employees.value.find(row => !isAdminLikeEmployee(row)
-      && normalizeSupportUsername(row.username) === username);
+      && employeeMatchesSupportUsername(row, company.uyqur_support_username));
     if (!employee || !isSupportEmployee(employee)) return null;
     mapping = {
       employee,
@@ -6525,21 +6580,29 @@ function resolveCompanySupportMappingForRequest(request = {}, employeeMappings =
 }
 
 function findEmployeeMappingForOpenRequest(request = {}, employeeMappings = []) {
-  const assignedId = String(
-    request.assigned_to_employee_id || request.responsible_employee_id || ''
-  ).trim();
+  const assignedId = String(request.assigned_to_employee_id || '').trim();
   if (assignedId) {
     const byId = employeeMappings.find(mapping => mapping.id === assignedId);
     if (byId) return byId;
   }
 
+  const openedId = String(request.opened_by_employee_id || '').trim();
+  if (openedId) {
+    const byOpened = employeeMappings.find(mapping => mapping.id === openedId);
+    if (byOpened) return byOpened;
+  }
+
+  const chatId = String(request.chat_id || '').trim();
+  const companyId = String(request.company_id || '').trim();
+  const companyName = normalizedCompanyName(request.company_name || request.chat_title || '');
+
   const byCompanyScope = employeeMappings.find(mapping => {
-    if (request.company_id && mapping.companyIds.has(String(request.company_id).trim())) return true;
-    if (request.company_name && mapping.companyNames.has(normalizedCompanyName(request.company_name))) return true;
-    if (request.chat_id && mapping.chatIds.has(String(request.chat_id).trim())) return true;
+    if (companyId && mapping.companyIds.has(companyId)) return true;
+    if (companyName && mapping.companyNames.has(companyName)) return true;
+    if (chatId && mapping.chatIds.has(chatId)) return true;
     return false;
   });
-  return byCompanyScope || null;
+  return byCompanyScope || resolveCompanySupportMappingForRequest(request, employeeMappings) || null;
 }
 
 function buildEmployeeOpenRequestMappings() {
@@ -6549,10 +6612,7 @@ function buildEmployeeOpenRequestMappings() {
     const companyNames = new Set(companies.map(c => normalizedCompanyName(c.name)).filter(Boolean));
     const chatIds = new Set();
     companies.forEach(company => {
-      if (company.chat_id) chatIds.add(String(company.chat_id));
-      relatedCompanyChatStats(company).forEach(chat => {
-        if (chat.chat_id) chatIds.add(String(chat.chat_id));
-      });
+      companyGroupChatIds(company).forEach(chatId => chatIds.add(chatId));
     });
     return {
       employee: emp,
@@ -6585,21 +6645,25 @@ function employeeOpenRequestSummaryMap() {
     const matchedEmp = findEmployeeMappingForOpenRequest(request, employeeMappings);
     if (!matchedEmp || !isSupportEmployee(matchedEmp.employee) || isManagerEmployee(matchedEmp.employee)) return;
 
-    const key = matchedEmp.key;
-    const current = map.get(key) || {
-      key,
+    const summary = {
+      key: matchedEmp.key,
       employee_id: matchedEmp.employee.id || matchedEmp.employee.employee_id || '',
       username: matchedEmp.employee.username || '',
       full_name: matchedEmp.employee.full_name || 'Xodim',
+      role: matchedEmp.employee.role || 'support',
+      tg_user_id: matchedEmp.employee.tg_user_id || '',
       is_unassigned: false,
       open_requests: 0,
       chat_keys: new Set()
     };
-    current.open_requests += 1;
-    if (request.chat_id) current.chat_keys.add(String(request.chat_id));
-    map.set(key, current);
+    employeePerformanceLookupKeys(matchedEmp.employee).forEach(key => {
+      const current = map.get(key) || { ...summary, chat_keys: new Set(summary.chat_keys) };
+      current.open_requests += 1;
+      if (request.chat_id) current.chat_keys.add(String(request.chat_id));
+      map.set(key, current);
+    });
   });
-  
+
   return map;
 }
 
@@ -6607,23 +6671,27 @@ function employeeSummaryRows(kind = 'requests') {
   const openMap = employeeOpenRequestSummaryMap();
   const rowMap = new Map();
   topSupportCards.value.forEach(row => {
-    const key = employeeSummaryKey(row);
-    const openSummary = key ? openMap.get(key) : null;
+    const openSummary = resolvePerformanceStatsRow(openMap, row);
     const openRequests = isManagerPerformanceRow(row)
       ? 0
       : (openSummary ? Number(openSummary.open_requests || 0) : Number(row.open_requests || 0));
     const closedRequests = Number(row.closed_requests || 0);
-    rowMap.set(key || row.key || row.full_name, {
+    const rowKey = supportRowKey(row) || row.key || row.full_name;
+    rowMap.set(rowKey, {
       ...row,
       total_requests: isManagerPerformanceRow(row) ? closedRequests : closedRequests + openRequests,
       open_requests: openRequests,
       handled_chats: Math.max(Number(row.handled_chats || 0), openSummary?.chat_keys?.size || 0)
     });
-    if (key) openMap.delete(key);
+    employeePerformanceLookupKeys(row).forEach(key => openMap.delete(key));
   });
+  const seenOpenKeys = new Set();
   openMap.forEach(row => {
     if (isUnassignedRankingRow(row)) return;
-    rowMap.set(row.key, {
+    const dedupeKey = supportRowKey(row) || row.key;
+    if (!dedupeKey || seenOpenKeys.has(dedupeKey)) return;
+    seenOpenKeys.add(dedupeKey);
+    rowMap.set(dedupeKey, {
       ...row,
       rank: '',
       closed_requests: 0,

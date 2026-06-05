@@ -619,16 +619,9 @@ function buildEmployeePerformance({ requests, employees, messages = [], periodKe
   }
 
   function assignOpenRequest(request, { previous = false } = {}) {
-    const assignedId = String(request.assigned_to_employee_id || '').trim();
-    if (assignedId && assignOpenToEmployee(findEmployee(assignedId, '', ''), request, { previous })) return;
-
-    const openedId = String(request.opened_by_employee_id || '').trim();
-    if (openedId && assignOpenToEmployee(findEmployee(openedId, '', ''), request, { previous })) return;
-
-    const companyId = resolveCompanyIdForRequest(request, chatMap, externalChatCompanyMap);
-    const companySupport = companyId ? companySupportByCompanyId.get(companyId) : null;
-    if (companySupport && assignOpenToEmployee(
-      findEmployee(companySupport.employee_id, companySupport.tg_user_id, companySupport.full_name),
+    const responsible = resolveOpenRequestSupportEmployee(request, employeeMaps, resolveOptions);
+    if (responsible?.employee_id && assignOpenToEmployee(
+      findEmployee(responsible.employee_id, responsible.tg_user_id, responsible.full_name),
       request,
       { previous }
     )) return;
@@ -2005,6 +1998,31 @@ function resolveCompanyIdForRequest(request = {}, chatMap = new Map(), externalC
   return external?.company_id ? String(external.company_id).trim() : '';
 }
 
+function resolveOpenRequestSupportEmployee(request = {}, employeeMaps = buildEmployeeMaps([]), options = {}) {
+  const {
+    chatMap = new Map(),
+    companySupportByCompanyId = new Map(),
+    externalChatCompanyMap = new Map()
+  } = options;
+
+  const assignedId = String(request.assigned_to_employee_id || '').trim();
+  if (assignedId && employeeMaps?.byId?.has(assignedId)) {
+    return employeeSummary(employeeMaps.byId.get(assignedId));
+  }
+
+  const openedId = String(request.opened_by_employee_id || '').trim();
+  if (openedId && employeeMaps?.byId?.has(openedId)) {
+    return employeeSummary(employeeMaps.byId.get(openedId));
+  }
+
+  const companyId = resolveCompanyIdForRequest(request, chatMap, externalChatCompanyMap);
+  if (companyId && companySupportByCompanyId.has(companyId)) {
+    return companySupportByCompanyId.get(companyId);
+  }
+
+  return null;
+}
+
 function buildChatToEmployeeIdMap(chats = [], companyMembers = []) {
   const map = new Map();
   chats.forEach(chat => {
@@ -2029,6 +2047,11 @@ function resolveRequestResponsibleEmployee(request, messages = [], employeeMaps 
   const assignedId = String(request.assigned_to_employee_id || '').trim();
   if (assignedId && employeeMaps?.byId?.has(assignedId)) {
     return employeeSummary(employeeMaps.byId.get(assignedId));
+  }
+
+  const openedId = String(request.opened_by_employee_id || '').trim();
+  if (openedId && employeeMaps?.byId?.has(openedId)) {
+    return employeeSummary(employeeMaps.byId.get(openedId));
   }
 
   const companyId = resolveCompanyIdForRequest(request, chatMap, externalChatCompanyMap);
@@ -2127,17 +2150,13 @@ function enrichOpenRequests({ requests = [], chats = [], messages = [], employee
 
   return requests.map(request => {
     const chat = chatMap.get(telegramIdKey(request.chat_id)) || {};
-    const responsible = resolveRequestResponsibleEmployee(
-      request,
-      messagesByConversation.get(conversationScopeKey(request)) || [],
-      employeeMaps,
-      chatToEmployeeId,
-      resolveOptions
-    );
+    const responsible = resolveOpenRequestSupportEmployee(request, employeeMaps, resolveOptions);
     return {
       ...request,
       chat_title: displayChatTitle(chat),
       chat_source_type: chat.source_type || request.source_type || '',
+      company_id: request.company_id || chat.company_id || externalChatCompanyMap.get(telegramIdKey(request.chat_id))?.company_id || null,
+      company_name: request.company_name || chat.company_name || externalChatCompanyMap.get(telegramIdKey(request.chat_id))?.company_name || '',
       responsible_employee_id: responsible?.employee_id || null,
       responsible_employee_name: responsible?.full_name || '',
       responsible_employee_username: responsible?.username || '',
@@ -2149,7 +2168,7 @@ function enrichOpenRequests({ requests = [], chats = [], messages = [], employee
 async function getOpenRequestInsights(options = {}) {
   const lite = Boolean(options.lite);
   const requests = await supabase.select('support_requests', {
-    select: 'id,source_type,chat_id,company_id,customer_tg_id,customer_name,customer_username,initial_message_id,initial_text,status,open_source,assigned_to_employee_id,business_connection_id,created_at',
+    select: 'id,source_type,chat_id,company_id,customer_tg_id,customer_name,customer_username,initial_message_id,initial_text,status,open_source,opened_by_employee_id,assigned_to_employee_id,business_connection_id,created_at',
     status: 'eq.open',
     order: supabase.order('created_at', false),
     limit: '500'
@@ -2159,7 +2178,7 @@ async function getOpenRequestInsights(options = {}) {
     const now = new Date();
     const enriched = requests.map(request => ({
       ...request,
-      responsible_employee_id: request.assigned_to_employee_id || null,
+      responsible_employee_id: request.assigned_to_employee_id || request.opened_by_employee_id || null,
       open_minutes: round(minutesSince(request.created_at, now), 1)
     }));
     const groupOpen = enriched.filter(request => request.source_type === 'group').length;
