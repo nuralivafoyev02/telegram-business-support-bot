@@ -301,6 +301,18 @@ function inPreviousPeriod(value, periodKey, keys) {
   return inDatePeriod(value, periodKey, keys, true);
 }
 
+function isOpenRequestStatus(status = '') {
+  return String(status || '').trim().toLowerCase() === 'open';
+}
+
+function isClosedLikeRequestStatus(status = '') {
+  return ['closed', 'cancelled'].includes(String(status || '').trim().toLowerCase());
+}
+
+function isPrivateLikeSourceType(sourceType = '') {
+  return ['private', 'business'].includes(String(sourceType || '').trim().toLowerCase());
+}
+
 function emptyPeriod(periodKey, label) {
   return {
     period: periodKey,
@@ -485,7 +497,7 @@ function alignTicketTrendWithPeriodSummary(trendRows = [], summary = {}, periodK
 
 function buildPeriodSummary(requests, periodKey, label, keys, messages = [], employeeMaps = buildEmployeeMaps([])) {
   const created = requests.filter(request => inCurrentPeriod(request.created_at, periodKey, keys));
-  const openRequests = created.filter(request => request.status === 'open');
+  const openRequests = created.filter(request => isOpenRequestStatus(request.status));
 
   const now = new Date();
   const overdueOpenRequests = openRequests.filter(request => {
@@ -493,22 +505,22 @@ function buildPeriodSummary(requests, periodKey, label, keys, messages = [], emp
     return min !== null && min > 30;
   });
 
-  const closed = created.filter(request => request.status === 'closed');
+  const closed = created.filter(request => isClosedLikeRequestStatus(request.status));
 
   const prevCreated = requests.filter(request => inPreviousPeriod(request.created_at, periodKey, keys));
-  const prevOpenRequests = prevCreated.filter(request => request.status === 'open');
+  const prevOpenRequests = prevCreated.filter(request => isOpenRequestStatus(request.status));
   const prevOverdueOpenRequests = prevOpenRequests.filter(request => {
     const closedAt = request.closed_at ? new Date(request.closed_at) : now;
     const min = minutesBetween(request.created_at, closedAt);
     return min !== null && min > 30;
   });
 
-  const prevClosed = prevCreated.filter(request => request.status === 'closed');
+  const prevClosed = prevCreated.filter(request => isClosedLikeRequestStatus(request.status));
 
   return {
     ...emptyPeriod(periodKey, label),
     total_requests: created.length,
-    open_requests: created.filter(request => request.status === 'open').length,
+    open_requests: created.filter(request => isOpenRequestStatus(request.status)).length,
     overdue_open_requests: overdueOpenRequests.length,
     closed_requests: closed.length,
     close_rate: percent(closed.length, created.length),
@@ -520,7 +532,7 @@ function buildPeriodSummary(requests, periodKey, label, keys, messages = [], emp
     // Previous period stats
     prev_total_requests: prevCreated.length,
     prev_closed_requests: prevClosed.length,
-    prev_open_requests: prevCreated.filter(request => request.status === 'open').length,
+    prev_open_requests: prevCreated.filter(request => isOpenRequestStatus(request.status)).length,
     prev_overdue_open_requests: prevOverdueOpenRequests.length,
     prev_close_rate: percent(prevClosed.length, prevCreated.length),
     prev_avg_close_minutes: averageResponseMinutesForPeriodRequests(prevCreated, messages, employeeMaps),
@@ -578,20 +590,20 @@ function buildEmployeePerformance({
   }
 
   const periodClosedRequests = requests.filter(request =>
-    request.status === 'closed' && inCurrentPeriod(request.created_at, periodKey, keys)
+    isClosedLikeRequestStatus(request.status) && inCurrentPeriod(request.created_at, periodKey, keys)
   );
   const closed = periodClosedRequests.filter(request =>
     Boolean(request.closed_by_employee_id || request.closed_by_tg_id || request.closed_by_name)
   );
-  const open = requests.filter(request => request.status === 'open' && inCurrentPeriod(request.created_at, periodKey, keys));
+  const open = requests.filter(request => isOpenRequestStatus(request.status) && inCurrentPeriod(request.created_at, periodKey, keys));
 
   const prevPeriodClosedRequests = requests.filter(request =>
-    request.status === 'closed' && inPreviousPeriod(request.created_at, periodKey, keys)
+    isClosedLikeRequestStatus(request.status) && inPreviousPeriod(request.created_at, periodKey, keys)
   );
   const prevClosed = prevPeriodClosedRequests.filter(request =>
     Boolean(request.closed_by_employee_id || request.closed_by_tg_id || request.closed_by_name)
   );
-  const prevOpen = requests.filter(request => request.status === 'open' && inPreviousPeriod(request.created_at, periodKey, keys));
+  const prevOpen = requests.filter(request => isOpenRequestStatus(request.status) && inPreviousPeriod(request.created_at, periodKey, keys));
 
   const totals = new Map();
 
@@ -1342,7 +1354,7 @@ function rangeQuery(field, window) {
 
 async function selectAnalyticsRequests(window, options = {}) {
   const baseQuery = {
-    select: 'id,source_type,chat_id,company_id,customer_tg_id,customer_name,status,open_source,opened_by_employee_id,assigned_to_employee_id,assigned_at,closed_by_employee_id,closed_by_tg_id,closed_by_name,created_at,closed_at',
+    select: 'id,source_type,chat_id,company_id,customer_tg_id,customer_name,status,open_source,opened_by_employee_id,assigned_to_employee_id,assigned_at,closed_by_employee_id,closed_by_tg_id,closed_by_name,business_connection_id,created_at,closed_at',
     order: supabase.order('created_at', false),
     limit: String(options.limit || '10000')
   };
@@ -1427,9 +1439,7 @@ async function getDashboardAnalytics(query = {}) {
     order: supabase.order('created_at', false),
     ...rangeQuery('created_at', window)
   }, 'chat_id', chatIds, { maxRows: messageMaxRows }) : [];
-  const businessConnectionEmployee = statsFocus
-    ? new Map()
-    : await loadBusinessConnectionEmployeeMap(requests, messages, employees);
+  const businessConnectionEmployee = await loadBusinessConnectionEmployeeMap(requests, messages, employees);
 
   const employeeMaps = buildEmployeeMaps(employees);
 
@@ -2154,7 +2164,8 @@ function resolveOpenRequestSupportEmployee(request = {}, employeeMaps = buildEmp
     companyGroupSupportByChatId = new Map(),
     chatCompanySupportByChatId = new Map(),
     companyInfoCompanies = [],
-    directoryCompanies = []
+    directoryCompanies = [],
+    businessConnectionEmployee = new Map()
   } = options;
 
   const assignedId = String(request.assigned_to_employee_id || '').trim();
@@ -2168,6 +2179,19 @@ function resolveOpenRequestSupportEmployee(request = {}, employeeMaps = buildEmp
   }
 
   const chatKey = telegramIdKey(request.chat_id);
+  const chat = chatKey ? (chatMap.get(chatKey) || {}) : {};
+  const sourceType = String(request.source_type || chat.source_type || '').toLowerCase();
+  const connectionId = normalizeBusinessConnectionId(request.business_connection_id);
+  if (connectionId && businessConnectionEmployee.has(connectionId)) {
+    return businessConnectionEmployee.get(connectionId);
+  }
+  if (isPrivateLikeSourceType(sourceType)) {
+    const chatConnectionId = normalizeBusinessConnectionId(chat.business_connection_id);
+    if (chatConnectionId && businessConnectionEmployee.has(chatConnectionId)) {
+      return businessConnectionEmployee.get(chatConnectionId);
+    }
+  }
+
   if (chatKey && chatCompanySupportByChatId.has(chatKey)) {
     return chatCompanySupportByChatId.get(chatKey);
   }
@@ -2185,7 +2209,6 @@ function resolveOpenRequestSupportEmployee(request = {}, employeeMaps = buildEmp
     return companySupportByCompanyId.get(companyId);
   }
 
-  const chat = chatKey ? (chatMap.get(chatKey) || {}) : {};
   const company = findCompanyInfoRow(companyInfoCompanies, {
     companyId: request.company_id || chat.company_id || externalCompanyId,
     companyName: request.company_name || chat.company_name || companyNameFromChatTitle(chat.title || request.chat_title)
@@ -2360,7 +2383,7 @@ async function getOpenRequestInsights(options = {}) {
       supabase.select('employees', { select: 'id,tg_user_id,full_name,username,role,is_active', limit: '1000' }).catch(() => []),
       getCachedCompanyInfo().catch(() => null),
       chatIds.length ? supabase.select('tg_chats', {
-        select: 'chat_id,title,username,company_id,source_type,type,is_active',
+        select: 'chat_id,title,username,company_id,source_type,type,is_active,business_connection_id',
         chat_id: supabase.inList(chatIds.slice(0, 500)),
         limit: '500'
       }).catch(() => []) : Promise.resolve([]),
@@ -2370,6 +2393,7 @@ async function getOpenRequestInsights(options = {}) {
     const companyInfoCompanies = resolveCachedCompanyInfoCompanies(companyInfoCache);
     const directoryCompanies = mergeCompanyDirectoryRows(localCompanies, companyInfoCompanies);
     const enrichedChats = enrichChatsWithCompanyAssignments(chats, companyInfoCompanies, localCompanies);
+    const businessConnectionEmployee = await loadBusinessConnectionEmployeeMap(requests, [], employees);
     const supportMaps = buildOpenRequestSupportMaps({
       companyInfoCompanies,
       chats: enrichedChats,
@@ -2381,6 +2405,7 @@ async function getOpenRequestInsights(options = {}) {
       chatMap,
       companyInfoCompanies,
       directoryCompanies,
+      businessConnectionEmployee,
       ...supportMaps
     };
     const enriched = requests.map(request => {
@@ -2921,7 +2946,7 @@ async function getDashboard(query = {}) {
       const companyInfoCache = await getCachedCompanyInfo().catch(() => null);
       const companyInfoCompanies = resolveCachedCompanyInfoCompanies(companyInfoCache);
       const chats = await supabase.select('tg_chats', {
-        select: 'chat_id,title,username,company_id,source_type,type,is_active,last_message_at',
+        select: 'chat_id,title,username,company_id,source_type,type,is_active,last_message_at,business_connection_id',
         chat_id: supabase.inList(openChatIds.slice(0, 500)),
         limit: '500'
       }).catch(() => []);

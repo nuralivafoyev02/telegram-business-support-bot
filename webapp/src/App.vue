@@ -6639,6 +6639,24 @@ function employeeMatchesSupportUsername(employee = {}, supportUsername = '') {
     || supportIdentitiesMatch(employee.full_name, supportUsername);
 }
 
+function buildPrivateChatSupportIndex() {
+  const index = new Map();
+  (dashboard.chatStats || []).forEach(chat => {
+    const sourceType = String(chat.source_type || '').toLowerCase();
+    if (!['private', 'business'].includes(sourceType)) return;
+    const chatId = String(chat.chat_id || '').trim();
+    const companyId = String(chat.company_id || '').trim();
+    if (!chatId || !companyId) return;
+    const company = (visibleCompanyInfoRows.value || []).find(item => String(item.id || item.company_id || '').trim() === companyId);
+    if (!company || !hasCompanySupport(company)) return;
+    const employee = (employees.value || []).find(row => !isAdminLikeEmployee(row)
+      && employeeMatchesSupportUsername(row, company.uyqur_support_username));
+    if (!employee || !isSupportEmployee(employee) || isManagerEmployee(employee)) return;
+    if (!index.has(chatId)) index.set(chatId, employee);
+  });
+  return index;
+}
+
 function buildCompanyGroupSupportIndex() {
   const index = new Map();
   (visibleCompanyInfoRows.value || []).forEach(company => {
@@ -6716,6 +6734,13 @@ function findEmployeeMappingForOpenRequest(request = {}, employeeMappings = [], 
   }
 
   const chatId = String(request.chat_id || '').trim();
+  const privateIndex = buildPrivateChatSupportIndex();
+  const privateEmployee = chatId ? privateIndex.get(chatId) : null;
+  if (privateEmployee) {
+    const byPrivate = employeeMappings.find(mapping => mapping.id === String(privateEmployee.id || privateEmployee.employee_id || '').trim());
+    if (byPrivate) return byPrivate;
+  }
+
   const groupIndex = groupSupportIndex || buildCompanyGroupSupportIndex();
   const groupEmployee = chatId ? groupIndex.get(chatId) : null;
   if (groupEmployee) {
