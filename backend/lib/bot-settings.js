@@ -29,9 +29,12 @@ const DEFAULT_SETTINGS = Object.freeze({
   mainGroupId: ''
 });
 
-let cachedSettings = null;
-let cachedAt = 0;
+const settingsCache = new Map();
 const CACHE_MS = 15_000;
+
+function cacheKey(tenantId) {
+  return String(tenantId || 1);
+}
 
 function settingValue(rows, key) {
   const row = rows.find(item => item && item.key === key);
@@ -147,20 +150,25 @@ function normalizeSettings(rows = []) {
   };
 }
 
-async function getBotSettings({ force = false } = {}) {
+async function getBotSettings({ force = false, tenantId } = {}) {
+  const { getCurrentTenantId, normalizeTenantId } = require('./tenant');
+  const resolvedTenantId = normalizeTenantId(tenantId ?? getCurrentTenantId());
+  const key = cacheKey(resolvedTenantId);
   const now = Date.now();
-  if (!force && cachedSettings && now - cachedAt < CACHE_MS) return cachedSettings;
+  const cached = settingsCache.get(key);
+  if (!force && cached && now - cached.cachedAt < CACHE_MS) return cached.settings;
 
   try {
     const rows = await supabase.select('bot_settings', {
       select: 'key,value',
       key: 'in.(ai_mode,ai_integration,log_notifications,group_message_audit,message_reactions,ticket_notifications,clickup_integration,auto_reply,done_tag,request_detection,main_group)'
     });
+    let settings;
     try {
-      cachedSettings = normalizeSettings(rows || []);
+      settings = normalizeSettings(rows || []);
     } catch (normalizeError) {
       console.error('[bot:settings:normalize:error]', normalizeError);
-      cachedSettings = {
+      settings = {
         ...DEFAULT_SETTINGS,
         groupMessageAudit: normalizeGroupMessageAudit(settingValue(rows, 'group_message_audit')),
         logNotifications: normalizeLogNotifications(settingValue(rows, 'log_notifications')),
@@ -169,19 +177,22 @@ async function getBotSettings({ force = false } = {}) {
         mainGroupId: String(settingValue(rows, 'main_group').chat_id || DEFAULT_SETTINGS.mainGroupId).trim()
       };
     }
-    cachedAt = now;
-    return cachedSettings;
+    settingsCache.set(key, { settings, cachedAt: now });
+    return settings;
   } catch (error) {
     console.error('[bot:settings:error]', error);
-    cachedSettings = { ...DEFAULT_SETTINGS };
-    cachedAt = now;
-    return cachedSettings;
+    const settings = { ...DEFAULT_SETTINGS };
+    settingsCache.set(key, { settings, cachedAt: now });
+    return settings;
   }
 }
 
-function clearBotSettingsCache() {
-  cachedSettings = null;
-  cachedAt = 0;
+function clearBotSettingsCache(tenantId) {
+  if (tenantId === undefined || tenantId === null || tenantId === '') {
+    settingsCache.clear();
+    return;
+  }
+  settingsCache.delete(cacheKey(tenantId));
 }
 
 module.exports = {

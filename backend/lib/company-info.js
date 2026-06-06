@@ -2,6 +2,7 @@
 
 const { optionalEnv } = require('./env');
 const supabase = require('./supabase');
+const { getCurrentTenantId, normalizeTenantId, DEFAULT_TENANT_ID } = require('./tenant');
 
 const DEFAULT_COMPANY_INFO_URL = 'https://backend.app.uyqur.uz/dev/company/info-for-bot';
 const EXPIRING_SOON_DAYS = 30;
@@ -51,12 +52,41 @@ const MEDIA_FIELDS = Object.freeze([
   'thumbnail_file_id'
 ]);
 
-function companyInfoUrl() {
-  return optionalEnv('UYQUR_COMPANY_INFO_URL', DEFAULT_COMPANY_INFO_URL);
+function resolveTenantId(tenantId) {
+  return normalizeTenantId(tenantId ?? getCurrentTenantId() ?? DEFAULT_TENANT_ID);
 }
 
-function companyInfoAuth() {
-  return optionalEnv('UYQUR_COMPANY_INFO_AUTH', '');
+function tenantEnvSuffix(tenantId) {
+  const id = resolveTenantId(tenantId);
+  return id === DEFAULT_TENANT_ID ? '' : `_TENANT_${id}`;
+}
+
+function companyInfoUrl(tenantId) {
+  const suffix = tenantEnvSuffix(tenantId);
+  const tenantUrl = suffix ? optionalEnv(`UYQUR_COMPANY_INFO_URL${suffix}`, '') : '';
+  return tenantUrl || optionalEnv('UYQUR_COMPANY_INFO_URL', DEFAULT_COMPANY_INFO_URL);
+}
+
+function companyInfoAuth(tenantId) {
+  const suffix = tenantEnvSuffix(tenantId);
+  const tenantAuth = suffix ? optionalEnv(`UYQUR_COMPANY_INFO_AUTH${suffix}`, '') : '';
+  return tenantAuth || optionalEnv('UYQUR_COMPANY_INFO_AUTH', '');
+}
+
+function companyInfoScope(tenantId) {
+  const suffix = tenantEnvSuffix(tenantId);
+  const tenantScope = suffix ? optionalEnv(`UYQUR_COMPANY_INFO_SCOPE${suffix}`, '') : '';
+  return tenantScope || optionalEnv('UYQUR_COMPANY_INFO_SCOPE', COMPANY_INFO_DEFAULT_SCOPE);
+}
+
+function assertTenantCompanyInfoAuth(tenantId) {
+  const id = resolveTenantId(tenantId);
+  const auth = companyInfoAuth(id);
+  if (auth) return auth;
+  if (id === DEFAULT_TENANT_ID) {
+    throw new Error('UYQUR_COMPANY_INFO_AUTH env sozlanmagan');
+  }
+  throw new Error(`Tenant ${id} uchun UYQUR_COMPANY_INFO_AUTH_TENANT_${id} env sozlanmagan`);
 }
 
 function parseUnixDate(value) {
@@ -719,7 +749,7 @@ function attachExternalGroups(companies = [], groups = []) {
   });
 }
 
-function scopedCompanyInfoUrl(rawUrl = companyInfoUrl()) {
+function scopedCompanyInfoUrl(rawUrl = companyInfoUrl(), tenantId) {
   let parsed;
   try {
     parsed = new URL(rawUrl);
@@ -733,7 +763,7 @@ function scopedCompanyInfoUrl(rawUrl = companyInfoUrl()) {
     parsed.searchParams.set('include', COMPANY_INFO_INCLUDE.join(','));
   }
   if (!parsed.searchParams.has('scope')) {
-    parsed.searchParams.set('scope', optionalEnv('UYQUR_COMPANY_INFO_SCOPE', COMPANY_INFO_DEFAULT_SCOPE));
+    parsed.searchParams.set('scope', companyInfoScope(tenantId));
   }
   return parsed.toString();
 }
@@ -763,10 +793,10 @@ function shouldRetryUnscoped(error = {}) {
 }
 
 async function fetchCompanyInfo(options = {}) {
-  const baseUrl = companyInfoUrl();
-  const url = scopedCompanyInfoUrl(baseUrl);
-  const auth = companyInfoAuth();
-  if (!auth) throw new Error('UYQUR_COMPANY_INFO_AUTH env sozlanmagan');
+  const tenantId = resolveTenantId(options.tenantId);
+  const baseUrl = companyInfoUrl(tenantId);
+  const url = scopedCompanyInfoUrl(baseUrl, tenantId);
+  const auth = assertTenantCompanyInfoAuth(tenantId);
 
   let payload;
   let source = url;
@@ -784,6 +814,7 @@ async function fetchCompanyInfo(options = {}) {
   const companies = attachExternalGroups(normalizedCompanies, groups);
   const supportEmployeeSync = await syncSupportEmployees(companies);
   const result = {
+    tenant_id: tenantId,
     summary: buildSummary(companies),
     companies,
     groups,

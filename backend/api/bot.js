@@ -6,6 +6,7 @@ const supabase = require('../lib/supabase');
 const { sendMessage, deleteMessage, reactToMessage, answerCallbackQuery, editMessageReplyMarkup, escapeHtml, tgUserName, getWebhookInfo, getMe, getChatMember, getFile, downloadFile } = require('../lib/telegram');
 const { getMessageText, normalizeText, classifyMessage, isGreetingOnly, isSmallTalk, isCompletionIntent } = require('../lib/parser');
 const { getBotSettings } = require('../lib/bot-settings');
+const { runWithTenant, resolveTenantFromQuery } = require('../lib/tenant');
 const { resolveMainStatsChatId, sendMainStatsReport, buildMainStatsQuestionReply, isMainStatsQuestion } = require('../lib/report');
 const { shouldUseExternalAi, classifyWithAi, generateSupportReply, generateLocalSupportReply, generateClickUpTaskDraft } = require('../lib/ai');
 const { detectIncomingMediaKind, resolveIncomingMessageText } = require('../lib/media-analysis');
@@ -2699,8 +2700,10 @@ async function handler(req, res) {
   try {
     const query = getQuery(req);
     const sourceBot = String(query.source_bot || '').trim().toLowerCase();
+    const tenantId = resolveTenantFromQuery(query);
     const update = await readBody(req);
-    return sendJson(res, 200, await handleTelegramUpdate(update, { sourceBot }));
+    const result = await runWithTenant(tenantId, () => handleTelegramUpdate(update, { sourceBot, tenantId }));
+    return sendJson(res, 200, result);
   } catch (error) {
     console.error('[bot:error]', error);
     notifyOperationalError('bot:error', error).catch(logError => console.error('[bot:notify-log:error]', logError));

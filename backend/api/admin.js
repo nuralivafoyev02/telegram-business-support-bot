@@ -9,6 +9,7 @@ const { streamStorageObject, uploadStorageObject, buildStoragePath, contentTypeF
 const TELEGRAM_FILE_PROXY_MAX_BYTES = 20 * 1024 * 1024;
 const { allowCors, sendJson, readBody, getQuery } = require('../lib/http');
 const { login, requireAdmin, hashPassword } = require('../lib/auth');
+const { runWithTenant, normalizeTenantId, getCurrentTenantId, shouldAttachTenantQuery } = require('../lib/tenant');
 const { sendMessage, sendBusinessMessage, getWebhookInfo, setWebhook, deleteWebhook, getUpdates, getFile, getFileWithToken, getUserProfilePhotos, downloadFile, downloadFileWithToken, tgUserName, escapeHtml } = require('../lib/telegram');
 const { optionalEnv } = require('../lib/env');
 const { normalizeSettings, clearBotSettingsCache } = require('../lib/bot-settings');
@@ -4854,7 +4855,11 @@ async function connectTelegramWebhook(body = {}) {
   assertSafeTelegramWebhookAppUrl(appUrl);
 
   const secret = optionalEnv('TELEGRAM_WEBHOOK_SECRET', '');
-  const webhookUrl = `${appUrl}/api/bot${secret ? `?secret=${encodeURIComponent(secret)}` : ''}`;
+  const tenantId = getCurrentTenantId();
+  const queryParts = [];
+  if (shouldAttachTenantQuery(tenantId)) queryParts.push(`tenant=${encodeURIComponent(tenantId)}`);
+  if (secret) queryParts.push(`secret=${encodeURIComponent(secret)}`);
+  const webhookUrl = `${appUrl}/api/bot${queryParts.length ? `?${queryParts.join('&')}` : ''}`;
   const payload = {
     url: webhookUrl,
     allowed_updates: TELEGRAM_ALLOWED_UPDATES,
@@ -5765,7 +5770,7 @@ async function updateSettings(body) {
   }
 
   const savedRows = await supabase.insert('bot_settings', rows, { upsert: true, onConflict: 'key' });
-  clearBotSettingsCache();
+  clearBotSettingsCache(getCurrentTenantId());
 
   if (!previousSettings.aiMode && nextSettings.aiMode) {
     await notifyAiModeChange(nextSettings, true).catch(error => console.error('[admin:ai-mode-notice:error]', error));
@@ -5907,24 +5912,29 @@ async function handler(req, res) {
     }
 
     const currentAdmin = requireAdmin(req);
+    const tenantId = normalizeTenantId(currentAdmin.tenant_id);
 
     if (req.method === 'GET') {
-      if (action === 'telegramFile') {
-        await sendTelegramFile(query, res);
-        return;
-      }
-      if (action === 'telegramProfilePhoto') {
-        await sendTelegramProfilePhoto(query, res);
-        return;
-      }
-      const data = await handleGet(action, query);
-      return sendJson(res, 200, { ok: true, data });
+      return runWithTenant(tenantId, async () => {
+        if (action === 'telegramFile') {
+          await sendTelegramFile(query, res);
+          return;
+        }
+        if (action === 'telegramProfilePhoto') {
+          await sendTelegramProfilePhoto(query, res);
+          return;
+        }
+        const data = await handleGet(action, query);
+        return sendJson(res, 200, { ok: true, data });
+      });
     }
 
     if (req.method === 'POST') {
       const body = await readBody(req);
-      const data = await handlePost(action, body, currentAdmin);
-      return sendJson(res, 200, { ok: true, data });
+      return runWithTenant(tenantId, async () => {
+        const data = await handlePost(action, body, currentAdmin);
+        return sendJson(res, 200, { ok: true, data });
+      });
     }
 
     return sendJson(res, 405, { ok: false, error: 'Method not allowed' });

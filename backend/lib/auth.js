@@ -3,6 +3,7 @@
 const crypto = require('crypto');
 const supabase = require('./supabase');
 const { optionalEnv, requiredEnv } = require('./env');
+const { DEFAULT_TENANT_ID, normalizeTenantId } = require('./tenant');
 
 function base64url(input) {
   return Buffer.from(input).toString('base64url');
@@ -31,6 +32,7 @@ function createToken(admin) {
     sub: String(admin.id || 'env-admin'),
     username: admin.username,
     role: admin.role || 'owner',
+    tenant_id: normalizeTenantId(admin.tenant_id),
     iat: Math.floor(Date.now() / 1000),
     exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7
   }));
@@ -54,7 +56,7 @@ function verifyToken(token) {
 
 async function login(username, password) {
   const admins = await supabase.select('admins', {
-    select: 'id,username,password_hash,full_name,role,is_active',
+    select: 'id,username,password_hash,full_name,role,is_active,tenant_id',
     username: supabase.eq(username),
     limit: '1'
   }).catch(() => []);
@@ -68,7 +70,14 @@ async function login(username, password) {
   const fallbackUser = optionalEnv('ADMIN_USERNAME', 'admin');
   const fallbackPass = optionalEnv('ADMIN_PASSWORD', 'Admin@12345');
   if (username === fallbackUser && password === fallbackPass) {
-    const envAdmin = { id: 'env-admin', username: fallbackUser, full_name: 'System Admin', role: 'owner', is_active: true };
+    const envAdmin = {
+      id: 'env-admin',
+      username: fallbackUser,
+      full_name: 'System Admin',
+      role: 'owner',
+      is_active: true,
+      tenant_id: DEFAULT_TENANT_ID
+    };
     return { token: createToken(envAdmin), admin: sanitizeAdmin(envAdmin), fallback: true };
   }
 
@@ -80,7 +89,8 @@ function sanitizeAdmin(admin) {
     id: admin.id,
     username: admin.username,
     full_name: admin.full_name || 'Admin',
-    role: admin.role || 'owner'
+    role: admin.role || 'owner',
+    tenant_id: normalizeTenantId(admin.tenant_id)
   };
 }
 

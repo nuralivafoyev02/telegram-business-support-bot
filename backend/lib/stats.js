@@ -1,6 +1,13 @@
 'use strict';
 
 const supabase = require('./supabase');
+const { getCurrentTenantId } = require('./tenant');
+
+function withTenantQuery(query = {}) {
+  const tenantId = getCurrentTenantId();
+  if (!tenantId || query.tenant_id !== undefined) return query;
+  return { ...query, tenant_id: supabase.eq(tenantId) };
+}
 
 const DEFAULT_SUMMARY = {
   total_requests: 0,
@@ -201,19 +208,19 @@ async function fallbackTodaySummary() {
 }
 
 function selectEmployeeStatistics(query = {}) {
-  return selectOrFallback('v_employee_statistics', query, fallbackEmployeeStatistics);
+  return selectOrFallback('v_employee_statistics', withTenantQuery(query), fallbackEmployeeStatistics);
 }
 
 function selectChatStatistics(query = {}) {
-  return selectOrFallback('v_chat_statistics', query, fallbackChatStatistics);
+  return selectOrFallback('v_chat_statistics', withTenantQuery(query), fallbackChatStatistics);
 }
 
 function selectCompanyStatistics(query = {}) {
-  return selectOrFallback('v_company_statistics', query, fallbackCompanyStatistics);
+  return selectOrFallback('v_company_statistics', withTenantQuery(query), fallbackCompanyStatistics);
 }
 
 function selectTodaySummary(query = {}) {
-  return selectOrFallback('v_today_summary', query, fallbackTodaySummary);
+  return selectOrFallback('v_today_summary', withTenantQuery(query), fallbackTodaySummary);
 }
 
 module.exports = {

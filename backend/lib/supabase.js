@@ -1,6 +1,7 @@
 'use strict';
 
 const { requiredEnv } = require('./env');
+const { scopeQuery, scopeRows, tenantOnConflict } = require('./tenant');
 
 let cachedConfig = null;
 
@@ -72,25 +73,27 @@ async function request(path, { method = 'GET', body, query, prefer } = {}) {
 }
 
 async function select(table, query = {}) {
-  return request(table, { method: 'GET', query });
+  return request(table, { method: 'GET', query: scopeQuery(table, query) });
 }
 
 async function insert(table, rows, { upsert = false, onConflict, prefer = 'return=representation' } = {}) {
-  const query = onConflict ? { on_conflict: onConflict } : undefined;
+  const scopedRows = scopeRows(table, rows);
+  const resolvedConflict = tenantOnConflict(table, onConflict);
+  const query = resolvedConflict ? { on_conflict: resolvedConflict } : undefined;
   return request(table, {
     method: 'POST',
-    body: rows,
+    body: scopedRows,
     query,
     prefer: upsert ? `${prefer},resolution=merge-duplicates` : prefer
   });
 }
 
 async function patch(table, query, values, prefer = 'return=representation') {
-  return request(table, { method: 'PATCH', query, body: values, prefer });
+  return request(table, { method: 'PATCH', query: scopeQuery(table, query), body: values, prefer });
 }
 
 async function remove(table, query, prefer = 'return=representation') {
-  return request(table, { method: 'DELETE', query, prefer });
+  return request(table, { method: 'DELETE', query: scopeQuery(table, query), prefer });
 }
 
 async function rpc(name, body = {}) {

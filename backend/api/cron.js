@@ -6,6 +6,7 @@ const { sendMainStatsReport } = require('../lib/report');
 const { syncCompanyInfo } = require('../lib/company-info');
 const { syncClickUpCompletedTasks } = require('../lib/clickup-sync');
 const { notifyOperationalError } = require('../lib/log-notifier');
+const { runWithTenant, resolveTenantFromQuery } = require('../lib/tenant');
 
 function verify(req) {
   const secret = optionalEnv('CRON_SECRET', optionalEnv('TELEGRAM_WEBHOOK_SECRET', ''));
@@ -19,15 +20,16 @@ async function handler(req, res) {
   try {
     const query = getQuery(req);
     const action = String(query.action || query.job || '').trim();
+    const tenantId = resolveTenantFromQuery(query);
     if (['companyInfo', 'company-info', 'uyqurCompanyInfo', 'uyqur-company-info'].includes(action)) {
-      const result = await syncCompanyInfo();
+      const result = await runWithTenant(tenantId, () => syncCompanyInfo());
       return sendJson(res, 200, { ok: true, data: result });
     }
     if (['clickupSync', 'clickup-sync', 'clickup'].includes(action)) {
-      const result = await syncClickUpCompletedTasks({ limit: Number(query.limit || 50) });
+      const result = await runWithTenant(tenantId, () => syncClickUpCompletedTasks({ limit: Number(query.limit || 50) }));
       return sendJson(res, 200, { ok: true, data: result });
     }
-    const result = await sendMainStatsReport(query.chat_id || undefined);
+    const result = await runWithTenant(tenantId, () => sendMainStatsReport(query.chat_id || undefined));
     return sendJson(res, 200, { ok: true, data: result });
   } catch (error) {
     console.error('[cron:error]', error);
