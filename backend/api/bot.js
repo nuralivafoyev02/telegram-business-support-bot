@@ -1677,7 +1677,20 @@ function logBackgroundError(label, error) {
   notifyOperationalError(`bot:${label}`, error).catch(logError => console.error('[bot:notify-log:error]', logError));
 }
 
-async function maybeReactToTicketClose(message, settings = null) {
+function isReactTargetNotFound(error) {
+  const description = String(error?.telegram?.description || error?.message || '').toLowerCase();
+  return description.includes('message to react not found') || description.includes('message not found');
+}
+
+function resolveTicketCloseReactionTarget(message = {}, closedRequest = null) {
+  const businessConnectionId = message.business_connection_id || null;
+  if (businessConnectionId && closedRequest?.initial_message_id) {
+    return closedRequest.initial_message_id;
+  }
+  return message.message_id;
+}
+
+async function maybeReactToTicketClose(message, settings = null, { closedRequest = null } = {}) {
   const resolvedSettings = settings || await getBotSettings().catch(error => {
     logBackgroundError('ticket-close-reaction-settings', error);
     return null;
@@ -1685,13 +1698,20 @@ async function maybeReactToTicketClose(message, settings = null) {
   const reactions = resolvedSettings && resolvedSettings.messageReactions ? resolvedSettings.messageReactions : {};
   if (!reactions.enabled || !reactions.ticketClose) return;
 
-  await reactToMessage(message.chat.id, message.message_id, reactions.emoji || '\u26a1')
-    .catch(error => logBackgroundError('ticket-close-reaction', error));
+  const chatId = message.chat && message.chat.id;
+  const messageId = resolveTicketCloseReactionTarget(message, closedRequest);
+  if (!chatId || !messageId) return;
+
+  await reactToMessage(chatId, messageId, reactions.emoji || '\u26a1')
+    .catch(error => {
+      if (isReactTargetNotFound(error)) return;
+      logBackgroundError('ticket-close-reaction', error);
+    });
 }
 
 async function maybeReplyDone(message, result, settings = null) {
   if (result.closed) {
-    await maybeReactToTicketClose(message, settings);
+    await maybeReactToTicketClose(message, settings, { closedRequest: result.request });
   } else {
     if (isGroupChat(message.chat || {})) return;
     const silent = boolEnv('SILENT_DONE_REPLY', false);
@@ -2178,7 +2198,7 @@ async function maybeCloseRequestFromEmployeeAnswer(message, classification, empl
 
   const result = await metrics.closeLatestRequest({ message, employee, recordMissing: false });
   if (result.closed) {
-    await maybeReactToTicketClose(message, settings);
+    await maybeReactToTicketClose(message, settings, { closedRequest: result.request });
   }
   return !!result.closed;
 }
