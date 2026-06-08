@@ -7,6 +7,7 @@ const { getCurrentTenantId, normalizeTenantId, DEFAULT_TENANT_ID } = require('./
 const DEFAULT_COMPANY_INFO_URL = 'https://backend.app.uyqur.uz/dev/company/info-for-bot';
 const EXPIRING_SOON_DAYS = 30;
 const COMPANY_INFO_CACHE_KEY = 'uyqur_company_info_cache';
+const COMPANY_INFO_CACHE_SCHEMA_VERSION = 2;
 const COMPANY_INFO_FIELDS = Object.freeze([
   'id',
   'name',
@@ -62,15 +63,21 @@ function tenantEnvSuffix(tenantId) {
 }
 
 function companyInfoUrl(tenantId) {
-  const suffix = tenantEnvSuffix(tenantId);
+  const id = resolveTenantId(tenantId);
+  const suffix = tenantEnvSuffix(id);
   const tenantUrl = suffix ? optionalEnv(`UYQUR_COMPANY_INFO_URL${suffix}`, '') : '';
-  return tenantUrl || optionalEnv('UYQUR_COMPANY_INFO_URL', DEFAULT_COMPANY_INFO_URL);
+  if (tenantUrl) return tenantUrl;
+  if (id === DEFAULT_TENANT_ID) return optionalEnv('UYQUR_COMPANY_INFO_URL', DEFAULT_COMPANY_INFO_URL);
+  return DEFAULT_COMPANY_INFO_URL;
 }
 
 function companyInfoAuth(tenantId) {
-  const suffix = tenantEnvSuffix(tenantId);
+  const id = resolveTenantId(tenantId);
+  const suffix = tenantEnvSuffix(id);
   const tenantAuth = suffix ? optionalEnv(`UYQUR_COMPANY_INFO_AUTH${suffix}`, '') : '';
-  return tenantAuth || optionalEnv('UYQUR_COMPANY_INFO_AUTH', '');
+  if (tenantAuth) return tenantAuth;
+  if (id === DEFAULT_TENANT_ID) return optionalEnv('UYQUR_COMPANY_INFO_AUTH', '');
+  return '';
 }
 
 function companyInfoScope(tenantId) {
@@ -388,9 +395,28 @@ async function syncSupportEmployees(companies = []) {
   }
 }
 
+function emptyCompanyInfoResult(tenantId) {
+  const id = resolveTenantId(tenantId);
+  return {
+    tenant_id: id,
+    cache_schema_version: COMPANY_INFO_CACHE_SCHEMA_VERSION,
+    summary: buildSummary([]),
+    companies: [],
+    groups: [],
+    support_employee_sync: null,
+    fetched_at: '',
+    cached_at: null,
+    source: '',
+    message: null,
+    empty: true
+  };
+}
+
 function companyInfoSnapshot(result = {}) {
   const fetchedAt = result.fetched_at || new Date().toISOString();
   return {
+    tenant_id: resolveTenantId(result.tenant_id),
+    cache_schema_version: COMPANY_INFO_CACHE_SCHEMA_VERSION,
     summary: result.summary || buildSummary(result.companies || []),
     companies: Array.isArray(result.companies) ? result.companies : [],
     groups: Array.isArray(result.groups) ? result.groups : [],
@@ -412,7 +438,27 @@ async function saveCompanyInfoSnapshot(result = {}) {
   return snapshot;
 }
 
-async function getCachedCompanyInfo() {
+function isCachedCompanyInfoValid(value = {}, tenantId) {
+  const currentTenantId = resolveTenantId(tenantId);
+  if (!value || typeof value !== 'object') return false;
+  if (value.empty === true) return resolveTenantId(value.tenant_id) === currentTenantId;
+
+  if (currentTenantId !== DEFAULT_TENANT_ID) {
+    const schemaVersion = Number(value.cache_schema_version || 0);
+    if (schemaVersion < COMPANY_INFO_CACHE_SCHEMA_VERSION) return false;
+    if (!companyInfoAuth(currentTenantId)) return false;
+  }
+
+  if (value.tenant_id === undefined || value.tenant_id === null || value.tenant_id === '') {
+    return currentTenantId === DEFAULT_TENANT_ID;
+  }
+  return resolveTenantId(value.tenant_id) === currentTenantId;
+}
+
+async function getCachedCompanyInfo(options = {}) {
+  const tenantId = resolveTenantId(options.tenantId);
+  if (tenantId !== DEFAULT_TENANT_ID && !companyInfoAuth(tenantId)) return null;
+
   const rows = await supabase.select('bot_settings', {
     select: 'key,value,updated_at',
     key: supabase.eq(COMPANY_INFO_CACHE_KEY),
@@ -420,8 +466,10 @@ async function getCachedCompanyInfo() {
   }).catch(() => []);
   const row = rows[0] || null;
   if (!row || !row.value || typeof row.value !== 'object') return null;
+  if (!isCachedCompanyInfoValid(row.value, tenantId)) return null;
   return {
     ...row.value,
+    tenant_id: resolveTenantId(row.value.tenant_id),
     cached_at: row.value.cached_at || row.updated_at || null,
     from_cache: true
   };
@@ -803,7 +851,7 @@ async function fetchCompanyInfo(options = {}) {
   try {
     payload = await requestCompanyInfo(url, auth);
   } catch (error) {
-    if (url === baseUrl || !shouldRetryUnscoped(error)) throw error;
+    if (tenantId !== DEFAULT_TENANT_ID || url === baseUrl || !shouldRetryUnscoped(error)) throw error;
     payload = await requestCompanyInfo(baseUrl, auth);
     source = baseUrl;
   }
@@ -836,9 +884,11 @@ async function syncCompanyInfo(options = {}) {
   return fetchCompanyInfo({ ...options, persist: true });
 }
 
-function resolveCachedCompanyInfoCompanies(cache = null) {
-  const companies = Array.isArray(cache?.companies) ? cache.companies : [];
-  const groups = Array.isArray(cache?.groups) ? cache.groups : [];
+function resolveCachedCompanyInfoCompanies(cache = null, tenantId) {
+  if (!cache) return [];
+  if (!isCachedCompanyInfoValid(cache, resolveTenantId(tenantId))) return [];
+  const companies = Array.isArray(cache.companies) ? cache.companies : [];
+  const groups = Array.isArray(cache.groups) ? cache.groups : [];
   if (!companies.length) return [];
   if (!groups.length) return companies;
   const hasEmbeddedGroups = companies.some(company => Array.isArray(company.groups) && company.groups.length);
@@ -848,6 +898,9 @@ function resolveCachedCompanyInfoCompanies(cache = null) {
 
 module.exports = {
   COMPANY_INFO_CACHE_KEY,
+  COMPANY_INFO_CACHE_SCHEMA_VERSION,
+  emptyCompanyInfoResult,
+  isCachedCompanyInfoValid,
   fetchCompanyInfo,
   syncCompanyInfo,
   getCachedCompanyInfo,

@@ -191,11 +191,7 @@ alter table public.bot_settings drop constraint if exists bot_settings_pkey;
 alter table public.bot_settings add primary key (tenant_id, key);
 alter table public.bot_settings drop constraint if exists bot_settings_key_key;
 
-insert into public.bot_settings (tenant_id, key, value)
-select 2, key, value
-from public.bot_settings
-where tenant_id = 1
-on conflict (tenant_id, key) do nothing;
+-- Tenant 2: boshqa tenantdan nusxa emas — 012_tenant_bootstrap.sql da bootstrap_tenant(2) ishlating.
 
 insert into public.admins (username, password_hash, full_name, role, is_active, tenant_id)
 values (

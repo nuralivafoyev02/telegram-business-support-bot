@@ -1,7 +1,7 @@
 'use strict';
 
 const { optionalEnv } = require('./env');
-const { getFileWithToken, downloadFileWithToken } = require('./telegram');
+const { getFileWithToken, downloadFileWithToken, resolveBotToken } = require('./telegram');
 const { bestPhotoSize } = require('./message-media');
 const {
   buildStoragePath,
@@ -39,7 +39,7 @@ function resolveSourceBotToken(sourceBot = '') {
       if (token) return token;
     }
   }
-  return optionalEnv(DEFAULT_TOKEN_ENV, '');
+  return resolveBotToken();
 }
 
 function collectRelayTokens(sourceBot = '') {
@@ -49,6 +49,11 @@ function collectRelayTokens(sourceBot = '') {
   if (primary) {
     tokens.push(primary);
     seen.add(primary);
+  }
+  const tenantToken = resolveBotToken();
+  if (tenantToken && !seen.has(tenantToken)) {
+    tokens.push(tenantToken);
+    seen.add(tenantToken);
   }
   for (const envName of ['BOT_TOKEN', 'BOT_A_TOKEN']) {
     const token = optionalEnv(envName, '').trim();

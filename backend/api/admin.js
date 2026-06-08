@@ -9,8 +9,8 @@ const { streamStorageObject, uploadStorageObject, buildStoragePath, contentTypeF
 const TELEGRAM_FILE_PROXY_MAX_BYTES = 20 * 1024 * 1024;
 const { allowCors, sendJson, readBody, getQuery } = require('../lib/http');
 const { login, requireAdmin, hashPassword } = require('../lib/auth');
-const { runWithTenant, normalizeTenantId, getCurrentTenantId, shouldAttachTenantQuery } = require('../lib/tenant');
-const { sendMessage, sendBusinessMessage, getWebhookInfo, setWebhook, deleteWebhook, getUpdates, getFile, getFileWithToken, getUserProfilePhotos, downloadFile, downloadFileWithToken, tgUserName, escapeHtml } = require('../lib/telegram');
+const { DEFAULT_TENANT_ID, runWithTenant, normalizeTenantId, getCurrentTenantId, shouldAttachTenantQuery } = require('../lib/tenant');
+const { sendMessage, sendBusinessMessage, getWebhookInfo, setWebhook, deleteWebhook, getUpdates, getFile, getFileWithToken, getUserProfilePhotos, downloadFile, downloadFileWithToken, resolveBotToken, tgUserName, escapeHtml } = require('../lib/telegram');
 const { optionalEnv } = require('../lib/env');
 const { normalizeSettings, clearBotSettingsCache } = require('../lib/bot-settings');
 const { normalizeAiIntegration, mergeAiIntegration, sanitizeAiIntegration, isAiIntegrationReady, isAiIntegrationConfigured, aiIntegrationSignature } = require('../lib/ai-config');
@@ -28,7 +28,7 @@ const {
 } = require('../lib/clickup');
 const { extractTextFromUpload } = require('../lib/document-text');
 const { resolveMainStatsChatId, sendMainStatsReport } = require('../lib/report');
-const { syncCompanyInfo, getCachedCompanyInfo, resolveCachedCompanyInfoCompanies } = require('../lib/company-info');
+const { syncCompanyInfo, getCachedCompanyInfo, resolveCachedCompanyInfoCompanies, emptyCompanyInfoResult } = require('../lib/company-info');
 const { notifyOperationalLog, notifyOperationalError } = require('../lib/log-notifier');
 const stats = require('../lib/stats');
 const botHandler = require('./bot');
@@ -3743,8 +3743,13 @@ async function listCompanies(query) {
 }
 
 async function getCompanyInfo(query = {}) {
+  const tenantId = normalizeTenantId(getCurrentTenantId());
   const cachedOnly = ['1', 'true', 'yes'].includes(String(query.cached || query.cache || '').toLowerCase());
-  if (cachedOnly) {
+  if (tenantId !== DEFAULT_TENANT_ID) {
+    const cached = await getCachedCompanyInfo();
+    if (cached) return cached;
+    if (cachedOnly) return emptyCompanyInfoResult(tenantId);
+  } else if (cachedOnly) {
     const cached = await getCachedCompanyInfo();
     if (cached) return cached;
   }
@@ -3757,12 +3762,15 @@ async function getCompanyInfo(query = {}) {
       action: 'companyInfo'
     }).catch(logError => console.error('[admin:company-info:notify-error]', logError));
     const cached = await getCachedCompanyInfo();
-    if (!cached) throw error;
-    return {
-      ...cached,
-      stale: true,
-      last_error: error.message
-    };
+    if (cached) {
+      return {
+        ...cached,
+        stale: true,
+        last_error: error.message
+      };
+    }
+    if (tenantId !== DEFAULT_TENANT_ID) return emptyCompanyInfoResult(tenantId);
+    throw error;
   }
 }
 
@@ -4618,10 +4626,12 @@ function formatTelegramFileSizeMb(bytes = 0) {
 
 function collectTelegramFileTokens() {
   const tokens = [];
+  const primary = resolveBotToken().trim();
   const main = optionalEnv('BOT_TOKEN', '').trim();
   const botA = optionalEnv('BOT_A_TOKEN', '').trim();
-  if (main) tokens.push(main);
-  if (botA && botA !== main) tokens.push(botA);
+  if (primary) tokens.push(primary);
+  if (main && main !== primary) tokens.push(main);
+  if (botA && !tokens.includes(botA)) tokens.push(botA);
   return tokens.length ? tokens : [''];
 }
 

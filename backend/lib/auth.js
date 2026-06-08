@@ -51,6 +51,8 @@ function verifyToken(token) {
   }
   const decoded = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
   if (decoded.exp < Math.floor(Date.now() / 1000)) throw new Error('Token expired');
+  if (!decoded.tenant_id) throw new Error('Token expired');
+  decoded.tenant_id = normalizeTenantId(decoded.tenant_id);
   return decoded;
 }
 

@@ -1,22 +1,38 @@
 'use strict';
 
-const { requiredEnv } = require('./env');
+const { optionalEnv, requiredEnv } = require('./env');
+const { getCurrentTenantId, normalizeTenantId, DEFAULT_TENANT_ID } = require('./tenant');
 
-function resolveToken(token) {
+function tenantBotTokenEnvSuffix(tenantId) {
+  const id = normalizeTenantId(tenantId ?? getCurrentTenantId() ?? DEFAULT_TENANT_ID);
+  return id === DEFAULT_TENANT_ID ? '' : `_TENANT_${id}`;
+}
+
+function resolveBotToken(tenantId) {
+  const suffix = tenantBotTokenEnvSuffix(tenantId);
+  if (suffix) {
+    const tenantToken = optionalEnv(`BOT_TOKEN${suffix}`, '').trim();
+    if (tenantToken) return tenantToken;
+  }
+  return requiredEnv('BOT_TOKEN');
+}
+
+function resolveToken(token, tenantId) {
   const candidate = typeof token === 'string' ? token.trim() : '';
-  return candidate || requiredEnv('BOT_TOKEN');
+  if (candidate) return candidate;
+  return resolveBotToken(tenantId);
 }
 
-function apiUrl(method, token) {
-  return `https://api.telegram.org/bot${resolveToken(token)}/${method}`;
+function apiUrl(method, token, tenantId) {
+  return `https://api.telegram.org/bot${resolveToken(token, tenantId)}/${method}`;
 }
 
-function fileApiUrl(filePath, token) {
-  return `https://api.telegram.org/file/bot${resolveToken(token)}/${filePath}`;
+function fileApiUrl(filePath, token, tenantId) {
+  return `https://api.telegram.org/file/bot${resolveToken(token, tenantId)}/${filePath}`;
 }
 
-async function telegram(method, payload = {}, { token } = {}) {
-  const response = await fetch(apiUrl(method, token), {
+async function telegram(method, payload = {}, { token, tenantId } = {}) {
+  const response = await fetch(apiUrl(method, token, tenantId), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
@@ -140,8 +156,8 @@ async function getUserProfilePhotos(userId, options = {}) {
   });
 }
 
-async function downloadFile(filePath) {
-  const response = await fetch(fileApiUrl(filePath));
+async function downloadFile(filePath, tenantId) {
+  const response = await fetch(fileApiUrl(filePath, undefined, tenantId));
   if (!response.ok) {
     throw new Error(`Telegram file download: ${response.statusText || response.status}`);
   }
@@ -169,6 +185,7 @@ function escapeHtml(str = '') {
 }
 
 module.exports = {
+  resolveBotToken,
   telegram,
   sendMessage,
   deleteMessage,
