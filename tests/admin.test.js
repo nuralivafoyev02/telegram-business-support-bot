@@ -2870,18 +2870,27 @@ async function testReplyRequestSendsMessageAndClosesTicket() {
   const inserts = [];
   const patches = [];
   const telegramCalls = [];
+  let supportRequestReads = 0;
+  const supportRequestBase = {
+    id: 'request-1',
+    source_type: 'group',
+    chat_id: -1001,
+    customer_name: 'Mijoz',
+    initial_message_id: 55,
+    initial_text: 'Lift ishlamayapti',
+    business_connection_id: null,
+    notification_chat_id: -9999,
+    notification_message_id: 321,
+    open_source: 'ai'
+  };
 
   supabase.select = async (table) => {
     if (table === 'support_requests') {
+      supportRequestReads += 1;
       return [{
-        id: 'request-1',
-        source_type: 'group',
-        chat_id: -1001,
-        customer_name: 'Mijoz',
-        initial_message_id: 55,
-        initial_text: 'Lift ishlamayapti',
-        status: 'open',
-        business_connection_id: null
+        ...supportRequestBase,
+        status: supportRequestReads === 1 ? 'open' : 'closed',
+        closed_by_name: supportRequestReads === 1 ? null : 'Admin'
       }];
     }
     if (table === 'tg_chats') return [{ chat_id: -1001, title: 'Mijoz guruhi', source_type: 'group', business_connection_id: null }];
@@ -2922,6 +2931,14 @@ async function testReplyRequestSendsMessageAndClosesTicket() {
 
     assert.strictEqual(inserts.some(item => item.table === 'messages' && item.rows[0].raw.source === 'admin_request_reply'), true);
     assert.strictEqual(inserts.some(item => item.table === 'request_events' && item.rows[0].event_type === 'closed'), true);
+
+    const ticketRefreshCall = telegramCalls.find(call => /editMessageText$/.test(call.url));
+    assert.ok(ticketRefreshCall, 'ticket notification should be refreshed');
+    assert.strictEqual(ticketRefreshCall.body.chat_id, -9999);
+    assert.strictEqual(ticketRefreshCall.body.message_id, 321);
+    assert.match(ticketRefreshCall.body.text, /Javob berildi/);
+    assert.match(ticketRefreshCall.body.text, /Lift qayta ishga tushirildi/);
+    assert.deepStrictEqual(ticketRefreshCall.body.reply_markup, { inline_keyboard: [] });
   } finally {
     supabase.select = originalSelect;
     supabase.insert = originalInsert;

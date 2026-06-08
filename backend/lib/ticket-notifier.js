@@ -327,16 +327,21 @@ function enrichRequestForNotification(request = {}, { openSource = '', companyId
   };
 }
 
-async function buildNotificationText({ request, chat, company, openedByEmployee, assignedEmployee }) {
+function closedStatusLabel(request = {}, options = {}) {
+  if (request.status === 'cancelled') return '❌ So‘rov emas';
+  if (request.status !== 'closed') return '🚨 Yangi Ticket';
+  if (options.closeSource === 'admin_panel') return '✅ Javob berildi';
+  return '🔒 Yopilgan';
+}
+
+async function buildNotificationText({ request, chat, company, openedByEmployee, assignedEmployee, options = {} }) {
   const companySupport = employeeLabel(company.supportEmployee, '—');
   const markedBy = employeeLabel(openedByEmployee, '—');
   const assigned = employeeLabel(assignedEmployee, '—');
   const link = telegramMessageLink(chat, request.initial_message_id);
-  const statusLabel = request.status === 'closed'
-    ? '🔒 Yopilgan'
-    : request.status === 'cancelled'
-      ? '❌ So‘rov emas'
-      : '🚨 Yangi Ticket';
+  const statusLabel = closedStatusLabel(request, options);
+  const closedByName = String(options.closedByName || request.closed_by_name || '').trim();
+  const solutionText = String(options.solutionText || '').trim();
   const lines = [
     `<b>${statusLabel}</b>`,
     '',
@@ -345,6 +350,12 @@ async function buildNotificationText({ request, chat, company, openedByEmployee,
     openedByEmployee ? `👁 <b>Belgilagan:</b> ${escapeHtml(markedBy)}` : null,
     assignedEmployee && assignedEmployee.id !== openedByEmployee?.id
       ? `✅ <b>Mas'ul (ishlayapti):</b> ${escapeHtml(assigned)}`
+      : null,
+    request.status === 'closed' && options.closeSource === 'admin_panel' && closedByName
+      ? `💬 <b>Javob berdi:</b> ${escapeHtml(closedByName)}`
+      : null,
+    request.status === 'closed' && options.closeSource === 'admin_panel' && solutionText
+      ? `📝 <b>Javob:</b> ${escapeHtml(truncateText(solutionText))}`
       : null,
     `📩 <b>Murojaat:</b> ${escapeHtml(truncateText(request.initial_text))}`,
     link ? `🔗 <a href="${escapeHtml(link)}">Xabarni Telegramda ochish</a>` : null,
@@ -376,17 +387,40 @@ async function saveTicketNotification({ requestId, chatId, messageId }) {
   }
 }
 
-async function refreshTicketNotificationMessage(request = {}) {
-  const chatId = request.notification_chat_id;
-  const messageId = request.notification_message_id;
-  if (!chatId || !messageId) return;
+async function loadTicketNotificationTarget(request = {}) {
+  const directChatId = request.notification_chat_id;
+  const directMessageId = request.notification_message_id;
+  if (directChatId && directMessageId) {
+    return { chatId: directChatId, messageId: directMessageId };
+  }
+  if (!request.id) return null;
+  const rows = await supabase.select('ticket_notifications', {
+    select: 'chat_id,message_id',
+    request_id: supabase.eq(request.id),
+    limit: '1'
+  }).catch(() => []);
+  const row = rows[0];
+  if (!row?.chat_id || !row?.message_id) return null;
+  return { chatId: row.chat_id, messageId: row.message_id };
+}
+
+async function refreshTicketNotificationMessage(request = {}, options = {}) {
+  const target = await loadTicketNotificationTarget(request);
+  if (!target) return;
   const chat = await loadChatRow(request.chat_id);
   const company = await loadNotificationCompany(request, chat || { id: request.chat_id });
   const openedByEmployee = await loadEmployeeById(request.opened_by_employee_id);
   const assignedEmployee = await loadEmployeeById(request.assigned_to_employee_id);
-  const text = await buildNotificationText({ request, chat: chat || { id: request.chat_id }, company, openedByEmployee, assignedEmployee });
+  const text = await buildNotificationText({
+    request,
+    chat: chat || { id: request.chat_id },
+    company,
+    openedByEmployee,
+    assignedEmployee,
+    options
+  });
   const keyboard = request.status === 'open' ? buildTicketKeyboard(request, 'main') : { inline_keyboard: [] };
-  await editMessageText(chatId, messageId, text, { reply_markup: keyboard, parse_mode: 'HTML' }).catch(error => {
+  await editMessageText(target.chatId, target.messageId, text, { reply_markup: keyboard, parse_mode: 'HTML' }).catch(error => {
     console.warn('[ticket-notifier:refresh]', { request_id: request.id, error: error.message });
   });
 }

@@ -31,6 +31,7 @@ const { resolveMainStatsChatId, sendMainStatsReport } = require('../lib/report')
 const { syncCompanyInfo, getCachedCompanyInfo, resolveCachedCompanyInfoCompanies, emptyCompanyInfoResult } = require('../lib/company-info');
 const { notifyOperationalLog, notifyOperationalError } = require('../lib/log-notifier');
 const stats = require('../lib/stats');
+const { refreshTicketNotificationMessage, loadRequestById } = require('../lib/ticket-notifier');
 const botHandler = require('./bot');
 
 const TELEGRAM_ALLOWED_UPDATES = [
@@ -5177,6 +5178,15 @@ async function replyToRequest(body, currentAdmin = {}) {
     }], { prefer: 'return=minimal' }).catch(() => null)
   ]);
 
+  const closedRequest = await loadRequestById(request.id)
+    || closedRows[0]
+    || { ...request, status: 'closed', closed_at: closedAt, closed_by_name: actorName };
+  await refreshTicketNotificationMessage(closedRequest, {
+    closeSource: 'admin_panel',
+    solutionText: text,
+    closedByName: actorName
+  }).catch(() => null);
+
   return {
     sent: true,
     request_id: request.id,
@@ -5184,7 +5194,7 @@ async function replyToRequest(body, currentAdmin = {}) {
     business_connection_id: usedBusinessConnectionId || null,
     telegram: telegramResult,
     fallback_from_business: !!delivery.fallback_from_business,
-    request: closedRows[0] || { ...request, status: 'closed', closed_at: closedAt, closed_by_name: actorName }
+    request: closedRequest
   };
 }
 
