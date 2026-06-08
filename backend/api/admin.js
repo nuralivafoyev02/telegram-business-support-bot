@@ -4919,10 +4919,31 @@ async function saveTelegramUpdateOffset(offset, details = {}) {
   }], { upsert: true, onConflict: 'key', prefer: 'return=minimal' }).catch(() => null);
 }
 
+function isTelegramWebhookActive(info = {}) {
+  return !!String(info.url || '').trim();
+}
+
+function emptyTelegramSyncResult(currentOffset, details = {}) {
+  return {
+    fetched: 0,
+    processed: 0,
+    offset: currentOffset,
+    webhook_deleted: false,
+    used_saved_offset: details.used_saved_offset === true,
+    acknowledged: false,
+    handled: {},
+    errors: [],
+    ...details
+  };
+}
+
 async function syncTelegramUpdates(body = {}) {
   const useSavedOffset = body.use_saved_offset === true && body.reset_offset !== true && body.ignore_saved_offset !== true;
   const currentOffset = useSavedOffset ? await getTelegramUpdateOffset() : 0;
   const limit = clampInt(body.limit, 100, 1, 100);
+  const mode = String(body.mode || (body.auto ? 'auto' : 'manual')).toLowerCase();
+  const allowWebhookDelete = body.allow_webhook_delete === true;
+  const preserveWebhook = mode === 'auto' || !allowWebhookDelete;
   const payload = {
     limit,
     timeout: 0,
@@ -4930,12 +4951,31 @@ async function syncTelegramUpdates(body = {}) {
   };
   if (currentOffset) payload.offset = currentOffset;
 
+  if (preserveWebhook) {
+    const webhookInfo = await getWebhookInfo().catch(() => ({}));
+    if (isTelegramWebhookActive(webhookInfo)) {
+      return emptyTelegramSyncResult(currentOffset, {
+        used_saved_offset: useSavedOffset,
+        webhook_skipped: true,
+        mode
+      });
+    }
+  }
+
   let webhookDeleted = false;
   let updates;
   try {
     updates = await getUpdates(payload);
   } catch (error) {
     if (!isGetUpdatesWebhookConflict(error)) throw error;
+    if (preserveWebhook) {
+      return emptyTelegramSyncResult(currentOffset, {
+        used_saved_offset: useSavedOffset,
+        webhook_skipped: true,
+        webhook_conflict: true,
+        mode
+      });
+    }
     await deleteWebhook({ drop_pending_updates: false });
     webhookDeleted = true;
     updates = await getUpdates(payload);

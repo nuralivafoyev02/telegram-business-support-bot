@@ -2739,7 +2739,7 @@ async function testSyncTelegramUpdatesDeletesActiveWebhookThenProcessesUpdates()
   try {
     const result = await callAdmin('syncTelegramUpdates', {
       method: 'POST',
-      body: { limit: 10 }
+      body: { limit: 10, mode: 'manual', allow_webhook_delete: true }
     });
     assert.strictEqual(result.status, 200);
     assert.strictEqual(result.payload.data.webhook_deleted, true);

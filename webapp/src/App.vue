@@ -7598,6 +7598,10 @@ async function runTelegramAutoSync() {
   telegramAutoSync.value = { ...telegramAutoSync.value, enabled: true, running: true, error: '' };
   try {
     const result = await api.syncTelegramUpdates({ limit: 100, mode: 'auto', ignore_saved_offset: true });
+    if (result.webhook_skipped) {
+      stopTelegramAutoSync();
+      return;
+    }
     telegramAutoSync.value = {
       enabled: true,
       running: false,
@@ -7654,8 +7658,12 @@ async function checkTelegramWebhook(show = true) {
 async function reconnectTelegramWebhook() {
   startLoading('webhookConnect');
   try {
+    stopTelegramAutoSync();
     webhookStatus.value = await api.setTelegramWebhook({ app_url: window.location.origin });
-    showToast('Telegram ulanishi yangilandi. Endi Telegramda /register yuboring.');
+    stopTelegramAutoSync();
+    const info = webhookStatus.value?.webhook || webhookStatus.value || {};
+    const connected = !!String(info.url || '').trim();
+    showToast(connected ? 'Telegram webhook ulandi va saqlanadi.' : 'Telegram ulanishi yangilandi, lekin manzil hali ko‘rinmayapti.');
   } catch (error) {
     showToast(error.message);
   } finally {
@@ -7664,9 +7672,19 @@ async function reconnectTelegramWebhook() {
 }
 
 async function syncTelegramUpdates() {
+  const info = currentWebhookInfo();
+  if (String(info?.url || '').trim()) {
+    const confirmed = window.confirm('Webhooksiz sinxronlash faol webhookni o‘chiradi. Davom etasizmi?');
+    if (!confirmed) return;
+  }
   startLoading('webhookSync');
   try {
-    const result = await api.syncTelegramUpdates({ limit: 100, mode: 'manual', ignore_saved_offset: true });
+    const result = await api.syncTelegramUpdates({
+      limit: 100,
+      mode: 'manual',
+      ignore_saved_offset: true,
+      allow_webhook_delete: true
+    });
     await checkTelegramWebhook(false);
     await refresh();
     const prefix = result.webhook_deleted ? 'Webhook o‘chirildi, ' : '';
