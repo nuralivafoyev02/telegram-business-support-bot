@@ -164,11 +164,10 @@ async function resolvePrivateChatParticipants(message = {}, knownEmployee = null
   return { customerTgId: fromId, counterpartTgId };
 }
 
-async function canCreateTicketFromPrivateMessage({ message, sourceType, knownEmployee = null } = {}) {
+async function canCreateTicketFromPrivateMessage({ sourceType } = {}) {
   if (isGroupSourceType(sourceType)) return true;
-  if (!isPrivateLikeSourceType(sourceType)) return true;
-  const company = await resolvePrivateTicketCompanyContext(message, knownEmployee);
-  return Boolean(company?.companyId);
+  if (isPrivateLikeSourceType(sourceType)) return false;
+  return true;
 }
 
 module.exports = {
