@@ -2429,6 +2429,7 @@ const employees = ref([]);
 const clickupTasks = ref([]);
 const companyInfo = ref({ summary: {}, companies: [], fetched_at: '', source: '' });
 const requestRows = ref([]);
+const periodOpenTicketRows = ref([]);
 const ticketList = ref({ rows: [], active: 'all', mode: 'all', source: 'all', title: 'Ticketlar ro‘yxati' });
 const ticketListSearch = ref('');
 const ticketListSupport = ref('all');
@@ -2471,6 +2472,7 @@ const mediaLoading = ref({});
 const mediaErrors = ref({});
 let mediaLoadToken = 0;
 let dashboardLoadToken = 0;
+let periodOpenTicketsLoadToken = 0;
 let employeeProfileLoadToken = 0;
 let employeeProfileChatToken = 0;
 const settingsRaw = ref({ settings: [], admins: [] });
@@ -2976,6 +2978,10 @@ function normalizeDateKey(value = '') {
 }
 
 const filteredOpenRequests = computed(() => (dashboard.openRequests || []).filter(request => isInSelectedPeriodDate(request.created_at)));
+const rankingOpenRequests = computed(() => {
+  if (periodOpenTicketRows.value.length) return periodOpenTicketRows.value;
+  return filteredOpenRequests.value || [];
+});
 
 const managerOpenRequests = computed(() => (filteredOpenRequests.value || [])
   .slice()
@@ -4552,7 +4558,7 @@ const rankingOpenRequestsTotal = computed(() => topSupportCards.value.reduce(
   0
 ));
 
-const rankingOverdueOpenRequestsTotal = computed(() => countAssignedOverdueOpenRequests(filteredOpenRequests.value || []));
+const rankingOverdueOpenRequestsTotal = computed(() => countAssignedOverdueOpenRequests(rankingOpenRequests.value || []));
 
 watch(topSupportCards, rows => {
   rows.slice(0, 20).forEach(row => loadEmployeeAvatar(row));
@@ -5604,6 +5610,22 @@ async function loadDashboard() {
   dashboard.analytics = nextAnalytics;
 }
 
+async function loadPeriodOpenTickets() {
+  const loadToken = ++periodOpenTicketsLoadToken;
+  try {
+    const rows = await api.requests({
+      ...dashboardPeriodQuery(),
+      limit: 5000
+    });
+    if (loadToken !== periodOpenTicketsLoadToken) return;
+    periodOpenTicketRows.value = (Array.isArray(rows) ? rows : [])
+      .filter(request => isOpenTicketStatus(request.status) && isInSelectedPeriodDate(request.created_at));
+  } catch {
+    if (loadToken !== periodOpenTicketsLoadToken) return;
+    periodOpenTicketRows.value = [];
+  }
+}
+
 async function loadCompanyInfo(query = {}) {
   const data = await api.companyInfo(query);
   companyInfo.value = data;
@@ -5627,7 +5649,7 @@ async function loadEmployeesOptional() {
 }
 
 async function loadSupportPerformance() {
-  const secondaryLoads = [loadDashboard()];
+  const secondaryLoads = [loadDashboard(), loadPeriodOpenTickets()];
   if (!companyInfo.value?.companies?.length) secondaryLoads.push(loadCompanyInfoOptional({ cached: true }));
   if (!employees.value.length) secondaryLoads.push(loadEmployeesOptional());
   await Promise.all(secondaryLoads);
@@ -6862,11 +6884,41 @@ function resolveCompanySupportMappingForRequest(request = {}, employeeMappings =
   return mapping;
 }
 
-function findEmployeeMappingForOpenRequest(request = {}, employeeMappings = [], groupSupportIndex = null) {
-  const assignedId = String(request.assigned_to_employee_id || '').trim();
-  if (assignedId) {
-    const byId = employeeMappings.find(mapping => mapping.id === assignedId);
-    if (byId) return byId;
+function buildOpenRequestEmployeeMapping(employee, employeeMappings = []) {
+  if (!employee) return null;
+  const id = String(employee.id || employee.employee_id || '').trim();
+  const existing = employeeMappings.find(mapping => mapping.id === id);
+  if (existing) return existing;
+  return {
+    employee,
+    key: employeeSummaryKey(employee),
+    username: normalizeSupportUsername(employee.username),
+    id,
+    tg_user_id: String(employee.tg_user_id || '').trim(),
+    full_name: String(employee.full_name || '').trim().toLowerCase(),
+    companyIds: new Set(),
+    companyNames: new Set(),
+    chatIds: new Set()
+  };
+}
+
+function resolveOpenRequestEmployeeMapping(request = {}, employeeMappings = []) {
+  const responsibleId = String(request.responsible_employee_id || '').trim();
+  if (responsibleId) {
+    const byResponsibleId = employeeMappings.find(mapping => mapping.id === responsibleId);
+    if (byResponsibleId) return byResponsibleId;
+    const employee = employees.value.find(row => !isAdminLikeEmployee(row) && String(row.id || row.employee_id || '').trim() === responsibleId);
+    const mapped = buildOpenRequestEmployeeMapping(employee, employeeMappings);
+    if (mapped) return mapped;
+  }
+
+  const responsibleUsername = normalizeSupportUsername(request.responsible_employee_username || request.support_username || '');
+  if (responsibleUsername) {
+    const byResponsibleUser = employeeMappings.find(mapping => supportIdentitiesMatch(mapping.username, responsibleUsername));
+    if (byResponsibleUser) return byResponsibleUser;
+    const employee = employees.value.find(row => !isAdminLikeEmployee(row) && supportIdentitiesMatch(row.username, responsibleUsername));
+    const mapped = buildOpenRequestEmployeeMapping(employee, employeeMappings);
+    if (mapped) return mapped;
   }
 
   const responsibleName = String(request.responsible_employee_name || request.support_name || '').trim();
@@ -6876,14 +6928,16 @@ function findEmployeeMappingForOpenRequest(request = {}, employeeMappings = [], 
       || supportIdentitiesMatch(mapping.username, responsibleName)
       || String(mapping.employee?.full_name || '').trim() === responsibleName);
     if (byResponsibleName) return byResponsibleName;
-    return null;
+    const employee = employees.value.find(row => !isAdminLikeEmployee(row)
+      && (supportIdentitiesMatch(row.full_name, responsibleName) || supportIdentitiesMatch(row.username, responsibleName)));
+    const mapped = buildOpenRequestEmployeeMapping(employee, employeeMappings);
+    if (mapped) return mapped;
   }
 
-  const responsibleId = String(request.responsible_employee_id || '').trim();
-  if (responsibleId) {
-    const byResponsible = employeeMappings.find(mapping => mapping.id === responsibleId);
-    if (byResponsible) return byResponsible;
-    return null;
+  const assignedId = String(request.assigned_to_employee_id || '').trim();
+  if (assignedId) {
+    const byAssigned = employeeMappings.find(mapping => mapping.id === assignedId);
+    if (byAssigned) return byAssigned;
   }
 
   const openedId = String(request.opened_by_employee_id || '').trim();
@@ -6892,12 +6946,12 @@ function findEmployeeMappingForOpenRequest(request = {}, employeeMappings = [], 
     if (byOpened) return byOpened;
   }
 
-  const responsibleUsername = normalizeSupportUsername(request.responsible_employee_username || request.support_username || '');
-  if (responsibleUsername) {
-    const byResponsibleUser = employeeMappings.find(mapping => supportIdentitiesMatch(mapping.username, responsibleUsername));
-    if (byResponsibleUser) return byResponsibleUser;
-    return null;
-  }
+  return null;
+}
+
+function findEmployeeMappingForOpenRequest(request = {}, employeeMappings = [], groupSupportIndex = null) {
+  const direct = resolveOpenRequestEmployeeMapping(request, employeeMappings);
+  if (direct) return direct;
 
   const chatId = String(request.chat_id || '').trim();
   const privateIndex = buildPrivateChatSupportIndex();
@@ -6973,7 +7027,16 @@ function countAssignedOverdueOpenRequests(requests = []) {
 }
 
 function classifyOpenRequestAssignment(request = {}, employeeMappings = [], groupSupportIndex = null) {
-  const matchedEmp = findEmployeeMappingForOpenRequest(request, employeeMappings, groupSupportIndex);
+  const matchedEmp = resolveOpenRequestEmployeeMapping(request, employeeMappings)
+    || findEmployeeMappingForOpenRequest(request, employeeMappings, groupSupportIndex);
+  if (!matchedEmp || !isSupportEmployee(matchedEmp.employee) || isManagerEmployee(matchedEmp.employee)) {
+    return { assigned: false, mapping: null };
+  }
+  return { assigned: true, mapping: matchedEmp };
+}
+
+function classifyRankingOpenRequestAssignment(request = {}, employeeMappings = []) {
+  const matchedEmp = resolveOpenRequestEmployeeMapping(request, employeeMappings);
   if (!matchedEmp || !isSupportEmployee(matchedEmp.employee) || isManagerEmployee(matchedEmp.employee)) {
     return { assigned: false, mapping: null };
   }
@@ -6983,7 +7046,6 @@ function classifyOpenRequestAssignment(request = {}, employeeMappings = [], grou
 function employeeOpenRequestSummaryMap() {
   const map = new Map();
   const employeeMappings = buildEmployeeOpenRequestMappings();
-  const groupSupportIndex = buildCompanyGroupSupportIndex();
   const unassignedSummary = {
     key: 'unassigned:open',
     employee_id: '',
@@ -6996,8 +7058,8 @@ function employeeOpenRequestSummaryMap() {
     chat_keys: new Set()
   };
 
-  (filteredOpenRequests.value || []).forEach(request => {
-    const { assigned, mapping } = classifyOpenRequestAssignment(request, employeeMappings, groupSupportIndex);
+  (rankingOpenRequests.value || []).forEach(request => {
+    const { assigned, mapping } = classifyRankingOpenRequestAssignment(request, employeeMappings);
     if (!assigned) {
       unassignedSummary.open_requests += 1;
       if (request.chat_id) unassignedSummary.chat_keys.add(String(request.chat_id));
@@ -7635,7 +7697,10 @@ async function sendInlineRequestReply(request = {}) {
 }
 
 async function refreshAfterRequestReply(chatId) {
-  await loadDashboard();
+  await Promise.all([
+    loadDashboard(),
+    activeTab.value === 'stats' ? loadPeriodOpenTickets() : Promise.resolve()
+  ]);
   if (activeTab.value === 'groups') groups.value = await api.groups();
   if (activeTab.value === 'privates') privates.value = await api.privates();
   if (activeTab.value === 'employees') employees.value = await api.employees();

@@ -2386,8 +2386,7 @@ function resolveDisplayedRequestResponsibleEmployee(request = {}, context = {}) 
   } = context;
 
   return resolveRequestResponsibleEmployeeFromEvents(request, events, employeeMaps)
-    || resolveRequestResponsibleEmployee(request, messages, employeeMaps, chatToEmployeeId, resolveOptions)
-    || resolveOpenRequestSupportEmployee(request, employeeMaps, resolveOptions);
+    || resolveRequestResponsibleEmployee(request, messages, employeeMaps, chatToEmployeeId, resolveOptions);
 }
 
 function enrichOpenRequests({
@@ -4191,14 +4190,27 @@ async function getEmployeeActivity(query = {}) {
     const chat = activityChatMap.get(key) || {};
     return employeeMaps.tgIds.has(key) && isPrivateLikeChat({ source_type: chat.source_type || 'private' });
   };
+  const openRequestEvents = openRequestCandidates.length
+    ? await selectPagedByChunks('request_events', {
+      select: 'id,request_id,chat_id,tg_message_id,event_type,actor_tg_id,actor_name,employee_id,text,raw,created_at',
+      order: supabase.order('created_at', false)
+    }, 'request_id', [...new Set(openRequestCandidates.map(request => request.id).filter(Boolean))], { maxRows: 20000 })
+    : [];
+  const openEventsByRequestId = new Map();
+  openRequestEvents.forEach(event => {
+    if (!event.request_id) return;
+    const list = openEventsByRequestId.get(event.request_id) || [];
+    list.push(event);
+    openEventsByRequestId.set(event.request_id, list);
+  });
   function requestResponsibleMatchesEmployee(request = {}) {
-    const responsible = resolveRequestResponsibleEmployee(
-      request,
-      messagesByConversation.get(conversationScopeKey(request)) || [],
+    const responsible = resolveDisplayedRequestResponsibleEmployee(request, {
       employeeMaps,
-      new Map(),
+      messages: messagesByConversation.get(conversationScopeKey(request)) || [],
+      events: openEventsByRequestId.get(request.id) || [],
+      chatToEmployeeId: new Map(),
       resolveOptions
-    );
+    });
     if (!responsible) return false;
     if (selectedEmployeeId && String(responsible.employee_id || '') === selectedEmployeeId) return true;
     return Boolean(selectedTgUserId && telegramIdKey(responsible.tg_user_id) === selectedTgUserId);
