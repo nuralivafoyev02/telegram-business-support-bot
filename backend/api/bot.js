@@ -557,6 +557,9 @@ async function handleDoneReaction(reaction = {}, settings = {}) {
     from: actor.id && !actor.type ? actor : {}
   };
   const result = await metrics.closeRequestByMessage({ message: closeMessage, targetMessageId: reaction.message_id, employee });
+  if (result.closed) {
+    await refreshTicketNotificationAfterGroupClose(result, closeMessage);
+  }
   const taskRows = await supabase.select('clickup_tasks', {
     select: 'id,clickup_task_id,status',
     chat_id: supabase.eq(chat.id),
@@ -2637,6 +2640,9 @@ async function processMessage(updateKind, message, options = {}) {
   if (classification === 'done') {
     const closer = employee || await metrics.ensureEmployee(from);
     const result = await metrics.closeLatestRequest({ message, employee: closer });
+    if (result.closed) {
+      await refreshTicketNotificationAfterGroupClose(result, message);
+    }
     await maybeReplyDone(message, result, settings);
     return;
   }

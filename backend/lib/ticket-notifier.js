@@ -411,21 +411,22 @@ async function loadTicketNotificationTarget(request = {}) {
 async function refreshTicketNotificationMessage(request = {}, options = {}) {
   const target = await loadTicketNotificationTarget(request);
   if (!target) return;
-  const chat = await loadChatRow(request.chat_id);
-  const company = await loadNotificationCompany(request, chat || { id: request.chat_id });
-  const openedByEmployee = await loadEmployeeById(request.opened_by_employee_id);
-  const assignedEmployee = await loadEmployeeById(request.assigned_to_employee_id);
+  const resolved = (request.id ? await loadRequestById(request.id) : null) || request;
+  const chat = await loadChatRow(resolved.chat_id);
+  const company = await loadNotificationCompany(resolved, chat || { id: resolved.chat_id });
+  const openedByEmployee = await loadEmployeeById(resolved.opened_by_employee_id);
+  const assignedEmployee = await loadEmployeeById(resolved.assigned_to_employee_id);
   const text = await buildNotificationText({
-    request,
-    chat: chat || { id: request.chat_id },
+    request: resolved,
+    chat: chat || { id: resolved.chat_id },
     company,
     openedByEmployee,
     assignedEmployee,
     options
   });
-  const keyboard = request.status === 'open' ? buildTicketKeyboard(request, 'main') : { inline_keyboard: [] };
+  const keyboard = resolved.status === 'open' ? buildTicketKeyboard(resolved, 'main') : { inline_keyboard: [] };
   await editMessageText(target.chatId, target.messageId, text, { reply_markup: keyboard, parse_mode: 'HTML' }).catch(error => {
-    console.warn('[ticket-notifier:refresh]', { request_id: request.id, error: error.message });
+    console.warn('[ticket-notifier:refresh]', { request_id: resolved.id, error: error.message });
   });
 }
 
