@@ -17,7 +17,9 @@ const metrics = require('../lib/metrics');
 const {
   parseTicketCallbackData,
   handleTicketCallback,
-  openSupportRequestAndNotify
+  openSupportRequestAndNotify,
+  refreshTicketNotificationMessage,
+  loadRequestById
 } = require('../lib/ticket-notifier');
 
 const START_RE = /^\/start(?:@\w+)?(?:\s|$)/i;
@@ -2149,12 +2151,25 @@ async function classifyIncomingMessage({ text, chat, sourceType, updateKind, mes
   return classification;
 }
 
+async function refreshTicketNotificationAfterGroupClose(result, message = {}) {
+  if (!result?.closed || !result?.request?.id) return;
+  const request = await loadRequestById(result.request.id) || result.request;
+  const solutionText = String(getMessageText(message) || '').trim();
+  const closedByName = String(request.closed_by_name || tgUserName(message.from || {})).trim();
+  await refreshTicketNotificationMessage(request, {
+    closeSource: 'group_reply',
+    solutionText,
+    closedByName
+  }).catch(() => null);
+}
+
 async function maybeCloseRequestFromReply(message, classification, employee, settings = null) {
   if (!message.reply_to_message || classification === 'done' || classification === 'command') return false;
   if (message.from && message.from.is_bot) return false;
 
   const result = await metrics.closeRequestByReply({ message, employee });
   if (!result.closed) return false;
+  await refreshTicketNotificationAfterGroupClose(result, message);
   await maybeReplyDone(message, result, settings);
   return true;
 }
@@ -2201,6 +2216,7 @@ async function maybeCloseRequestFromEmployeeAnswer(message, classification, empl
 
   const result = await metrics.closeLatestRequest({ message, employee, recordMissing: false });
   if (result.closed) {
+    await refreshTicketNotificationAfterGroupClose(result, message);
     await maybeReactToTicketClose(message, settings, { closedRequest: result.request });
   }
   return !!result.closed;

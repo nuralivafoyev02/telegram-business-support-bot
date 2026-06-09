@@ -327,10 +327,14 @@ function enrichRequestForNotification(request = {}, { openSource = '', companyId
   };
 }
 
+function isAnsweredCloseSource(closeSource = '') {
+  return closeSource === 'admin_panel' || closeSource === 'group_reply';
+}
+
 function closedStatusLabel(request = {}, options = {}) {
   if (request.status === 'cancelled') return '❌ So‘rov emas';
   if (request.status !== 'closed') return '🚨 Yangi Ticket';
-  if (options.closeSource === 'admin_panel') return '✅ Javob berildi';
+  if (isAnsweredCloseSource(options.closeSource)) return '✅ Javob berildi';
   return '🔒 Yopilgan';
 }
 
@@ -351,10 +355,10 @@ async function buildNotificationText({ request, chat, company, openedByEmployee,
     assignedEmployee && assignedEmployee.id !== openedByEmployee?.id
       ? `✅ <b>Mas'ul (ishlayapti):</b> ${escapeHtml(assigned)}`
       : null,
-    request.status === 'closed' && options.closeSource === 'admin_panel' && closedByName
+    request.status === 'closed' && isAnsweredCloseSource(options.closeSource) && closedByName
       ? `💬 <b>Javob berdi:</b> ${escapeHtml(closedByName)}`
       : null,
-    request.status === 'closed' && options.closeSource === 'admin_panel' && solutionText
+    request.status === 'closed' && isAnsweredCloseSource(options.closeSource) && solutionText
       ? `📝 <b>Javob:</b> ${escapeHtml(truncateText(solutionText))}`
       : null,
     `📩 <b>Murojaat:</b> ${escapeHtml(truncateText(request.initial_text))}`,
