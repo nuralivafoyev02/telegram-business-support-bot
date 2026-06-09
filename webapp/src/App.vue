@@ -2207,7 +2207,7 @@
                     <time>{{ fmtChatTime(message.created_at) }}</time>
                   </div>
                   <div v-else :id="chatMessageDomId(message)" class="chat-bubble"
-                    :class="{ 'ticket-message': !!message.request_text, 'chat-bubble-highlight': isChatMessageFocused(message) }">
+                    :class="{ 'ticket-message': !!message.request_text, 'ticket-message-closed': isClosedTicketMessage(message), 'chat-bubble-highlight': isChatMessageFocused(message) }">
                     <div class="chat-bubble-author">{{ message.actor_name || (message.direction === 'outbound' ? 'Xodim'
                       :
                       'Mijoz') }}</div>
@@ -5197,6 +5197,10 @@ function messageStatusBadgeClass(message = {}) {
 
 function showMessageStatus(message = {}) {
   return !!messageStatusLabel(message);
+}
+
+function isClosedTicketMessage(message = {}) {
+  return showRequestBadge(message) && messageRequestStatus(message) === 'closed';
 }
 
 function isChatMessageFocused(message = {}) {

@@ -1888,6 +1888,11 @@ tbody tr:hover {
   background: var(--chat-ticket-bg);
 }
 
+.chat-bubble.ticket-message.ticket-message-closed {
+  border-color: var(--success-line);
+  background: var(--success-bg-soft);
+}
+
 .timeline-list {
   display: grid;
   max-height: min(420px, 48vh);
