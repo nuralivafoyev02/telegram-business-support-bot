@@ -1092,6 +1092,19 @@ tbody tr:hover {
   width: min(1380px, calc(100vw - 28px));
 }
 
+.modal-xlarge {
+  width: min(1580px, calc(100vw - 24px));
+  max-height: calc(100dvh - 12px);
+}
+
+.modal-xlarge .modal-body {
+  max-height: calc(100dvh - 64px);
+}
+
+.modal-backdrop:has(.modal-xlarge) {
+  padding: 6px;
+}
+
 .modal-body {
   padding: 16px;
   min-height: 0;
@@ -4286,9 +4299,38 @@ tbody tr:hover {
 
 .chat-detail-layout {
   display: grid;
-  grid-template-columns: minmax(0, 0.88fr) minmax(420px, 1.22fr);
-  gap: 16px;
-  align-items: start;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: 14px;
+  align-items: stretch;
+  width: 100%;
+  max-width: 100%;
+}
+
+.chat-detail-layout .ticket-panel,
+.chat-detail-layout .dialog-panel {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.chat-detail-layout .ticket-panel .table-wrap {
+  width: 100%;
+  max-width: 100%;
+  overflow: auto;
+  max-height: min(74vh, 780px);
+}
+
+.chat-detail-layout .ticket-panel .table-wrap table {
+  min-width: 980px;
+}
+
+.chat-detail-layout .ticket-panel th:nth-child(4),
+.chat-detail-layout .ticket-panel td:nth-child(4) {
+  min-width: 112px;
+}
+
+.chat-detail-layout .ticket-panel .table-wrap::-webkit-scrollbar {
+  width: 6px;
+  height: 8px;
 }
 
 .metric-chat-workspace {
@@ -5516,7 +5558,7 @@ tbody tr.unassigned-ranking-row td:first-child {
 }
 
 .dialog-panel .telegram-thread {
-  max-height: min(72vh, 820px);
+  max-height: min(74vh, 780px);
   overflow: auto;
 }
 

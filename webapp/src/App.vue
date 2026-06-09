@@ -2140,7 +2140,7 @@
     </Transition>
 
     <Transition name="modal-fade">
-      <Modal v-if="modal === 'chatDetail'" :title="chatDetailTitle" wide @close="closeModal">
+      <Modal v-if="modal === 'chatDetail'" :title="chatDetailTitle" wide xlarge @close="closeModal">
         <div class="detail-stack">
           <section class="detail-summary">
             <div>
@@ -5099,9 +5099,9 @@ const chatRequestColumns = [
   { key: 'initial_text', label: 'Kelgan so‘rov', slot: 'initialText' },
   { key: 'status', label: 'Holat', format: statusLabel, badge: true, action: 'chatDetail' },
   { key: 'closed_by_name', label: 'Yopgan', format: v => v || '—', action: 'chatDetail' },
-  { key: 'solution_text', label: 'Yechim/Javob', truncate: true, format: v => v || '—', action: 'chatDetail' },
+  { key: 'solution_text', label: 'Javob', truncate: true, format: v => v || '—', action: 'chatDetail' },
   { key: 'created_at', label: 'Kelgan', format: fmtDate },
-  { key: 'solution_at', label: 'Javob vaqti', format: fmtDate },
+  { key: 'solution_at', label: 'Vaqt', format: fmtDate },
   { key: 'reply', label: 'Javob', slot: 'requestReply' }
 ];
 
@@ -8161,11 +8161,12 @@ const Toolbar = defineComponent({
 });
 
 const Modal = defineComponent({
-  props: { title: String, wide: Boolean },
+  props: { title: String, wide: Boolean, xlarge: Boolean },
   emits: ['close'],
   setup(props, { slots, emit }) {
+    const modalClass = props.xlarge ? 'modal-xlarge' : (props.wide ? 'modal-wide' : '');
     return () => h('div', { class: 'modal-backdrop', onClick: () => emit('close') }, [
-      h('section', { class: ['modal', props.wide ? 'modal-wide' : ''], onClick: e => e.stopPropagation() }, [
+      h('section', { class: ['modal', modalClass], onClick: e => e.stopPropagation() }, [
         h('div', { class: 'card-header' }, [
           h('div', { class: 'card-title' }, props.title),
           h('button', { class: 'btn small', onClick: () => emit('close') }, '✕')
