@@ -557,6 +557,7 @@ function buildEmployeePerformance({
   requests,
   employees,
   messages = [],
+  eventsByRequestId = new Map(),
   periodKey,
   keys,
   chats = [],
@@ -578,7 +579,15 @@ function buildEmployeePerformance({
     employeeMaps,
     directoryCompanies
   });
-  const resolveOptions = { chatMap, businessConnectionEmployee, companyInfoCompanies, directoryCompanies, ...supportMaps };
+  const resolveOptions = {
+    chatMap,
+    companySupportByCompanyId: supportMaps.companySupportByCompanyId,
+    businessConnectionEmployee,
+    externalChatCompanyMap: supportMaps.externalChatCompanyMap,
+    companyInfoCompanies,
+    directoryCompanies,
+    ...supportMaps
+  };
   const messagesByConversation = new Map();
   messages.forEach(message => {
     const key = conversationScopeKey(message);
@@ -656,7 +665,13 @@ function buildEmployeePerformance({
   }
 
   function assignOpenRequest(request, { previous = false } = {}) {
-    const responsible = resolveOpenRequestSupportEmployee(request, employeeMaps, resolveOptions);
+    const responsible = resolveDisplayedRequestResponsibleEmployee(request, {
+      employeeMaps,
+      messages: messagesByConversation.get(conversationScopeKey(request)) || [],
+      events: eventsByRequestId.get(request.id) || [],
+      chatToEmployeeId,
+      resolveOptions
+    });
     if (responsible?.employee_id && assignOpenToEmployee(
       findEmployee(responsible.employee_id, responsible.tg_user_id, responsible.full_name),
       request,
@@ -1452,6 +1467,21 @@ async function getDashboardAnalytics(query = {}) {
     ...rangeQuery('created_at', window)
   }, 'chat_id', chatIds, { maxRows: messageMaxRows }) : [];
   const businessConnectionEmployee = await loadBusinessConnectionEmployeeMap(requests, messages, employees);
+  const requestIds = [...new Set(requests.map(request => request.id).filter(Boolean))];
+  const events = requestIds.length ? await selectPagedByChunks('request_events', {
+    select: 'id,request_id,chat_id,tg_message_id,event_type,actor_tg_id,actor_name,employee_id,text,created_at',
+    order: supabase.order('created_at', false)
+  }, 'request_id', requestIds, { maxRows: statsFocus ? 8000 : 20000 }) : [];
+  const eventsByRequestId = new Map();
+  events.forEach(event => {
+    if (!event.request_id) return;
+    const list = eventsByRequestId.get(event.request_id) || [];
+    list.push(event);
+    eventsByRequestId.set(event.request_id, list);
+  });
+  const focusedPeriod = statsFocus
+    ? (customPeriod ? 'custom' : normalizePeriodKey(query.period || ''))
+    : '';
 
   const employeeMaps = buildEmployeeMaps(employees);
 
@@ -1487,6 +1517,7 @@ async function getDashboardAnalytics(query = {}) {
     requests,
     employees,
     messages,
+    eventsByRequestId,
     periodKey: key,
     keys,
     chats: analyticsChats,
@@ -1505,6 +1536,7 @@ async function getDashboardAnalytics(query = {}) {
     return {
       periods: periodSummaries,
       periodDates: Object.fromEntries(periodContext.map(p => [p.key, { current: p.currentLabel, prev: p.prevLabel }])),
+      focused_period: focusedPeriod,
       employeePerformance,
       ticketAnswerTrend: Object.fromEntries(mergeAnalyticsPeriodKeys(trendPeriods, periods).map(([key]) => [key, alignTicketTrendWithPeriodSummary(
         buildTicketAnswerTrend(requests, key, keys),
@@ -1531,6 +1563,7 @@ async function getDashboardAnalytics(query = {}) {
   return {
     periods: periodSummaries,
     periodDates: Object.fromEntries(periodContext.map(p => [p.key, { current: p.currentLabel, prev: p.prevLabel }])),
+    focused_period: focusedPeriod,
     employeePerformance,
     chatPerformance: Object.fromEntries(periods.map(([key]) => [key, buildChatPerformance({ requests, chats: analyticsChats, periodKey: key, keys })])),
     groupPerformance: Object.fromEntries(periods.map(([key]) => [key, buildGroupPerformance({ requests, chats: analyticsChats, periodKey: key, keys })])),
@@ -2343,7 +2376,30 @@ function resolveRequestResponsibleEmployeeFromEvents(request = {}, events = [], 
   return afterRequest ? afterRequest.employee : null;
 }
 
-function enrichOpenRequests({ requests = [], chats = [], messages = [], employees = [], companyMembers = [], companyInfoCompanies = [], businessConnectionEmployee = new Map() }) {
+function resolveDisplayedRequestResponsibleEmployee(request = {}, context = {}) {
+  const {
+    employeeMaps = buildEmployeeMaps([]),
+    messages = [],
+    events = [],
+    chatToEmployeeId = new Map(),
+    resolveOptions = {}
+  } = context;
+
+  return resolveRequestResponsibleEmployeeFromEvents(request, events, employeeMaps)
+    || resolveRequestResponsibleEmployee(request, messages, employeeMaps, chatToEmployeeId, resolveOptions)
+    || resolveOpenRequestSupportEmployee(request, employeeMaps, resolveOptions);
+}
+
+function enrichOpenRequests({
+  requests = [],
+  chats = [],
+  messages = [],
+  eventsByRequestId = new Map(),
+  employees = [],
+  companyMembers = [],
+  companyInfoCompanies = [],
+  businessConnectionEmployee = new Map()
+}) {
   const now = new Date();
   const chatMap = new Map(chats.map(chat => [telegramIdKey(chat.chat_id), chat]));
   const messagesByConversation = new Map();
@@ -2357,14 +2413,22 @@ function enrichOpenRequests({ requests = [], chats = [], messages = [], employee
   const supportMaps = buildOpenRequestSupportMaps({ companyInfoCompanies, chats, employeeMaps });
   const resolveOptions = {
     chatMap,
+    companySupportByCompanyId: supportMaps.companySupportByCompanyId,
     businessConnectionEmployee,
+    externalChatCompanyMap: supportMaps.externalChatCompanyMap,
     companyInfoCompanies,
     ...supportMaps
   };
 
   return requests.map(request => {
     const chat = chatMap.get(telegramIdKey(request.chat_id)) || {};
-    const responsible = resolveOpenRequestSupportEmployee(request, employeeMaps, resolveOptions);
+    const responsible = resolveDisplayedRequestResponsibleEmployee(request, {
+      employeeMaps,
+      messages: messagesByConversation.get(conversationScopeKey(request)) || [],
+      events: eventsByRequestId.get(request.id) || [],
+      chatToEmployeeId,
+      resolveOptions
+    });
     return {
       ...request,
       chat_title: displayChatTitle(chat),
@@ -2391,7 +2455,12 @@ async function getOpenRequestInsights(options = {}) {
   if (lite) {
     const now = new Date();
     const chatIds = [...new Set(requests.map(request => request.chat_id).filter(value => value !== undefined && value !== null))];
-    const [employees, companyInfoCache, chats, localCompanies] = await Promise.all([
+    const requestIds = [...new Set(requests.map(request => request.id).filter(Boolean))];
+    const oldestOpenCreatedAt = requests
+      .map(request => request.created_at)
+      .filter(Boolean)
+      .sort()[0] || '';
+    const [employees, companyInfoCache, chats, localCompanies, messages, events, companyMembers] = await Promise.all([
       supabase.select('employees', { select: 'id,tg_user_id,full_name,username,role,is_active', limit: '1000' }).catch(() => []),
       getCachedCompanyInfo().catch(() => null),
       chatIds.length ? supabase.select('tg_chats', {
@@ -2399,42 +2468,41 @@ async function getOpenRequestInsights(options = {}) {
         chat_id: supabase.inList(chatIds.slice(0, 500)),
         limit: '500'
       }).catch(() => []) : Promise.resolve([]),
-      supabase.select('companies', { select: 'id,name,is_active', limit: '5000' }).catch(() => [])
+      supabase.select('companies', { select: 'id,name,is_active', limit: '5000' }).catch(() => []),
+      chatIds.length ? supabase.select('messages', {
+        select: 'id,tg_message_id,chat_id,from_tg_user_id,from_name,from_username,employee_id,source_type,classification,text,business_connection_id,created_at',
+        chat_id: supabase.inList(chatIds.slice(0, 500)),
+        ...(oldestOpenCreatedAt ? { created_at: [`gte.${oldestOpenCreatedAt}`, `lt.${nowIso()}`] } : {}),
+        order: supabase.order('created_at', false),
+        limit: '5000'
+      }).catch(() => []) : Promise.resolve([]),
+      requestIds.length ? supabase.select('request_events', {
+        select: 'id,request_id,chat_id,tg_message_id,event_type,actor_tg_id,actor_name,employee_id,text,created_at',
+        request_id: supabase.inList(requestIds.slice(0, 500)),
+        order: supabase.order('created_at', false),
+        limit: '5000'
+      }).catch(() => []) : Promise.resolve([]),
+      supabase.select('company_members', { select: 'company_id,employee_id,member_type,is_active', limit: '5000' }).catch(() => [])
     ]);
-    const employeeMaps = buildEmployeeMaps(employees);
     const companyInfoCompanies = resolveCachedCompanyInfoCompanies(companyInfoCache);
-    const directoryCompanies = mergeCompanyDirectoryRows(localCompanies, companyInfoCompanies);
     const enrichedChats = enrichChatsWithCompanyAssignments(chats, companyInfoCompanies, localCompanies);
-    const businessConnectionEmployee = await loadBusinessConnectionEmployeeMap(requests, [], employees);
-    const supportMaps = buildOpenRequestSupportMaps({
-      companyInfoCompanies,
-      chats: enrichedChats,
-      employeeMaps,
-      directoryCompanies
+    const businessConnectionEmployee = await loadBusinessConnectionEmployeeMap(requests, messages, employees);
+    const eventsByRequestId = new Map();
+    events.forEach(event => {
+      if (!event.request_id) return;
+      const list = eventsByRequestId.get(event.request_id) || [];
+      list.push(event);
+      eventsByRequestId.set(event.request_id, list);
     });
-    const chatMap = new Map(enrichedChats.map(chat => [telegramIdKey(chat.chat_id), chat]));
-    const resolveOptions = {
-      chatMap,
+    const enriched = enrichOpenRequests({
+      requests,
+      chats: enrichedChats,
+      messages,
+      eventsByRequestId,
+      employees,
+      companyMembers,
       companyInfoCompanies,
-      directoryCompanies,
-      businessConnectionEmployee,
-      ...supportMaps
-    };
-    const enriched = requests.map(request => {
-      const chat = chatMap.get(telegramIdKey(request.chat_id)) || {};
-      const responsible = resolveOpenRequestSupportEmployee(request, employeeMaps, resolveOptions);
-      const chatKey = telegramIdKey(request.chat_id);
-      const external = supportMaps.externalChatCompanyMap.get(chatKey) || {};
-      return {
-        ...request,
-        chat_title: displayChatTitle(chat),
-        company_id: request.company_id || chat.company_id || external.company_id || responsible?.company_id || null,
-        company_name: request.company_name || chat.company_name || external.company_name || '',
-        responsible_employee_id: responsible?.employee_id || null,
-        responsible_employee_name: responsible?.full_name || '',
-        responsible_employee_username: responsible?.username || '',
-        open_minutes: round(minutesSince(request.created_at, now), 1)
-      };
+      businessConnectionEmployee
     });
     const groupOpen = enriched.filter(request => request.source_type === 'group').length;
     const chatOpen = enriched.filter(request => request.source_type !== 'group').length;
@@ -2455,7 +2523,8 @@ async function getOpenRequestInsights(options = {}) {
     .map(request => request.created_at)
     .filter(Boolean)
     .sort()[0] || '';
-  const [chats, messages, employees, companyMembers, companyInfoCache] = await Promise.all([
+  const requestIds = [...new Set(requests.map(request => request.id).filter(Boolean))];
+  const [chats, messages, employees, companyMembers, companyInfoCache, events] = await Promise.all([
     chatIds.length ? supabase.select('tg_chats', {
       select: 'chat_id,title,username,company_id,source_type,business_connection_id,last_message_at',
       chat_id: supabase.inList(chatIds),
@@ -2470,16 +2539,30 @@ async function getOpenRequestInsights(options = {}) {
     }).catch(() => []) : Promise.resolve([]),
     supabase.select('employees', { select: 'id,tg_user_id,full_name,username,role,is_active', limit: '1000' }).catch(() => []),
     supabase.select('company_members', { select: 'company_id,employee_id,member_type,is_active', limit: '5000' }).catch(() => []),
-    getCachedCompanyInfo().catch(() => null)
+    getCachedCompanyInfo().catch(() => null),
+    requestIds.length ? supabase.select('request_events', {
+      select: 'id,request_id,chat_id,tg_message_id,event_type,actor_tg_id,actor_name,employee_id,text,created_at',
+      request_id: supabase.inList(requestIds),
+      order: supabase.order('created_at', false),
+      limit: '5000'
+    }).catch(() => []) : Promise.resolve([])
   ]);
 
   const businessConnectionEmployee = await loadBusinessConnectionEmployeeMap(requests, messages, employees);
   const companyInfoCompanies = resolveCachedCompanyInfoCompanies(companyInfoCache);
   const enrichedChats = enrichChatsWithCompanyAssignments(chats, companyInfoCompanies, []);
+  const eventsByRequestId = new Map();
+  events.forEach(event => {
+    if (!event.request_id) return;
+    const list = eventsByRequestId.get(event.request_id) || [];
+    list.push(event);
+    eventsByRequestId.set(event.request_id, list);
+  });
   const enriched = enrichOpenRequests({
     requests,
     chats: enrichedChats,
     messages,
+    eventsByRequestId,
     employees,
     companyMembers,
     companyInfoCompanies,

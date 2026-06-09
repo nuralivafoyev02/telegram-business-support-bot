@@ -2696,7 +2696,10 @@ const selectedPeriodLabel = computed(() => {
   if (currentRange) return currentRange;
   return periodOptions.find(period => period.key === selectedStatsPeriod.value)?.label || '7 kun';
 });
-const selectedPeriodStats = computed(() => analytics.value.periods?.[selectedStatsPeriod.value] || emptyPeriodStats);
+const selectedPeriodStats = computed(() => {
+  if (!analyticsMatchesSelectedPeriod()) return emptyPeriodStats;
+  return analytics.value.periods?.[selectedStatsPeriod.value] || emptyPeriodStats;
+});
 const topEmployeeRows = computed(() => (analytics.value.employeePerformance?.[selectedStatsPeriod.value] || [])
   .filter(row => !row.is_unassigned && !isUnassignedRankingRow(row)));
 const chatPerformanceRows = computed(() => analytics.value.chatPerformance?.[selectedStatsPeriod.value] || []);
@@ -2737,6 +2740,12 @@ const responseTrendYTicks = computed(() => chartYTicks(responseTrendMax.value, {
   top: 24,
   bottom: 176
 }));
+function analyticsMatchesSelectedPeriod() {
+  const focusedPeriod = String(analytics.value.focused_period || '').trim();
+  if (!focusedPeriod) return true;
+  return focusedPeriod === selectedStatsPeriod.value;
+}
+
 function filterTicketTrendRowsForSelectedPeriod(rows = []) {
   const period = selectedStatsPeriod.value;
   if (period === 'all') return rows;
@@ -2764,6 +2773,9 @@ function filterTicketTrendRowsForSelectedPeriod(rows = []) {
 }
 
 const ticketTrendRows = computed(() => {
+  if (!analyticsMatchesSelectedPeriod()) {
+    return buildTicketTrendFallbackRows(selectedStatsPeriod.value);
+  }
   const mappedRows = (analytics.value.ticketAnswerTrend?.[selectedStatsPeriod.value] || [])
     .map(row => ({
       date_key: row.date_key || row.date || row.label,
@@ -2787,6 +2799,7 @@ const ticketTrendMax = computed(() => Math.max(1, ...ticketTrendRows.value.map(r
   Number(row.open_requests || 0)
 ))));
 const companyTicketRows = computed(() => {
+  if (!analyticsMatchesSelectedPeriod()) return [];
   const rows = (analytics.value.companyTickets?.[selectedStatsPeriod.value] || [])
     .map(normalizeCompanyTicketRow)
     .filter(row => Number(row.total_requests || 0) > 0);
@@ -6856,10 +6869,21 @@ function findEmployeeMappingForOpenRequest(request = {}, employeeMappings = [], 
     if (byId) return byId;
   }
 
+  const responsibleName = String(request.responsible_employee_name || request.support_name || '').trim();
+  if (responsibleName) {
+    const byResponsibleName = employeeMappings.find(mapping =>
+      supportIdentitiesMatch(mapping.full_name, responsibleName)
+      || supportIdentitiesMatch(mapping.username, responsibleName)
+      || String(mapping.employee?.full_name || '').trim() === responsibleName);
+    if (byResponsibleName) return byResponsibleName;
+    return null;
+  }
+
   const responsibleId = String(request.responsible_employee_id || '').trim();
   if (responsibleId) {
     const byResponsible = employeeMappings.find(mapping => mapping.id === responsibleId);
     if (byResponsible) return byResponsible;
+    return null;
   }
 
   const openedId = String(request.opened_by_employee_id || '').trim();
@@ -6868,10 +6892,11 @@ function findEmployeeMappingForOpenRequest(request = {}, employeeMappings = [], 
     if (byOpened) return byOpened;
   }
 
-  const responsibleUsername = normalizeSupportUsername(request.responsible_employee_username || '');
+  const responsibleUsername = normalizeSupportUsername(request.responsible_employee_username || request.support_username || '');
   if (responsibleUsername) {
     const byResponsibleUser = employeeMappings.find(mapping => supportIdentitiesMatch(mapping.username, responsibleUsername));
     if (byResponsibleUser) return byResponsibleUser;
+    return null;
   }
 
   const chatId = String(request.chat_id || '').trim();
