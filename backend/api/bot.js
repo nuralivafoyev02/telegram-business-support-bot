@@ -752,11 +752,11 @@ async function handleEyeReaction(reaction = {}, settings = {}) {
 
 async function handleMessageReaction(reaction = {}) {
   const settings = await getBotSettings();
-  if (!settings.messageReactions?.enabled) return { ok: true, handled: 'message_reaction_disabled' };
-  if (reactionWasAdded(reaction, '💯')) {
+  if (reactionWasAdded(reaction, '💯') && settings.messageReactions?.ticketClose !== false) {
     const result = await handleDoneReaction(reaction, settings);
     return { ok: true, handled: 'message_reaction_done', ...result };
   }
+  if (!settings.messageReactions?.enabled) return { ok: true, handled: 'message_reaction_disabled' };
   if (reactionWasAddedEye(reaction)) {
     const result = await handleEyeReaction(reaction, settings);
     if (result.skipped || result.error) {

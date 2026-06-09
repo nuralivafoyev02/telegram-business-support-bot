@@ -563,9 +563,28 @@ async function findOpenRequestByMessage({ chatId, messageId }) {
   return rows[0] || null;
 }
 
+async function findOpenRequestByLinkedMessage({ chatId, messageId }) {
+  if (!chatId || !messageId) return null;
+  const events = await supabase.select('request_events', {
+    select: 'request_id,event_type,created_at',
+    chat_id: supabase.eq(chatId),
+    tg_message_id: supabase.eq(messageId),
+    event_type: 'in.(opened,note)',
+    order: supabase.order('created_at', false),
+    limit: '5'
+  }).catch(() => []);
+  for (const event of events) {
+    const request = await findOpenRequestById(event.request_id);
+    if (request) return request;
+  }
+  return null;
+}
+
 async function closeRequestByMessage({ message, targetMessageId, employee }) {
   const chat = message.chat || {};
-  const request = await findOpenRequestByMessage({ chatId: chat.id, messageId: targetMessageId || message.message_id });
+  const messageId = targetMessageId || message.message_id;
+  const request = await findOpenRequestByMessage({ chatId: chat.id, messageId })
+    || await findOpenRequestByLinkedMessage({ chatId: chat.id, messageId });
   if (!request) return { closed: false, request: null };
   const closer = employee || await ensureEmployee(message.from || {});
   return closeRequestRecord({ request, message, employee: closer });

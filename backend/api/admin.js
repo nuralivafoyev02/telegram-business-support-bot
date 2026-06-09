@@ -1301,6 +1301,11 @@ function requestedAnalyticsPeriods(query = {}, customPeriod = null) {
 
 function requestedAnalyticsTrendPeriods(query = {}, customPeriod = null) {
   if (customPeriod) return [['custom', customPeriod.label || 'Ixtiyoriy']];
+  const selected = normalizePeriodKey(query.period || '');
+  if (selected && selected !== 'all') {
+    const labels = { today: 'Bugun', week: '7 kun', month: '1 oy' };
+    return [[selected, labels[selected] || selected]];
+  }
   return [
     ['today', 'Bugun'],
     ['week', '7 kun'],

@@ -2737,8 +2737,34 @@ const responseTrendYTicks = computed(() => chartYTicks(responseTrendMax.value, {
   top: 24,
   bottom: 176
 }));
+function filterTicketTrendRowsForSelectedPeriod(rows = []) {
+  const period = selectedStatsPeriod.value;
+  if (period === 'all') return rows;
+  if (period === 'today') {
+    const todayKey = tashkentDateKey(new Date());
+    return rows.filter(row => row.date_key === todayKey);
+  }
+  if (period === 'week') {
+    const todayKey = tashkentDateKey(new Date());
+    const weekStart = addDaysToDateKey(todayKey, -6);
+    return rows.filter(row => row.date_key >= weekStart && row.date_key <= todayKey);
+  }
+  if (period === 'month') {
+    const todayKey = tashkentDateKey(new Date());
+    const monthStart = addDaysToDateKey(todayKey, -29);
+    return rows.filter(row => row.date_key >= monthStart && row.date_key <= todayKey);
+  }
+  if (period === 'custom') {
+    const startKey = normalizeDateKey(customPeriodForm.appliedStart);
+    const endKey = normalizeDateKey(customPeriodForm.appliedEnd);
+    if (!startKey || !endKey) return rows;
+    return rows.filter(row => row.date_key >= startKey && row.date_key <= endKey);
+  }
+  return rows;
+}
+
 const ticketTrendRows = computed(() => {
-  const rows = (analytics.value.ticketAnswerTrend?.[selectedStatsPeriod.value] || [])
+  const mappedRows = (analytics.value.ticketAnswerTrend?.[selectedStatsPeriod.value] || [])
     .map(row => ({
       date_key: row.date_key || row.date || row.label,
       date_label: row.date_label || row.date || '—',
@@ -2749,10 +2775,11 @@ const ticketTrendRows = computed(() => {
       sla: Number(row.sla || row.close_rate || 0)
     }))
     .filter(row => row.date_key);
-  if (rows.length) {
-    return rows.filter(row => selectedStatsPeriod.value !== 'month' || row.total_requests || row.closed_requests || row.open_requests);
-  }
-  return buildTicketTrendFallbackRows(selectedStatsPeriod.value);
+  const rows = mappedRows.length
+    ? filterTicketTrendRowsForSelectedPeriod(mappedRows)
+    : buildTicketTrendFallbackRows(selectedStatsPeriod.value);
+  if (!rows.length) return rows;
+  return rows.filter(row => selectedStatsPeriod.value !== 'month' || row.total_requests || row.closed_requests || row.open_requests);
 });
 const ticketTrendMax = computed(() => Math.max(1, ...ticketTrendRows.value.map(row => Math.max(
   Number(row.total_requests || 0),
@@ -3168,10 +3195,7 @@ const supportPerformanceRows = computed(() => {
     const assignedCompanyCount = visibleCompanyInfoRows.value.filter(company => companyMatchesEmployee(company, candidate)).length;
 
     const closedRaw = periodRow ? Number(periodRow.closed_requests || 0) : 0;
-    const periodOpen = periodRow ? Number(periodRow.open_requests || 0) : 0;
-    const mergedPeriodOpen = Number(row.period_open_requests || candidate.period_open_requests || 0);
-    const mappedOpen = openSummary ? Number(openSummary.open_requests || 0) : 0;
-    const openRaw = mappedOpen > 0 ? mappedOpen : Math.max(periodOpen, mergedPeriodOpen);
+    const openRaw = openSummary ? Number(openSummary.open_requests || 0) : 0;
     const totalRaw = closedRaw + openRaw;
     const slaRaw = totalRaw > 0 ? (closedRaw / totalRaw) * 100 : 100;
     const avgRaw = periodRow ? Number(periodRow.avg_close_minutes || 0) : 0;
@@ -5561,7 +5585,10 @@ async function loadDashboard() {
   const loadToken = ++dashboardLoadToken;
   const data = await api.dashboard(dashboardPeriodQuery());
   if (loadToken !== dashboardLoadToken) return;
-  Object.assign(dashboard, data);
+  const nextAnalytics = data.analytics || {};
+  const { analytics: _ignoredAnalytics, ...rest } = data;
+  Object.assign(dashboard, rest);
+  dashboard.analytics = nextAnalytics;
 }
 
 async function loadCompanyInfo(query = {}) {
@@ -5727,7 +5754,7 @@ async function handleStatsPeriodChange() {
   previousStatsPeriod.value = selectedStatsPeriod.value;
   startLoading('period');
   try {
-    await loadDashboard();
+    await loadSupportPerformance();
   } catch (error) {
     showToast(error.message);
   } finally {
@@ -6991,7 +7018,7 @@ function employeeSummaryRows(kind = 'requests') {
     const openSummary = resolvePerformanceStatsRow(openMap, row);
     const openRequests = isManagerPerformanceRow(row)
       ? 0
-      : (openSummary ? Number(openSummary.open_requests || 0) : Number(row.open_requests || 0));
+      : (openSummary ? Number(openSummary.open_requests || 0) : 0);
     const closedRequests = Number(row.closed_requests || 0);
     const rowKey = supportRowKey(row) || row.key || row.full_name;
     rowMap.set(rowKey, {
