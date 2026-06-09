@@ -2180,9 +2180,15 @@
               </div>
               <DataTable v-if="chatTicketsOpen" :columns="chatRequestColumns" :rows="chatDetail.requests || []"
                 empty="Bu chatda so‘rov yo‘q" :on-cell-action="handleTableCellAction" :row-class="requestRowClass">
+                <template #initialText="{ row }">
+                  <button type="button" class="request-preview-btn" :title="row.initial_text || '—'"
+                    @click.stop="focusChatRequest(row)">
+                    {{ previewFirstWords(row.initial_text) }}
+                  </button>
+                </template>
                 <template #requestReply="{ row }">
                   <button class="btn small" type="button" :disabled="row.status !== 'open'"
-                    @click.stop="openRequestReply(row)">Javob</button>
+                    @click.stop="focusChatRequest(row)">Javob</button>
                 </template>
               </DataTable>
               <div v-else class="empty compact">Ticketlar yashirilgan</div>
@@ -2200,7 +2206,8 @@
                     <span>{{ message.text }}</span>
                     <time>{{ fmtChatTime(message.created_at) }}</time>
                   </div>
-                  <div v-else class="chat-bubble" :class="{ 'ticket-message': !!message.request_text }">
+                  <div v-else :id="chatMessageDomId(message)" class="chat-bubble"
+                    :class="{ 'ticket-message': !!message.request_text, 'chat-bubble-highlight': isChatMessageFocused(message) }">
                     <div class="chat-bubble-author">{{ message.actor_name || (message.direction === 'outbound' ? 'Xodim'
                       :
                       'Mijoz') }}</div>
@@ -2247,6 +2254,8 @@
                     <div v-if="chatMessageBodyText(message)" class="chat-message-text"
                       v-html="chatMessageHtml(message)"></div>
                     <div class="chat-bubble-footer">
+                      <span v-if="showMessageStatus(message)" class="badge"
+                        :class="messageStatusBadgeClass(message)">{{ messageStatusLabel(message) }}</span>
                       <span v-if="showRequestBadge(message)" class="chat-ticket">So‘rov</span>
                       <span class="chat-source">{{ messageSourceLabel(message) }}</span>
                       <time>{{ fmtChatTime(message.created_at) }}</time>
@@ -2255,6 +2264,18 @@
                 </article>
               </div>
               <div v-else class="empty compact">Dialog tarixi yo‘q</div>
+              <div v-if="chatDetailActiveRequest" class="chat-detail-reply-box">
+                <div class="card-note">Javob: {{ previewFirstWords(chatDetailActiveRequest.initial_text, 8) }}</div>
+                <form class="inline-reply-form" @submit.prevent="sendChatDetailRequestReply">
+                  <textarea v-model.trim="inlineReplyForm.text" class="textarea" placeholder="Javob yozing..."></textarea>
+                  <div>
+                    <button class="btn small" type="button" @click="cancelInlineReply">Bekor</button>
+                    <button class="btn small primary" type="submit" :disabled="loadingAction === 'replyRequest'">
+                      Yuborish
+                    </button>
+                  </div>
+                </form>
+              </div>
             </section>
           </div>
 
@@ -2442,6 +2463,7 @@ const metricChatSelectedId = ref('');
 const metricChatTicketsOpen = ref(true);
 const metricChatThreadRef = ref(null);
 const chatDetailThreadRef = ref(null);
+const chatDetailFocusedMessageId = ref('');
 const employeeProfileThreadRef = ref(null);
 const companyGroupThreadRef = ref(null);
 const employeeDrilldown = ref(null);
@@ -4527,6 +4549,10 @@ const chatDetailTitle = computed(() => {
   return chat ? `Chat: ${chat.title || chat.chat_id}` : 'Chat tafsiloti';
 });
 const chatConversation = computed(() => chatDetail.value.conversation || []);
+const chatDetailActiveRequest = computed(() => {
+  if (!inlineReplyForm.request_id) return null;
+  return (chatDetail.value.requests || []).find(request => isSameRequest(request, inlineReplyForm.request_id)) || null;
+});
 const metricChatConversation = computed(() => metricChatDetail.value.conversation || []);
 const metricChatTitle = computed(() => {
   const chat = metricChatDetail.value.chat;
@@ -5070,7 +5096,7 @@ const ticketListColumns = [
 
 const chatRequestColumns = [
   { key: 'customer_name', label: 'Mijoz', format: v => v || '—', action: 'chatDetail' },
-  { key: 'initial_text', label: 'Kelgan so‘rov', truncate: true, action: 'chatDetail' },
+  { key: 'initial_text', label: 'Kelgan so‘rov', slot: 'initialText' },
   { key: 'status', label: 'Holat', format: statusLabel, badge: true, action: 'chatDetail' },
   { key: 'closed_by_name', label: 'Yopgan', format: v => v || '—', action: 'chatDetail' },
   { key: 'solution_text', label: 'Yechim/Javob', truncate: true, format: v => v || '—', action: 'chatDetail' },
@@ -5134,6 +5160,99 @@ function isSystemMessage(message = {}) {
 
 function chatBubbleKey(message) {
   return `${message.message_id || message.id || 'msg'}:${message.created_at || ''}`;
+}
+
+function chatMessageDomId(message = {}) {
+  const messageId = message.message_id || message.id;
+  return messageId ? `chat-msg-${messageId}` : '';
+}
+
+function previewFirstWords(text = '', count = 2) {
+  const words = String(text || '').trim().split(/\s+/).filter(Boolean);
+  if (!words.length) return '—';
+  if (words.length <= count) return words.join(' ');
+  return `${words.slice(0, count).join(' ')}...`;
+}
+
+function messageRequestStatus(message = {}) {
+  if (message.status) return String(message.status).toLowerCase();
+  const requestId = String(message.request_id || '').trim();
+  if (!requestId) return '';
+  const request = (chatDetail.value.requests || []).find(row => isSameRequest(row, requestId));
+  return String(request?.status || '').toLowerCase();
+}
+
+function messageStatusLabel(message = {}) {
+  const status = messageRequestStatus(message);
+  return status ? statusLabel(status) : '';
+}
+
+function messageStatusBadgeClass(message = {}) {
+  const status = messageRequestStatus(message);
+  if (status === 'closed') return 'green';
+  if (status === 'open') return 'orange';
+  if (status === 'cancelled') return 'blue';
+  return '';
+}
+
+function showMessageStatus(message = {}) {
+  return !!messageStatusLabel(message);
+}
+
+function isChatMessageFocused(message = {}) {
+  const messageId = String(message.message_id || message.id || '').trim();
+  return Boolean(messageId && messageId === chatDetailFocusedMessageId.value);
+}
+
+function findConversationMessageForRequest(request = {}, conversation = []) {
+  const initialId = String(request.initial_message_id || '').trim();
+  const requestId = requestIdentity(request);
+  if (initialId) {
+    const byMessageId = conversation.find(message => String(message.message_id || '').trim() === initialId);
+    if (byMessageId) return byMessageId;
+  }
+  if (!requestId) return null;
+  return conversation.find(message => String(message.request_id || '').trim() === requestId
+    && String(message.direction || '').toLowerCase() !== 'outbound') || null;
+}
+
+async function scrollChatDetailToMessage(message = {}) {
+  await nextTick();
+  const thread = chatDetailThreadRef.value;
+  const domId = chatMessageDomId(message);
+  if (!thread || !domId) return false;
+  const target = thread.querySelector(`#${CSS.escape(domId)}`);
+  if (!target) return false;
+  target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  chatDetailFocusedMessageId.value = String(message.message_id || message.id || '').trim();
+  window.setTimeout(() => {
+    if (chatDetailFocusedMessageId.value === String(message.message_id || message.id || '').trim()) {
+      chatDetailFocusedMessageId.value = '';
+    }
+  }, 2200);
+  return true;
+}
+
+async function focusChatRequest(request = {}) {
+  const message = findConversationMessageForRequest(request, chatConversation.value);
+  if (message) await scrollChatDetailToMessage(message);
+  if (request.status !== 'open') {
+    cancelInlineReply();
+    if (!message) showToast('Dialogda xabar topilmadi');
+    else showToast('Bu so‘rov allaqachon yopilgan');
+    return;
+  }
+  openInlineReply(request);
+  if (!message) showToast('Dialogda xabar topilmadi, lekin javob yozishingiz mumkin');
+}
+
+async function sendChatDetailRequestReply() {
+  const request = chatDetailActiveRequest.value;
+  if (!request) {
+    cancelInlineReply();
+    return;
+  }
+  await sendInlineRequestReply(request);
 }
 
 function mediaUrl(media) {
@@ -7369,6 +7488,7 @@ function openInlineReply(request = {}) {
 function cancelInlineReply() {
   inlineReplyForm.request_id = '';
   inlineReplyForm.text = '';
+  chatDetailFocusedMessageId.value = '';
 }
 
 function closedRequestVersion(request = {}, result = {}, text = '') {
@@ -7513,6 +7633,7 @@ async function loadChatDetail(row) {
   if (!row?.chat_id) return showToast('Chat tanlanmagan');
   selectedTarget.value = row;
   clearMediaUrls();
+  cancelInlineReply();
   chatTicketsOpen.value = true;
   startLoading('chatDetail');
   try {

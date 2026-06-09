@@ -4286,7 +4286,7 @@ tbody tr:hover {
 
 .chat-detail-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(320px, .65fr);
+  grid-template-columns: minmax(0, 0.88fr) minmax(420px, 1.22fr);
   gap: 16px;
   align-items: start;
 }
@@ -5516,12 +5516,39 @@ tbody tr.unassigned-ranking-row td:first-child {
 }
 
 .dialog-panel .telegram-thread {
-  max-height: min(64vh, 720px);
+  max-height: min(72vh, 820px);
   overflow: auto;
 }
 
 .dialog-panel .chat-bubble {
-  max-width: min(72%, 620px);
+  max-width: min(78%, 680px);
+}
+
+.request-preview-btn {
+  border: 0;
+  background: transparent;
+  color: var(--primary);
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+  max-width: 100%;
+  font: inherit;
+}
+
+.request-preview-btn:hover {
+  text-decoration: underline;
+}
+
+.chat-bubble-highlight {
+  outline: 2px solid rgba(31, 144, 255, .45);
+  outline-offset: 2px;
+  border-radius: 14px;
+}
+
+.chat-detail-reply-box {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
 }
 
 .recipient-row,

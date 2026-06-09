@@ -1677,20 +1677,23 @@ function logBackgroundError(label, error) {
   notifyOperationalError(`bot:${label}`, error).catch(logError => console.error('[bot:notify-log:error]', logError));
 }
 
-function isReactTargetNotFound(error) {
+function isBenignReactionError(error) {
   const description = String(error?.telegram?.description || error?.message || '').toLowerCase();
-  return description.includes('message to react not found') || description.includes('message not found');
+  return description.includes('message to react not found')
+    || description.includes('message not found')
+    || description.includes('chat not found')
+    || description.includes('bot was kicked')
+    || description.includes('have no rights')
+    || description.includes('reaction_invalid');
 }
 
-function resolveTicketCloseReactionTarget(message = {}, closedRequest = null) {
-  const businessConnectionId = message.business_connection_id || null;
-  if (businessConnectionId && closedRequest?.initial_message_id) {
-    return closedRequest.initial_message_id;
-  }
+function resolveTicketCloseReactionTarget(message = {}) {
   return message.message_id;
 }
 
 async function maybeReactToTicketClose(message, settings = null, { closedRequest = null } = {}) {
+  if (message.business_connection_id) return;
+
   const resolvedSettings = settings || await getBotSettings().catch(error => {
     logBackgroundError('ticket-close-reaction-settings', error);
     return null;
@@ -1698,13 +1701,13 @@ async function maybeReactToTicketClose(message, settings = null, { closedRequest
   const reactions = resolvedSettings && resolvedSettings.messageReactions ? resolvedSettings.messageReactions : {};
   if (!reactions.enabled || !reactions.ticketClose) return;
 
-  const chatId = message.chat && message.chat.id;
-  const messageId = resolveTicketCloseReactionTarget(message, closedRequest);
+  const chatId = closedRequest?.chat_id || message.chat?.id;
+  const messageId = resolveTicketCloseReactionTarget(message);
   if (!chatId || !messageId) return;
 
   await reactToMessage(chatId, messageId, reactions.emoji || '\u26a1')
     .catch(error => {
-      if (isReactTargetNotFound(error)) return;
+      if (isBenignReactionError(error)) return;
       logBackgroundError('ticket-close-reaction', error);
     });
 }
