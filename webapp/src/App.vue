@@ -1965,7 +1965,7 @@
                           <time>{{ fmtChatTime(message.created_at) }}</time>
                         </div>
                         <div v-else class="chat-bubble"
-                          :class="{ 'ticket-message': showRequestBadge(message), 'ticket-message-closed': isClosedTicketMessage(message) }">
+                          :class="{ 'ticket-message': isTicketMessage(message), 'ticket-message-open': isOpenTicketMessage(message), 'ticket-message-closed': isClosedTicketMessage(message) }">
                           <div class="chat-bubble-author">{{ message.actor_name || (message.direction === 'outbound' ?
                             employeeProfile.employee?.full_name || 'Xodim' : 'Mijoz') }}</div>
                           <div v-if="message.media" class="chat-media">
@@ -2015,7 +2015,7 @@
                           <div class="chat-bubble-footer">
                             <span v-if="showMessageStatus(message)" class="badge"
                               :class="messageStatusBadgeClass(message)">{{ messageStatusLabel(message) }}</span>
-                            <span v-else-if="showRequestBadge(message)" class="chat-ticket">So‘rov</span>
+                            <span v-if="showRequestBadge(message)" class="chat-ticket">So‘rov</span>
                             <span class="chat-source">{{ messageSourceLabel(message) }}</span>
                             <time>{{ fmtChatTime(message.created_at) }}</time>
                           </div>
@@ -2210,7 +2210,7 @@
                     <time>{{ fmtChatTime(message.created_at) }}</time>
                   </div>
                   <div v-else :id="chatMessageDomId(message)" class="chat-bubble"
-                    :class="{ 'ticket-message': !!message.request_text, 'ticket-message-closed': isClosedTicketMessage(message), 'chat-bubble-highlight': isChatMessageFocused(message) }">
+                    :class="{ 'ticket-message': isTicketMessage(message), 'ticket-message-open': isOpenTicketMessage(message), 'ticket-message-closed': isClosedTicketMessage(message), 'chat-bubble-highlight': isChatMessageFocused(message) }">
                     <div class="chat-bubble-author">{{ message.actor_name || (message.direction === 'outbound' ? 'Xodim'
                       :
                       'Mijoz') }}</div>
@@ -5266,8 +5266,19 @@ function showMessageStatus(message = {}) {
   return !!messageStatusLabel(message);
 }
 
+function isTicketMessage(message = {}) {
+  if (String(message.type || '').toLowerCase() === 'ticket') return true;
+  return Boolean(String(message.request_text || '').trim());
+}
+
+function isOpenTicketMessage(message = {}) {
+  if (!isTicketMessage(message) || isClosedTicketMessage(message)) return false;
+  const status = messageRequestStatus(message);
+  return !status || status === 'open';
+}
+
 function isClosedTicketMessage(message = {}) {
-  return showRequestBadge(message) && messageRequestStatus(message) === 'closed';
+  return isTicketMessage(message) && messageRequestStatus(message) === 'closed';
 }
 
 function isChatMessageFocused(message = {}) {
@@ -5465,6 +5476,7 @@ function chatMessageBodyText(message = {}) {
 }
 
 function showRequestBadge(message = {}) {
+  if (String(message?.type || '').toLowerCase() === 'ticket') return true;
   if (!String(message?.request_text || '').trim()) return false;
   const direction = String(message?.direction || '').toLowerCase();
   const origin = String(message?.origin_type || message?.actor_type || '').toLowerCase();

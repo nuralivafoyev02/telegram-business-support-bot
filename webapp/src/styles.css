@@ -1626,6 +1626,16 @@ tbody tr:hover {
   background: var(--chat-ticket-bg);
 }
 
+.chat-bubble.ticket-message-open {
+  border-color: #ffd8a8;
+  background: #fff4e5;
+}
+
+.chat-bubble.ticket-message-open .badge.orange {
+  color: #a65d00;
+  background: #ffe8cc;
+}
+
 .chat-bubble.ticket-message.ticket-message-closed {
   border-color: var(--line);
   background: var(--chat-in-bg);
@@ -4892,6 +4902,11 @@ tbody tr.open-ticket-row:hover {
 .employee-profile-thread .chat-media-video {
   width: min(320px, 100%);
   max-height: min(300px, 42vh);
+}
+
+.employee-profile-thread .chat-bubble.ticket-message-open {
+  border-color: #ffd8a8;
+  background: #fff4e5;
 }
 
 .employee-profile-thread .chat-bubble.ticket-message.ticket-message-closed {
