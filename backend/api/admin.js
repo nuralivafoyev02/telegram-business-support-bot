@@ -610,16 +610,10 @@ function buildEmployeePerformance({
   const periodClosedRequests = requests.filter(request =>
     isClosedLikeRequestStatus(request.status) && inCurrentPeriod(request.created_at, periodKey, keys)
   );
-  const closed = periodClosedRequests.filter(request =>
-    Boolean(request.closed_by_employee_id || request.closed_by_tg_id || request.closed_by_name)
-  );
   const open = requests.filter(request => isOpenRequestStatus(request.status) && inCurrentPeriod(request.created_at, periodKey, keys));
 
   const prevPeriodClosedRequests = requests.filter(request =>
     isClosedLikeRequestStatus(request.status) && inPreviousPeriod(request.created_at, periodKey, keys)
-  );
-  const prevClosed = prevPeriodClosedRequests.filter(request =>
-    Boolean(request.closed_by_employee_id || request.closed_by_tg_id || request.closed_by_name)
   );
   const prevOpen = requests.filter(request => isOpenRequestStatus(request.status) && inPreviousPeriod(request.created_at, periodKey, keys));
 
@@ -725,14 +719,28 @@ function buildEmployeePerformance({
     return employee;
   }
 
-  closed.forEach(request => {
-    const employee = findEmployee(request.closed_by_employee_id, request.closed_by_tg_id, request.closed_by_name);
+  function resolveClosedRequestEmployee(request) {
+    const closer = findEmployee(request.closed_by_employee_id, request.closed_by_tg_id, request.closed_by_name);
+    if (closer) return closer;
+    const responsible = resolveDisplayedRequestResponsibleEmployee(request, {
+      employeeMaps,
+      messages: messagesByConversation.get(conversationScopeKey(request)) || [],
+      events: eventsByRequestId.get(request.id) || [],
+      chatToEmployeeId,
+      resolveOptions
+    });
+    if (!responsible) return null;
+    return findEmployee(responsible.employee_id, responsible.tg_user_id, responsible.full_name);
+  }
+
+  periodClosedRequests.forEach(request => {
+    const employee = resolveClosedRequestEmployee(request);
     if (!employee) return;
     const current = ensureEmployeeTotal({
       employee,
-      employeeId: request.closed_by_employee_id,
-      tgUserId: request.closed_by_tg_id,
-      name: request.closed_by_name
+      employeeId: employee.id,
+      tgUserId: employee.tg_user_id,
+      name: employee.full_name
     });
     current.closed_requests += 1;
     if (request.chat_id) current.handled_chats.add(conversationScopeKey(request));
@@ -749,14 +757,14 @@ function buildEmployeePerformance({
 
   open.forEach(request => assignOpenRequest(request));
 
-  prevClosed.forEach(request => {
-    const employee = findEmployee(request.closed_by_employee_id, request.closed_by_tg_id, request.closed_by_name);
+  prevPeriodClosedRequests.forEach(request => {
+    const employee = resolveClosedRequestEmployee(request);
     if (!employee) return;
     const current = ensureEmployeeTotal({
       employee,
-      employeeId: request.closed_by_employee_id,
-      tgUserId: request.closed_by_tg_id,
-      name: request.closed_by_name
+      employeeId: employee.id,
+      tgUserId: employee.tg_user_id,
+      name: employee.full_name
     });
     current.prev_closed_requests += 1;
     if (request.chat_id) current.prev_handled_chats.add(conversationScopeKey(request));

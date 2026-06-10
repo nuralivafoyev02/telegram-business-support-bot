@@ -2248,6 +2248,87 @@ async function testDashboardPeriodCountsOnlyRequestsCreatedInSelectedRange() {
   }
 }
 
+async function testDashboardEmployeePerformanceAttributesClosedWithoutCloser() {
+  const originalSelect = supabase.select;
+  const originalEmployeeStats = stats.selectEmployeeStatistics;
+  const originalChatStats = stats.selectChatStatistics;
+  const originalTodaySummary = stats.selectTodaySummary;
+  const chatId = -100904;
+  const createdAt = '2026-05-24T10:00:00.000Z';
+  const employees = [
+    { id: 'emp-1', tg_user_id: 777, full_name: 'Uyqur | Nurali', username: 'nurali', role: 'support', is_active: true },
+    { id: 'emp-2', tg_user_id: 778, full_name: 'Uyqur | Mirshod', username: 'mirshod', role: 'support', is_active: true }
+  ];
+  const requests = [
+    {
+      id: 'request-closed-by-name',
+      source_type: 'group',
+      chat_id: chatId,
+      customer_tg_id: 501,
+      customer_name: 'Mijoz 1',
+      status: 'closed',
+      closed_by_employee_id: 'emp-1',
+      closed_by_tg_id: 777,
+      closed_by_name: 'Uyqur | Nurali',
+      created_at: createdAt,
+      closed_at: '2026-05-24T10:10:00.000Z'
+    },
+    {
+      id: 'request-closed-no-closer',
+      source_type: 'group',
+      chat_id: chatId,
+      customer_tg_id: 502,
+      customer_name: 'Mijoz 2',
+      initial_message_id: 61,
+      status: 'closed',
+      assigned_to_employee_id: 'emp-2',
+      created_at: '2026-05-24T11:00:00.000Z',
+      closed_at: '2026-05-24T11:20:00.000Z'
+    }
+  ];
+  const messages = [
+    { id: 'm61', tg_message_id: 61, chat_id: chatId, from_tg_user_id: 502, from_name: 'Mijoz 2', employee_id: null, text: 'Savol', created_at: '2026-05-24T11:00:00.000Z' },
+    { id: 'm62', tg_message_id: 62, chat_id: chatId, from_tg_user_id: 778, from_name: 'Uyqur | Mirshod', from_username: 'mirshod', employee_id: 'emp-2', text: 'Javob', created_at: '2026-05-24T11:05:00.000Z' }
+  ];
+
+  supabase.select = async (table, query = {}) => {
+    if (table === 'support_requests') return query.status === 'eq.open' ? requests.filter(row => row.status === 'open') : requests;
+    if (table === 'tg_chats') return [{ chat_id: chatId, title: 'Support guruhi', source_type: 'group', is_active: true }];
+    if (table === 'employees') return employees;
+    if (table === 'messages') return messages;
+    if (table === 'companies') return [];
+    if (table === 'company_members') return [];
+    if (table === 'request_events') return [];
+    return [];
+  };
+  stats.selectEmployeeStatistics = async () => [];
+  stats.selectChatStatistics = async () => [{ chat_id: chatId, title: 'Support guruhi', source_type: 'group', is_active: true }];
+  stats.selectTodaySummary = async () => [{ total_requests: 0, open_requests: 0, closed_requests: 0 }];
+
+  try {
+    const result = await callAdmin('dashboard', {
+      query: { period: 'custom', start_date: '2026-05-24', end_date: '2026-05-24' }
+    });
+    assert.strictEqual(result.status, 200);
+    const period = result.payload.data.analytics.periods.custom;
+    assert.strictEqual(period.closed_requests, 2);
+    const performance = result.payload.data.analytics.employeePerformance.custom;
+    const nurali = performance.find(item => item.employee_id === 'emp-1');
+    const mirshod = performance.find(item => item.employee_id === 'emp-2');
+    assert.ok(nurali);
+    assert.ok(mirshod);
+    assert.strictEqual(nurali.closed_requests, 1);
+    assert.strictEqual(mirshod.closed_requests, 1);
+    const rankingClosedTotal = performance.reduce((sum, item) => sum + Number(item.closed_requests || 0), 0);
+    assert.strictEqual(rankingClosedTotal, period.closed_requests);
+  } finally {
+    supabase.select = originalSelect;
+    stats.selectEmployeeStatistics = originalEmployeeStats;
+    stats.selectChatStatistics = originalChatStats;
+    stats.selectTodaySummary = originalTodaySummary;
+  }
+}
+
 async function testDashboardEmployeePerformanceCountsClosedByCreatedDate() {
   const originalSelect = supabase.select;
   const originalEmployeeStats = stats.selectEmployeeStatistics;
@@ -4309,6 +4390,7 @@ async function run() {
   await testDashboardEmployeePerformanceCountsOpenOnlyWhenAssigned();
   await testDashboardEmployeePerformanceAvgIncludesAssignedOpenWait();
   await testDashboardPeriodCountsOnlyRequestsCreatedInSelectedRange();
+  await testDashboardEmployeePerformanceAttributesClosedWithoutCloser();
   await testDashboardEmployeePerformanceCountsClosedByCreatedDate();
   await testRequestsListEnrichesCompanyFromRegisteredGroup();
   await testRequestsListShowsResponsibleEmployeeFromTicketMessages();
