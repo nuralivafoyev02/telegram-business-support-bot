@@ -720,15 +720,13 @@ function buildEmployeePerformance({
   }
 
   function resolveClosedRequestEmployee(request) {
-    const closer = findEmployee(request.closed_by_employee_id, request.closed_by_tg_id, request.closed_by_name);
-    if (closer) return closer;
     const responsible = resolveDisplayedRequestResponsibleEmployee(request, {
       employeeMaps,
       messages: messagesByConversation.get(conversationScopeKey(request)) || [],
       events: eventsByRequestId.get(request.id) || [],
       chatToEmployeeId,
       resolveOptions
-    });
+    }) || employeeSummary(findEmployee(request.closed_by_employee_id, request.closed_by_tg_id, request.closed_by_name));
     if (!responsible) return null;
     return findEmployee(responsible.employee_id, responsible.tg_user_id, responsible.full_name);
   }

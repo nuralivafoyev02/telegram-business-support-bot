@@ -2248,7 +2248,7 @@ async function testDashboardPeriodCountsOnlyRequestsCreatedInSelectedRange() {
   }
 }
 
-async function testDashboardEmployeePerformanceAttributesClosedWithoutCloser() {
+async function testDashboardEmployeePerformanceAttributesClosedByResponsibleEmployee() {
   const originalSelect = supabase.select;
   const originalEmployeeStats = stats.selectEmployeeStatistics;
   const originalChatStats = stats.selectChatStatistics;
@@ -2274,7 +2274,7 @@ async function testDashboardEmployeePerformanceAttributesClosedWithoutCloser() {
       closed_at: '2026-05-24T10:10:00.000Z'
     },
     {
-      id: 'request-closed-no-closer',
+      id: 'request-closed-by-other',
       source_type: 'group',
       chat_id: chatId,
       customer_tg_id: 502,
@@ -2282,6 +2282,9 @@ async function testDashboardEmployeePerformanceAttributesClosedWithoutCloser() {
       initial_message_id: 61,
       status: 'closed',
       assigned_to_employee_id: 'emp-2',
+      closed_by_employee_id: 'emp-1',
+      closed_by_tg_id: 777,
+      closed_by_name: 'Uyqur | Nurali',
       created_at: '2026-05-24T11:00:00.000Z',
       closed_at: '2026-05-24T11:20:00.000Z'
     }
@@ -2318,7 +2321,7 @@ async function testDashboardEmployeePerformanceAttributesClosedWithoutCloser() {
     assert.ok(nurali);
     assert.ok(mirshod);
     assert.strictEqual(nurali.closed_requests, 1);
-    assert.strictEqual(mirshod.closed_requests, 1);
+    assert.strictEqual(mirshod.closed_requests, 1, 'mas\'ul xodim assigned_to bo\'yicha hisoblanadi, closed_by emas');
     const rankingClosedTotal = performance.reduce((sum, item) => sum + Number(item.closed_requests || 0), 0);
     assert.strictEqual(rankingClosedTotal, period.closed_requests);
   } finally {
@@ -4390,7 +4393,7 @@ async function run() {
   await testDashboardEmployeePerformanceCountsOpenOnlyWhenAssigned();
   await testDashboardEmployeePerformanceAvgIncludesAssignedOpenWait();
   await testDashboardPeriodCountsOnlyRequestsCreatedInSelectedRange();
-  await testDashboardEmployeePerformanceAttributesClosedWithoutCloser();
+  await testDashboardEmployeePerformanceAttributesClosedByResponsibleEmployee();
   await testDashboardEmployeePerformanceCountsClosedByCreatedDate();
   await testRequestsListEnrichesCompanyFromRegisteredGroup();
   await testRequestsListShowsResponsibleEmployeeFromTicketMessages();
