@@ -720,13 +720,13 @@ function buildEmployeePerformance({
   }
 
   function resolveClosedRequestEmployee(request) {
-    const responsible = resolveDisplayedRequestResponsibleEmployee(request, {
+    const responsible = resolveRequestListedResponsibleEmployee(request, {
       employeeMaps,
       messages: messagesByConversation.get(conversationScopeKey(request)) || [],
       events: eventsByRequestId.get(request.id) || [],
       chatToEmployeeId,
       resolveOptions
-    }) || employeeSummary(findEmployee(request.closed_by_employee_id, request.closed_by_tg_id, request.closed_by_name));
+    });
     if (!responsible) return null;
     return findEmployee(responsible.employee_id, responsible.tg_user_id, responsible.full_name);
   }
@@ -1424,9 +1424,7 @@ async function getDashboardAnalytics(query = {}) {
     statsFocus
       ? Promise.resolve([])
       : supabase.select('companies', { select: 'id,name,is_active', limit: '5000' }).catch(() => []),
-    statsFocus
-      ? Promise.resolve([])
-      : supabase.select('company_members', { select: 'company_id,employee_id,member_type,is_active', limit: '5000' }).catch(() => []),
+    supabase.select('company_members', { select: 'company_id,employee_id,member_type,is_active', limit: '5000' }).catch(() => []),
     getCachedCompanyInfo().catch(() => null)
   ]);
   const companyInfoCompanies = resolveCachedCompanyInfoCompanies(companyInfoCache);
@@ -1466,18 +1464,18 @@ async function getDashboardAnalytics(query = {}) {
           .map(chat => chat.chat_id)
       ]).filter(value => value !== undefined && value !== null)
   )];
-  const messageMaxRows = statsFocus ? (window ? 1200 : 4000) : (window ? 15000 : 40000);
+  const messageMaxRows = statsFocus ? 40000 : (window ? 15000 : 40000);
   const messages = chatIds.length ? await selectPagedByChunks('messages', {
     select: 'id,tg_message_id,chat_id,from_tg_user_id,from_name,from_username,employee_id,source_type,classification,text,business_connection_id,created_at',
     order: supabase.order('created_at', false),
-    ...rangeQuery('created_at', window)
+    ...(statsFocus ? {} : rangeQuery('created_at', window))
   }, 'chat_id', chatIds, { maxRows: messageMaxRows }) : [];
   const businessConnectionEmployee = await loadBusinessConnectionEmployeeMap(requests, messages, employees);
   const requestIds = [...new Set(requests.map(request => request.id).filter(Boolean))];
   const events = requestIds.length ? await selectPagedByChunks('request_events', {
     select: 'id,request_id,chat_id,tg_message_id,event_type,actor_tg_id,actor_name,employee_id,text,created_at',
     order: supabase.order('created_at', false)
-  }, 'request_id', requestIds, { maxRows: statsFocus ? 8000 : 20000 }) : [];
+  }, 'request_id', requestIds, { maxRows: statsFocus ? 40000 : 20000 }) : [];
   const eventsByRequestId = new Map();
   events.forEach(event => {
     if (!event.request_id) return;
@@ -2395,6 +2393,22 @@ function resolveDisplayedRequestResponsibleEmployee(request = {}, context = {}) 
     || resolveRequestResponsibleEmployee(request, messages, employeeMaps, chatToEmployeeId, resolveOptions);
 }
 
+function resolveRequestListedResponsibleEmployee(request = {}, context = {}) {
+  const {
+    employeeMaps = buildEmployeeMaps([]),
+    messages = [],
+    events = [],
+    chatToEmployeeId = new Map(),
+    resolveOptions = {}
+  } = context;
+  const closer = employeeMaps.byId.get(request.closed_by_employee_id)
+    || employeeMaps.byTgId.get(telegramIdKey(request.closed_by_tg_id))
+    || null;
+  return resolveRequestResponsibleEmployeeFromEvents(request, events, employeeMaps)
+    || resolveRequestResponsibleEmployee(request, messages, employeeMaps, chatToEmployeeId, resolveOptions)
+    || employeeSummary(closer);
+}
+
 function enrichOpenRequests({
   requests = [],
   chats = [],
@@ -3190,16 +3204,13 @@ async function listRequests(query) {
     const chat = chatMap.get(telegramIdKey(request.chat_id)) || {};
     const companyId = resolveCompanyIdForRequest(request, chatMap, externalChatCompanyMap) || null;
     const company = companyId ? companyMap.get(companyId) : null;
-    const closer = employeeMaps.byId.get(request.closed_by_employee_id) || employeeMaps.byTgId.get(telegramIdKey(request.closed_by_tg_id)) || null;
-    const responsible = resolveRequestResponsibleEmployeeFromEvents(request, eventsByRequestId.get(request.id) || [], employeeMaps)
-      || resolveRequestResponsibleEmployee(
-        request,
-        messagesByConversation.get(conversationScopeKey(request)) || [],
-        employeeMaps,
-        chatToEmployeeId,
-        resolveOptions
-      )
-      || employeeSummary(closer);
+    const responsible = resolveRequestListedResponsibleEmployee(request, {
+      employeeMaps,
+      messages: messagesByConversation.get(conversationScopeKey(request)) || [],
+      events: eventsByRequestId.get(request.id) || [],
+      chatToEmployeeId,
+      resolveOptions
+    });
     const responsibleName = responsible?.full_name || request.closed_by_name || '';
     return {
       ...request,
