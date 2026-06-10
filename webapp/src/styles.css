@@ -4894,9 +4894,6 @@ tbody tr.open-ticket-row:hover {
   max-height: min(300px, 42vh);
 }
 
-.employee-profile-thread .chat-bubble,
-.employee-profile-thread .chat-bubble-row.outbound .chat-bubble,
-.employee-profile-thread .chat-bubble.ticket-message,
 .employee-profile-thread .chat-bubble.ticket-message.ticket-message-closed {
   background: #fff;
   border-color: var(--line);

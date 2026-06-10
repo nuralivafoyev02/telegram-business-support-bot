@@ -1965,7 +1965,7 @@
                           <time>{{ fmtChatTime(message.created_at) }}</time>
                         </div>
                         <div v-else class="chat-bubble"
-                          :class="{ 'ticket-message': !!message.request_text, 'ticket-message-closed': isClosedTicketMessage(message) }">
+                          :class="{ 'ticket-message': showRequestBadge(message), 'ticket-message-closed': isClosedTicketMessage(message) }">
                           <div class="chat-bubble-author">{{ message.actor_name || (message.direction === 'outbound' ?
                             employeeProfile.employee?.full_name || 'Xodim' : 'Mijoz') }}</div>
                           <div v-if="message.media" class="chat-media">
