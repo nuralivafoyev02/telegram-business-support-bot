@@ -2432,7 +2432,7 @@ const employees = ref([]);
 const clickupTasks = ref([]);
 const companyInfo = ref({ summary: {}, companies: [], fetched_at: '', source: '' });
 const requestRows = ref([]);
-const periodOpenTicketRows = ref([]);
+const periodTicketRows = ref([]);
 const ticketList = ref({ rows: [], active: 'all', mode: 'all', source: 'all', title: 'Ticketlar ro‘yxati' });
 const ticketListSearch = ref('');
 const ticketListSupport = ref('all');
@@ -2982,7 +2982,8 @@ function normalizeDateKey(value = '') {
 
 const filteredOpenRequests = computed(() => (dashboard.openRequests || []).filter(request => isInSelectedPeriodDate(request.created_at)));
 const rankingOpenRequests = computed(() => {
-  if (periodOpenTicketRows.value.length) return periodOpenTicketRows.value;
+  const fromPeriod = periodTicketRows.value.filter(request => isOpenTicketStatus(request.status));
+  if (fromPeriod.length) return fromPeriod;
   return filteredOpenRequests.value || [];
 });
 
@@ -3161,6 +3162,7 @@ const supportPerformanceRows = computed(() => {
   const merged = new Map();
   const openSummaryMap = employeeOpenRequestSummaryMap();
   const periodStatsLookup = buildPerformanceStatsLookup(topEmployeeRows.value);
+  const periodClosedLookup = periodClosedCountLookup();
 
   // Faqat ma'lum bo'lgan xodimlarning kalitlarini yig'ib olamiz
   const knownEmployeeKeys = new Set([
@@ -3216,7 +3218,8 @@ const supportPerformanceRows = computed(() => {
     lookupKeys.forEach(key => openSummaryMap.delete(key));
     const assignedCompanyCount = visibleCompanyInfoRows.value.filter(company => companyMatchesEmployee(company, candidate)).length;
 
-    const closedRaw = periodRow ? Number(periodRow.closed_requests || 0) : 0;
+    const closedFallback = periodRow ? Number(periodRow.closed_requests || 0) : 0;
+    const closedRaw = resolvePeriodClosedCount(lookupKeys, closedFallback, periodClosedLookup);
     const openRaw = openSummary ? Number(openSummary.open_requests || 0) : 0;
     const totalRaw = closedRaw + openRaw;
     const slaRaw = totalRaw > 0 ? (closedRaw / totalRaw) * 100 : 100;
@@ -3308,7 +3311,20 @@ const supportPerformanceRows = computed(() => {
   );
   const allManagerRows = registeredManagers.map(manager => {
     const stats = managerStatsByKey.get(supportRowKey(manager)) || {};
-    return { ...manager, ...stats, role: 'manager', open_requests: 0, prev_open_requests: 0 };
+    const managerKeys = employeePerformanceLookupKeys({ ...manager, ...stats });
+    const closedFromPeriod = resolvePeriodClosedCount(
+      managerKeys,
+      Number(stats.closed_requests || 0),
+      periodClosedLookup
+    );
+    return {
+      ...manager,
+      ...stats,
+      role: 'manager',
+      closed_requests: closedFromPeriod,
+      open_requests: 0,
+      prev_open_requests: 0
+    };
   });
   const unassignedSummary = openSummaryMap.get('unassigned:open');
   if (unassignedSummary && Number(unassignedSummary.open_requests || 0) > 0) {
@@ -5648,11 +5664,11 @@ async function loadPeriodOpenTickets() {
       limit: 5000
     });
     if (loadToken !== periodOpenTicketsLoadToken) return;
-    periodOpenTicketRows.value = (Array.isArray(rows) ? rows : [])
-      .filter(request => isOpenTicketStatus(request.status) && isInSelectedPeriodDate(request.created_at));
+    periodTicketRows.value = (Array.isArray(rows) ? rows : [])
+      .filter(request => isInSelectedPeriodDate(request.created_at));
   } catch {
     if (loadToken !== periodOpenTicketsLoadToken) return;
-    periodOpenTicketRows.value = [];
+    periodTicketRows.value = [];
   }
 }
 
@@ -7073,6 +7089,29 @@ function classifyRankingOpenRequestAssignment(request = {}, employeeMappings = [
     return { assigned: false, mapping: null };
   }
   return { assigned: true, mapping: matchedEmp };
+}
+
+function periodClosedCountLookup() {
+  const lookup = new Map();
+  if (!periodTicketRows.value.length) return lookup;
+  const employeeMappings = buildEmployeeOpenRequestMappings();
+  periodTicketRows.value
+    .filter(request => isClosedLikeTicketStatus(request.status))
+    .forEach(request => {
+      const mapping = resolveOpenRequestEmployeeMapping(request, employeeMappings);
+      if (!mapping?.employee) return;
+      employeePerformanceLookupKeys(mapping.employee).forEach(key => {
+        lookup.set(key, Number(lookup.get(key) || 0) + 1);
+      });
+    });
+  return lookup;
+}
+
+function resolvePeriodClosedCount(lookupKeys = [], fallback = 0, closedLookup = new Map()) {
+  if (!periodTicketRows.value.length) return fallback;
+  const keys = [...new Set(lookupKeys.filter(Boolean))];
+  if (!keys.length) return 0;
+  return keys.reduce((max, key) => Math.max(max, Number(closedLookup.get(key) || 0)), 0);
 }
 
 function employeeOpenRequestSummaryMap() {
