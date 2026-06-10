@@ -2452,6 +2452,88 @@ async function testRequestsListEnrichesCompanyFromRegisteredGroup() {
   }
 }
 
+async function testRequestsListUsesCompanyGroupSupportMappingForResponsible() {
+  const originalSelect = supabase.select;
+  const chatId = -100905;
+  const companyId = 'company-markaz';
+  const companyInfoCache = {
+    companies: [{
+      id: companyId,
+      name: 'Markaz Qurilish',
+      uyqur_support_username: '@uyqur_mirshod',
+      groups: [{ chat_id: chatId, company_id: companyId, company_name: 'Markaz Qurilish' }]
+    }]
+  };
+
+  supabase.select = async (table, query = {}) => {
+    if (table === 'support_requests') return [{
+      id: 'request-open-markaz',
+      source_type: 'group',
+      chat_id: chatId,
+      company_id: companyId,
+      customer_tg_id: 701,
+      customer_name: 'Mijoz',
+      initial_message_id: 71,
+      initial_text: '@Uyqur_Dilbek tekshiring',
+      status: 'open',
+      created_at: '2026-06-10T10:01:00.000Z',
+      closed_at: null
+    }];
+    if (table === 'tg_chats') return [{
+      chat_id: chatId,
+      title: 'Markaz Qurilish | Uyqur',
+      source_type: 'group',
+      company_id: companyId
+    }];
+    if (table === 'companies') return [{ id: companyId, name: 'Markaz Qurilish', is_active: true }];
+    if (table === 'employees') return [
+      { id: 'emp-mirshod', tg_user_id: 801, full_name: 'Uyqur | Mirshod', username: 'uyqur_mirshod', role: 'support', is_active: true },
+      { id: 'emp-kozimjon', tg_user_id: 802, full_name: 'Kozimjon Xasanovich Yoqubov', username: 'kozimjon', role: 'manager', is_active: true }
+    ];
+    if (table === 'messages') return [
+      {
+        id: 'm70',
+        tg_message_id: 70,
+        chat_id: chatId,
+        from_tg_user_id: 802,
+        from_name: 'Kozimjon Xasanovich Yoqubov',
+        from_username: 'kozimjon',
+        employee_id: 'emp-kozimjon',
+        source_type: 'group',
+        classification: 'employee_message',
+        text: 'Eski xabar',
+        created_at: '2026-06-10T09:50:00.000Z'
+      },
+      {
+        id: 'm71',
+        tg_message_id: 71,
+        chat_id: chatId,
+        from_tg_user_id: 701,
+        from_name: 'Mijoz',
+        employee_id: null,
+        source_type: 'group',
+        classification: 'request',
+        text: '@Uyqur_Dilbek tekshiring',
+        created_at: '2026-06-10T10:01:00.000Z'
+      }
+    ];
+    if (table === 'company_members') return [];
+    if (table === 'request_events') return [];
+    if (table === 'bot_settings' && query.key) return [{ key: 'uyqur_company_info_cache', value: companyInfoCache }];
+    return [];
+  };
+
+  try {
+    const result = await callAdmin('requests', { query: { period: 'all', limit: 100 } });
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.data[0].responsible_employee_id, 'emp-mirshod');
+    assert.strictEqual(result.payload.data[0].responsible_employee_name, 'Uyqur | Mirshod');
+    assert.notStrictEqual(result.payload.data[0].responsible_employee_id, 'emp-kozimjon');
+  } finally {
+    supabase.select = originalSelect;
+  }
+}
+
 async function testRequestsListShowsResponsibleEmployeeFromTicketMessages() {
   const originalSelect = supabase.select;
   const chatId = -100802;
@@ -4396,6 +4478,7 @@ async function run() {
   await testDashboardEmployeePerformanceAttributesClosedByResponsibleEmployee();
   await testDashboardEmployeePerformanceCountsClosedByCreatedDate();
   await testRequestsListEnrichesCompanyFromRegisteredGroup();
+  await testRequestsListUsesCompanyGroupSupportMappingForResponsible();
   await testRequestsListShowsResponsibleEmployeeFromTicketMessages();
   await testWebhookInfoWarnsWhenMessageUpdatesMissing();
   await testWebhookInfoWarnsWhenPointingToCompanyInfoUrl();

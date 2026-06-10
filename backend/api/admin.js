@@ -553,6 +553,15 @@ function isManagerEmployeeRecord(employee = {}) {
   return String(employee.role || '').trim().toLowerCase() === 'manager';
 }
 
+function isSupportEmployeeRecord(employee = {}) {
+  return String(employee?.role || '').trim().toLowerCase() === 'support';
+}
+
+function asSupportEmployeeSummary(employee = null) {
+  if (!employee || !isSupportEmployeeRecord(employee)) return null;
+  return employeeSummary(employee);
+}
+
 function buildEmployeePerformance({
   requests,
   employees,
@@ -1985,7 +1994,10 @@ function findEmployeeForCompanySupport(company = {}, employeeMaps = buildEmploye
     if (!employeeId || seen.has(employeeId)) continue;
     seen.add(employeeId);
     const keys = [supportIdentityKey(employee.username), supportIdentityKey(employee.full_name)].filter(Boolean);
-    if (keys.some(key => supportIdentitiesMatch(key, target))) return employee;
+    if (keys.some(key => supportIdentitiesMatch(key, target))) {
+      if (!isSupportEmployeeRecord(employee)) return null;
+      return employee;
+    }
   }
   return null;
 }
@@ -2019,6 +2031,43 @@ function findCompanyInfoRow(companies = [], { companyId = '', companyName = '' }
   return companies.find(company => normalizeCompanyDirectoryName(company.name) === normalizedName) || null;
 }
 
+function groupChatKeys(group = {}) {
+  return [group.chat_id, group.telegram_chat_id, group.group_id]
+    .map(value => telegramIdKey(value))
+    .filter(Boolean);
+}
+
+function hasCompanySupportAssignment(company = {}) {
+  return Boolean(normalizeSupportUsername(company?.uyqur_support_username));
+}
+
+function findCompanyInfoByGroupChatId(companyInfoCompanies = [], chatKey = '') {
+  const normalizedChatKey = telegramIdKey(chatKey);
+  if (!normalizedChatKey) return null;
+  for (const company of companyInfoCompanies) {
+    const groups = Array.isArray(company.groups) ? company.groups : [];
+    if (groups.some(group => groupChatKeys(group).includes(normalizedChatKey))) return company;
+  }
+  return null;
+}
+
+function resolveCompanyInfoForRequest(request = {}, options = {}) {
+  const {
+    chatMap = new Map(),
+    companyInfoCompanies = [],
+    directoryCompanies = [],
+    externalChatCompanyMap = new Map()
+  } = options;
+  const chatKey = telegramIdKey(request.chat_id);
+  const chat = chatKey ? (chatMap.get(chatKey) || {}) : {};
+  const external = chatKey ? (externalChatCompanyMap.get(chatKey) || {}) : {};
+  return findCompanyInfoByGroupChatId(companyInfoCompanies, chatKey)
+    || findCompanyInfoRow(companyInfoCompanies, {
+      companyId: request.company_id || chat.company_id || external.company_id,
+      companyName: request.company_name || chat.company_name || external.company_name || companyNameFromChatTitle(chat.title || request.chat_title)
+    }, directoryCompanies);
+}
+
 function buildCompanyGroupSupportByChatId(companyInfoCompanies = [], employeeMaps = buildEmployeeMaps([])) {
   const map = new Map();
   companyInfoCompanies.forEach(company => {
@@ -2027,9 +2076,9 @@ function buildCompanyGroupSupportByChatId(companyInfoCompanies = [], employeeMap
     const summary = employeeSummary(employee);
     const companyId = companyDirectoryId(company);
     (Array.isArray(company.groups) ? company.groups : []).forEach(group => {
-      const chatKey = telegramIdKey(group.chat_id);
-      if (!chatKey) return;
-      map.set(chatKey, { ...summary, company_id: companyId || group.company_id || null });
+      groupChatKeys(group).forEach(chatKey => {
+        map.set(chatKey, { ...summary, company_id: companyId || group.company_id || null });
+      });
     });
   });
   return map;
@@ -2093,7 +2142,7 @@ function buildBusinessConnectionEmployeeMap(connections = [], employeeMaps = bui
     const connectionId = normalizeBusinessConnectionId(connection.connection_id);
     if (!connectionId) return;
     const employee = employeeMaps.byTgId.get(telegramIdKey(connection.tg_user_id));
-    if (employee) map.set(connectionId, employeeSummary(employee));
+    if (employee && isSupportEmployeeRecord(employee)) map.set(connectionId, employeeSummary(employee));
   });
   return map;
 }
@@ -2168,12 +2217,13 @@ function buildCompanyInfoChatMap(companyInfoCompanies = []) {
     const companyName = String(company.name || company.company_name || '').trim();
     const groups = Array.isArray(company.groups) ? company.groups : [];
     groups.forEach(group => {
-      const chatKey = telegramIdKey(group.chat_id);
-      if (!chatKey) return;
       const groupCompanyId = String(group.company_id || '').trim();
-      map.set(chatKey, {
+      const payload = {
         company_id: companyId || groupCompanyId,
         company_name: companyName || String(group.company_name || '').trim()
+      };
+      groupChatKeys(group).forEach(chatKey => {
+        map.set(chatKey, payload);
       });
     });
   });
@@ -2212,62 +2262,80 @@ function resolveOpenRequestSupportEmployee(request = {}, employeeMaps = buildEmp
     externalChatCompanyMap = new Map(),
     companyGroupSupportByChatId = new Map(),
     chatCompanySupportByChatId = new Map(),
-    companyInfoCompanies = [],
-    directoryCompanies = [],
     businessConnectionEmployee = new Map()
   } = options;
 
-  const assignedId = String(request.assigned_to_employee_id || '').trim();
-  if (assignedId && employeeMaps?.byId?.has(assignedId)) {
-    return employeeSummary(employeeMaps.byId.get(assignedId));
-  }
-
-  const openedId = String(request.opened_by_employee_id || '').trim();
-  if (openedId && employeeMaps?.byId?.has(openedId)) {
-    return employeeSummary(employeeMaps.byId.get(openedId));
-  }
-
   const chatKey = telegramIdKey(request.chat_id);
   const chat = chatKey ? (chatMap.get(chatKey) || {}) : {};
+  const company = resolveCompanyInfoForRequest(request, options);
+  if (company && hasCompanySupportAssignment(company)) {
+    const employee = findEmployeeForCompanySupport(company, employeeMaps);
+    if (employee) return employeeSummary(employee);
+    return null;
+  }
+
+  const assignedId = String(request.assigned_to_employee_id || '').trim();
+  if (assignedId && employeeMaps?.byId?.has(assignedId)) {
+    const assigned = asSupportEmployeeSummary(employeeMaps.byId.get(assignedId));
+    if (assigned) return assigned;
+  }
+
   const sourceType = String(request.source_type || chat.source_type || '').toLowerCase();
   const connectionId = normalizeBusinessConnectionId(request.business_connection_id);
   if (connectionId && businessConnectionEmployee.has(connectionId)) {
-    return businessConnectionEmployee.get(connectionId);
+    const connectionSupport = asSupportEmployeeSummary(employeeMaps.byId.get(businessConnectionEmployee.get(connectionId)?.employee_id));
+    if (connectionSupport) return connectionSupport;
   }
   if (isPrivateLikeSourceType(sourceType)) {
     const chatConnectionId = normalizeBusinessConnectionId(chat.business_connection_id);
     if (chatConnectionId && businessConnectionEmployee.has(chatConnectionId)) {
-      return businessConnectionEmployee.get(chatConnectionId);
+      const connectionSupport = asSupportEmployeeSummary(employeeMaps.byId.get(businessConnectionEmployee.get(chatConnectionId)?.employee_id));
+      if (connectionSupport) return connectionSupport;
     }
   }
 
-  if (chatKey && chatCompanySupportByChatId.has(chatKey)) {
-    return chatCompanySupportByChatId.get(chatKey);
-  }
-  if (chatKey && companyGroupSupportByChatId.has(chatKey)) {
-    return companyGroupSupportByChatId.get(chatKey);
+  const mappedFromChat = (chatKey && chatCompanySupportByChatId.get(chatKey))
+    || (chatKey && companyGroupSupportByChatId.get(chatKey))
+    || null;
+  if (mappedFromChat) {
+    const mappedSupport = asSupportEmployeeSummary(employeeMaps.byId.get(mappedFromChat.employee_id));
+    if (mappedSupport) return mappedSupport;
   }
 
   const externalCompanyId = chatKey ? String(externalChatCompanyMap.get(chatKey)?.company_id || '').trim() : '';
   if (externalCompanyId && companySupportByCompanyId.has(externalCompanyId)) {
-    return companySupportByCompanyId.get(externalCompanyId);
+    const companySupport = asSupportEmployeeSummary(employeeMaps.byId.get(companySupportByCompanyId.get(externalCompanyId)?.employee_id));
+    if (companySupport) return companySupport;
   }
 
   const companyId = resolveCompanyIdForRequest(request, chatMap, externalChatCompanyMap);
   if (companyId && companySupportByCompanyId.has(companyId)) {
-    return companySupportByCompanyId.get(companyId);
-  }
-
-  const company = findCompanyInfoRow(companyInfoCompanies, {
-    companyId: request.company_id || chat.company_id || externalCompanyId,
-    companyName: request.company_name || chat.company_name || companyNameFromChatTitle(chat.title || request.chat_title)
-  }, directoryCompanies);
-  if (company) {
-    const employee = findEmployeeForCompanySupport(company, employeeMaps);
-    if (employee) return employeeSummary(employee);
+    const companySupport = asSupportEmployeeSummary(employeeMaps.byId.get(companySupportByCompanyId.get(companyId)?.employee_id));
+    if (companySupport) return companySupport;
   }
 
   return null;
+}
+
+function resolveFirstSupportReplyAfterRequest(request = {}, messages = [], employeeMaps = buildEmployeeMaps([])) {
+  const requestTime = new Date(request.created_at || 0).getTime();
+  const match = messages
+    .filter(message => isEmployeeConversationMessage(message, employeeMaps))
+    .map(message => {
+      const employee = (employeeMaps.byId && employeeMaps.byId.get(message.employee_id))
+        || (employeeMaps.byTgId && employeeMaps.byTgId.get(telegramIdKey(message.from_tg_user_id)))
+        || (message.from_username && employeeMaps.byUsername
+          ? employeeMaps.byUsername.get(normalizeSupportUsername(message.from_username))
+          : null)
+        || (message.from_name && employeeMaps.byName
+          ? employeeMaps.byName.get(String(message.from_name).toLowerCase().trim())
+          : null);
+      return { employee, time: new Date(message.created_at || 0).getTime() };
+    })
+    .filter(item => item.employee && isSupportEmployeeRecord(item.employee) && Number.isFinite(item.time))
+    .filter(item => !Number.isFinite(requestTime) || item.time >= requestTime)
+    .sort((a, b) => a.time - b.time)[0];
+  return match ? employeeSummary(match.employee) : null;
 }
 
 function buildChatToEmployeeIdMap(chats = [], companyMembers = []) {
@@ -2384,29 +2452,29 @@ function resolveDisplayedRequestResponsibleEmployee(request = {}, context = {}) 
   const {
     employeeMaps = buildEmployeeMaps([]),
     messages = [],
-    events = [],
-    chatToEmployeeId = new Map(),
     resolveOptions = {}
   } = context;
 
-  return resolveRequestResponsibleEmployeeFromEvents(request, events, employeeMaps)
-    || resolveRequestResponsibleEmployee(request, messages, employeeMaps, chatToEmployeeId, resolveOptions);
+  const mapped = resolveOpenRequestSupportEmployee(request, employeeMaps, resolveOptions);
+  if (mapped) return mapped;
+  const company = resolveCompanyInfoForRequest(request, resolveOptions);
+  if (company && hasCompanySupportAssignment(company)) return null;
+  return resolveFirstSupportReplyAfterRequest(request, messages, employeeMaps);
 }
 
 function resolveRequestListedResponsibleEmployee(request = {}, context = {}) {
   const {
     employeeMaps = buildEmployeeMaps([]),
     messages = [],
-    events = [],
-    chatToEmployeeId = new Map(),
     resolveOptions = {}
   } = context;
-  const closer = employeeMaps.byId.get(request.closed_by_employee_id)
-    || employeeMaps.byTgId.get(telegramIdKey(request.closed_by_tg_id))
-    || null;
-  return resolveRequestResponsibleEmployeeFromEvents(request, events, employeeMaps)
-    || resolveRequestResponsibleEmployee(request, messages, employeeMaps, chatToEmployeeId, resolveOptions)
-    || employeeSummary(closer);
+  const mapped = resolveOpenRequestSupportEmployee(request, employeeMaps, resolveOptions);
+  if (mapped) return mapped;
+  const company = resolveCompanyInfoForRequest(request, resolveOptions);
+  if (company && hasCompanySupportAssignment(company)) return null;
+  return resolveFirstSupportReplyAfterRequest(request, messages, employeeMaps)
+    || asSupportEmployeeSummary(employeeMaps.byId.get(request.closed_by_employee_id)
+      || employeeMaps.byTgId.get(telegramIdKey(request.closed_by_tg_id)));
 }
 
 function enrichOpenRequests({
@@ -3194,15 +3262,26 @@ async function listRequests(query) {
   const enrichedChats = enrichChatsWithCompanyAssignments(chats, companyInfoCompanies, [...requestCompanies, ...chatCompanies]);
   const chatMap = new Map(enrichedChats.map(chat => [telegramIdKey(chat.chat_id), chat]));
   const employeeMaps = buildEmployeeMaps(employees);
-  const chatToEmployeeId = buildChatToEmployeeIdMap(enrichedChats, companyMembers);
-  const companySupportByCompanyId = buildCompanySupportByCompanyId(companyInfoCompanies, employeeMaps);
+  const directoryCompanies = [...requestCompanies, ...chatCompanies];
+  const supportMaps = buildOpenRequestSupportMaps({
+    companyInfoCompanies,
+    chats: enrichedChats,
+    employeeMaps,
+    directoryCompanies
+  });
   const businessConnectionEmployee = await loadBusinessConnectionEmployeeMap(requests, messages, employees);
-  const externalChatCompanyMap = buildCompanyInfoChatMap(companyInfoCompanies);
-  const resolveOptions = { chatMap, companySupportByCompanyId, businessConnectionEmployee, externalChatCompanyMap };
+  const chatToEmployeeId = buildChatToEmployeeIdMap(enrichedChats, companyMembers);
+  const resolveOptions = {
+    chatMap,
+    ...supportMaps,
+    businessConnectionEmployee,
+    companyInfoCompanies,
+    directoryCompanies
+  };
 
   return requests.map(request => {
     const chat = chatMap.get(telegramIdKey(request.chat_id)) || {};
-    const companyId = resolveCompanyIdForRequest(request, chatMap, externalChatCompanyMap) || null;
+    const companyId = resolveCompanyIdForRequest(request, chatMap, supportMaps.externalChatCompanyMap) || null;
     const company = companyId ? companyMap.get(companyId) : null;
     const responsible = resolveRequestListedResponsibleEmployee(request, {
       employeeMaps,

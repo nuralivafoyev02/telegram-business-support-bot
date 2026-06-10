@@ -7084,7 +7084,9 @@ function classifyOpenRequestAssignment(request = {}, employeeMappings = [], grou
 }
 
 function classifyRankingOpenRequestAssignment(request = {}, employeeMappings = []) {
-  const matchedEmp = resolveOpenRequestEmployeeMapping(request, employeeMappings);
+  const groupSupportIndex = buildCompanyGroupSupportIndex();
+  const matchedEmp = resolveOpenRequestEmployeeMapping(request, employeeMappings)
+    || findEmployeeMappingForOpenRequest(request, employeeMappings, groupSupportIndex);
   if (!matchedEmp || !isSupportEmployee(matchedEmp.employee) || isManagerEmployee(matchedEmp.employee)) {
     return { assigned: false, mapping: null };
   }
@@ -7095,10 +7097,12 @@ function periodClosedCountLookup() {
   const lookup = new Map();
   if (!periodTicketRows.value.length) return lookup;
   const employeeMappings = buildEmployeeOpenRequestMappings();
+  const groupSupportIndex = buildCompanyGroupSupportIndex();
   periodTicketRows.value
     .filter(request => isClosedLikeTicketStatus(request.status))
     .forEach(request => {
-      const mapping = resolveOpenRequestEmployeeMapping(request, employeeMappings);
+      const mapping = resolveOpenRequestEmployeeMapping(request, employeeMappings)
+        || findEmployeeMappingForOpenRequest(request, employeeMappings, groupSupportIndex);
       if (!mapping?.employee) return;
       employeePerformanceLookupKeys(mapping.employee).forEach(key => {
         lookup.set(key, Number(lookup.get(key) || 0) + 1);
