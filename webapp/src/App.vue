@@ -1964,7 +1964,8 @@
                           <span>{{ message.text }}</span>
                           <time>{{ fmtChatTime(message.created_at) }}</time>
                         </div>
-                        <div v-else class="chat-bubble" :class="{ 'ticket-message': !!message.request_text }">
+                        <div v-else class="chat-bubble"
+                          :class="{ 'ticket-message': !!message.request_text, 'ticket-message-closed': isClosedTicketMessage(message) }">
                           <div class="chat-bubble-author">{{ message.actor_name || (message.direction === 'outbound' ?
                             employeeProfile.employee?.full_name || 'Xodim' : 'Mijoz') }}</div>
                           <div v-if="message.media" class="chat-media">
@@ -2012,7 +2013,9 @@
                           <div v-if="chatMessageBodyText(message)" class="chat-message-text"
                             v-html="chatMessageHtml(message)"></div>
                           <div class="chat-bubble-footer">
-                            <span v-if="showRequestBadge(message)" class="chat-ticket">So‘rov</span>
+                            <span v-if="showMessageStatus(message)" class="badge"
+                              :class="messageStatusBadgeClass(message)">{{ messageStatusLabel(message) }}</span>
+                            <span v-else-if="showRequestBadge(message)" class="chat-ticket">So‘rov</span>
                             <span class="chat-source">{{ messageSourceLabel(message) }}</span>
                             <time>{{ fmtChatTime(message.created_at) }}</time>
                           </div>
@@ -4815,17 +4818,31 @@ function employeeMessageConversationItem(message = {}, employee = {}) {
   };
 }
 
-function employeeChatMessageConversationItem(message = {}, employee = {}) {
+function findEmployeeProfileRequestForMessage(message = {}, requestRows = []) {
+  const requestId = String(message.request_id || '').trim();
+  const messageId = String(message.message_id || message.tg_message_id || '').trim();
+  if (requestId) {
+    const byId = requestRows.find(row => String(row.id || '') === requestId);
+    if (byId) return byId;
+  }
+  if (messageId) {
+    return requestRows.find(row => String(row.initial_message_id || '') === messageId) || null;
+  }
+  return null;
+}
+
+function employeeChatMessageConversationItem(message = {}, employee = {}, requestRows = []) {
   if (isSystemMessage(message)) {
     return { ...message, direction: 'system', type: message.type || 'service', text: message.text || '', created_at: message.created_at || null };
   }
   const outbound = messageBelongsToEmployee(message, employee)
     || ['employee_message', 'admin_reply', 'ai_reply', 'bot_reply', 'bot_broadcast', 'bot_notification', 'bot_message'].includes(message.classification || '');
   const origin = message.origin_type || message.actor_type || (outbound ? 'employee' : 'customer');
+  const linkedRequest = findEmployeeProfileRequestForMessage(message, requestRows);
   return {
     id: message.id || `chat-message-${message.chat_id || ''}-${message.message_id || message.created_at || ''}`,
     type: outbound ? 'employee_reply' : 'chat_message',
-    request_id: message.request_id || null,
+    request_id: message.request_id || linkedRequest?.id || null,
     message_id: message.message_id || message.tg_message_id || null,
     direction: outbound ? 'outbound' : 'inbound',
     actor_type: origin,
@@ -4837,7 +4854,8 @@ function employeeChatMessageConversationItem(message = {}, employee = {}) {
     employee_id: message.employee_id || null,
     text: message.text || '',
     media: message.media || null,
-    request_text: message.request_text || '',
+    request_text: message.request_text || linkedRequest?.initial_text || '',
+    status: message.status || linkedRequest?.status || '',
     classification: message.classification || '',
     created_at: message.created_at || null
   };
@@ -4852,7 +4870,7 @@ function employeeScopedConversation(row = {}, employee = {}) {
   const requestEvents = requestRows.flatMap(request => employeeRequestEventConversationItems(request, employee));
   const messages = Array.isArray(row.chat_messages)
     ? row.chat_messages
-      .map(message => employeeChatMessageConversationItem(message, employee))
+      .map(message => employeeChatMessageConversationItem(message, employee, requestRows))
     : (Array.isArray(row.messages) ? row.messages : [])
       .map(message => employeeMessageConversationItem(message, employee))
       .filter(message => messageBelongsToEmployee(message, employee));
@@ -5198,9 +5216,21 @@ function previewFirstWords(text = '', count = 2) {
 function messageRequestStatus(message = {}) {
   if (message.status) return String(message.status).toLowerCase();
   const requestId = String(message.request_id || '').trim();
-  if (!requestId) return '';
-  const request = (chatDetail.value.requests || []).find(row => isSameRequest(row, requestId));
-  return String(request?.status || '').toLowerCase();
+  const messageId = String(message.message_id || '').trim();
+  const lookup = [
+    ...(chatDetail.value.requests || []),
+    ...(employeeProfileChatDetail.value.requests || []),
+    ...(employeeProfileChatRequests.value || [])
+  ];
+  if (requestId) {
+    const request = lookup.find(row => isSameRequest(row, requestId));
+    if (request?.status) return String(request.status).toLowerCase();
+  }
+  if (messageId) {
+    const request = lookup.find(row => String(row.initial_message_id || '') === messageId);
+    if (request?.status) return String(request.status).toLowerCase();
+  }
+  return '';
 }
 
 function messageStatusLabel(message = {}) {
