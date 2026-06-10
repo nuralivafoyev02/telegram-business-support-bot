@@ -4590,7 +4590,7 @@ tbody tr:hover {
 }
 
 .employee-support-modal .employee-chat-layout {
-  height: auto;
+  height: 100%;
   min-height: 0;
 }
 

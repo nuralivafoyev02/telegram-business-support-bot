@@ -1906,7 +1906,7 @@
             </aside>
 
             <section class="employee-chat-pane">
-              <Transition name="fade-slide-up" mode="out-in">
+              <Transition name="fade-slide-up" mode="out-in" @after-enter="scrollEmployeeProfileChatToEnd">
                 <div v-if="selectedEmployeeProfileChat" :key="employeeProfileSelectedChatKey" class="chat-pane-shell">
                   <div class="employee-chat-pane-head">
                     <div>
@@ -6373,10 +6373,11 @@ async function selectEmployeeProfileChat(row = {}) {
       requests: employeeProfileChatRequests.value,
       conversation: employeeScopedConversation(row, employee)
     };
+    employeeProfileChatLoading.value = false;
     await nextTick();
-    scrollEmployeeProfileChatToEnd();
+    await scrollEmployeeProfileChatToEnd();
     loadConversationMedia(employeeProfileConversation.value)
-      .then(scrollEmployeeProfileChatToEnd)
+      .then(() => scrollEmployeeProfileChatToEnd())
       .catch(error => showToast(error.message));
   } catch (error) {
     if (token !== employeeProfileChatToken || employeeProfileSelectedChatKey.value !== key) return;
@@ -6385,6 +6386,7 @@ async function selectEmployeeProfileChat(row = {}) {
   } finally {
     if (token === employeeProfileChatToken && employeeProfileSelectedChatKey.value === key) {
       employeeProfileChatLoading.value = false;
+      nextTick().then(() => scrollEmployeeProfileChatToEnd());
     }
   }
 }
