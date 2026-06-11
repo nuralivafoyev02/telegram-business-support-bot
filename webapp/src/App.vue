@@ -1393,7 +1393,7 @@
           <section class="metric-table-panel">
             <div class="metric-detail-body" :class="{ 'with-chat': metricDetail.chatPane }">
               <div class="metric-detail-main">
-                <div class="ticket-filter-tabs source-tabs compact-tabs">
+                <div v-if="metricDetail.showSourceTabs" class="ticket-filter-tabs source-tabs compact-tabs">
                   <button :class="{ active: metricDetail.source === 'all' }" @click="metricDetail.source = 'all'">Umumiy</button>
                   <button :class="{ active: metricDetail.source === 'group' }" @click="metricDetail.source = 'group'">Guruh</button>
                   <button :class="{ active: metricDetail.source === 'private' }" @click="metricDetail.source = 'private'">Shaxsiy</button>
@@ -1564,7 +1564,7 @@
         </div>
 
         <div v-else class="detail-stack">
-          <div class="ticket-filter-tabs source-tabs">
+          <div v-if="metricDetail.showSourceTabs" class="ticket-filter-tabs source-tabs">
             <button :class="{ active: metricDetail.source === 'all' }" @click="metricDetail.source = 'all'">Umumiy</button>
             <button :class="{ active: metricDetail.source === 'group' }" @click="metricDetail.source = 'group'">Guruh</button>
             <button :class="{ active: metricDetail.source === 'private' }" @click="metricDetail.source = 'private'">Shaxsiy</button>
@@ -2497,7 +2497,7 @@ const employeeProfileChatDetail = ref({ chat: null, requests: [], conversation: 
 const employeeProfileChatLoading = ref(false);
 const employeeProfileChatError = ref('');
 const employeeProfileTicketsOpen = ref(false);
-const metricDetail = ref({ title: '', columns: [], rows: [], empty: 'Ma’lumot yo‘q', pageSize: 12, summary: [], source: 'all' });
+const metricDetail = ref({ title: '', columns: [], rows: [], empty: 'Ma’lumot yo‘q', pageSize: 12, summary: [], source: 'all', showSourceTabs: true });
 const employeeGroupActivity = ref([]);
 const employeeGroupTicketVisibility = ref({});
 const employeeOpenRequests = ref([]);
@@ -6702,9 +6702,9 @@ function resetMetricChatDetail() {
   metricChatTicketsOpen.value = true;
 }
 
-function setMetricDetail({ title, rows, columns, empty = 'Ma’lumot topilmadi', pageSize = 12, summary = [], chatPane = false }) {
+function setMetricDetail({ title, rows, columns, empty = 'Ma’lumot topilmadi', pageSize = 12, summary = [], chatPane = false, showSourceTabs = true }) {
   resetMetricChatDetail();
-  metricDetail.value = { title, rows, columns, empty, pageSize, summary, chatPane, source: 'all' };
+  metricDetail.value = { title, rows, columns, empty, pageSize, summary, chatPane, source: 'all', showSourceTabs };
   modal.value = 'metricDetail';
 }
 
@@ -7379,6 +7379,7 @@ function openCompanyMetricDetail(kind = 'total') {
     rows,
     columns: companyMetricColumns,
     empty: 'Kompaniya ma’lumoti topilmadi',
+    showSourceTabs: false,
     summary: [
       { label: 'Kompaniya', value: fmtNumber(rows.length) },
       { label: 'Real', value: fmtNumber(rows.filter(row => Number(row.is_real || 0) === 1).length) },
