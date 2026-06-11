@@ -3815,6 +3815,12 @@ td,
   font-weight: 700;
 }
 
+.company-module-filter .mini-select {
+  min-width: 152px;
+  width: auto;
+  padding: 4px 30px 4px 10px;
+}
+
 .company-module-table-wrap {
   max-height: min(520px, 62vh);
   overflow: auto;
