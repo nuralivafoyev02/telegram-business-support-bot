@@ -540,8 +540,8 @@
               <section class="card company-module-table-card">
                 <div class="card-header company-module-table-head">
                   <div>
-                    <div class="card-title">Kompaniyalar ro‘yxati</div>
-                    <div class="card-note">Bo‘limlar foydalanish statistikasi</div>
+                    <div class="card-title">Bo‘limlar foydalanish statistikasi</div>
+                    <div class="card-note">Kompaniyalar ro‘yxati</div>
                   </div>
                   <div class="company-module-table-controls">
                     <label class="company-module-filter">
