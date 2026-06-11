@@ -87,19 +87,45 @@ async function loadActiveEmployeesForLookup() {
   return Array.isArray(rows) ? rows : [];
 }
 
+function employeeDisplayNameParts(value = '') {
+  return String(value || '')
+    .split('|')
+    .map(part => normalizeEmployeeName(part))
+    .filter(Boolean);
+}
+
+function usernamesLooselyMatch(left = '', right = '') {
+  const a = normalizeEmployeeUsername(left);
+  const b = normalizeEmployeeUsername(right);
+  if (!a || !b) return false;
+  if (a === b) return true;
+  if (a.endsWith(`_${b}`) || b.endsWith(`_${a}`)) return true;
+  if (a.includes(b) || b.includes(a)) return true;
+  return false;
+}
+
+function employeeNamesLooselyMatch(employeeName = '', displayName = '') {
+  const emp = normalizeEmployeeName(employeeName);
+  const display = normalizeEmployeeName(displayName);
+  if (!emp || !display) return false;
+  if (emp === display || display.includes(emp) || emp.includes(display)) return true;
+  const displayParts = employeeDisplayNameParts(displayName);
+  return displayParts.some(part => part === emp || part.includes(emp) || emp.includes(part));
+}
+
 function matchEmployeeByTelegramProfile(employees = [], user = {}) {
   const username = normalizeEmployeeUsername(user.username);
   const displayName = normalizeEmployeeName(tgUserName(user));
 
   if (username) {
-    const byUsername = employees.find(employee => normalizeEmployeeUsername(employee.username) === username);
+    const byUsername = employees.find(employee => usernamesLooselyMatch(employee.username, username));
     if (byUsername) return byUsername;
     const byNameAsUsername = employees.find(employee => normalizeEmployeeUsername(employee.full_name) === username);
     if (byNameAsUsername) return byNameAsUsername;
   }
 
   if (displayName) {
-    const byName = employees.find(employee => normalizeEmployeeName(employee.full_name) === displayName);
+    const byName = employees.find(employee => employeeNamesLooselyMatch(employee.full_name, tgUserName(user)));
     if (byName) return byName;
   }
 

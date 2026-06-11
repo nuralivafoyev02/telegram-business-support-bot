@@ -2536,7 +2536,7 @@ const floatingTooltipStyle = computed(() => ({
   transform: floatingTooltip.value.placement === 'top' ? 'translate(-50%, -100%)' : 'translate(-50%, 0)'
 }));
 
-const settingsForm = reactive({ ai_mode: 'false', auto_reply: 'true', message_reactions: 'false', ticket_notifications: 'false', ticket_group_id: '', done_tag: '#done', main_group_id: '', group_message_audit: 'main_group', group_message_audit_channel_id: '', request_detection: 'keyword' });
+const settingsForm = reactive({ ai_mode: 'false', auto_reply: 'true', message_reactions: 'true', ticket_notifications: 'false', ticket_group_id: '', done_tag: '#done', main_group_id: '', group_message_audit: 'main_group', group_message_audit_channel_id: '', request_detection: 'keyword' });
 const isManagerMode = computed(() => false);
 const mainTabs = computed(() => tabs.filter(tab => mainTabKeys.includes(tab.key)));
 const otherTabs = computed(() => tabs.filter(tab => otherTabKeys.includes(tab.key) && (tab.key !== 'clickup' || clickUpIntegrationReady.value)));
@@ -5846,8 +5846,8 @@ async function loadSettings() {
     ? String(!!autoReplySetting.enabled)
     : 'true';
   settingsForm.message_reactions = messageReactions === undefined
-    ? 'false'
-    : String(!!messageReactions?.enabled);
+    ? 'true'
+    : String(messageReactions?.enabled !== false);
   settingsForm.ticket_notifications = ticketNotifications === undefined
     ? 'false'
     : String(!!ticketNotifications?.enabled);

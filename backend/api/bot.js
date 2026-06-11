@@ -331,7 +331,7 @@ const DONE_REACTION_EMOJI = '💯';
 
 function reactionItemKeys(item = {}) {
   if (!item) return [];
-  if (item.type === 'emoji' && item.emoji) return [String(item.emoji)];
+  if ((item.type === 'emoji' || item.type === 'paid') && item.emoji) return [String(item.emoji)];
   if (item.type === 'custom_emoji' && item.custom_emoji_id !== undefined && item.custom_emoji_id !== null && item.custom_emoji_id !== '') {
     return [`custom:${String(item.custom_emoji_id)}`];
   }
@@ -629,6 +629,18 @@ async function handleDoneReaction(reaction = {}, settings = {}) {
   const result = await metrics.closeRequestByMessage({ message: closeMessage, targetMessageId: reaction.message_id, employee });
   if (result.closed) {
     await refreshTicketNotificationAfterGroupClose(result, closeMessage);
+    if (isGroupChat(chat)) {
+      const closer = employee.full_name || employee.username || tgUserName(actor);
+      await sendTrackedBotReply({
+        message: closeMessage,
+        sourceType: 'group',
+        text: `✅ So'rov yopildi (${closer})`,
+        options: { reply_to_message_id: reaction.message_id, parse_mode: null },
+        classification: 'bot_reply',
+        updateKind: 'reaction_ticket_closed_reply',
+        rawSource: 'reaction_ticket_closed_reply'
+      }).catch(error => logBackgroundError('reaction-ticket-closed-reply', error));
+    }
   }
   const taskRows = await supabase.select('clickup_tasks', {
     select: 'id,clickup_task_id,status',
@@ -704,6 +716,28 @@ async function handleEyeReaction(reaction = {}, settings = {}) {
   });
   if (supportRequest?.id) {
     console.info('[bot:eye-reaction:ticket]', { request_id: supportRequest.id, chat_id: chat.id });
+    if (isGroupChat(chat)) {
+      const opener = employee.full_name || employee.username || tgUserName(actor);
+      const preview = String(raw.text || savedMessage.text || '').trim().slice(0, 120);
+      const ticketText = preview
+        ? `✅ So'rov qabul qilindi (${opener})\n${preview}`
+        : `✅ So'rov qabul qilindi (${opener})`;
+      await sendTrackedBotReply({
+        message: raw,
+        sourceType,
+        text: ticketText,
+        options: { reply_to_message_id: savedMessage.tg_message_id, parse_mode: null },
+        classification: 'bot_reply',
+        updateKind: 'reaction_ticket_opened_reply',
+        rawSource: 'reaction_ticket_opened_reply'
+      }).catch(error => logBackgroundError('reaction-ticket-opened-reply', error));
+    }
+  } else if (!supportRequest) {
+    console.warn('[bot:eye-reaction:no-ticket]', {
+      chat_id: chat.id,
+      message_id: reaction.message_id,
+      employee_id: employee.id || null
+    });
   }
   const supportRequestId = supportRequest && supportRequest.id || null;
 
@@ -823,13 +857,20 @@ async function handleEyeReaction(reaction = {}, settings = {}) {
   }
 }
 
+function reactionsEnabledForChat(reaction = {}, settings = {}) {
+  if (settings.messageReactions?.enabled !== false) return true;
+  return isGroupChat(reaction.chat || {});
+}
+
 async function handleMessageReaction(reaction = {}) {
   const settings = await getBotSettings();
   if (reactionWasAddedDone(reaction, settings) && settings.messageReactions?.ticketClose !== false) {
     const result = await handleDoneReaction(reaction, settings);
     return { ok: true, handled: 'message_reaction_done', ...result };
   }
-  if (!settings.messageReactions?.enabled) return { ok: true, handled: 'message_reaction_disabled' };
+  if (!reactionsEnabledForChat(reaction, settings)) {
+    return { ok: true, handled: 'message_reaction_disabled' };
+  }
   if (reactionWasAddedEye(reaction, settings)) {
     const result = await handleEyeReaction(reaction, settings);
     if (result.skipped || result.error) {
@@ -837,6 +878,13 @@ async function handleMessageReaction(reaction = {}) {
     }
     return { ok: true, handled: 'message_reaction_eye', ...result };
   }
+  console.info('[bot:reaction:ignored]', {
+    chat_id: reaction.chat?.id || null,
+    message_id: reaction.message_id || null,
+    actor_id: reaction.user?.id || null,
+    actor_username: reaction.user?.username || null,
+    new_reaction: reaction.new_reaction || []
+  });
   return { ok: true, handled: 'message_reaction_ignored' };
 }
 
