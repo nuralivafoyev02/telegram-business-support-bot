@@ -656,7 +656,7 @@ function buildEmployeePerformance({
   }
 
   function assignOpenToEmployee(employee, request, { previous = false } = {}) {
-    if (!employee || isManagerEmployeeRecord(employee)) return false;
+    if (!employee) return false;
     const current = ensureEmployeeTotal({
       employee,
       employeeId: employee.id,
@@ -2255,6 +2255,22 @@ function resolveCompanyIdForRequest(request = {}, chatMap = new Map(), externalC
   return external?.company_id ? String(external.company_id).trim() : '';
 }
 
+function resolveExplicitTicketActor(request = {}, employeeMaps = buildEmployeeMaps([])) {
+  const openedId = String(request.opened_by_employee_id || '').trim();
+  if (openedId && employeeMaps?.byId?.has(openedId)) {
+    return employeeSummary(employeeMaps.byId.get(openedId));
+  }
+  const assignedId = String(request.assigned_to_employee_id || '').trim();
+  if (assignedId && employeeMaps?.byId?.has(assignedId)) {
+    return employeeSummary(employeeMaps.byId.get(assignedId));
+  }
+  const closedId = String(request.closed_by_employee_id || '').trim();
+  if (closedId && employeeMaps?.byId?.has(closedId)) {
+    return employeeSummary(employeeMaps.byId.get(closedId));
+  }
+  return null;
+}
+
 function resolveOpenRequestSupportEmployee(request = {}, employeeMaps = buildEmployeeMaps([]), options = {}) {
   const {
     chatMap = new Map(),
@@ -2265,6 +2281,9 @@ function resolveOpenRequestSupportEmployee(request = {}, employeeMaps = buildEmp
     businessConnectionEmployee = new Map()
   } = options;
 
+  const explicitActor = resolveExplicitTicketActor(request, employeeMaps);
+  if (explicitActor) return explicitActor;
+
   const chatKey = telegramIdKey(request.chat_id);
   const chat = chatKey ? (chatMap.get(chatKey) || {}) : {};
   const company = resolveCompanyInfoForRequest(request, options);
@@ -2272,12 +2291,6 @@ function resolveOpenRequestSupportEmployee(request = {}, employeeMaps = buildEmp
     const employee = findEmployeeForCompanySupport(company, employeeMaps);
     if (employee) return employeeSummary(employee);
     return null;
-  }
-
-  const assignedId = String(request.assigned_to_employee_id || '').trim();
-  if (assignedId && employeeMaps?.byId?.has(assignedId)) {
-    const assigned = asSupportEmployeeSummary(employeeMaps.byId.get(assignedId));
-    if (assigned) return assigned;
   }
 
   const sourceType = String(request.source_type || chat.source_type || '').toLowerCase();
@@ -2468,12 +2481,14 @@ function resolveRequestListedResponsibleEmployee(request = {}, context = {}) {
     messages = [],
     resolveOptions = {}
   } = context;
+  const explicitActor = resolveExplicitTicketActor(request, employeeMaps);
+  if (explicitActor) return explicitActor;
   const mapped = resolveOpenRequestSupportEmployee(request, employeeMaps, resolveOptions);
   if (mapped) return mapped;
   const company = resolveCompanyInfoForRequest(request, resolveOptions);
   if (company && hasCompanySupportAssignment(company)) return null;
   return resolveFirstSupportReplyAfterRequest(request, messages, employeeMaps)
-    || asSupportEmployeeSummary(employeeMaps.byId.get(request.closed_by_employee_id)
+    || employeeSummary(employeeMaps.byId.get(request.closed_by_employee_id)
       || employeeMaps.byTgId.get(telegramIdKey(request.closed_by_tg_id)));
 }
 
@@ -3195,7 +3210,7 @@ async function listPrivateChats(query) {
 
 async function listRequests(query) {
   const params = {
-    select: 'id,source_type,chat_id,company_id,customer_tg_id,customer_name,customer_username,initial_message_id,initial_text,status,business_connection_id,closed_at,closed_by_employee_id,closed_by_tg_id,closed_by_name,done_message_id,created_at',
+    select: 'id,source_type,chat_id,company_id,customer_tg_id,customer_name,customer_username,initial_message_id,initial_text,status,open_source,opened_by_employee_id,assigned_to_employee_id,business_connection_id,closed_at,closed_by_employee_id,closed_by_tg_id,closed_by_name,done_message_id,created_at',
     order: supabase.order(query.orderBy || 'created_at', false)
   };
   if (query.chat_id) params.chat_id = supabase.eq(query.chat_id);

@@ -3124,8 +3124,8 @@ function isUnassignedCompanyTicketRow(row = {}) {
 function shouldShowInSupportRanking(row = {}) {
   if (isUnassignedRankingRow(row)) return Number(row.open_requests || 0) > 0;
   if (row.is_manager_group === true) return true;
-  if (isManagerEmployee(row)) return false;
-  if (!isSupportEmployee(row)) return false;
+  if (hasEmployeeActivity(row)) return true;
+  if (!isSupportEmployee(row) && !isManagerEmployee(row)) return false;
   return Boolean(row.employee_id || row.id || row.tg_user_id || row.username);
 }
 
@@ -3269,9 +3269,9 @@ const supportPerformanceRows = computed(() => {
 
     const isManager = isManagerEmployee({ role: resolvedRole });
     const closed = closedRaw;
-    const open = isManager ? 0 : openRaw;
-    const total = isManager ? closedRaw : totalRaw;
-    const sla = isManager ? (closedRaw > 0 ? 100 : 0) : slaRaw;
+    const open = openRaw;
+    const total = totalRaw;
+    const sla = slaRaw;
     const avg = avgRaw;
     const handledChats = handledChatsRaw;
 
@@ -3298,10 +3298,10 @@ const supportPerformanceRows = computed(() => {
       close_rate: sla,
       sla,
       prev_closed_requests: periodRow ? Number(periodRow.prev_closed_requests || 0) : 0,
-      prev_open_requests: isManager ? 0 : (periodRow ? Number(periodRow.prev_open_requests || 0) : 0),
+      prev_open_requests: periodRow ? Number(periodRow.prev_open_requests || 0) : 0,
       prev_company_total: periodRow ? Number(periodRow.prev_company_total || 0) : 0,
       prev_avg_close_minutes: periodRow ? Number(periodRow.prev_avg_close_minutes || 0) : 0,
-      prev_close_rate: isManager ? (Number(periodRow?.prev_closed_requests || 0) > 0 ? 100 : 0) : (periodRow ? Number(periodRow.prev_close_rate || 0) : 0),
+      prev_close_rate: periodRow ? Number(periodRow.prev_close_rate || 0) : 0,
       grade
     };
   });
@@ -3313,15 +3313,14 @@ const supportPerformanceRows = computed(() => {
     if (isUnassignedRankingRow(summary)) return;
     const summarySupportKey = supportRowKey(summary);
     if (summarySupportKey && !knownEmployeeKeys.has(summarySupportKey)) return;
-    if (!isSupportEmployee(summary)) return;
     rows.push({
       key: summary.key,
       id: summary.employee_id || '',
       employee_id: summary.employee_id || '',
-      tg_user_id: '',
+      tg_user_id: summary.tg_user_id || '',
       username: summary.username || '',
       phone: '',
-      role: 'support',
+      role: summary.role || 'support',
       full_name: summary.full_name || 'Xodim',
       telegram_is_premium: false,
       is_support_employee: true,
@@ -7022,6 +7021,38 @@ function buildOpenRequestEmployeeMapping(employee, employeeMappings = []) {
 }
 
 function resolveOpenRequestEmployeeMapping(request = {}, employeeMappings = []) {
+  if (isClosedLikeTicketStatus(request.status)) {
+    const closedId = String(request.closed_by_employee_id || '').trim();
+    if (closedId) {
+      const byClosed = employeeMappings.find(mapping => mapping.id === closedId);
+      if (byClosed) return byClosed;
+      const closedEmployee = employees.value.find(row => !isAdminLikeEmployee(row)
+        && String(row.id || row.employee_id || '').trim() === closedId);
+      const closedMapping = buildOpenRequestEmployeeMapping(closedEmployee, employeeMappings);
+      if (closedMapping) return closedMapping;
+    }
+  }
+
+  const openedId = String(request.opened_by_employee_id || '').trim();
+  if (openedId) {
+    const byOpened = employeeMappings.find(mapping => mapping.id === openedId);
+    if (byOpened) return byOpened;
+    const openedEmployee = employees.value.find(row => !isAdminLikeEmployee(row)
+      && String(row.id || row.employee_id || '').trim() === openedId);
+    const openedMapping = buildOpenRequestEmployeeMapping(openedEmployee, employeeMappings);
+    if (openedMapping) return openedMapping;
+  }
+
+  const assignedId = String(request.assigned_to_employee_id || '').trim();
+  if (assignedId) {
+    const byAssigned = employeeMappings.find(mapping => mapping.id === assignedId);
+    if (byAssigned) return byAssigned;
+    const assignedEmployee = employees.value.find(row => !isAdminLikeEmployee(row)
+      && String(row.id || row.employee_id || '').trim() === assignedId);
+    const assignedMapping = buildOpenRequestEmployeeMapping(assignedEmployee, employeeMappings);
+    if (assignedMapping) return assignedMapping;
+  }
+
   const responsibleId = String(request.responsible_employee_id || '').trim();
   if (responsibleId) {
     const byResponsibleId = employeeMappings.find(mapping => mapping.id === responsibleId);
@@ -7051,18 +7082,6 @@ function resolveOpenRequestEmployeeMapping(request = {}, employeeMappings = []) 
       && (supportIdentitiesMatch(row.full_name, responsibleName) || supportIdentitiesMatch(row.username, responsibleName)));
     const mapped = buildOpenRequestEmployeeMapping(employee, employeeMappings);
     if (mapped) return mapped;
-  }
-
-  const assignedId = String(request.assigned_to_employee_id || '').trim();
-  if (assignedId) {
-    const byAssigned = employeeMappings.find(mapping => mapping.id === assignedId);
-    if (byAssigned) return byAssigned;
-  }
-
-  const openedId = String(request.opened_by_employee_id || '').trim();
-  if (openedId) {
-    const byOpened = employeeMappings.find(mapping => mapping.id === openedId);
-    if (byOpened) return byOpened;
   }
 
   return null;
@@ -7140,7 +7159,7 @@ function countAssignedOverdueOpenRequests(requests = []) {
   const groupSupportIndex = buildCompanyGroupSupportIndex();
   return requests.filter(request => {
     const matchedEmp = findEmployeeMappingForOpenRequest(request, employeeMappings, groupSupportIndex);
-    if (!matchedEmp || !isSupportEmployee(matchedEmp.employee) || isManagerEmployee(matchedEmp.employee)) return false;
+    if (!matchedEmp?.employee) return false;
     return openMinutes(request.created_at) > 30;
   }).length;
 }
@@ -7148,7 +7167,7 @@ function countAssignedOverdueOpenRequests(requests = []) {
 function classifyOpenRequestAssignment(request = {}, employeeMappings = [], groupSupportIndex = null) {
   const matchedEmp = resolveOpenRequestEmployeeMapping(request, employeeMappings)
     || findEmployeeMappingForOpenRequest(request, employeeMappings, groupSupportIndex);
-  if (!matchedEmp || !isSupportEmployee(matchedEmp.employee) || isManagerEmployee(matchedEmp.employee)) {
+  if (!matchedEmp?.employee) {
     return { assigned: false, mapping: null };
   }
   return { assigned: true, mapping: matchedEmp };
@@ -7158,7 +7177,7 @@ function classifyRankingOpenRequestAssignment(request = {}, employeeMappings = [
   const groupSupportIndex = buildCompanyGroupSupportIndex();
   const matchedEmp = resolveOpenRequestEmployeeMapping(request, employeeMappings)
     || findEmployeeMappingForOpenRequest(request, employeeMappings, groupSupportIndex);
-  if (!matchedEmp || !isSupportEmployee(matchedEmp.employee) || isManagerEmployee(matchedEmp.employee)) {
+  if (!matchedEmp?.employee) {
     return { assigned: false, mapping: null };
   }
   return { assigned: true, mapping: matchedEmp };

@@ -134,11 +134,12 @@ function matchEmployeeByTelegramProfile(employees = [], user = {}) {
 
 async function bindEmployeeTelegramId(employee = {}, tgUserId) {
   if (!employee?.id || tgUserId === undefined || tgUserId === null || tgUserId === '') return employee;
-  if (employee.tg_user_id !== undefined && employee.tg_user_id !== null && employee.tg_user_id !== '') {
-    return employee;
-  }
   const boundId = Number(tgUserId);
   if (!Number.isFinite(boundId)) return employee;
+  const currentRaw = employee.tg_user_id;
+  const hasCurrent = currentRaw !== undefined && currentRaw !== null && currentRaw !== '';
+  const currentId = hasCurrent ? Number(currentRaw) : null;
+  if (hasCurrent && Number.isFinite(currentId) && currentId === boundId) return employee;
   await supabase.patch('employees', { id: supabase.eq(employee.id) }, {
     tg_user_id: boundId,
     last_activity_at: nowIso()
@@ -160,7 +161,13 @@ async function getKnownEmployeeByTelegramId(tgUserId) {
 async function getKnownEmployeeByTelegramUser(user = {}) {
   if (!user || !user.id || user.is_bot) return null;
   const byId = await getKnownEmployeeByTelegramId(user.id);
-  if (byId) return byId;
+  if (byId) {
+    const username = normalizeEmployeeUsername(user.username);
+    const storedUsername = normalizeEmployeeUsername(byId.username);
+    if (!username || !storedUsername || usernamesLooselyMatch(byId.username, user.username)) {
+      return byId;
+    }
+  }
 
   const employees = await loadActiveEmployeesForLookup();
   const matched = matchEmployeeByTelegramProfile(employees, user);
