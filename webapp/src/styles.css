@@ -3789,12 +3789,132 @@ td,
   background: var(--danger);
 }
 
-.active-company-chart {
-  min-height: 310px;
+.company-module-table-card {
+  overflow: hidden;
 }
 
-.company-bar {
-  fill: var(--primary);
+.company-module-table-head {
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.company-module-table-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.company-module-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted-strong);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.company-module-table-wrap {
+  max-height: min(520px, 62vh);
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.company-module-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.company-module-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-soft);
+  color: var(--muted-strong);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  text-align: left;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.company-module-table tbody td {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+}
+
+.company-module-table tbody tr:hover {
+  background: color-mix(in srgb, var(--primary) 4%, var(--surface));
+}
+
+.module-index-col {
+  width: 48px;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.module-company-col {
+  min-width: 180px;
+}
+
+.company-module-name {
+  color: var(--text);
+  font-weight: 800;
+}
+
+.module-count-col {
+  width: 92px;
+  text-align: center;
+}
+
+.module-count-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  min-height: 24px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--primary) 12%, var(--surface));
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.module-status-cell {
+  width: 96px;
+  text-align: center;
+}
+
+.module-status-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  min-height: 24px;
+  font-size: 14px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.module-status-icon.yes {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  background: #22c55e;
+  color: #fff;
+}
+
+.module-status-icon.no {
+  color: #ef4444;
+  font-size: 18px;
 }
 
 .donut::after {

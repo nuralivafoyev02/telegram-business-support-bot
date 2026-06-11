@@ -537,35 +537,67 @@
             <div class="spacer"></div>
 
             <div class="company-activity-stack">
-              <section class="card chart-card active-company-chart">
-                <div class="card-header">
+              <section class="card company-module-table-card">
+                <div class="card-header company-module-table-head">
                   <div>
-                    <div class="card-title">Eng faol kompaniyalar</div>
-                    <div class="card-note">Sessiya soni bo‘yicha</div>
+                    <div class="card-title">Kompaniyalar ro‘yxati</div>
+                    <div class="card-note">Bo‘limlar bo‘yicha foydalanish holati</div>
+                  </div>
+                  <div class="company-module-table-controls">
+                    <label class="company-module-filter">
+                      <span>Sortlash</span>
+                      <select v-model="companyModuleSort" class="select mini-select">
+                        <option value="modules_desc">Ko‘p ishlatilgan</option>
+                        <option value="modules_asc">Kam ishlatilgan</option>
+                        <option value="name">Kompaniya nomi</option>
+                      </select>
+                    </label>
+                    <label class="company-module-filter">
+                      <span>Davr</span>
+                      <select v-model="companyModulePeriod" class="select mini-select">
+                        <option value="all">Umumiy</option>
+                        <option v-for="period in periodOptions" :key="`module-period-${period.key}`" :value="period.key">
+                          {{ period.label }}
+                        </option>
+                      </select>
+                    </label>
                   </div>
                 </div>
-                <div class="vertical-bar-chart">
-                  <svg viewBox="0 0 760 260" role="img" aria-label="Eng faol kompaniyalar">
-                    <g class="trend-grid">
-                      <line v-for="tick in activeCompanyYTicks" :key="`company-y-${tick.value}`" x1="50" x2="720"
-                        :y1="tick.y" :y2="tick.y" />
-                      <line v-for="bar in activeCompanyChartBars" :key="`company-x-${bar.label}`" :x1="bar.x"
-                        :x2="bar.x" y1="36" y2="198" />
-                    </g>
-                    <g class="trend-axis">
-                      <text v-for="tick in activeCompanyYTicks" :key="`company-yt-${tick.value}`" x="40" :y="tick.y + 5"
-                        text-anchor="end">{{ fmtNumber(tick.value) }}</text>
-                      <text v-for="bar in activeCompanyChartBars" :key="`company-label-${bar.label}`" :x="bar.x" y="235"
-                        text-anchor="middle">{{ bar.short_label }}</text>
-                    </g>
-                    <g>
-                      <rect v-for="bar in activeCompanyChartBars" :key="`company-bar-${bar.label}`" class="company-bar"
-                        :x="bar.x - bar.width / 2" :y="bar.y" :width="bar.width" :height="bar.height" rx="8">
-                        <title>{{ bar.label }}: {{ fmtNumber(bar.session_count) }} ta sessiya</title>
-                      </rect>
-                    </g>
-                  </svg>
-                  <div v-if="!activeCompanyChartBars.length" class="empty compact">Faollik ma’lumoti yo‘q</div>
+                <div class="company-module-table-wrap">
+                  <table v-if="companyModuleTableRows.length" class="company-module-table">
+                    <thead>
+                      <tr>
+                        <th>№</th>
+                        <th>Kompaniya</th>
+                        <th class="module-count-col">Ishlatilgan</th>
+                        <th>Ta’minot</th>
+                        <th>Kassa</th>
+                        <th>Omborxona</th>
+                        <th>Qurilish jarayoni</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="(row, index) in companyModuleTableRows" :key="row.id || row.name || index">
+                        <td class="module-index-col">{{ index + 1 }}</td>
+                        <td class="module-company-col">
+                          <span class="company-module-name">{{ row.name || 'Kompaniya' }}</span>
+                        </td>
+                        <td class="module-count-col">
+                          <span class="module-count-badge">{{ row.module_active_count }}</span>
+                        </td>
+                        <td v-for="moduleKey in companyModuleKeys" :key="`${row.id || row.name}-${moduleKey}`"
+                          class="module-status-cell">
+                          <span class="module-status-icon" :class="row.module_usage[moduleKey] ? 'yes' : 'no'"
+                            :title="row.module_usage[moduleKey] ? 'Ishlatilgan' : 'Ishlatilmagan'"
+                            :aria-label="row.module_usage[moduleKey] ? 'Ishlatilgan' : 'Ishlatilmagan'">
+                            <template v-if="row.module_usage[moduleKey]">✓</template>
+                            <template v-else>✗</template>
+                          </span>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <div v-else class="empty compact">Kompaniya ma’lumoti topilmadi</div>
                 </div>
               </section>
 
@@ -4458,28 +4490,49 @@ const assignCompanyOptions = computed(() => {
     .slice(0, 120);
 });
 const companyActivitySummary = computed(() => summarizeCompanyRows(visibleCompanyInfoRows.value));
-const activeCompanyRows = computed(() => filteredCompanyInfoRows.value
-  .map(row => ({
-    ...row,
-    session_count: companyActivitySessionCount(row)
-  }))
-  .filter(row => Number(row.session_count || 0) > 0)
-  .sort((a, b) => Number(b.session_count || 0) - Number(a.session_count || 0)
-    || String(a.name || '').localeCompare(String(b.name || '')))
-  .slice(0, 6));
-const activeCompanyChartMax = computed(() => niceChartMax(Math.max(1, ...activeCompanyRows.value.map(row => Number(row.session_count || 0)))));
-const activeCompanyChartBars = computed(() => barChartColumns(activeCompanyRows.value, activeCompanyChartMax.value, {
-  left: 95,
-  right: 685,
-  top: 36,
-  bottom: 198
-}));
-const activeCompanyYTicks = computed(() => chartYTicks(activeCompanyChartMax.value, {
-  left: 95,
-  right: 685,
-  top: 36,
-  bottom: 198
-}));
+const companyModuleKeys = ['taminot', 'kassa', 'omborxona', 'qurilish_jarayoni'];
+const companyModulePeriod = ref('all');
+const companyModuleSort = ref('modules_desc');
+
+function companyModuleUsageValue(row = {}, key = '') {
+  const usage = row.module_usage || row.modules || row.product_modules || {};
+  if (usage && typeof usage === 'object') {
+    if (usage[key] !== undefined) return Boolean(usage[key]);
+    if (key === 'qurilish_jarayoni' && usage.qurilish !== undefined) return Boolean(usage.qurilish);
+  }
+  if (row[`${key}_used`] !== undefined) return Boolean(row[`${key}_used`]);
+  if (key === 'qurilish_jarayoni' && row.qurilish_used !== undefined) return Boolean(row.qurilish_used);
+  return false;
+}
+
+function companyModuleUsageMap(row = {}) {
+  return Object.fromEntries(companyModuleKeys.map(key => [key, companyModuleUsageValue(row, key)]));
+}
+
+function companyModuleActiveCount(usage = {}) {
+  return companyModuleKeys.reduce((sum, key) => sum + (usage[key] ? 1 : 0), 0);
+}
+
+const companyModuleTableRows = computed(() => {
+  const rows = filteredCompanyInfoRows.value.map(row => {
+    const module_usage = companyModuleUsageMap(row);
+    return {
+      ...row,
+      module_usage,
+      module_active_count: companyModuleActiveCount(module_usage)
+    };
+  });
+  const sort = companyModuleSort.value;
+  return [...rows].sort((a, b) => {
+    if (sort === 'name') return String(a.name || '').localeCompare(String(b.name || ''));
+    if (sort === 'modules_asc') {
+      return a.module_active_count - b.module_active_count
+        || String(a.name || '').localeCompare(String(b.name || ''));
+    }
+    return b.module_active_count - a.module_active_count
+      || String(a.name || '').localeCompare(String(b.name || ''));
+  });
+});
 const companyAlerts = computed(() => visibleCompanyInfoRows.value
   .filter(row => ['expired', 'soon'].includes(row.expiry_state))
   .sort((a, b) => Number(a.days_until_expiry ?? 9999) - Number(b.days_until_expiry ?? 9999))
