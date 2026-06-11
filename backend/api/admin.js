@@ -2256,14 +2256,19 @@ function resolveCompanyIdForRequest(request = {}, chatMap = new Map(), externalC
 }
 
 function resolveExplicitTicketActor(request = {}, employeeMaps = buildEmployeeMaps([])) {
-  const openedId = String(request.opened_by_employee_id || '').trim();
-  if (openedId && employeeMaps?.byId?.has(openedId)) {
-    return employeeSummary(employeeMaps.byId.get(openedId));
-  }
   const assignedId = String(request.assigned_to_employee_id || '').trim();
   if (assignedId && employeeMaps?.byId?.has(assignedId)) {
     return employeeSummary(employeeMaps.byId.get(assignedId));
   }
+
+  const openedId = String(request.opened_by_employee_id || '').trim();
+  if (openedId && employeeMaps?.byId?.has(openedId)) {
+    const opener = employeeMaps.byId.get(openedId);
+    if (!isManagerEmployeeRecord(opener)) {
+      return employeeSummary(opener);
+    }
+  }
+
   const closedId = String(request.closed_by_employee_id || '').trim();
   if (closedId && employeeMaps?.byId?.has(closedId)) {
     return employeeSummary(employeeMaps.byId.get(closedId));
@@ -2311,20 +2316,20 @@ function resolveOpenRequestSupportEmployee(request = {}, employeeMaps = buildEmp
     || (chatKey && companyGroupSupportByChatId.get(chatKey))
     || null;
   if (mappedFromChat) {
-    const mappedSupport = asSupportEmployeeSummary(employeeMaps.byId.get(mappedFromChat.employee_id));
-    if (mappedSupport) return mappedSupport;
+    const mappedEmployee = employeeMaps.byId.get(mappedFromChat.employee_id);
+    if (mappedEmployee) return employeeSummary(mappedEmployee);
   }
 
   const externalCompanyId = chatKey ? String(externalChatCompanyMap.get(chatKey)?.company_id || '').trim() : '';
   if (externalCompanyId && companySupportByCompanyId.has(externalCompanyId)) {
-    const companySupport = asSupportEmployeeSummary(employeeMaps.byId.get(companySupportByCompanyId.get(externalCompanyId)?.employee_id));
-    if (companySupport) return companySupport;
+    const companySupport = employeeMaps.byId.get(companySupportByCompanyId.get(externalCompanyId)?.employee_id);
+    if (companySupport) return employeeSummary(companySupport);
   }
 
   const companyId = resolveCompanyIdForRequest(request, chatMap, externalChatCompanyMap);
   if (companyId && companySupportByCompanyId.has(companyId)) {
-    const companySupport = asSupportEmployeeSummary(employeeMaps.byId.get(companySupportByCompanyId.get(companyId)?.employee_id));
-    if (companySupport) return companySupport;
+    const companySupport = employeeMaps.byId.get(companySupportByCompanyId.get(companyId)?.employee_id);
+    if (companySupport) return employeeSummary(companySupport);
   }
 
   return null;
@@ -2379,7 +2384,10 @@ function resolveRequestResponsibleEmployee(request, messages = [], employeeMaps 
 
   const openedId = String(request.opened_by_employee_id || '').trim();
   if (openedId && employeeMaps?.byId?.has(openedId)) {
-    return employeeSummary(employeeMaps.byId.get(openedId));
+    const opener = employeeMaps.byId.get(openedId);
+    if (!isManagerEmployeeRecord(opener)) {
+      return employeeSummary(opener);
+    }
   }
 
   const companyId = resolveCompanyIdForRequest(request, chatMap, externalChatCompanyMap);

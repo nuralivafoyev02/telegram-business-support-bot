@@ -7034,16 +7034,6 @@ function resolveOpenRequestEmployeeMapping(request = {}, employeeMappings = []) 
     }
   }
 
-  const openedId = String(request.opened_by_employee_id || '').trim();
-  if (openedId) {
-    const byOpened = employeeMappings.find(mapping => mapping.id === openedId);
-    if (byOpened) return byOpened;
-    const openedEmployee = employees.value.find(row => !isAdminLikeEmployee(row)
-      && String(row.id || row.employee_id || '').trim() === openedId);
-    const openedMapping = buildOpenRequestEmployeeMapping(openedEmployee, employeeMappings);
-    if (openedMapping) return openedMapping;
-  }
-
   const assignedId = String(request.assigned_to_employee_id || '').trim();
   if (assignedId) {
     const byAssigned = employeeMappings.find(mapping => mapping.id === assignedId);
@@ -7052,6 +7042,18 @@ function resolveOpenRequestEmployeeMapping(request = {}, employeeMappings = []) 
       && String(row.id || row.employee_id || '').trim() === assignedId);
     const assignedMapping = buildOpenRequestEmployeeMapping(assignedEmployee, employeeMappings);
     if (assignedMapping) return assignedMapping;
+  }
+
+  const openedId = String(request.opened_by_employee_id || '').trim();
+  if (openedId) {
+    const openedEmployee = employees.value.find(row => !isAdminLikeEmployee(row)
+      && String(row.id || row.employee_id || '').trim() === openedId);
+    if (openedEmployee && !isManagerEmployee(openedEmployee)) {
+      const byOpened = employeeMappings.find(mapping => mapping.id === openedId);
+      if (byOpened) return byOpened;
+      const openedMapping = buildOpenRequestEmployeeMapping(openedEmployee, employeeMappings);
+      if (openedMapping) return openedMapping;
+    }
   }
 
   const responsibleId = String(request.responsible_employee_id || '').trim();
