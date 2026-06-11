@@ -8112,7 +8112,7 @@ async function saveSettings() {
           }
         },
         { key: 'auto_reply', value: { enabled: settingsForm.auto_reply === 'true' } },
-        { key: 'message_reactions', value: { enabled: settingsForm.message_reactions === 'true', ticket_close: true, emoji: '⚡' } },
+        { key: 'message_reactions', value: { enabled: settingsForm.message_reactions === 'true', ticket_close: true, emoji: '⚡', accept_custom_emoji_as_eye: true } },
         {
           key: 'ticket_notifications',
           value: {

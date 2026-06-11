@@ -14,7 +14,14 @@ const DEFAULT_SETTINGS = Object.freeze({
   aiIntegration: normalizeAiIntegration({}),
   logNotifications: Object.freeze({ enabled: false, levels: ['error'], target: 'main_group' }),
   groupMessageAudit: Object.freeze({ enabled: true, target: 'main_group', channelId: '' }),
-  messageReactions: Object.freeze({ enabled: false, ticketClose: true, emoji: '\u26a1' }),
+  messageReactions: Object.freeze({
+    enabled: true,
+    ticketClose: true,
+    emoji: '\u26a1',
+    acceptCustomEmojiAsEye: true,
+    eyeCustomEmojiIds: [],
+    doneCustomEmojiIds: []
+  }),
   ticketNotifications: Object.freeze({
     enabled: false,
     target_chat_id: '',
@@ -91,11 +98,19 @@ function normalizeGroupMessageAudit(value = {}) {
   };
 }
 
+function normalizeCustomEmojiIds(value) {
+  const list = Array.isArray(value) ? value : (value === undefined || value === null || value === '' ? [] : [value]);
+  return [...new Set(list.map(id => String(id).trim()).filter(Boolean))];
+}
+
 function normalizeMessageReactions(value = {}) {
   return {
     enabled: normalizeBoolean(value.enabled, DEFAULT_SETTINGS.messageReactions.enabled),
     ticketClose: normalizeBoolean(value.ticket_close ?? value.ticketClose, DEFAULT_SETTINGS.messageReactions.ticketClose),
-    emoji: String(value.emoji || DEFAULT_SETTINGS.messageReactions.emoji).trim() || DEFAULT_SETTINGS.messageReactions.emoji
+    emoji: String(value.emoji || DEFAULT_SETTINGS.messageReactions.emoji).trim() || DEFAULT_SETTINGS.messageReactions.emoji,
+    acceptCustomEmojiAsEye: value.accept_custom_emoji_as_eye !== false && value.acceptCustomEmojiAsEye !== false,
+    eyeCustomEmojiIds: normalizeCustomEmojiIds(value.eye_custom_emoji_ids || value.eyeCustomEmojiIds),
+    doneCustomEmojiIds: normalizeCustomEmojiIds(value.done_custom_emoji_ids || value.doneCustomEmojiIds)
   };
 }
 

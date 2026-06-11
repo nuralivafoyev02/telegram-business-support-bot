@@ -1385,6 +1385,162 @@ async function testEyeReactionCreatesClickUpTask() {
   }
 }
 
+async function testEyeReactionMatchesEmployeeByUsernameWithoutTelegramId() {
+  const originalInsert = supabase.insert;
+  const originalSelect = supabase.select;
+  const originalPatch = supabase.patch;
+  const inserted = [];
+  const patched = [];
+  clearBotSettingsCache();
+
+  supabase.select = async (table, query = {}) => {
+    if (table === 'bot_settings') {
+      return [{ key: 'message_reactions', value: { enabled: true, ticket_close: true, emoji: '⚡' } }];
+    }
+    if (table === 'tg_chats') return [];
+    if (table === 'messages') {
+      return [{
+        id: 'message-row',
+        tg_message_id: 88,
+        chat_id: -100222,
+        from_tg_user_id: 1002,
+        from_name: 'Customer',
+        from_username: 'customer2',
+        source_type: 'group',
+        classification: 'message',
+        text: 'Yordam kerak',
+        raw: {
+          message_id: 88,
+          text: 'Yordam kerak',
+          chat: { id: -100222, type: 'supergroup', title: 'Nuriddin Buildings' },
+          from: { id: 1002, first_name: 'Customer', username: 'customer2', is_bot: false }
+        },
+        created_at: new Date().toISOString()
+      }];
+    }
+    if (table === 'employees') {
+      if (query.tg_user_id) return [];
+      if (query.is_active === 'eq.true') {
+        return [{
+          id: 'employee-2',
+          tg_user_id: null,
+          full_name: 'Uyqur | Nurali',
+          username: 'uyqur_nurali',
+          clickup_user_id: null,
+          is_active: true
+        }];
+      }
+      return [];
+    }
+    if (table === 'support_requests' && query.status === 'eq.open') return [];
+    return [];
+  };
+  supabase.insert = async (table, rows) => {
+    inserted.push({ table, rows });
+    if (table === 'support_requests') return rows.map(row => ({ id: 'request-username', ...row }));
+    return rows.map(row => ({ id: `${table}-row`, ...row }));
+  };
+  supabase.patch = async (table, query, values) => {
+    patched.push({ table, query, values });
+    return [{ id: 'employee-2', ...values }];
+  };
+
+  try {
+    const result = await callHandler({
+      update_id: 152,
+      message_reaction: {
+        chat: { id: -100222, type: 'supergroup', title: 'Nuriddin Buildings' },
+        message_id: 88,
+        date: 1777100300,
+        user: { id: 999, first_name: 'Nurali', username: 'uyqur_nurali', is_bot: false },
+        old_reaction: [],
+        new_reaction: [{ type: 'emoji', emoji: '👀' }]
+      }
+    });
+
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.handled, 'message_reaction_eye');
+    assert.notStrictEqual(result.payload.skipped, 'not_employee');
+    assert.ok(inserted.some(item => item.table === 'support_requests'));
+    assert.ok(patched.some(item => item.table === 'employees' && item.values.tg_user_id === 999));
+  } finally {
+    supabase.insert = originalInsert;
+    supabase.select = originalSelect;
+    supabase.patch = originalPatch;
+    clearBotSettingsCache();
+  }
+}
+
+async function testEyeReactionAcceptsGroupCustomEmoji() {
+  const originalInsert = supabase.insert;
+  const originalSelect = supabase.select;
+  const inserted = [];
+  clearBotSettingsCache();
+
+  supabase.select = async (table, query = {}) => {
+    if (table === 'bot_settings') {
+      return [{ key: 'message_reactions', value: { enabled: true, ticket_close: true, accept_custom_emoji_as_eye: true } }];
+    }
+    if (table === 'tg_chats') return [];
+    if (table === 'messages') {
+      return [{
+        id: 'message-row',
+        tg_message_id: 99,
+        chat_id: -100333,
+        from_tg_user_id: 1003,
+        from_name: 'Customer',
+        from_username: 'customer3',
+        source_type: 'group',
+        classification: 'message',
+        text: 'Custom emoji test',
+        raw: {
+          message_id: 99,
+          text: 'Custom emoji test',
+          chat: { id: -100333, type: 'supergroup', title: 'Nuriddin Buildings' },
+          from: { id: 1003, first_name: 'Customer', username: 'customer3', is_bot: false }
+        },
+        created_at: new Date().toISOString()
+      }];
+    }
+    if (table === 'employees') {
+      if (query.tg_user_id) {
+        return [{ id: 'employee-1', tg_user_id: 777, full_name: 'Ali', username: 'ali', is_active: true }];
+      }
+      return [];
+    }
+    if (table === 'support_requests' && query.status === 'eq.open') return [];
+    return [];
+  };
+  supabase.insert = async (table, rows) => {
+    inserted.push({ table, rows });
+    if (table === 'support_requests') return rows.map(row => ({ id: 'request-custom', ...row }));
+    return rows.map(row => ({ id: `${table}-row`, ...row }));
+  };
+
+  try {
+    const result = await callHandler({
+      update_id: 153,
+      message_reaction: {
+        chat: { id: -100333, type: 'supergroup', title: 'Nuriddin Buildings' },
+        message_id: 99,
+        date: 1777100400,
+        user: { id: 777, first_name: 'Ali', username: 'ali', is_bot: false },
+        old_reaction: [],
+        new_reaction: [{ type: 'custom_emoji', custom_emoji_id: '5443394972451749502' }]
+      }
+    });
+
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.handled, 'message_reaction_eye');
+    assert.notStrictEqual(result.payload.skipped, 'not_employee');
+    assert.ok(inserted.some(item => item.table === 'support_requests'));
+  } finally {
+    supabase.insert = originalInsert;
+    supabase.select = originalSelect;
+    clearBotSettingsCache();
+  }
+}
+
 async function testHundredReactionClosesTicketAndClickUpTask() {
   const originalInsert = supabase.insert;
   const originalSelect = supabase.select;
@@ -1920,6 +2076,8 @@ async function testGroupVoicePlaceholderOpensRequest() {
   await testEmployeePlainAnswerClosesLatestOpenRequest();
   await testMessageReactionSettingEnablesTicketCloseReaction();
   await testEyeReactionCreatesClickUpTask();
+  await testEyeReactionMatchesEmployeeByUsernameWithoutTelegramId();
+  await testEyeReactionAcceptsGroupCustomEmoji();
   await testHundredReactionClosesTicketAndClickUpTask();
   await testMainGroupBroadcastPreview();
   await testMainGroupBroadcastConfirmSendsAndReports();

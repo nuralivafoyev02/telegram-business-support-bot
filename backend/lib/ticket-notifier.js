@@ -232,7 +232,7 @@ async function resolveCallbackEmployee(query = {}) {
   const user = query.from || {};
   if (!user.id) return null;
   await metrics.upsertTelegramUser(user, {}, { prefer: 'return=minimal' }).catch(() => null);
-  return metrics.getKnownEmployeeByTelegramId(user.id);
+  return metrics.getKnownEmployeeByTelegramUser(user);
 }
 
 function openSourceLabel(source = '') {

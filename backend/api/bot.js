@@ -327,26 +327,68 @@ function jsonObject(value) {
 }
 
 const EYE_REACTION_EMOJIS = Object.freeze(['👀', '👁', '👁️']);
+const DONE_REACTION_EMOJI = '💯';
 
-function reactionEmojiSet(reactions = []) {
+function reactionItemKeys(item = {}) {
+  if (!item) return [];
+  if (item.type === 'emoji' && item.emoji) return [String(item.emoji)];
+  if (item.type === 'custom_emoji' && item.custom_emoji_id !== undefined && item.custom_emoji_id !== null && item.custom_emoji_id !== '') {
+    return [`custom:${String(item.custom_emoji_id)}`];
+  }
+  return [];
+}
+
+function reactionKeySet(reactions = []) {
   const set = new Set();
   for (const item of Array.isArray(reactions) ? reactions : []) {
-    if (!item) continue;
-    if ((item.type === 'emoji' || item.type === 'custom_emoji') && item.emoji) {
-      set.add(item.emoji);
-    }
+    for (const key of reactionItemKeys(item)) set.add(key);
   }
   return set;
 }
 
-function reactionWasAdded(reaction = {}, emoji) {
-  const oldSet = reactionEmojiSet(reaction.old_reaction);
-  const newSet = reactionEmojiSet(reaction.new_reaction);
-  return !oldSet.has(emoji) && newSet.has(emoji);
+function reactionWasAddedKey(reaction = {}, key) {
+  const oldSet = reactionKeySet(reaction.old_reaction);
+  const newSet = reactionKeySet(reaction.new_reaction);
+  return !oldSet.has(key) && newSet.has(key);
 }
 
-function reactionWasAddedEye(reaction = {}) {
-  return EYE_REACTION_EMOJIS.some(emoji => reactionWasAdded(reaction, emoji));
+function configuredCustomEmojiKeys(ids = []) {
+  return (Array.isArray(ids) ? ids : []).map(id => `custom:${String(id)}`);
+}
+
+function addedCustomEmojiIds(reaction = {}) {
+  const oldIds = new Set();
+  for (const item of Array.isArray(reaction.old_reaction) ? reaction.old_reaction : []) {
+    if (item?.type === 'custom_emoji' && item.custom_emoji_id !== undefined && item.custom_emoji_id !== null && item.custom_emoji_id !== '') {
+      oldIds.add(String(item.custom_emoji_id));
+    }
+  }
+  const added = [];
+  for (const item of Array.isArray(reaction.new_reaction) ? reaction.new_reaction : []) {
+    if (item?.type !== 'custom_emoji' || item.custom_emoji_id === undefined || item.custom_emoji_id === null || item.custom_emoji_id === '') continue;
+    const id = String(item.custom_emoji_id);
+    if (!oldIds.has(id)) added.push(id);
+  }
+  return added;
+}
+
+function reactionWasAddedDone(reaction = {}, settings = {}) {
+  const reactions = settings.messageReactions || {};
+  if (reactionWasAddedKey(reaction, DONE_REACTION_EMOJI)) return true;
+  return configuredCustomEmojiKeys(reactions.doneCustomEmojiIds)
+    .some(key => reactionWasAddedKey(reaction, key));
+}
+
+function reactionWasAddedEye(reaction = {}, settings = {}) {
+  const reactions = settings.messageReactions || {};
+  if (EYE_REACTION_EMOJIS.some(emoji => reactionWasAddedKey(reaction, emoji))) return true;
+  if (configuredCustomEmojiKeys(reactions.eyeCustomEmojiIds).some(key => reactionWasAddedKey(reaction, key))) {
+    return true;
+  }
+  if (reactions.acceptCustomEmojiAsEye === false) return false;
+
+  const doneCustomIds = new Set((reactions.doneCustomEmojiIds || []).map(id => String(id)));
+  return addedCustomEmojiIds(reaction).some(id => !doneCustomIds.has(id));
 }
 
 function bestPhotoSize(photo = []) {
@@ -507,6 +549,30 @@ async function getSavedReactionMessage(chatId, messageId) {
   return rows[0] || null;
 }
 
+async function ensureReactionTargetMessage(reaction = {}, chat = {}) {
+  const saved = await getSavedReactionMessage(chat.id, reaction.message_id);
+  if (saved) return saved;
+
+  const stubMessage = {
+    message_id: reaction.message_id,
+    date: reaction.date || Math.floor(Date.now() / 1000),
+    chat,
+    text: '',
+    from: {}
+  };
+  await metrics.saveMessage({
+    message: stubMessage,
+    updateKind: 'message_reaction_stub',
+    sourceType: isGroupChat(chat) ? 'group' : 'private',
+    classification: 'message',
+    employee: null
+  }, { prefer: 'return=minimal' }).catch(error => {
+    console.warn('[bot:eye-reaction:stub-message:error]', error.message);
+  });
+
+  return getSavedReactionMessage(chat.id, reaction.message_id);
+}
+
 async function getClickUpTracking(chatId, messageId, emoji) {
   const rows = await supabase.select('clickup_tasks', {
     select: 'id,status,clickup_task_id,clickup_task_url',
@@ -530,6 +596,12 @@ function reactionActor(reaction = {}) {
   return reaction.user || reaction.actor_chat || {};
 }
 
+async function resolveReactionEmployee(reaction = {}) {
+  const user = reaction.user;
+  if (!user?.id) return null;
+  return metrics.getKnownEmployeeByTelegramUser(user).catch(() => null);
+}
+
 async function ensureReactionContext(reaction = {}) {
   const chat = reaction.chat || {};
   const actor = reactionActor(reaction);
@@ -543,9 +615,7 @@ async function handleDoneReaction(reaction = {}, settings = {}) {
   const chat = reaction.chat || {};
   const actor = reactionActor(reaction);
   await ensureReactionContext(reaction);
-  const employee = actor.id && !actor.type
-    ? await metrics.getKnownEmployeeByTelegramId(actor.id).catch(() => null)
-    : null;
+  const employee = await resolveReactionEmployee(reaction);
   if (!employee) {
     return { ok: false, skipped: 'not_employee' };
   }
@@ -584,23 +654,26 @@ async function handleDoneReaction(reaction = {}, settings = {}) {
 async function handleEyeReaction(reaction = {}, settings = {}) {
   const chat = reaction.chat || {};
   const actor = reactionActor(reaction);
-  const employee = actor.id && !actor.type
-    ? await metrics.getKnownEmployeeByTelegramId(actor.id).catch(() => null)
-    : null;
+  const employee = await resolveReactionEmployee(reaction);
   if (!employee) {
-    console.warn('[bot:eye-reaction]', { skipped: 'not_employee', actor_id: actor.id || null, chat_id: chat.id });
+    console.warn('[bot:eye-reaction]', {
+      skipped: 'not_employee',
+      actor_id: actor.id || null,
+      actor_username: actor.username || null,
+      actor_name: tgUserName(actor) || null,
+      chat_id: chat.id
+    });
     return { ok: false, skipped: 'not_employee' };
   }
 
   await ensureReactionContext(reaction);
 
-  const savedMessage = await getSavedReactionMessage(chat.id, reaction.message_id);
+  const savedMessage = await ensureReactionTargetMessage(reaction, chat);
   if (!savedMessage) {
     console.warn('[bot:eye-reaction]', {
       error: 'message_not_found',
       chat_id: chat.id,
-      message_id: reaction.message_id,
-      hint: 'Bot avval mijoz xabarini DB ga saqlagan bo‘lishi kerak (guruhda admin + privacy off)'
+      message_id: reaction.message_id
     });
     return { ok: false, error: 'message_not_found' };
   }
@@ -752,12 +825,12 @@ async function handleEyeReaction(reaction = {}, settings = {}) {
 
 async function handleMessageReaction(reaction = {}) {
   const settings = await getBotSettings();
-  if (reactionWasAdded(reaction, '💯') && settings.messageReactions?.ticketClose !== false) {
+  if (reactionWasAddedDone(reaction, settings) && settings.messageReactions?.ticketClose !== false) {
     const result = await handleDoneReaction(reaction, settings);
     return { ok: true, handled: 'message_reaction_done', ...result };
   }
   if (!settings.messageReactions?.enabled) return { ok: true, handled: 'message_reaction_disabled' };
-  if (reactionWasAddedEye(reaction)) {
+  if (reactionWasAddedEye(reaction, settings)) {
     const result = await handleEyeReaction(reaction, settings);
     if (result.skipped || result.error) {
       console.warn('[bot:eye-reaction:result]', result);
@@ -1132,7 +1205,7 @@ async function getCallbackEmployee(query = {}) {
   const user = query.from || {};
   if (!user.id) return null;
   await metrics.upsertTelegramUser(user, {}, { prefer: 'return=minimal' }).catch(error => logBackgroundError('callback-user-upsert', error));
-  return metrics.getKnownEmployeeByTelegramId(user.id);
+  return metrics.getKnownEmployeeByTelegramUser(user);
 }
 
 async function ensureCallbackBotAdmin(query = {}, label = 'callback') {
@@ -2714,8 +2787,8 @@ async function handleTelegramUpdate(update = {}, options = {}) {
   }
 
   if (update.message_reaction) {
-    await handleMessageReaction(update.message_reaction);
-    return { ok: true, handled: 'message_reaction' };
+    const reactionResult = await handleMessageReaction(update.message_reaction);
+    return { ok: true, ...reactionResult };
   }
 
   const picked = pickMessage(update);

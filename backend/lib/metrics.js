@@ -70,6 +70,56 @@ async function upsertTelegramUser(user = {}, extra = {}, options = {}) {
   return Array.isArray(rows) ? rows[0] : null;
 }
 
+function normalizeEmployeeUsername(value = '') {
+  return String(value || '').replace(/^@/, '').trim().toLowerCase();
+}
+
+function normalizeEmployeeName(value = '') {
+  return String(value || '').trim().toLowerCase();
+}
+
+async function loadActiveEmployeesForLookup() {
+  const rows = await supabase.select('employees', {
+    select: 'id,tg_user_id,full_name,username,role,clickup_user_id,is_active',
+    is_active: 'eq.true',
+    limit: '5000'
+  }).catch(() => []);
+  return Array.isArray(rows) ? rows : [];
+}
+
+function matchEmployeeByTelegramProfile(employees = [], user = {}) {
+  const username = normalizeEmployeeUsername(user.username);
+  const displayName = normalizeEmployeeName(tgUserName(user));
+
+  if (username) {
+    const byUsername = employees.find(employee => normalizeEmployeeUsername(employee.username) === username);
+    if (byUsername) return byUsername;
+    const byNameAsUsername = employees.find(employee => normalizeEmployeeUsername(employee.full_name) === username);
+    if (byNameAsUsername) return byNameAsUsername;
+  }
+
+  if (displayName) {
+    const byName = employees.find(employee => normalizeEmployeeName(employee.full_name) === displayName);
+    if (byName) return byName;
+  }
+
+  return null;
+}
+
+async function bindEmployeeTelegramId(employee = {}, tgUserId) {
+  if (!employee?.id || tgUserId === undefined || tgUserId === null || tgUserId === '') return employee;
+  if (employee.tg_user_id !== undefined && employee.tg_user_id !== null && employee.tg_user_id !== '') {
+    return employee;
+  }
+  const boundId = Number(tgUserId);
+  if (!Number.isFinite(boundId)) return employee;
+  await supabase.patch('employees', { id: supabase.eq(employee.id) }, {
+    tg_user_id: boundId,
+    last_activity_at: nowIso()
+  }).catch(() => null);
+  return { ...employee, tg_user_id: boundId };
+}
+
 async function getKnownEmployeeByTelegramId(tgUserId) {
   if (!tgUserId) return null;
   const rows = await supabase.select('employees', {
@@ -81,14 +131,24 @@ async function getKnownEmployeeByTelegramId(tgUserId) {
   return rows[0] || null;
 }
 
+async function getKnownEmployeeByTelegramUser(user = {}) {
+  if (!user || !user.id || user.is_bot) return null;
+  const byId = await getKnownEmployeeByTelegramId(user.id);
+  if (byId) return byId;
+
+  const employees = await loadActiveEmployeesForLookup();
+  const matched = matchEmployeeByTelegramProfile(employees, user);
+  if (!matched) return null;
+
+  return bindEmployeeTelegramId(matched, user.id);
+}
+
 async function ensureEmployee(user = {}) {
   // Avtomatik xodim qo'shish o'chirilgan — xodimlar faqat admin panelidan
-  // qo'lda qo'shiladi. Bu funksiya endi mavjud xodimni qaytaradi yoki null.
-  // Bot mantig'i o'zgarmaydi: agar xodim ro'yxatda bo'lsa, u so'rovni yopuvchi
-  // sifatida saqlanadi; bo'lmasa `closed_by_employee_id = null` bo'ladi,
-  // lekin `closed_by_tg_id` va `closed_by_name` Telegram'dan to'ldiriladi.
+  // qo'lda qo'shiladi. Bu funksiya mavjud xodimni Telegram profili bo'yicha
+  // (ID, username yoki ism) qaytaradi yoki null.
   if (!user || !user.id) return null;
-  return await getKnownEmployeeByTelegramId(user.id);
+  return await getKnownEmployeeByTelegramUser(user);
 }
 
 async function upsertChat(chat = {}, sourceType = 'group', extra = {}, options = {}) {
@@ -608,6 +668,7 @@ module.exports = {
   sourceTypeFrom,
   upsertTelegramUser,
   getKnownEmployeeByTelegramId,
+  getKnownEmployeeByTelegramUser,
   ensureEmployee,
   upsertChat,
   saveBusinessConnection,
