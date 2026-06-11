@@ -541,7 +541,7 @@
                 <div class="card-header company-module-table-head">
                   <div>
                     <div class="card-title">Kompaniyalar ro‘yxati</div>
-                    <div class="card-note">Bo‘limlar bo‘yicha foydalanish holati</div>
+                    <div class="card-note">Bo‘limlar foydalanish statistikasi</div>
                   </div>
                   <div class="company-module-table-controls">
                     <label class="company-module-filter">
