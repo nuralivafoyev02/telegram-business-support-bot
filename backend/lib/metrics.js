@@ -171,8 +171,7 @@ async function getKnownEmployeeByTelegramUser(user = {}) {
 
   const employees = await loadActiveEmployeesForLookup();
   const matched = matchEmployeeByTelegramProfile(employees, user);
-  if (!matched) return null;
-
+  if (!matched) return byId || null;
   return bindEmployeeTelegramId(matched, user.id);
 }
 

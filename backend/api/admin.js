@@ -4225,7 +4225,7 @@ async function getEmployeeActivity(query = {}) {
     prevCustomStart: prevCustomPeriod?.start || '',
     prevCustomEnd: prevCustomPeriod?.end || ''
   };
-  const requestSelect = 'id,source_type,chat_id,customer_tg_id,customer_name,customer_username,initial_message_id,initial_text,status,business_connection_id,closed_at,closed_by_employee_id,closed_by_tg_id,closed_by_name,done_message_id,created_at,raw';
+  const requestSelect = 'id,source_type,chat_id,company_id,customer_tg_id,customer_name,customer_username,initial_message_id,initial_text,status,open_source,opened_by_employee_id,assigned_to_employee_id,business_connection_id,closed_at,closed_by_employee_id,closed_by_tg_id,closed_by_name,done_message_id,created_at,raw';
   const [requestsByEmployeeId, requestsByTgId, employeeMessagesById, employeeMessagesByTg, openRequestCandidates] = await Promise.all([
     selectPaged('support_requests', {
       select: requestSelect,
@@ -4294,13 +4294,16 @@ async function getEmployeeActivity(query = {}) {
   const companyInfoCompanies = resolveCachedCompanyInfoCompanies(companyInfoCache);
   const enrichedActivityChats = enrichChatsWithCompanyAssignments(chats, companyInfoCompanies, []);
   const activityChatMap = new Map(enrichedActivityChats.map(chat => [telegramIdKey(chat.chat_id), chat]));
-  const companySupportByCompanyId = buildCompanySupportByCompanyId(companyInfoCompanies, employeeMaps);
-  const externalChatCompanyMap = buildCompanyInfoChatMap(companyInfoCompanies);
+  const supportMaps = buildOpenRequestSupportMaps({
+    companyInfoCompanies,
+    chats: enrichedActivityChats,
+    employeeMaps
+  });
   const resolveOptions = {
     chatMap: activityChatMap,
-    companySupportByCompanyId,
+    ...supportMaps,
     businessConnectionEmployee,
-    externalChatCompanyMap
+    companyInfoCompanies
   };
   const selectedEmployeeId = String(enrichedEmployee.id || '').trim();
   const selectedTgUserId = telegramIdKey(enrichedEmployee.tg_user_id);
@@ -4323,7 +4326,7 @@ async function getEmployeeActivity(query = {}) {
     openEventsByRequestId.set(event.request_id, list);
   });
   function requestResponsibleMatchesEmployee(request = {}) {
-    const responsible = resolveDisplayedRequestResponsibleEmployee(request, {
+    const responsible = resolveRequestListedResponsibleEmployee(request, {
       employeeMaps,
       messages: messagesByConversation.get(conversationScopeKey(request)) || [],
       events: openEventsByRequestId.get(request.id) || [],

@@ -4778,8 +4778,8 @@ const employeeProfileChatRows = computed(() => sortChatsWithOpenFirst((employeeP
   return {
     ...group,
     source_type: group.source_type || 'private',
-    closed_count: Number(group.closed_count ?? closedRequests.length),
-    open_count: Number(group.open_count ?? openRequests.length),
+    closed_count: Math.max(Number(group.closed_count || 0), closedRequests.length),
+    open_count: Math.max(Number(group.open_count || 0), openRequests.length),
     message_count: Number(group.message_count ?? messages.length),
     chat_message_count: Number(group.chat_message_count ?? chatMessages.length),
     closed_requests: closedRequests,
@@ -5292,11 +5292,18 @@ function messageRequestStatus(message = {}) {
   if (message.status) return String(message.status).toLowerCase();
   const requestId = String(message.request_id || '').trim();
   const messageId = String(message.message_id || '').trim();
-  const lookup = [
-    ...(chatDetail.value.requests || []),
-    ...(employeeProfileChatDetail.value.requests || []),
-    ...(employeeProfileChatRequests.value || [])
-  ];
+  const lookup = modal.value === 'employeeCompanies'
+    ? [
+      ...(employeeProfileChatDetail.value.requests || []),
+      ...(employeeProfileChatRequests.value || [])
+    ]
+    : modal.value === 'metricDetail'
+      ? [...(metricChatDetail.value.requests || [])]
+      : [
+        ...(chatDetail.value.requests || []),
+        ...(employeeProfileChatDetail.value.requests || []),
+        ...(employeeProfileChatRequests.value || [])
+      ];
   if (requestId) {
     const request = lookup.find(row => isSameRequest(row, requestId));
     if (request?.status) return String(request.status).toLowerCase();

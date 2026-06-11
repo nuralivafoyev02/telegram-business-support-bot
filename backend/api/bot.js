@@ -617,6 +617,14 @@ async function handleDoneReaction(reaction = {}, settings = {}) {
   await ensureReactionContext(reaction);
   const employee = await resolveReactionEmployee(reaction);
   if (!employee) {
+    console.warn('[bot:done-reaction]', {
+      skipped: 'not_employee',
+      actor_id: actor.id || null,
+      actor_username: actor.username || null,
+      actor_name: tgUserName(actor) || null,
+      chat_id: chat.id,
+      message_id: reaction.message_id || null
+    });
     return { ok: false, skipped: 'not_employee' };
   }
   const closeMessage = {
@@ -641,6 +649,23 @@ async function handleDoneReaction(reaction = {}, settings = {}) {
         rawSource: 'reaction_ticket_closed_reply'
       }).catch(error => logBackgroundError('reaction-ticket-closed-reply', error));
     }
+  } else if (isGroupChat(chat)) {
+    console.warn('[bot:done-reaction]', {
+      skipped: 'no_open_request',
+      employee_id: employee.id || null,
+      employee_username: employee.username || null,
+      chat_id: chat.id,
+      message_id: reaction.message_id || null
+    });
+    await sendTrackedBotReply({
+      message: closeMessage,
+      sourceType: 'group',
+      text: '⚠️ Bu xabarda ochiq so\'rov topilmadi',
+      options: { reply_to_message_id: reaction.message_id, parse_mode: null },
+      classification: 'bot_reply',
+      updateKind: 'reaction_ticket_not_found_reply',
+      rawSource: 'reaction_ticket_not_found_reply'
+    }).catch(error => logBackgroundError('reaction-ticket-not-found-reply', error));
   }
   const taskRows = await supabase.select('clickup_tasks', {
     select: 'id,clickup_task_id,status',
@@ -866,6 +891,9 @@ async function handleMessageReaction(reaction = {}) {
   const settings = await getBotSettings();
   if (reactionWasAddedDone(reaction, settings) && settings.messageReactions?.ticketClose !== false) {
     const result = await handleDoneReaction(reaction, settings);
+    if (result.skipped || result.closed === false) {
+      console.warn('[bot:done-reaction:result]', result);
+    }
     return { ok: true, handled: 'message_reaction_done', ...result };
   }
   if (!reactionsEnabledForChat(reaction, settings)) {
