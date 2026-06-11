@@ -7349,6 +7349,7 @@ function openProductMetricDetail(kind = 'total') {
     rows,
     columns: productMetricColumns,
     empty: 'Kompaniya ma’lumoti topilmadi',
+    showSourceTabs: false,
     summary: [
       { label: 'Kompaniya', value: fmtNumber(rows.length) },
       { label: 'Aktiv', value: fmtNumber(rows.filter(row => row.business_status === 'ACTIVE').length) },
@@ -7527,6 +7528,7 @@ function openCompanyTimelineDetail(row = {}) {
     rows: [row],
     columns: productMetricColumns,
     empty: 'Kompaniya ma’lumoti topilmadi',
+    showSourceTabs: false,
     summary: [
       { label: 'Boshlanish', value: row.start_label || '—' },
       { label: 'Obuna muddati', value: row.subscription_label || '—' },
