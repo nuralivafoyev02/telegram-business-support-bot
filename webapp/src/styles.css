@@ -3867,12 +3867,11 @@ td,
 }
 
 .module-company-col {
-  min-width: 180px;
+  min-width: 220px;
 }
 
-.company-module-name {
-  color: var(--text);
-  font-weight: 800;
+.company-module-identity {
+  min-width: 0;
 }
 
 .module-count-col {

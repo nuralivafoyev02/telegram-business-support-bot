@@ -580,7 +580,13 @@
                       <tr v-for="(row, index) in companyModuleTableRows" :key="row.id || row.name || index">
                         <td class="module-index-col">{{ index + 1 }}</td>
                         <td class="module-company-col">
-                          <span class="company-module-name">{{ row.name || 'Kompaniya' }}</span>
+                          <span class="company-identity company-module-identity">
+                            <img v-if="row.icon" :src="row.icon" alt="" />
+                            <span>
+                              <b>{{ row.name || 'Kompaniya' }}</b>
+                              <small>{{ row.brand || 'Brend kiritilmagan' }}</small>
+                            </span>
+                          </span>
                         </td>
                         <td class="module-count-col">
                           <span class="module-count-badge">{{ row.module_active_count }}</span>
