@@ -1695,7 +1695,7 @@
                               </button>
                             </div>
                           </form>
-                          <button v-else class="btn small primary" type="button" @click.stop="openInlineReply(request)">
+                          <button v-else class="btn small primary" type="button" @click="openInlineReply(request)">
                             Javob
                           </button>
                         </template>
@@ -2520,7 +2520,7 @@ const employeeGroupTicketVisibility = ref({});
 const employeeOpenRequests = ref([]);
 const companyGroupDetail = ref({ company: null, summary: {}, groups: [] });
 const companyGroupSelectedChatKey = ref('');
-const companyGroupTicketsOpen = ref(true);
+const companyGroupTicketsOpen = ref(false);
 const employeeAvatarUrls = ref({});
 const employeeAvatarLoading = ref({});
 const chatAvatarUrls = ref({});
@@ -7518,7 +7518,7 @@ function normalizeCompanyGroupPayload(data = {}, fallback = {}) {
 
 async function selectCompanyGroup(row = {}) {
   companyGroupSelectedChatKey.value = companyGroupChatKey(row);
-  companyGroupTicketsOpen.value = true;
+  companyGroupTicketsOpen.value = false;
   clearMediaUrls();
   await nextTick();
   await scrollCompanyGroupToEnd();
@@ -7549,7 +7549,7 @@ async function openCompanyGroupActivity(row = {}) {
     detail.groups = sortChatsWithOpenFirst(detail.groups);
     companyGroupDetail.value = detail;
     companyGroupSelectedChatKey.value = companyGroupChatKey(detail.groups[0]);
-    companyGroupTicketsOpen.value = true;
+    companyGroupTicketsOpen.value = false;
     modal.value = 'companyGroupActivity';
     clearMediaUrls();
     await nextTick();
