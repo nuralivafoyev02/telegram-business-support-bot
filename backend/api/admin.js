@@ -3690,7 +3690,23 @@ async function getCompanyGroupActivity(query = {}) {
   });
 
 
-  const requestByInitialMessageId = new Map(requests.map(request => [telegramIdKey(request.initial_message_id), request]).filter(([id]) => id));
+  const requestByInitialMessageId = new Map();
+  requests.forEach(request => {
+    const key = telegramIdKey(request.initial_message_id);
+    if (!key) return;
+    const existing = requestByInitialMessageId.get(key);
+    if (!existing) {
+      requestByInitialMessageId.set(key, request);
+      return;
+    }
+    const existingOpen = isOpenRequestStatus(existing.status);
+    const currentOpen = isOpenRequestStatus(request.status);
+    if (currentOpen && !existingOpen) {
+      requestByInitialMessageId.set(key, request);
+    } else if (currentOpen === existingOpen && String(request.created_at || '') > String(existing.created_at || '')) {
+      requestByInitialMessageId.set(key, request);
+    }
+  });
   const requestByDoneMessageId = new Map(requests.map(request => [telegramIdKey(request.done_message_id), request]).filter(([id]) => id));
   const requestById = new Map(requests.map(request => [request.id, request]).filter(([id]) => id));
   const eventRequestByMessageId = new Map(events.map(event => {

@@ -1506,7 +1506,8 @@
                           <span>{{ message.text }}</span>
                           <time>{{ fmtChatTime(message.created_at) }}</time>
                         </div>
-                        <div v-else class="chat-bubble" :class="{ 'ticket-message': !!message.request_text }">
+                        <div v-else class="chat-bubble"
+                          :class="{ 'ticket-message': isTicketMessage(message), 'ticket-message-open': isOpenTicketMessage(message), 'ticket-message-closed': isClosedTicketMessage(message) }">
                           <div class="chat-bubble-author">{{ message.actor_name || (message.direction === 'outbound' ?
                             'Xodim'
                             : 'Mijoz') }}</div>
@@ -1554,6 +1555,9 @@
                           <div v-if="chatMessageBodyText(message)" class="chat-message-text"
                             v-html="chatMessageHtml(message)"></div>
                           <div class="chat-bubble-footer">
+                            <span v-if="isClosedTicketMessage(message)" class="chat-ticket chat-ticket-closed">Yopilgan</span>
+                            <span v-else-if="showMessageStatus(message)" class="badge"
+                              :class="messageStatusBadgeClass(message)">{{ messageStatusLabel(message) }}</span>
                             <span v-if="showRequestBadge(message)" class="chat-ticket">So‘rov</span>
                             <span class="chat-source">{{ messageSourceLabel(message) }}</span>
                             <time>{{ fmtChatTime(message.created_at) }}</time>
@@ -1711,7 +1715,8 @@
                           <span>{{ message.text }}</span>
                           <time>{{ fmtChatTime(message.created_at) }}</time>
                         </div>
-                        <div v-else class="chat-bubble" :class="{ 'ticket-message': !!message.request_text }">
+                        <div v-else class="chat-bubble"
+                          :class="{ 'ticket-message': isTicketMessage(message), 'ticket-message-open': isOpenTicketMessage(message), 'ticket-message-closed': isClosedTicketMessage(message) }">
                           <div class="chat-bubble-author">{{ message.actor_name || (message.direction === 'outbound' ?
                             'Xodim' : 'Mijoz') }}</div>
                           <div v-if="message.media" class="chat-media">
@@ -1758,6 +1763,9 @@
                           <div v-if="chatMessageBodyText(message)" class="chat-message-text"
                             v-html="chatMessageHtml(message)"></div>
                           <div class="chat-bubble-footer">
+                            <span v-if="isClosedTicketMessage(message)" class="chat-ticket chat-ticket-closed">Yopilgan</span>
+                            <span v-else-if="showMessageStatus(message)" class="badge"
+                              :class="messageStatusBadgeClass(message)">{{ messageStatusLabel(message) }}</span>
                             <span v-if="showRequestBadge(message)" class="chat-ticket">Ticket</span>
                             <span class="chat-source">{{ messageSourceLabel(message) }}</span>
                             <time>{{ fmtChatTime(message.created_at) }}</time>
@@ -2058,7 +2066,8 @@
                           <div v-if="chatMessageBodyText(message)" class="chat-message-text"
                             v-html="chatMessageHtml(message)"></div>
                           <div class="chat-bubble-footer">
-                            <span v-if="showMessageStatus(message)" class="badge"
+                            <span v-if="isClosedTicketMessage(message)" class="chat-ticket chat-ticket-closed">Yopilgan</span>
+                            <span v-else-if="showMessageStatus(message)" class="badge"
                               :class="messageStatusBadgeClass(message)">{{ messageStatusLabel(message) }}</span>
                             <span v-if="showRequestBadge(message)" class="chat-ticket">So‘rov</span>
                             <span class="chat-source">{{ messageSourceLabel(message) }}</span>
@@ -2302,7 +2311,8 @@
                     <div v-if="chatMessageBodyText(message)" class="chat-message-text"
                       v-html="chatMessageHtml(message)"></div>
                     <div class="chat-bubble-footer">
-                      <span v-if="showMessageStatus(message)" class="badge"
+                      <span v-if="isClosedTicketMessage(message)" class="chat-ticket chat-ticket-closed">Yopilgan</span>
+                      <span v-else-if="showMessageStatus(message)" class="badge"
                         :class="messageStatusBadgeClass(message)">{{ messageStatusLabel(message) }}</span>
                       <span v-if="showRequestBadge(message)" class="chat-ticket">So‘rov</span>
                       <span class="chat-source">{{ messageSourceLabel(message) }}</span>
@@ -5358,18 +5368,20 @@ function messageRequestStatus(message = {}) {
   if (message.status) return String(message.status).toLowerCase();
   const requestId = String(message.request_id || '').trim();
   const messageId = String(message.message_id || '').trim();
-  const lookup = modal.value === 'employeeCompanies'
-    ? [
-      ...(employeeProfileChatDetail.value.requests || []),
-      ...(employeeProfileChatRequests.value || [])
-    ]
-    : modal.value === 'metricDetail'
-      ? [...(metricChatDetail.value.requests || [])]
-      : [
-        ...(chatDetail.value.requests || []),
+  const lookup = modal.value === 'companyGroupActivity'
+    ? [...(companyGroupRequests.value || [])]
+    : modal.value === 'employeeCompanies'
+      ? [
         ...(employeeProfileChatDetail.value.requests || []),
         ...(employeeProfileChatRequests.value || [])
-      ];
+      ]
+      : modal.value === 'metricDetail'
+        ? [...(metricChatDetail.value.requests || [])]
+        : [
+          ...(chatDetail.value.requests || []),
+          ...(employeeProfileChatDetail.value.requests || []),
+          ...(employeeProfileChatRequests.value || [])
+        ];
   if (requestId) {
     const request = lookup.find(row => isSameRequest(row, requestId));
     if (request?.status) return String(request.status).toLowerCase();
@@ -5608,6 +5620,8 @@ function chatMessageBodyText(message = {}) {
 }
 
 function showRequestBadge(message = {}) {
+  const status = messageRequestStatus(message);
+  if (status === 'closed' || status === 'cancelled') return false;
   if (String(message?.type || '').toLowerCase() === 'ticket') return true;
   if (!String(message?.request_text || '').trim()) return false;
   const direction = String(message?.direction || '').toLowerCase();

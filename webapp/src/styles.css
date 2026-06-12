@@ -1621,9 +1621,14 @@ tbody tr:hover {
   font-weight: 900;
 }
 
+.chat-ticket-closed {
+  color: #166534;
+  background: #dcfce7;
+  border-color: #bbf7d0;
+}
+
 .chat-bubble.ticket-message {
   border-color: var(--chat-ticket-line);
-  background: var(--chat-ticket-bg);
 }
 
 .chat-bubble.ticket-message-open {
@@ -1637,8 +1642,15 @@ tbody tr:hover {
 }
 
 .chat-bubble.ticket-message.ticket-message-closed {
-  border-color: var(--line);
-  background: var(--chat-in-bg);
+  border-color: #e2e8f0;
+  background: #fff;
+}
+
+.chat-bubble.ticket-message.ticket-message-closed .chat-ticket-closed,
+.chat-bubble.ticket-message.ticket-message-closed .badge.green {
+  color: #166534;
+  background: #dcfce7;
+  border: 1px solid #bbf7d0;
 }
 
 .timeline-list {
@@ -5050,9 +5062,10 @@ tbody tr.open-ticket-row:hover {
   background: #fff4e5;
 }
 
-.employee-profile-thread .chat-bubble.ticket-message.ticket-message-closed {
+.employee-profile-thread .chat-bubble.ticket-message.ticket-message-closed,
+.telegram-thread .chat-bubble.ticket-message.ticket-message-closed {
   background: #fff;
-  border-color: var(--line);
+  border-color: #e2e8f0;
 }
 
 tbody tr.selected-row,
