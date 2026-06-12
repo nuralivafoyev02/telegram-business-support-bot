@@ -425,6 +425,7 @@ async function findOpenRequestByInitialMessage(chatId, messageId) {
     select: 'id,source_type,chat_id,company_id,customer_tg_id,customer_name,initial_message_id,initial_text,status,created_at',
     chat_id: supabase.eq(chatId),
     initial_message_id: supabase.eq(messageId),
+    status: 'eq.open',
     order: supabase.order('created_at', false),
     limit: '1'
   }).catch(() => []);

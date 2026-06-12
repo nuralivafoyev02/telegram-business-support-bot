@@ -4186,6 +4186,72 @@ function resolvePeriodCompaniesForEmployee({ employee, periodKey, periodCompanyK
   return assigned.filter(company => [...periodCompanyKeys].some(key => companyMatchesScopeKey(company, key)));
 }
 
+function collectSupportChatIdsForEmployee(employee = {}, companyInfoCompanies = [], employeeMaps = buildEmployeeMaps([])) {
+  const selectedEmployeeId = String(employee.id || '').trim();
+  const selectedTgUserId = telegramIdKey(employee.tg_user_id);
+  const chatIds = new Set();
+  (Array.isArray(companyInfoCompanies) ? companyInfoCompanies : []).forEach(company => {
+    const support = findEmployeeForCompanySupport(company, employeeMaps);
+    if (!support) return;
+    const matchesEmployee = (selectedEmployeeId && String(support.id || '') === selectedEmployeeId)
+      || (selectedTgUserId && telegramIdKey(support.tg_user_id) === selectedTgUserId);
+    if (!matchesEmployee) return;
+    (Array.isArray(company.groups) ? company.groups : []).forEach(group => {
+      [group.chat_id, group.telegram_chat_id, group.group_id].forEach(value => {
+        if (value !== undefined && value !== null && value !== '') chatIds.add(value);
+      });
+    });
+  });
+  return [...chatIds];
+}
+
+async function loadEmployeeOpenRequestCandidates(employee = {}, {
+  requestSelect = '',
+  supportChatIds = [],
+  activityChatIds = [],
+  maxRows = 2500
+} = {}) {
+  const rows = [];
+  const seen = new Set();
+  const push = list => {
+    for (const row of Array.isArray(list) ? list : []) {
+      const key = row.id || `${row.chat_id}:${row.initial_message_id || row.created_at}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      rows.push(row);
+    }
+  };
+  const [byAssigned, byOpened] = await Promise.all([
+    selectPaged('support_requests', {
+      select: requestSelect,
+      status: supabase.eq('open'),
+      assigned_to_employee_id: supabase.eq(employee.id),
+      order: supabase.order('created_at', false)
+    }, { maxRows: 1500 }),
+    selectPaged('support_requests', {
+      select: requestSelect,
+      status: supabase.eq('open'),
+      opened_by_employee_id: supabase.eq(employee.id),
+      order: supabase.order('created_at', false)
+    }, { maxRows: 1500 })
+  ]);
+  push(byAssigned);
+  push(byOpened);
+  const chatIds = [...new Set([...supportChatIds, ...activityChatIds].filter(value => value !== undefined && value !== null))];
+  if (chatIds.length && rows.length < maxRows) {
+    const byChat = await selectPagedByChunks('support_requests', {
+      select: requestSelect,
+      status: supabase.eq('open'),
+      order: supabase.order('created_at', false)
+    }, 'chat_id', chatIds, {
+      maxRows: Math.max(maxRows - rows.length, 500),
+      chunkSize: 150
+    });
+    push(byChat);
+  }
+  return rows;
+}
+
 async function getEmployeeActivity(query = {}) {
   const periodContext = queryPeriodContext(query);
   const periodKey = periodContext.period;

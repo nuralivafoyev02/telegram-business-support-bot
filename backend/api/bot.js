@@ -637,19 +637,7 @@ async function handleDoneReaction(reaction = {}, settings = {}) {
   const result = await metrics.closeRequestByMessage({ message: closeMessage, targetMessageId: reaction.message_id, employee });
   if (result.closed) {
     await refreshTicketNotificationAfterGroupClose(result, closeMessage);
-    if (isGroupChat(chat)) {
-      const closer = employee.full_name || employee.username || tgUserName(actor);
-      await sendTrackedBotReply({
-        message: closeMessage,
-        sourceType: 'group',
-        text: `✅ So'rov yopildi (${closer})`,
-        options: { reply_to_message_id: reaction.message_id, parse_mode: null },
-        classification: 'bot_reply',
-        updateKind: 'reaction_ticket_closed_reply',
-        rawSource: 'reaction_ticket_closed_reply'
-      }).catch(error => logBackgroundError('reaction-ticket-closed-reply', error));
-    }
-  } else if (isGroupChat(chat)) {
+  } else {
     console.warn('[bot:done-reaction]', {
       skipped: 'no_open_request',
       employee_id: employee.id || null,
@@ -657,15 +645,6 @@ async function handleDoneReaction(reaction = {}, settings = {}) {
       chat_id: chat.id,
       message_id: reaction.message_id || null
     });
-    await sendTrackedBotReply({
-      message: closeMessage,
-      sourceType: 'group',
-      text: '⚠️ Bu xabarda ochiq so\'rov topilmadi',
-      options: { reply_to_message_id: reaction.message_id, parse_mode: null },
-      classification: 'bot_reply',
-      updateKind: 'reaction_ticket_not_found_reply',
-      rawSource: 'reaction_ticket_not_found_reply'
-    }).catch(error => logBackgroundError('reaction-ticket-not-found-reply', error));
   }
   const taskRows = await supabase.select('clickup_tasks', {
     select: 'id,clickup_task_id,status',
@@ -741,22 +720,6 @@ async function handleEyeReaction(reaction = {}, settings = {}) {
   });
   if (supportRequest?.id) {
     console.info('[bot:eye-reaction:ticket]', { request_id: supportRequest.id, chat_id: chat.id });
-    if (isGroupChat(chat)) {
-      const opener = employee.full_name || employee.username || tgUserName(actor);
-      const preview = String(raw.text || savedMessage.text || '').trim().slice(0, 120);
-      const ticketText = preview
-        ? `✅ So'rov qabul qilindi (${opener})\n${preview}`
-        : `✅ So'rov qabul qilindi (${opener})`;
-      await sendTrackedBotReply({
-        message: raw,
-        sourceType,
-        text: ticketText,
-        options: { reply_to_message_id: savedMessage.tg_message_id, parse_mode: null },
-        classification: 'bot_reply',
-        updateKind: 'reaction_ticket_opened_reply',
-        rawSource: 'reaction_ticket_opened_reply'
-      }).catch(error => logBackgroundError('reaction-ticket-opened-reply', error));
-    }
   } else if (!supportRequest) {
     console.warn('[bot:eye-reaction:no-ticket]', {
       chat_id: chat.id,
