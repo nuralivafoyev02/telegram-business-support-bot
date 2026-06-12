@@ -419,17 +419,29 @@ async function patchSupportRequestMetadata(requestId, fields = {}) {
   }
 }
 
-async function findOpenRequestByInitialMessage(chatId, messageId) {
+function isOpenRequestStatus(status = '') {
+  return String(status || '').trim().toLowerCase() === 'open';
+}
+
+function isClosedLikeRequestStatus(status = '') {
+  return ['closed', 'cancelled'].includes(String(status || '').trim().toLowerCase());
+}
+
+async function findRequestByInitialMessage(chatId, messageId) {
   if (!chatId || !messageId) return null;
   const rows = await supabase.select('support_requests', {
-    select: 'id,source_type,chat_id,company_id,customer_tg_id,customer_name,initial_message_id,initial_text,status,created_at',
+    select: 'id,source_type,chat_id,company_id,customer_tg_id,customer_name,initial_message_id,initial_text,status,created_at,closed_at,closed_by_employee_id,open_source,opened_by_employee_id,assigned_to_employee_id',
     chat_id: supabase.eq(chatId),
     initial_message_id: supabase.eq(messageId),
-    status: 'eq.open',
     order: supabase.order('created_at', false),
     limit: '1'
   }).catch(() => []);
   return rows[0] || null;
+}
+
+async function findOpenRequestByInitialMessage(chatId, messageId) {
+  const request = await findRequestByInitialMessage(chatId, messageId);
+  return request && isOpenRequestStatus(request.status) ? request : null;
 }
 
 async function createSupportRequest({ message, sourceType, companyId = null, skipMerge = false, ...ticketMeta } = {}) {
@@ -440,16 +452,22 @@ async function createSupportRequest({ message, sourceType, companyId = null, ski
   const openSource = String(ticketMeta.openSource || ticketMeta.open_source || '').trim();
   const reactionOpen = openSource === 'reaction' || skipMerge === true;
 
-  if (reactionOpen && chat.id && message.message_id) {
-    const sameMessage = await findOpenRequestByInitialMessage(chat.id, message.message_id);
-    if (sameMessage) {
+  if (chat.id && message.message_id) {
+    const existingByMessage = await findRequestByInitialMessage(chat.id, message.message_id);
+    if (existingByMessage) {
       const optionalRow = buildSupportRequestOptionalFields(ticketMeta);
-      if (sameMessage.id && Object.keys(optionalRow).length) {
-        await patchSupportRequestMetadata(sameMessage.id, optionalRow).catch(patchError => {
-          console.warn('[metrics:support-request:reaction-metadata]', patchError.message);
+      if (existingByMessage.id && Object.keys(optionalRow).length) {
+        await patchSupportRequestMetadata(existingByMessage.id, optionalRow).catch(patchError => {
+          console.warn('[metrics:support-request:metadata-patch]', patchError.message);
         });
       }
-      return sameMessage;
+      if (reactionOpen || isClosedLikeRequestStatus(existingByMessage.status)) {
+        return existingByMessage;
+      }
+      if (isOpenRequestStatus(existingByMessage.status)) {
+        return addRequestNote({ request: existingByMessage, message });
+      }
+      return existingByMessage;
     }
   }
 
@@ -678,7 +696,13 @@ async function closeRequestByMessage({ message, targetMessageId, employee }) {
   const messageId = targetMessageId || message.message_id;
   const request = await findOpenRequestByMessage({ chatId: chat.id, messageId })
     || await findOpenRequestByLinkedMessage({ chatId: chat.id, messageId });
-  if (!request) return { closed: false, request: null };
+  if (!request) {
+    const existing = await findRequestByInitialMessage(chat.id, messageId);
+    if (existing && isClosedLikeRequestStatus(existing.status)) {
+      return { closed: true, request: existing, already_closed: true };
+    }
+    return { closed: false, request: null };
+  }
   const closer = employee || await ensureEmployee(message.from || {});
   return closeRequestRecord({ request, message, employee: closer });
 }
@@ -707,6 +731,7 @@ module.exports = {
   saveBusinessConnection,
   saveMessage,
   createSupportRequest,
+  findRequestByInitialMessage,
   findOpenRequestByInitialMessage,
   patchSupportRequestMetadata,
   closeRequestRecord,

@@ -4678,19 +4678,74 @@ const ticketListCounts = computed(() => {
     private_closed: countTicketListRows(rows, { source: 'private', status: 'closed' })
   };
 });
+function buildTicketListEmployeeMappings() {
+  const mappings = [];
+  employees.value
+    .filter(row => !isAdminLikeEmployee(row) && (isSupportEmployee(row) || isManagerEmployee(row)))
+    .forEach(employee => {
+      const mapping = buildOpenRequestEmployeeMapping(employee, mappings);
+      if (mapping) mappings.push(mapping);
+    });
+  return mappings;
+}
+
+function ticketInvolvesManager(row = {}) {
+  const managers = employees.value.filter(employee => !isAdminLikeEmployee(employee) && isManagerEmployee(employee));
+  if (!managers.length) return false;
+  const managerIds = new Set(managers.map(employee => String(employee.id || '').trim()).filter(Boolean));
+  const involvedIds = [
+    row.closed_by_employee_id,
+    row.opened_by_employee_id,
+    row.assigned_to_employee_id,
+    row.responsible_employee_id
+  ].map(id => String(id || '').trim()).filter(Boolean);
+  if (involvedIds.some(id => managerIds.has(id))) return true;
+  const names = [row.closed_by_name, row.responsible_employee_name, row.support_name].filter(Boolean);
+  return managers.some(manager => {
+    const managerName = String(manager.full_name || '').trim();
+    const managerUsername = normalizeSupportUsername(manager.username);
+    return names.some(name => supportIdentitiesMatch(name, managerName)
+      || (managerUsername && supportIdentitiesMatch(name, managerUsername)));
+  });
+}
+
+function ticketMatchesSupportFilter(row = {}, filterValue = 'all') {
+  if (!filterValue || filterValue === 'all') return true;
+  if (filterValue === 'manager:all') return ticketInvolvesManager(row);
+  const employee = employees.value.find(item => !isAdminLikeEmployee(item)
+    && isSupportEmployee(item)
+    && supportRowKey(item) === filterValue);
+  if (!employee) return false;
+  const matched = resolveOpenRequestEmployeeMapping(row, buildTicketListEmployeeMappings());
+  return String(matched?.id || '').trim() === String(employee.id || '').trim();
+}
+
 const ticketListSupportOptions = computed(() => {
-  const names = [...new Set((ticketList.value.rows || [])
-    .filter(row => ticketMatchesSource(row, ticketList.value.source))
-    .map(row => row.responsible_employee_name || row.support_name || row.closed_by_name || '')
-    .filter(Boolean))].sort((a, b) => a.localeCompare(b));
-  return [{ value: 'all', label: 'Barcha supportlar' }, ...names.map(name => ({ value: name, label: name }))];
+  const options = [{ value: 'all', label: 'Barcha supportlar' }];
+  employees.value
+    .filter(row => !isAdminLikeEmployee(row) && isSupportEmployee(row))
+    .slice()
+    .sort((left, right) => String(left.full_name || left.username || '').localeCompare(String(right.full_name || right.username || '')))
+    .forEach(employee => {
+      const key = supportRowKey(employee);
+      if (!key) return;
+      options.push({
+        value: key,
+        label: employee.full_name || employee.username || 'Support'
+      });
+    });
+  const hasManagers = employees.value.some(row => !isAdminLikeEmployee(row) && isManagerEmployee(row));
+  if (hasManagers) {
+    options.push({ value: 'manager:all', label: 'Barcha menejerlar' });
+  }
+  return options;
 });
 const filteredTicketListRows = computed(() => {
   const searchText = ticketListSearch.value.toLowerCase().trim();
   return (ticketList.value.rows || [])
     .filter(row => ticketMatchesSource(row, ticketList.value.source))
     .filter(row => ticketMatchesStatus(row, ticketList.value.active))
-    .filter(row => ticketListSupport.value === 'all' || [row.responsible_employee_name, row.support_name, row.closed_by_name].includes(ticketListSupport.value))
+    .filter(row => ticketMatchesSupportFilter(row, ticketListSupport.value))
     .filter(row => {
       if (!searchText) return true;
       return [
@@ -7530,6 +7585,7 @@ async function openSupportSummaryCard(action = 'requests') {
   };
   startLoading('ticketList');
   try {
+    if (!employees.value.length) await loadEmployeesOptional();
     const rows = await api.requests({
       period: selectedStatsPeriod.value,
       ...dashboardPeriodQuery(),
