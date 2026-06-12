@@ -552,6 +552,7 @@
                         <option value="modules_desc">Ko‘p ishlatilgan</option>
                         <option value="modules_asc">Kam ishlatilgan</option>
                         <option value="name">Kompaniya nomi</option>
+                        <option value="support">Mas’ul xodim</option>
                       </select>
                     </label>
                     <label class="company-module-filter">
@@ -4537,6 +4538,10 @@ const companyModuleTableRows = computed(() => {
   const sort = companyModuleSort.value;
   return [...rows].sort((a, b) => {
     if (sort === 'name') return String(a.name || '').localeCompare(String(b.name || ''));
+    if (sort === 'support') {
+      return companySupportLabel(a).localeCompare(companySupportLabel(b), 'uz')
+        || String(a.name || '').localeCompare(String(b.name || ''));
+    }
     if (sort === 'modules_asc') {
       return a.module_active_count - b.module_active_count
         || String(a.name || '').localeCompare(String(b.name || ''));
