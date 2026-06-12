@@ -80,42 +80,44 @@
           <h1>{{ currentTitle }}</h1>
           <p>{{ currentSubtitle }}</p>
         </div>
-        <div class="top-actions-menu" ref="actionMenuRef">
-          <button class="profile-action" type="button" :aria-expanded="actionMenuOpen"
-            @click="actionMenuOpen = !actionMenuOpen">
-            <span class="profile-avatar">{{ userInitials }}</span>
-            <span>Amallar</span>
-            <b>⌄</b>
+        <div class="topbar-actions">
+          <button class="btn topbar-refresh" type="button" :disabled="loadingAction === 'refresh'" @click="refresh">
+            {{ loadingAction === 'refresh' ? 'Yangilanmoqda...' : 'Yangilash' }}
           </button>
-          <Transition name="fade">
-            <div v-if="actionMenuOpen" class="actions-dropdown">
-              <button type="button" :disabled="loadingAction === 'refresh'" @click="runHeaderAction(refresh)">
-                {{ loadingAction === 'refresh' ? 'Yangilanmoqda...' : 'Yangilash' }}
-              </button>
-              <button v-if="activeTab === 'stats'" type="button" :disabled="loadingAction === 'mainStats'"
-                @click="runHeaderAction(sendMainStats)">
-                {{ loadingAction === 'mainStats' ? 'Yuborilmoqda...' : 'Statistika yuborish' }}
-              </button>
-              <button type="button" @click="runHeaderAction(openBroadcast)">Umumiy xabar</button>
-              <label v-if="activeTab === 'stats'" class="theme-menu-row">
-                <span>Davr</span>
-                <select v-model="selectedStatsPeriod" class="select mini-select" @change="handleStatsPeriodChange">
-                  <option v-for="period in periodOptions" :key="period.key" :value="period.key">
-                    {{ period.label }}
-                  </option>
-                </select>
-              </label>
-              <label class="theme-menu-row">
-                <span>Mavzu</span>
-                <select v-model="themeMode" class="select mini-select" @change="setThemeMode(themeMode)">
-                  <option value="system">Tizim</option>
-                  <option value="light">Yorug‘</option>
-                  <option value="dark">Qorong‘i</option>
-                </select>
-              </label>
-              <button class="danger-menu-item" type="button" @click="runHeaderAction(logout)">Chiqish</button>
-            </div>
-          </Transition>
+          <div class="top-actions-menu" ref="actionMenuRef">
+            <button class="profile-action" type="button" :aria-expanded="actionMenuOpen"
+              @click="actionMenuOpen = !actionMenuOpen">
+              <span class="profile-avatar">{{ userInitials }}</span>
+              <span>Amallar</span>
+              <b>⌄</b>
+            </button>
+            <Transition name="fade">
+              <div v-if="actionMenuOpen" class="actions-dropdown">
+                <button v-if="activeTab === 'stats'" type="button" :disabled="loadingAction === 'mainStats'"
+                  @click="runHeaderAction(sendMainStats)">
+                  {{ loadingAction === 'mainStats' ? 'Yuborilmoqda...' : 'Statistika yuborish' }}
+                </button>
+                <button type="button" @click="runHeaderAction(openBroadcast)">Umumiy xabar</button>
+                <label v-if="activeTab === 'stats'" class="theme-menu-row">
+                  <span>Davr</span>
+                  <select v-model="selectedStatsPeriod" class="select mini-select" @change="handleStatsPeriodChange">
+                    <option v-for="period in periodOptions" :key="period.key" :value="period.key">
+                      {{ period.label }}
+                    </option>
+                  </select>
+                </label>
+                <label class="theme-menu-row">
+                  <span>Mavzu</span>
+                  <select v-model="themeMode" class="select mini-select" @change="setThemeMode(themeMode)">
+                    <option value="system">Tizim</option>
+                    <option value="light">Yorug‘</option>
+                    <option value="dark">Qorong‘i</option>
+                  </select>
+                </label>
+                <button class="danger-menu-item" type="button" @click="runHeaderAction(logout)">Chiqish</button>
+              </div>
+            </Transition>
+          </div>
         </div>
       </header>
 
