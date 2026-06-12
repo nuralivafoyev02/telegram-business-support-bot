@@ -3881,6 +3881,11 @@ td,
   min-width: 220px;
 }
 
+.module-support-col {
+  min-width: 140px;
+  white-space: nowrap;
+}
+
 .company-module-identity {
   min-width: 0;
 }

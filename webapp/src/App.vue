@@ -571,6 +571,7 @@
                       <tr>
                         <th>№</th>
                         <th>Kompaniya</th>
+                        <th class="module-support-col">Mas’ul xodim</th>
                         <th class="module-count-col">Ishlatilgan</th>
                         <th>Ta’minot</th>
                         <th>Kassa</th>
@@ -589,6 +590,9 @@
                               <small>{{ row.brand || 'Brend kiritilmagan' }}</small>
                             </span>
                           </span>
+                        </td>
+                        <td class="module-support-col">
+                          <span class="support-owner">{{ companySupportLabel(row) }}</span>
                         </td>
                         <td class="module-count-col">
                           <span class="module-count-badge">{{ row.module_active_count }}</span>
