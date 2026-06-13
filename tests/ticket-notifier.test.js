@@ -7,6 +7,7 @@ const {
   normalizeTicketNotifications,
   shouldExcludeFromReassignPicker,
   isSupportRoleEmployee,
+  canEmployeeCloseTicket,
   TICKET_ACTIONS
 } = require('../backend/lib/ticket-notifier');
 
@@ -51,11 +52,24 @@ function testNormalizeTicketNotifications() {
   assert.strictEqual(config.target_chat_id, '-1003349113901');
 }
 
+function testCloseOnlyAssignedEmployee() {
+  const mirshod = { id: 'emp-mirshod' };
+  const nurali = { id: 'emp-nurali' };
+  const unassigned = { assigned_to_employee_id: null };
+  const assignedToMirshod = { assigned_to_employee_id: 'emp-mirshod' };
+
+  assert.strictEqual(canEmployeeCloseTicket(mirshod, unassigned), true);
+  assert.strictEqual(canEmployeeCloseTicket(nurali, unassigned), true);
+  assert.strictEqual(canEmployeeCloseTicket(mirshod, assignedToMirshod), true);
+  assert.strictEqual(canEmployeeCloseTicket(nurali, assignedToMirshod), false);
+}
+
 async function main() {
   testParseTicketCallback();
   testKeyboardHasFourActions();
   testReassignPickerOnlySupportAndNotCompanySupport();
   testNormalizeTicketNotifications();
+  testCloseOnlyAssignedEmployee();
   console.log('ticket-notifier tests passed');
 }
 

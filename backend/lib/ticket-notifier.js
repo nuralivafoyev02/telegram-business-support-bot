@@ -105,6 +105,12 @@ function isSameEmployeeRecord(left = {}, right = {}) {
   return String(left.id) === String(right.id);
 }
 
+function canEmployeeCloseTicket(employee = {}, request = {}) {
+  const assignedId = request.assigned_to_employee_id;
+  if (!assignedId) return true;
+  return isSameEmployeeRecord(employee, { id: assignedId });
+}
+
 function shouldExcludeFromReassignPicker(employee = {}, request = {}, companySupport = null) {
   if (!employee?.id || !isSupportRoleEmployee(employee)) return true;
   if (isSameEmployeeRecord(employee, { id: request.assigned_to_employee_id })) return true;
@@ -690,6 +696,10 @@ async function handleTicketCallback(query = {}, parsed = {}) {
       await answerCallbackQuery(query.id, 'Ticket bekor qilingan.').catch(() => null);
       return { ok: false, reason: 'cancelled' };
     }
+    if (!canEmployeeCloseTicket(employee, request)) {
+      await answerCallbackQuery(query.id, 'Yopish faqat biriktirilgan mas\'ul xodimga ruxsat etilgan.').catch(() => null);
+      return { ok: false, reason: 'not_assigned' };
+    }
     const closeMessage = {
       ...syntheticCallbackMessage(query),
       text: '🔒 Yopish',
@@ -741,5 +751,6 @@ module.exports = {
   openSupportRequestAndNotify,
   handleTicketCallback,
   isSupportRoleEmployee,
-  shouldExcludeFromReassignPicker
+  shouldExcludeFromReassignPicker,
+  canEmployeeCloseTicket
 };
