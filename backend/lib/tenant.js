@@ -20,9 +20,7 @@ const TENANT_SCOPED_TABLES = new Set([
   'broadcasts',
   'broadcast_targets',
   'ticket_notifications',
-  'clickup_tasks',
-  'company_module_daily_reports',
-  'company_module_sync_runs'
+  'clickup_tasks'
 ]);
 
 const tenantStorage = new AsyncLocalStorage();

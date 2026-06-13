@@ -559,6 +559,7 @@
                       <span>Davr</span>
                       <select v-model="companyModulePeriod" class="select mini-select">
                         <option value="all">Umumiy</option>
+                        <option value="yesterday">Kecha</option>
                         <option v-for="period in periodOptions" :key="`module-period-${period.key}`" :value="period.key">
                           {{ period.label }}
                         </option>
@@ -4542,7 +4543,7 @@ function companyModuleActiveCount(usage = {}) {
 }
 
 function companyModulePeriodQuery(period = 'all') {
-  if (!period || period === 'all' || period === 'custom') return { period: 'all' };
+  if (!period || period === 'custom') return { period: 'all' };
   return { period };
 }
 
