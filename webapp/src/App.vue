@@ -574,10 +574,7 @@
                         <th>Kompaniya</th>
                         <th class="module-support-col">Mas’ul xodim</th>
                         <th class="module-count-col">Ishlatilgan</th>
-                        <th>Ta’minot</th>
-                        <th>Kassa</th>
-                        <th>Omborxona</th>
-                        <th>Qurilish jarayoni</th>
+                        <th v-for="column in companyModuleColumns" :key="`module-head-${column.key}`">{{ column.label }}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -598,12 +595,12 @@
                         <td class="module-count-col">
                           <span class="module-count-badge">{{ row.module_active_count }}</span>
                         </td>
-                        <td v-for="moduleKey in companyModuleKeys" :key="`${row.id || row.name}-${moduleKey}`"
+                        <td v-for="column in companyModuleColumns" :key="`${row.id || row.name}-${column.key}`"
                           class="module-status-cell">
-                          <span class="module-status-icon" :class="row.module_usage[moduleKey] ? 'yes' : 'no'"
-                            :title="row.module_usage[moduleKey] ? 'Ishlatilgan' : 'Ishlatilmagan'"
-                            :aria-label="row.module_usage[moduleKey] ? 'Ishlatilgan' : 'Ishlatilmagan'">
-                            <template v-if="row.module_usage[moduleKey]">✓</template>
+                          <span class="module-status-icon" :class="row.module_usage[column.key] ? 'yes' : 'no'"
+                            :title="moduleStatusTitle(row, column.key)"
+                            :aria-label="row.module_usage[column.key] ? 'Ishlatilgan' : 'Ishlatilmagan'">
+                            <template v-if="row.module_usage[column.key]">✓</template>
                             <template v-else>✗</template>
                           </span>
                         </td>
@@ -2486,6 +2483,7 @@ const privates = ref([]);
 const employees = ref([]);
 const clickupTasks = ref([]);
 const companyInfo = ref({ summary: {}, companies: [], fetched_at: '', source: '' });
+const companyModuleReports = ref({ companies: [], report_dates: [], period: 'all' });
 const requestRows = ref([]);
 const periodTicketRows = ref([]);
 const ticketList = ref({ rows: [], active: 'all', mode: 'all', source: 'all', title: 'Ticketlar ro‘yxati' });
@@ -4513,7 +4511,14 @@ const assignCompanyOptions = computed(() => {
     .slice(0, 120);
 });
 const companyActivitySummary = computed(() => summarizeCompanyRows(visibleCompanyInfoRows.value));
-const companyModuleKeys = ['taminot', 'kassa', 'omborxona', 'qurilish_jarayoni'];
+const companyModuleColumns = [
+  { key: 'taminot', label: 'Ta’minot' },
+  { key: 'kassa', label: 'Kassa' },
+  { key: 'omborxona', label: 'Omborxona' },
+  { key: 'qurilish_jarayoni', label: 'Qurilish jarayoni' },
+  { key: 'monitoring', label: 'Monitoring' }
+];
+const companyModuleKeys = companyModuleColumns.map(column => column.key);
 const companyModulePeriod = ref('all');
 const companyModuleSort = ref('modules_desc');
 
@@ -4536,13 +4541,42 @@ function companyModuleActiveCount(usage = {}) {
   return companyModuleKeys.reduce((sum, key) => sum + (usage[key] ? 1 : 0), 0);
 }
 
+function companyModulePeriodQuery(period = 'all') {
+  if (!period || period === 'all' || period === 'custom') return { period: 'all' };
+  return { period };
+}
+
+function moduleStatusTitle(row = {}, moduleKey = '') {
+  const active = Boolean(row.module_usage?.[moduleKey]);
+  const lastDate = row.module_last_dates?.[moduleKey];
+  if (active && lastDate) return `Ishlatilgan · oxirgi: ${lastDate}`;
+  if (active) return 'Ishlatilgan';
+  if (lastDate) return `Ishlatilmagan · oxirgi: ${lastDate}`;
+  return 'Ishlatilmagan';
+}
+
+const companyModuleReportByCompanyId = computed(() => {
+  const map = new Map();
+  (companyModuleReports.value.companies || []).forEach(row => {
+    if (row?.company_id !== undefined && row?.company_id !== null) {
+      map.set(String(row.company_id), row);
+    }
+  });
+  return map;
+});
+
 const companyModuleTableRows = computed(() => {
+  const reportById = companyModuleReportByCompanyId.value;
   const rows = filteredCompanyInfoRows.value.map(row => {
-    const module_usage = companyModuleUsageMap(row);
+    const report = reportById.get(String(row.id));
+    const module_usage = report?.module_usage || companyModuleUsageMap(row);
+    const module_last_dates = report?.module_last_dates || row.module_last_dates || {};
     return {
       ...row,
       module_usage,
-      module_active_count: companyModuleActiveCount(module_usage)
+      module_last_dates,
+      module_active_count: companyModuleActiveCount(module_usage),
+      report_date: report?.report_date || row.report_date || null
     };
   });
   const sort = companyModuleSort.value;
@@ -5830,6 +5864,20 @@ async function loadPeriodOpenTickets() {
   }
 }
 
+async function loadCompanyModuleReports(query = {}) {
+  const data = await api.companyModuleReports(query);
+  companyModuleReports.value = data;
+  return data;
+}
+
+async function loadCompanyModuleReportsOptional(query = {}) {
+  try {
+    await loadCompanyModuleReports(query);
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
 async function loadCompanyInfo(query = {}) {
   const data = await api.companyInfo(query);
   companyInfo.value = data;
@@ -5867,10 +5915,15 @@ async function loadProductAnalytics() {
 async function loadCompanyActivity() {
   const [data] = await Promise.all([
     loadCompanyInfo({ cached: true }),
+    loadCompanyModuleReportsOptional(companyModulePeriodQuery(companyModulePeriod.value)),
     loadDashboard()
   ]);
   if (data?.from_cache) loadCompanyInfo().catch(error => showToast(error.message));
 }
+
+watch(companyModulePeriod, period => {
+  loadCompanyModuleReportsOptional(companyModulePeriodQuery(period));
+});
 
 async function loadSettings() {
   const data = await api.settings();

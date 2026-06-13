@@ -7,6 +7,12 @@
       "maxDuration": 60
     }
   },
+  "crons": [
+    {
+      "path": "/api/cron?action=companyReport",
+      "schedule": "0 1 * * *"
+    }
+  ],
   "headers": [
     {
       "source": "/(.*)",

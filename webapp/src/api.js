@@ -114,6 +114,8 @@ export const api = {
   privates: () => request('privates', { query: { limit: 500 } }).then(r => r.data),
   companies: () => request('companies', { query: { limit: 500 } }).then(r => r.data),
   companyInfo: (query = {}) => request('companyInfo', { query }).then(r => r.data),
+  companyReport: (query = {}) => request('companyReport', { query }).then(r => r.data),
+  companyModuleReports: (query = {}) => request('companyModuleReports', { query }).then(r => r.data),
   employees: () => request('employees').then(r => r.data),
   clickupTasks: (query = {}) => request('clickupTasks', { query }).then(r => r.data),
   employeeActivity: query => request('employeeActivity', { query }).then(r => r.data),

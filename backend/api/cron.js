@@ -4,6 +4,7 @@ const { sendJson, getQuery } = require('../lib/http');
 const { optionalEnv } = require('../lib/env');
 const { sendMainStatsReport } = require('../lib/report');
 const { syncCompanyInfo } = require('../lib/company-info');
+const { syncCompanyReport } = require('../lib/company-report');
 const { syncClickUpCompletedTasks } = require('../lib/clickup-sync');
 const { notifyOperationalError } = require('../lib/log-notifier');
 const { runWithTenant, resolveTenantFromQuery } = require('../lib/tenant');
@@ -23,6 +24,10 @@ async function handler(req, res) {
     const tenantId = resolveTenantFromQuery(query);
     if (['companyInfo', 'company-info', 'uyqurCompanyInfo', 'uyqur-company-info'].includes(action)) {
       const result = await runWithTenant(tenantId, () => syncCompanyInfo());
+      return sendJson(res, 200, { ok: true, data: result });
+    }
+    if (['companyReport', 'company-report', 'uyqurCompanyReport', 'uyqur-company-report'].includes(action)) {
+      const result = await runWithTenant(tenantId, () => syncCompanyReport());
       return sendJson(res, 200, { ok: true, data: result });
     }
     if (['clickupSync', 'clickup-sync', 'clickup'].includes(action)) {

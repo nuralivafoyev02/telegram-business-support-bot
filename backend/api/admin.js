@@ -29,6 +29,12 @@ const {
 const { extractTextFromUpload } = require('../lib/document-text');
 const { resolveMainStatsChatId, sendMainStatsReport } = require('../lib/report');
 const { syncCompanyInfo, getCachedCompanyInfo, resolveCachedCompanyInfoCompanies, emptyCompanyInfoResult } = require('../lib/company-info');
+const {
+  syncCompanyReport,
+  getCachedCompanyReport,
+  enrichCompaniesWithModuleReport,
+  getCompanyModuleReports
+} = require('../lib/company-report');
 const { notifyOperationalLog, notifyOperationalError } = require('../lib/log-notifier');
 const stats = require('../lib/stats');
 const { refreshTicketNotificationMessage, loadRequestById } = require('../lib/ticket-notifier');
@@ -3965,26 +3971,45 @@ async function listCompanies(query) {
   });
 }
 
+async function attachModuleReportToCompanyInfo(result = {}) {
+  const cachedReport = await getCachedCompanyReport().catch(() => null);
+  const reportCompanies = cachedReport?.companies || [];
+  if (!reportCompanies.length) return result;
+  const companies = enrichCompaniesWithModuleReport(result.companies || [], reportCompanies);
+  return {
+    ...result,
+    companies,
+    module_report: {
+      report_date: cachedReport.report_date || null,
+      fetched_at: cachedReport.fetched_at || null,
+      cached_at: cachedReport.cached_at || null,
+      summary: cachedReport.summary || null,
+      from_cache: true
+    }
+  };
+}
+
 async function getCompanyInfo(query = {}) {
   const tenantId = normalizeTenantId(getCurrentTenantId());
   const cachedOnly = ['1', 'true', 'yes'].includes(String(query.cached || query.cache || '').toLowerCase());
   if (tenantId !== DEFAULT_TENANT_ID) {
-    const cached = await getCachedCompanyInfo();
-    if (cached) return cached;
-    if (cachedOnly) return emptyCompanyInfoResult(tenantId);
+    const cached = await attachModuleReportToCompanyInfo(await getCachedCompanyInfo() || emptyCompanyInfoResult(tenantId));
+    if (cached?.companies?.length) return cached;
+    if (cachedOnly) return cached;
   } else if (cachedOnly) {
-    const cached = await getCachedCompanyInfo();
+    const cached = await attachModuleReportToCompanyInfo(await getCachedCompanyInfo());
     if (cached) return cached;
   }
 
   try {
-    return await syncCompanyInfo();
+    const result = await syncCompanyInfo();
+    return attachModuleReportToCompanyInfo(result);
   } catch (error) {
     await notifyOperationalError('company-info:sync', error, {
       source: 'admin',
       action: 'companyInfo'
     }).catch(logError => console.error('[admin:company-info:notify-error]', logError));
-    const cached = await getCachedCompanyInfo();
+    const cached = await attachModuleReportToCompanyInfo(await getCachedCompanyInfo());
     if (cached) {
       return {
         ...cached,
@@ -3993,6 +4018,34 @@ async function getCompanyInfo(query = {}) {
       };
     }
     if (tenantId !== DEFAULT_TENANT_ID) return emptyCompanyInfoResult(tenantId);
+    throw error;
+  }
+}
+
+async function getCompanyReport(query = {}) {
+  const cachedOnly = ['1', 'true', 'yes'].includes(String(query.cached || query.cache || '').toLowerCase());
+  if (cachedOnly) {
+    const cached = await getCachedCompanyReport();
+    if (cached) return cached;
+    const historical = await getCompanyModuleReports(query).catch(() => null);
+    if (historical?.companies?.length) return historical;
+    return { companies: [], report_dates: [], period: query.period || 'all' };
+  }
+  try {
+    return await syncCompanyReport();
+  } catch (error) {
+    await notifyOperationalError('company-report:sync', error, {
+      source: 'admin',
+      action: 'companyReport'
+    }).catch(logError => console.error('[admin:company-report:notify-error]', logError));
+    const cached = await getCachedCompanyReport();
+    if (cached) {
+      return {
+        ...cached,
+        stale: true,
+        last_error: error.message
+      };
+    }
     throw error;
   }
 }
@@ -6227,6 +6280,8 @@ async function handleGet(action, query) {
     case 'companyGroupActivity': return getCompanyGroupActivity(query);
     case 'companies': return listCompanies(query);
     case 'companyInfo': return getCompanyInfo(query);
+    case 'companyReport': return getCompanyReport(query);
+    case 'companyModuleReports': return getCompanyModuleReports(query);
     case 'employees': return listEmployees(query);
     case 'employeeActivity': return getEmployeeActivity(query);
     case 'settings': return listSettings();
