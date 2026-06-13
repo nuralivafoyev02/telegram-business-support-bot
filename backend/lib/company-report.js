@@ -272,6 +272,37 @@ function companiesForHistoryDates(history = {}, dates = []) {
   return rows;
 }
 
+function cacheDateInPeriod(reportDate = '', period = 'all') {
+  const cacheDate = String(reportDate || '').trim();
+  if (!cacheDate) return false;
+  if (!period || period === 'all') return true;
+  if (period === 'today') return cacheDate === tashkentDateKey();
+  if (period === 'yesterday') return cacheDate === shiftDateKey(tashkentDateKey(), -1);
+  if (period === 'week' || period === '7d') {
+    const end = tashkentDateKey();
+    return cacheDate >= shiftDateKey(end, -6) && cacheDate <= end;
+  }
+  if (period === 'month' || period === '30d') {
+    const end = tashkentDateKey();
+    return cacheDate >= shiftDateKey(end, -29) && cacheDate <= end;
+  }
+  return true;
+}
+
+async function companiesFromCacheForPeriod(period = 'all', tenantId) {
+  const cached = await getCachedCompanyReport({ tenantId });
+  if (!cached?.companies?.length) return { companies: [], dates: [] };
+  const reportDate = cached.report_date || tashkentDateKey();
+  if (!cacheDateInPeriod(reportDate, period)) return { companies: [], dates: [] };
+  return {
+    companies: cached.companies.map(company => ({
+      ...company,
+      report_date: company.report_date || reportDate
+    })),
+    dates: [reportDate]
+  };
+}
+
 async function requestCompanyReport(url, auth) {
   const response = await fetch(url, { headers: { 'X-Auth': auth } });
   const payload = await response.json().catch(() => ({}));
@@ -363,10 +394,17 @@ async function getCompanyModuleReports(query = {}) {
   const period = String(query.period || query.periodKey || 'all').trim().toLowerCase();
   const reportDate = String(query.report_date || query.date || '').trim();
   const history = await getReportHistory({ tenantId });
-  const dates = reportDate
+  let dates = reportDate
     ? [reportDate]
     : historyDatesForPeriod(period, history);
-  const list = companiesForHistoryDates(history, dates);
+  let list = companiesForHistoryDates(history, dates);
+  if (!list.length) {
+    const cached = await companiesFromCacheForPeriod(period, tenantId);
+    if (cached.companies.length) {
+      list = cached.companies;
+      if (!dates.length) dates = cached.dates;
+    }
+  }
 
   if (['week', '7d', 'month', '30d'].includes(period)) {
     const grouped = new Map();

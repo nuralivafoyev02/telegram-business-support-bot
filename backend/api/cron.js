@@ -34,6 +34,9 @@ async function handler(req, res) {
       const result = await runWithTenant(tenantId, () => syncClickUpCompletedTasks({ limit: Number(query.limit || 50) }));
       return sendJson(res, 200, { ok: true, data: result });
     }
+    if (action) {
+      return sendJson(res, 400, { ok: false, error: `Noma'lum cron action: ${action}` });
+    }
     const result = await runWithTenant(tenantId, () => sendMainStatsReport(query.chat_id || undefined));
     return sendJson(res, 200, { ok: true, data: result });
   } catch (error) {

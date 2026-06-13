@@ -5919,6 +5919,14 @@ async function loadCompanyActivity() {
     loadCompanyModuleReportsOptional(companyModulePeriodQuery(companyModulePeriod.value)),
     loadDashboard()
   ]);
+  if (!companyModuleReports.value?.companies?.length) {
+    try {
+      await api.companyReport();
+      await loadCompanyModuleReportsOptional(companyModulePeriodQuery(companyModulePeriod.value));
+    } catch (error) {
+      showToast(error.message);
+    }
+  }
   if (data?.from_cache) loadCompanyInfo().catch(error => showToast(error.message));
 }
 
