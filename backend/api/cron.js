@@ -23,6 +23,11 @@ async function handler(req, res) {
     const action = String(query.action || query.job || '').trim();
     const tenantId = resolveTenantFromQuery(query);
     if (['companyInfo', 'company-info', 'uyqurCompanyInfo', 'uyqur-company-info'].includes(action)) {
+      const syncReport = ['1', 'true', 'yes'].includes(String(query.syncReport || query.sync_report || query.report || '').trim().toLowerCase());
+      if (syncReport) {
+        const result = await runWithTenant(tenantId, () => syncCompanyReport());
+        return sendJson(res, 200, { ok: true, data: result });
+      }
       const result = await runWithTenant(tenantId, () => syncCompanyInfo());
       return sendJson(res, 200, { ok: true, data: result });
     }
