@@ -562,21 +562,35 @@
                     </label>
                     <label class="company-module-filter">
                       <span>Davr</span>
-                      <select v-model="companyModulePeriod" class="select mini-select">
+                      <select
+                        :value="companyModulePeriod"
+                        class="select mini-select"
+                        @change="handleCompanyModulePeriodChange($event.target.value)">
                         <option v-for="period in companyModulePeriodOptions" :key="`module-period-${period.key}`" :value="period.key">
                           {{ period.label }}
                         </option>
                       </select>
                     </label>
-                    <button
-                      type="button"
-                      class="btn-icon mini-icon module-compare-toggle"
-                      :class="{ active: companyModuleCompareEnabled }"
-                      :title="companyModuleCompareEnabled ? `Taqqoslash yoqilgan · ${companyModuleCompareAgainstLabel}` : 'Taqqoslashni yoqish'"
-                      :aria-pressed="companyModuleCompareEnabled"
-                      @click="companyModuleCompareEnabled = !companyModuleCompareEnabled">
-                      <span aria-hidden="true">⇄</span>
-                    </button>
+                    <div class="card-header-actions company-module-menu" ref="moduleCompareMenuRef">
+                      <button
+                        type="button"
+                        class="btn-icon mini-icon"
+                        title="Sozlamalar"
+                        @click="moduleCompareMenuOpen = !moduleCompareMenuOpen">
+                        <span>⋯</span>
+                      </button>
+                      <Transition name="fade">
+                        <div v-if="moduleCompareMenuOpen" class="actions-dropdown mini-dropdown right-align">
+                          <label class="theme-menu-row">
+                            <span>Taqqoslash</span>
+                            <label class="switch mini-switch">
+                              <input type="checkbox" v-model="companyModuleCompareEnabled">
+                              <span class="slider"></span>
+                            </label>
+                          </label>
+                        </div>
+                      </Transition>
+                    </div>
                   </div>
                 </div>
                 <div class="company-module-table-wrap">
@@ -1220,6 +1234,26 @@
             <button class="btn" type="button" @click="cancelCustomPeriod">Bekor qilish</button>
             <button class="btn primary" type="submit" :disabled="loadingAction === 'customPeriod'">
               {{ loadingAction === 'customPeriod' ? 'Yuklanmoqda...' : 'Qo‘llash' }}
+            </button>
+          </div>
+        </form>
+      </Modal>
+    </Transition>
+
+    <Transition name="modal-fade">
+      <Modal v-if="modal === 'companyModuleCustomPeriod'" title="Ixtiyoriy davr" @close="cancelCompanyModuleCustomPeriod">
+        <form class="form two custom-period-form" @submit.prevent="applyCompanyModuleCustomPeriod">
+          <label class="label">Boshlanish sanasi
+            <input v-model="companyModuleCustomPeriodForm.start" class="input" type="date" required />
+          </label>
+          <label class="label">Tugash sanasi
+            <input v-model="companyModuleCustomPeriodForm.end" class="input" type="date" required />
+          </label>
+          <p v-if="companyModuleCustomPeriodError" class="form-error">{{ companyModuleCustomPeriodError }}</p>
+          <div class="form-actions">
+            <button class="btn" type="button" @click="cancelCompanyModuleCustomPeriod">Bekor qilish</button>
+            <button class="btn primary" type="submit" :disabled="loadingAction === 'companyModuleCustomPeriod'">
+              {{ loadingAction === 'companyModuleCustomPeriod' ? 'Yuklanmoqda...' : 'Qo‘llash' }}
             </button>
           </div>
         </form>
@@ -2495,6 +2529,8 @@ const actionMenuOpen = ref(false);
 const actionMenuRef = ref(null);
 const rankingMenuOpen = ref(false);
 const rankingMenuRef = ref(null);
+const moduleCompareMenuOpen = ref(false);
+const moduleCompareMenuRef = ref(null);
 const comparisonEnabled = ref(getStoredComparisonEnabled());
 const themeMode = ref(getStoredThemeMode());
 applyThemeMode(themeMode.value);
@@ -2587,6 +2623,7 @@ const settingsTab = tabs.find(tab => tab.key === 'settings');
 watch(activeTab, key => {
   actionMenuOpen.value = false;
   rankingMenuOpen.value = false;
+  moduleCompareMenuOpen.value = false;
   if (otherTabKeys.includes(key)) otherMenuOpen.value = true;
 });
 
@@ -3590,12 +3627,17 @@ function handleDocumentPointerDown(event) {
     const root = rankingMenuRef.value;
     if (!root || !root.contains(event.target)) rankingMenuOpen.value = false;
   }
+  if (moduleCompareMenuOpen.value) {
+    const root = moduleCompareMenuRef.value;
+    if (!root || !root.contains(event.target)) moduleCompareMenuOpen.value = false;
+  }
 }
 
 function handleDocumentKeydown(event) {
   if (event.key === 'Escape') {
     actionMenuOpen.value = false;
     rankingMenuOpen.value = false;
+    moduleCompareMenuOpen.value = false;
     hideFloatingTooltip();
     if (modal.value) closeModal();
   }
@@ -4546,15 +4588,18 @@ const companyModuleColumns = [
   { key: 'monitoring', label: 'Monitoring' }
 ];
 const companyModuleKeys = companyModuleColumns.map(column => column.key);
-const companyModulePeriod = ref('all');
+const companyModulePeriod = ref('today');
 const companyModuleSort = ref('modules_desc');
 const companyModulePeriodOptions = [
-  { key: 'all', label: 'Umumiy' },
   { key: 'today', label: 'Bugun' },
   { key: 'yesterday', label: 'Kecha' },
   { key: 'week', label: '7 kun' },
-  { key: 'month', label: '1 oy' }
+  { key: 'month', label: '1 oy' },
+  { key: 'custom', label: 'Ixtiyoriy' }
 ];
+const companyModuleCustomPeriodForm = reactive({ start: '', end: '', appliedStart: '', appliedEnd: '' });
+const companyModuleCustomPeriodError = ref('');
+const previousCompanyModulePeriod = ref('today');
 
 function emptyCompanyModuleUsageMap() {
   return Object.fromEntries(companyModuleKeys.map(key => [key, false]));
@@ -4585,17 +4630,26 @@ function companyModuleActivePercent(usage = {}) {
   return Math.round((companyModuleActiveCount(usage) / total) * 100);
 }
 
-function companyModulePeriodQuery(period = 'all') {
-  return { period: period || 'all' };
+function companyModulePeriodQuery(period = 'today') {
+  if (period === 'custom') {
+    if (!companyModuleCustomPeriodForm.appliedStart || !companyModuleCustomPeriodForm.appliedEnd) {
+      return { period: 'today' };
+    }
+    return {
+      period: 'custom',
+      start_date: companyModuleCustomPeriodForm.appliedStart,
+      end_date: companyModuleCustomPeriodForm.appliedEnd
+    };
+  }
+  return { period: period || 'today' };
 }
 
-function companyModulePreviousPeriodKey(period = 'all') {
+function companyModulePreviousPeriodKey(period = 'today') {
   return ({
     today: 'yesterday',
     yesterday: 'day_before_yesterday',
     week: 'prev_week',
-    month: 'prev_month',
-    all: 'prev_all'
+    month: 'prev_month'
   })[period] || null;
 }
 
@@ -4603,13 +4657,15 @@ const companyModuleCompareAgainstLabel = computed(() => ({
   today: 'kechaga nisbatan',
   yesterday: 'undan oldingi kunga nisbatan',
   week: 'oldingi 7 kunga nisbatan',
-  month: 'oldingi 1 oyga nisbatan',
-  all: 'oldingi davrga nisbatan'
+  month: 'oldingi 1 oyga nisbatan'
 }[companyModulePeriod.value] || ''));
 
-const companyModulePeriodLabel = computed(() => (
-  companyModulePeriodOptions.find(period => period.key === companyModulePeriod.value)?.label || 'Umumiy'
-));
+const companyModulePeriodLabel = computed(() => {
+  if (companyModulePeriod.value === 'custom' && companyModuleCustomPeriodForm.appliedStart && companyModuleCustomPeriodForm.appliedEnd) {
+    return `${dateInputLabel(companyModuleCustomPeriodForm.appliedStart)} — ${dateInputLabel(companyModuleCustomPeriodForm.appliedEnd)}`;
+  }
+  return companyModulePeriodOptions.find(period => period.key === companyModulePeriod.value)?.label || 'Bugun';
+});
 
 const companyModuleReportDatesLabel = computed(() => {
   const dates = [...(companyModuleReports.value?.report_dates || [])].filter(Boolean).sort();
@@ -4660,7 +4716,7 @@ const companyModuleTableRows = computed(() => {
     const report = reportById.get(String(row.id));
     const previousReport = previousById.get(String(row.id));
     const module_usage = report?.module_usage
-      || (hasPeriodReports || period !== 'all' ? emptyCompanyModuleUsageMap() : companyModuleUsageMap(row));
+      || (hasPeriodReports || period !== 'custom' ? emptyCompanyModuleUsageMap() : companyModuleUsageMap(row));
     const previous_usage = previousReport?.module_usage || emptyCompanyModuleUsageMap();
     const module_last_dates = report?.module_last_dates || row.module_last_dates || {};
     const module_active_count = companyModuleActiveCount(module_usage);
@@ -6003,6 +6059,64 @@ async function refreshCompanyModuleReports() {
   await loadCompanyModuleReportsPreviousOptional({ period: previousPeriod });
 }
 
+function openCompanyModuleCustomPeriodModal() {
+  const defaults = defaultCustomPeriodDates();
+  companyModuleCustomPeriodForm.start = companyModuleCustomPeriodForm.appliedStart || companyModuleCustomPeriodForm.start || defaults.start;
+  companyModuleCustomPeriodForm.end = companyModuleCustomPeriodForm.appliedEnd || companyModuleCustomPeriodForm.end || defaults.end;
+  companyModuleCustomPeriodError.value = '';
+  companyModulePeriod.value = 'custom';
+  modal.value = 'companyModuleCustomPeriod';
+}
+
+async function handleCompanyModulePeriodChange(value) {
+  if (value === 'custom') {
+    previousCompanyModulePeriod.value = companyModulePeriod.value === 'custom'
+      ? previousCompanyModulePeriod.value
+      : companyModulePeriod.value;
+    openCompanyModuleCustomPeriodModal();
+    return;
+  }
+  companyModuleCustomPeriodForm.appliedStart = '';
+  companyModuleCustomPeriodForm.appliedEnd = '';
+  previousCompanyModulePeriod.value = value;
+  companyModulePeriod.value = value;
+  await refreshCompanyModuleReports();
+}
+
+function cancelCompanyModuleCustomPeriod() {
+  companyModuleCustomPeriodError.value = '';
+  if (!companyModuleCustomPeriodForm.appliedStart || !companyModuleCustomPeriodForm.appliedEnd) {
+    companyModulePeriod.value = previousCompanyModulePeriod.value || 'today';
+  }
+  modal.value = '';
+}
+
+async function applyCompanyModuleCustomPeriod() {
+  companyModuleCustomPeriodError.value = '';
+  if (!companyModuleCustomPeriodForm.start || !companyModuleCustomPeriodForm.end) {
+    companyModuleCustomPeriodError.value = 'Ikkala sanani ham tanlang';
+    return;
+  }
+  const start = companyModuleCustomPeriodForm.start <= companyModuleCustomPeriodForm.end
+    ? companyModuleCustomPeriodForm.start
+    : companyModuleCustomPeriodForm.end;
+  const end = companyModuleCustomPeriodForm.start <= companyModuleCustomPeriodForm.end
+    ? companyModuleCustomPeriodForm.end
+    : companyModuleCustomPeriodForm.start;
+  companyModuleCustomPeriodForm.appliedStart = start;
+  companyModuleCustomPeriodForm.appliedEnd = end;
+  companyModulePeriod.value = 'custom';
+  modal.value = '';
+  startLoading('companyModuleCustomPeriod');
+  try {
+    await refreshCompanyModuleReports();
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    stopLoading('companyModuleCustomPeriod');
+  }
+}
+
 async function loadCompanyInfo(query = {}) {
   const data = await api.companyInfo(query);
   companyInfo.value = data;
@@ -6054,7 +6168,6 @@ async function loadCompanyActivity() {
   if (data?.from_cache) loadCompanyInfo().catch(error => showToast(error.message));
 }
 
-watch(companyModulePeriod, refreshCompanyModuleReports);
 watch(companyModuleCompareEnabled, refreshCompanyModuleReports);
 
 async function loadSettings() {

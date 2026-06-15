@@ -239,6 +239,16 @@ async function getCachedCompanyReport(options = {}) {
   };
 }
 
+function historyDatesForRange(history = {}, startDate = '', endDate = '') {
+  const dates = [...(Array.isArray(history.dates) ? history.dates : Object.keys(objectValue(history.days)))].sort();
+  const start = String(startDate || '').trim();
+  const end = String(endDate || '').trim();
+  if (!start || !end) return [];
+  const rangeStart = start <= end ? start : end;
+  const rangeEnd = start <= end ? end : start;
+  return dates.filter(date => date >= rangeStart && date <= rangeEnd);
+}
+
 function historyDatesForPeriod(period = 'all', history = {}) {
   const dates = [...(Array.isArray(history.dates) ? history.dates : Object.keys(objectValue(history.days)))].sort();
   if (!dates.length) return [];
@@ -327,11 +337,19 @@ function latestFetchedAtForDates(history = {}, dates = []) {
     .sort((a, b) => String(b).localeCompare(String(a)))[0] || null;
 }
 
-async function companiesFromCacheForPeriod(period = 'all', tenantId) {
+async function companiesFromCacheForPeriod(period = 'all', tenantId, range = {}) {
   const cached = await getCachedCompanyReport({ tenantId });
   if (!cached?.companies?.length) return { companies: [], dates: [] };
   const reportDate = cached.report_date || tashkentDateKey();
-  if (!cacheDateInPeriod(reportDate, period)) return { companies: [], dates: [] };
+  const rangeStart = String(range.start || '').trim();
+  const rangeEnd = String(range.end || '').trim();
+  if (rangeStart && rangeEnd) {
+    const start = rangeStart <= rangeEnd ? rangeStart : rangeEnd;
+    const end = rangeStart <= rangeEnd ? rangeEnd : rangeStart;
+    if (reportDate < start || reportDate > end) return { companies: [], dates: [] };
+  } else if (!cacheDateInPeriod(reportDate, period)) {
+    return { companies: [], dates: [] };
+  }
   return {
     companies: cached.companies.map(company => ({
       ...company,
@@ -429,15 +447,22 @@ function aggregateModuleUsage(rows = []) {
 
 async function getCompanyModuleReports(query = {}) {
   const tenantId = resolveTenantId(query.tenantId);
-  const period = String(query.period || query.periodKey || 'all').trim().toLowerCase();
+  const period = String(query.period || query.periodKey || 'today').trim().toLowerCase();
   const reportDate = String(query.report_date || query.date || '').trim();
+  const startDate = String(query.start_date || query.startDate || '').trim();
+  const endDate = String(query.end_date || query.endDate || '').trim();
   const history = await getReportHistory({ tenantId });
+  const customRange = startDate && endDate
+    ? { start: startDate, end: endDate }
+    : null;
   let dates = reportDate
     ? [reportDate]
-    : historyDatesForPeriod(period, history);
+    : customRange
+      ? historyDatesForRange(history, customRange.start, customRange.end)
+      : historyDatesForPeriod(period, history);
   let list = companiesForHistoryDates(history, dates);
   if (!list.length) {
-    const cached = await companiesFromCacheForPeriod(period, tenantId);
+    const cached = await companiesFromCacheForPeriod(period, tenantId, customRange || {});
     if (cached.companies.length) {
       list = cached.companies;
       if (!dates.length) dates = cached.dates;
@@ -450,7 +475,8 @@ async function getCompanyModuleReports(query = {}) {
     fetched_at = cached?.fetched_at || null;
   }
 
-  if (['all', 'week', '7d', 'month', '30d', 'prev_week', 'prev_7d', 'prev_month', 'prev_30d', 'prev_all'].includes(period)) {
+  const aggregatePeriods = ['all', 'custom', 'week', '7d', 'month', '30d', 'prev_week', 'prev_7d', 'prev_month', 'prev_30d', 'prev_all'];
+  if (aggregatePeriods.includes(period) || (customRange && dates.length > 1)) {
     const grouped = new Map();
     list.forEach(row => {
       const key = String(row.company_id);
