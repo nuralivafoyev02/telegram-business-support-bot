@@ -543,7 +543,12 @@
                 <div class="card-header company-module-table-head">
                   <div>
                     <div class="card-title">Bo‘limlar foydalanish statistikasi</div>
-                    <div class="card-note">Kompaniyalar ro‘yxati</div>
+                    <div class="card-note">
+                      Kunlik saqlanadi · 365 kun tarix · {{ companyModulePeriodLabel }}:
+                      {{ companyModuleReportDatesLabel }}
+                      <template v-if="companyModuleFetchedAt"> · Oxirgi yangilanish: {{ fmtDate(companyModuleFetchedAt) }}</template>
+                      · Bir kunda qayta yangilansa oxirgisi saqlanadi
+                    </div>
                   </div>
                   <div class="company-module-table-controls">
                     <label class="company-module-filter">
@@ -558,9 +563,7 @@
                     <label class="company-module-filter">
                       <span>Davr</span>
                       <select v-model="companyModulePeriod" class="select mini-select">
-                        <option value="all">Umumiy</option>
-                        <option value="yesterday">Kecha</option>
-                        <option v-for="period in periodOptions" :key="`module-period-${period.key}`" :value="period.key">
+                        <option v-for="period in companyModulePeriodOptions" :key="`module-period-${period.key}`" :value="period.key">
                           {{ period.label }}
                         </option>
                       </select>
@@ -4525,6 +4528,17 @@ const companyModuleColumns = [
 const companyModuleKeys = companyModuleColumns.map(column => column.key);
 const companyModulePeriod = ref('all');
 const companyModuleSort = ref('modules_desc');
+const companyModulePeriodOptions = [
+  { key: 'all', label: 'Umumiy' },
+  { key: 'today', label: 'Bugun' },
+  { key: 'yesterday', label: 'Kecha' },
+  { key: 'week', label: '7 kun' },
+  { key: 'month', label: '1 oy' }
+];
+
+function emptyCompanyModuleUsageMap() {
+  return Object.fromEntries(companyModuleKeys.map(key => [key, false]));
+}
 
 function companyModuleUsageValue(row = {}, key = '') {
   const usage = row.module_usage || row.modules || row.product_modules || {};
@@ -4552,9 +4566,21 @@ function companyModuleActivePercent(usage = {}) {
 }
 
 function companyModulePeriodQuery(period = 'all') {
-  if (!period || period === 'custom') return { period: 'all' };
-  return { period };
+  return { period: period || 'all' };
 }
+
+const companyModulePeriodLabel = computed(() => (
+  companyModulePeriodOptions.find(period => period.key === companyModulePeriod.value)?.label || 'Umumiy'
+));
+
+const companyModuleReportDatesLabel = computed(() => {
+  const dates = [...(companyModuleReports.value?.report_dates || [])].filter(Boolean).sort();
+  if (!dates.length) return 'ma’lumot yo‘q';
+  if (dates.length === 1) return dates[0];
+  return `${dates[0]} — ${dates.at(-1)} (${dates.length} kun)`;
+});
+
+const companyModuleFetchedAt = computed(() => companyModuleReports.value?.fetched_at || '');
 
 function moduleStatusTitle(row = {}, moduleKey = '') {
   const active = Boolean(row.module_usage?.[moduleKey]);
@@ -4577,9 +4603,12 @@ const companyModuleReportByCompanyId = computed(() => {
 
 const companyModuleTableRows = computed(() => {
   const reportById = companyModuleReportByCompanyId.value;
+  const hasPeriodReports = (companyModuleReports.value?.report_dates || []).length > 0;
+  const period = companyModulePeriod.value;
   const rows = filteredCompanyInfoRows.value.map(row => {
     const report = reportById.get(String(row.id));
-    const module_usage = report?.module_usage || companyModuleUsageMap(row);
+    const module_usage = report?.module_usage
+      || (hasPeriodReports || period !== 'all' ? emptyCompanyModuleUsageMap() : companyModuleUsageMap(row));
     const module_last_dates = report?.module_last_dates || row.module_last_dates || {};
     return {
       ...row,

@@ -255,6 +255,7 @@ function historyDatesForPeriod(period = 'all', history = {}) {
     const start = shiftDateKey(end, -29);
     return dates.filter(date => date >= start && date <= end);
   }
+  if (period === 'all') return dates;
   return latest ? [latest] : [];
 }
 
@@ -287,6 +288,14 @@ function cacheDateInPeriod(reportDate = '', period = 'all') {
     return cacheDate >= shiftDateKey(end, -29) && cacheDate <= end;
   }
   return true;
+}
+
+function latestFetchedAtForDates(history = {}, dates = []) {
+  const days = objectValue(history.days);
+  return [...dates]
+    .map(date => days[date]?.fetched_at)
+    .filter(Boolean)
+    .sort((a, b) => String(b).localeCompare(String(a)))[0] || null;
 }
 
 async function companiesFromCacheForPeriod(period = 'all', tenantId) {
@@ -406,7 +415,13 @@ async function getCompanyModuleReports(query = {}) {
     }
   }
 
-  if (['week', '7d', 'month', '30d'].includes(period)) {
+  let fetched_at = latestFetchedAtForDates(history, dates);
+  if (!fetched_at) {
+    const cached = await getCachedCompanyReport({ tenantId });
+    fetched_at = cached?.fetched_at || null;
+  }
+
+  if (['all', 'week', '7d', 'month', '30d'].includes(period)) {
     const grouped = new Map();
     list.forEach(row => {
       const key = String(row.company_id);
@@ -434,7 +449,8 @@ async function getCompanyModuleReports(query = {}) {
       period,
       storage: 'bot_settings',
       companies,
-      report_dates: dates
+      report_dates: dates,
+      fetched_at
     };
   }
 
@@ -454,7 +470,8 @@ async function getCompanyModuleReports(query = {}) {
     period,
     storage: 'bot_settings',
     companies,
-    report_dates: dates
+    report_dates: dates,
+    fetched_at
   };
 }
 
