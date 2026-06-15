@@ -568,6 +568,15 @@
                         </option>
                       </select>
                     </label>
+                    <button
+                      type="button"
+                      class="btn-icon mini-icon module-compare-toggle"
+                      :class="{ active: companyModuleCompareEnabled }"
+                      :title="companyModuleCompareEnabled ? `Taqqoslash yoqilgan · ${companyModuleCompareAgainstLabel}` : 'Taqqoslashni yoqish'"
+                      :aria-pressed="companyModuleCompareEnabled"
+                      @click="companyModuleCompareEnabled = !companyModuleCompareEnabled">
+                      <span aria-hidden="true">⇄</span>
+                    </button>
                   </div>
                 </div>
                 <div class="company-module-table-wrap">
@@ -597,10 +606,19 @@
                           <span class="support-owner">{{ companySupportLabel(row) }}</span>
                         </td>
                         <td class="module-count-col">
-                          <span class="module-count-badge"
-                            :title="`${row.module_active_count} / ${companyModuleKeys.length}`">
-                            {{ row.module_active_percent }}%
-                          </span>
+                          <div class="module-count-stack">
+                            <span class="module-count-badge"
+                              :title="`${row.module_active_count} / ${companyModuleKeys.length}`">
+                              {{ row.module_active_percent }}%
+                            </span>
+                            <span
+                              v-if="companyModuleCompareEnabled && row.module_percent_comparison"
+                              class="trend-label module-trend-label"
+                              :class="row.module_percent_comparison.tone"
+                              :title="companyModuleCompareAgainstLabel">
+                              {{ row.module_percent_comparison.percentText }}
+                            </span>
+                          </div>
                         </td>
                         <td v-for="column in companyModuleColumns" :key="`${row.id || row.name}-${column.key}`"
                           class="module-status-cell">
@@ -2491,6 +2509,8 @@ const employees = ref([]);
 const clickupTasks = ref([]);
 const companyInfo = ref({ summary: {}, companies: [], fetched_at: '', source: '' });
 const companyModuleReports = ref({ companies: [], report_dates: [], period: 'all' });
+const companyModuleReportsPrevious = ref({ companies: [], report_dates: [], period: '' });
+const companyModuleCompareEnabled = ref(false);
 const requestRows = ref([]);
 const periodTicketRows = ref([]);
 const ticketList = ref({ rows: [], active: 'all', mode: 'all', source: 'all', title: 'Ticketlar ro‘yxati' });
@@ -4569,6 +4589,24 @@ function companyModulePeriodQuery(period = 'all') {
   return { period: period || 'all' };
 }
 
+function companyModulePreviousPeriodKey(period = 'all') {
+  return ({
+    today: 'yesterday',
+    yesterday: 'day_before_yesterday',
+    week: 'prev_week',
+    month: 'prev_month',
+    all: 'prev_all'
+  })[period] || null;
+}
+
+const companyModuleCompareAgainstLabel = computed(() => ({
+  today: 'kechaga nisbatan',
+  yesterday: 'undan oldingi kunga nisbatan',
+  week: 'oldingi 7 kunga nisbatan',
+  month: 'oldingi 1 oyga nisbatan',
+  all: 'oldingi davrga nisbatan'
+}[companyModulePeriod.value] || ''));
+
 const companyModulePeriodLabel = computed(() => (
   companyModulePeriodOptions.find(period => period.key === companyModulePeriod.value)?.label || 'Umumiy'
 ));
@@ -4601,21 +4639,42 @@ const companyModuleReportByCompanyId = computed(() => {
   return map;
 });
 
+const companyModuleReportPreviousByCompanyId = computed(() => {
+  const map = new Map();
+  (companyModuleReportsPrevious.value.companies || []).forEach(row => {
+    if (row?.company_id !== undefined && row?.company_id !== null) {
+      map.set(String(row.company_id), row);
+    }
+  });
+  return map;
+});
+
 const companyModuleTableRows = computed(() => {
   const reportById = companyModuleReportByCompanyId.value;
+  const previousById = companyModuleReportPreviousByCompanyId.value;
   const hasPeriodReports = (companyModuleReports.value?.report_dates || []).length > 0;
+  const hasPreviousReports = (companyModuleReportsPrevious.value?.report_dates || []).length > 0;
   const period = companyModulePeriod.value;
+  const compareEnabled = companyModuleCompareEnabled.value;
   const rows = filteredCompanyInfoRows.value.map(row => {
     const report = reportById.get(String(row.id));
+    const previousReport = previousById.get(String(row.id));
     const module_usage = report?.module_usage
       || (hasPeriodReports || period !== 'all' ? emptyCompanyModuleUsageMap() : companyModuleUsageMap(row));
+    const previous_usage = previousReport?.module_usage || emptyCompanyModuleUsageMap();
     const module_last_dates = report?.module_last_dates || row.module_last_dates || {};
+    const module_active_count = companyModuleActiveCount(module_usage);
+    const module_active_percent = companyModuleActivePercent(module_usage);
+    const previous_percent = companyModuleActivePercent(previous_usage);
     return {
       ...row,
       module_usage,
       module_last_dates,
-      module_active_count: companyModuleActiveCount(module_usage),
-      module_active_percent: companyModuleActivePercent(module_usage),
+      module_active_count,
+      module_active_percent,
+      module_percent_comparison: compareEnabled && hasPreviousReports
+        ? compareValue(module_active_percent, previous_percent, { isPercentage: true })
+        : null,
       report_date: report?.report_date || row.report_date || null
     };
   });
@@ -5918,6 +5977,32 @@ async function loadCompanyModuleReportsOptional(query = {}) {
   }
 }
 
+async function loadCompanyModuleReportsPreviousOptional(query = {}) {
+  try {
+    const data = await api.companyModuleReports(query);
+    companyModuleReportsPrevious.value = data;
+    return data;
+  } catch (error) {
+    companyModuleReportsPrevious.value = { companies: [], report_dates: [], period: query.period || '' };
+    showToast(error.message);
+  }
+}
+
+async function refreshCompanyModuleReports() {
+  const period = companyModulePeriod.value;
+  await loadCompanyModuleReportsOptional(companyModulePeriodQuery(period));
+  if (!companyModuleCompareEnabled.value) {
+    companyModuleReportsPrevious.value = { companies: [], report_dates: [], period: '' };
+    return;
+  }
+  const previousPeriod = companyModulePreviousPeriodKey(period);
+  if (!previousPeriod) {
+    companyModuleReportsPrevious.value = { companies: [], report_dates: [], period: '' };
+    return;
+  }
+  await loadCompanyModuleReportsPreviousOptional({ period: previousPeriod });
+}
+
 async function loadCompanyInfo(query = {}) {
   const data = await api.companyInfo(query);
   companyInfo.value = data;
@@ -5955,13 +6040,13 @@ async function loadProductAnalytics() {
 async function loadCompanyActivity() {
   const [data] = await Promise.all([
     loadCompanyInfo({ cached: true }),
-    loadCompanyModuleReportsOptional(companyModulePeriodQuery(companyModulePeriod.value)),
+    refreshCompanyModuleReports(),
     loadDashboard()
   ]);
   if (!companyModuleReports.value?.companies?.length) {
     try {
       await api.companyReport();
-      await loadCompanyModuleReportsOptional(companyModulePeriodQuery(companyModulePeriod.value));
+      await refreshCompanyModuleReports();
     } catch (error) {
       showToast(error.message);
     }
@@ -5969,9 +6054,8 @@ async function loadCompanyActivity() {
   if (data?.from_cache) loadCompanyInfo().catch(error => showToast(error.message));
 }
 
-watch(companyModulePeriod, period => {
-  loadCompanyModuleReportsOptional(companyModulePeriodQuery(period));
-});
+watch(companyModulePeriod, refreshCompanyModuleReports);
+watch(companyModuleCompareEnabled, refreshCompanyModuleReports);
 
 async function loadSettings() {
   const data = await api.settings();

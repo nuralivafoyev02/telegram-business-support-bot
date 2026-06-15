@@ -245,9 +245,15 @@ function historyDatesForPeriod(period = 'all', history = {}) {
   const latest = dates.at(-1);
   if (period === 'today') return [tashkentDateKey()];
   if (period === 'yesterday') return [shiftDateKey(tashkentDateKey(), -1)];
+  if (period === 'day_before_yesterday') return [shiftDateKey(tashkentDateKey(), -2)];
   if (period === 'week' || period === '7d') {
     const end = tashkentDateKey();
     const start = shiftDateKey(end, -6);
+    return dates.filter(date => date >= start && date <= end);
+  }
+  if (period === 'prev_week' || period === 'prev_7d') {
+    const end = shiftDateKey(tashkentDateKey(), -7);
+    const start = shiftDateKey(tashkentDateKey(), -13);
     return dates.filter(date => date >= start && date <= end);
   }
   if (period === 'month' || period === '30d') {
@@ -255,7 +261,16 @@ function historyDatesForPeriod(period = 'all', history = {}) {
     const start = shiftDateKey(end, -29);
     return dates.filter(date => date >= start && date <= end);
   }
+  if (period === 'prev_month' || period === 'prev_30d') {
+    const end = shiftDateKey(tashkentDateKey(), -30);
+    const start = shiftDateKey(tashkentDateKey(), -59);
+    return dates.filter(date => date >= start && date <= end);
+  }
   if (period === 'all') return dates;
+  if (period === 'prev_all') {
+    const cutoff = shiftDateKey(tashkentDateKey(), -29);
+    return dates.filter(date => date < cutoff);
+  }
   return latest ? [latest] : [];
 }
 
@@ -279,13 +294,27 @@ function cacheDateInPeriod(reportDate = '', period = 'all') {
   if (!period || period === 'all') return true;
   if (period === 'today') return cacheDate === tashkentDateKey();
   if (period === 'yesterday') return cacheDate === shiftDateKey(tashkentDateKey(), -1);
+  if (period === 'day_before_yesterday') return cacheDate === shiftDateKey(tashkentDateKey(), -2);
   if (period === 'week' || period === '7d') {
     const end = tashkentDateKey();
     return cacheDate >= shiftDateKey(end, -6) && cacheDate <= end;
   }
+  if (period === 'prev_week' || period === 'prev_7d') {
+    const end = shiftDateKey(tashkentDateKey(), -7);
+    const start = shiftDateKey(tashkentDateKey(), -13);
+    return cacheDate >= start && cacheDate <= end;
+  }
   if (period === 'month' || period === '30d') {
     const end = tashkentDateKey();
     return cacheDate >= shiftDateKey(end, -29) && cacheDate <= end;
+  }
+  if (period === 'prev_month' || period === 'prev_30d') {
+    const end = shiftDateKey(tashkentDateKey(), -30);
+    const start = shiftDateKey(tashkentDateKey(), -59);
+    return cacheDate >= start && cacheDate <= end;
+  }
+  if (period === 'prev_all') {
+    return cacheDate < shiftDateKey(tashkentDateKey(), -29);
   }
   return true;
 }
@@ -421,7 +450,7 @@ async function getCompanyModuleReports(query = {}) {
     fetched_at = cached?.fetched_at || null;
   }
 
-  if (['all', 'week', '7d', 'month', '30d'].includes(period)) {
+  if (['all', 'week', '7d', 'month', '30d', 'prev_week', 'prev_7d', 'prev_month', 'prev_30d', 'prev_all'].includes(period)) {
     const grouped = new Map();
     list.forEach(row => {
       const key = String(row.company_id);
