@@ -34,7 +34,7 @@ function companyReportUrl(tenantId) {
   const tenantUrl = suffix ? optionalEnv(`UYQUR_COMPANY_REPORT_URL${suffix}`, '') : '';
   if (tenantUrl) return tenantUrl;
   if (id === DEFAULT_TENANT_ID) {
-    return optionalEnv('UYQUR_COMPANY_REPORT_URL', optionalEnv('UYQUR_COMPANY_INFO_URL', DEFAULT_COMPANY_REPORT_URL));
+    return optionalEnv('UYQUR_COMPANY_REPORT_URL', DEFAULT_COMPANY_REPORT_URL);
   }
   return DEFAULT_COMPANY_REPORT_URL;
 }
