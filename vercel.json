@@ -10,7 +10,7 @@
   },
   "crons": [
     {
-      "path": "/api/company-report-sync",
+      "path": "/api/cron?action=companyInfo&syncReport=1",
       "schedule": "0 1 * * *"
     }
   ],

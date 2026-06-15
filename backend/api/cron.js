@@ -22,17 +22,16 @@ async function handler(req, res) {
     const query = getQuery(req);
     const action = String(query.action || query.job || '').trim();
     const tenantId = resolveTenantFromQuery(query);
-    if (['companyInfo', 'company-info', 'uyqurCompanyInfo', 'uyqur-company-info'].includes(action)) {
-      const syncReport = ['1', 'true', 'yes'].includes(String(query.syncReport || query.sync_report || query.report || '').trim().toLowerCase());
-      if (syncReport) {
+    const reportActions = ['companyReport', 'company-report', 'uyqurCompanyReport', 'uyqur-company-report'];
+    const infoActions = ['companyInfo', 'company-info', 'uyqurCompanyInfo', 'uyqur-company-info'];
+    const wantsReport = reportActions.includes(action)
+      || ['1', 'true', 'yes'].includes(String(query.syncReport || query.sync_report || query.report || '').trim().toLowerCase());
+    if (infoActions.includes(action) || reportActions.includes(action)) {
+      if (wantsReport) {
         const result = await runWithTenant(tenantId, () => syncCompanyReport());
         return sendJson(res, 200, { ok: true, data: result });
       }
       const result = await runWithTenant(tenantId, () => syncCompanyInfo());
-      return sendJson(res, 200, { ok: true, data: result });
-    }
-    if (['companyReport', 'company-report', 'uyqurCompanyReport', 'uyqur-company-report'].includes(action)) {
-      const result = await runWithTenant(tenantId, () => syncCompanyReport());
       return sendJson(res, 200, { ok: true, data: result });
     }
     if (['clickupSync', 'clickup-sync', 'clickup'].includes(action)) {
