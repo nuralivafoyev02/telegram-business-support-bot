@@ -5,6 +5,11 @@ const supabase = require('./supabase');
 const { getCurrentTenantId, normalizeTenantId, DEFAULT_TENANT_ID } = require('./tenant');
 
 const DEFAULT_COMPANY_REPORT_URL = 'https://backend.app.uyqur.uz/dev/company/info-report-for-bot';
+const COMPANY_REPORT_CACHE_KEY = 'uyqur_company_report_cache';
+const COMPANY_REPORT_HISTORY_KEY = 'uyqur_company_report_history';
+const COMPANY_REPORT_CACHE_SCHEMA_VERSION = 1;
+const COMPANY_REPORT_HISTORY_SCHEMA_VERSION = 1;
+const REPORT_HISTORY_MAX_DAYS = 365;
 const MODULE_KEYS = Object.freeze(['taminot', 'kassa', 'omborxona', 'qurilish_jarayoni', 'monitoring']);
 const ACTIVITY_KEY_MAP = Object.freeze({
   supply: 'taminot',
@@ -115,6 +120,20 @@ function normalizeReportCompany(row = {}, reportDate = tashkentDateKey()) {
   };
 }
 
+function reportSnapshot(result = {}) {
+  const fetchedAt = result.fetched_at || new Date().toISOString();
+  return {
+    tenant_id: resolveTenantId(result.tenant_id),
+    cache_schema_version: COMPANY_REPORT_CACHE_SCHEMA_VERSION,
+    report_date: result.report_date || tashkentDateKey(),
+    companies: Array.isArray(result.companies) ? result.companies : [],
+    summary: result.summary || buildReportSummary(result.companies || []),
+    fetched_at: fetchedAt,
+    cached_at: new Date().toISOString(),
+    source: result.source || ''
+  };
+}
+
 function buildReportSummary(companies = []) {
   return {
     total: companies.length,
@@ -127,119 +146,160 @@ function buildReportSummary(companies = []) {
   };
 }
 
-function mapDbRowToCompany(row = {}) {
+function emptyReportHistory(tenantId) {
   return {
-    company_id: row.company_id,
-    company_name: row.company_name || '',
-    report_date: row.report_date,
-    module_usage: row.module_usage || {},
-    module_last_dates: row.module_last_dates || {},
-    module_active_count: Number(row.module_active_count || 0),
-    raw: row.raw || null
+    tenant_id: resolveTenantId(tenantId),
+    cache_schema_version: COMPANY_REPORT_HISTORY_SCHEMA_VERSION,
+    days: {},
+    dates: [],
+    updated_at: null
   };
 }
 
-async function selectDailyReports(filters = {}) {
-  const query = {
-    select: 'company_id,company_name,report_date,module_usage,module_last_dates,module_active_count,raw,source_url,fetched_at',
-    order: supabase.order('company_name', true),
-    limit: '5000',
-    ...filters
+function pruneReportHistory(history = {}, maxDays = REPORT_HISTORY_MAX_DAYS) {
+  const days = objectValue(history.days);
+  const dates = [...new Set((Array.isArray(history.dates) ? history.dates : Object.keys(days)).filter(Boolean))]
+    .sort((a, b) => String(b).localeCompare(String(a)));
+  const keptDates = dates.slice(0, maxDays);
+  const nextDays = Object.fromEntries(
+    keptDates.map(date => [date, days[date]]).filter(([, value]) => value && typeof value === 'object')
+  );
+  return {
+    ...history,
+    days: nextDays,
+    dates: keptDates.sort((a, b) => String(a).localeCompare(String(b)))
   };
-  return supabase.select('company_module_daily_reports', query).catch(() => []);
 }
 
-async function getLatestReportDate() {
-  const rows = await supabase.select('company_module_daily_reports', {
-    select: 'report_date',
-    order: supabase.order('report_date', false),
+async function getReportHistory(options = {}) {
+  const tenantId = resolveTenantId(options.tenantId);
+  const rows = await supabase.select('bot_settings', {
+    select: 'key,value,updated_at',
+    key: supabase.eq(COMPANY_REPORT_HISTORY_KEY),
     limit: '1'
   }).catch(() => []);
-  return rows[0]?.report_date || null;
+  const row = rows[0] || null;
+  if (!row?.value || typeof row.value !== 'object') return emptyReportHistory(tenantId);
+  const history = pruneReportHistory({
+    ...row.value,
+    tenant_id: resolveTenantId(row.value.tenant_id),
+    updated_at: row.value.updated_at || row.updated_at || null
+  });
+  if (history.tenant_id !== tenantId && tenantId !== DEFAULT_TENANT_ID) return emptyReportHistory(tenantId);
+  return history;
 }
 
-async function getAvailableReportDates({ start, end } = {}) {
-  const query = {
-    select: 'report_date',
-    order: supabase.order('report_date', true),
-    limit: '5000'
-  };
-  if (start && end) query.report_date = [`gte.${start}`, `lte.${end}`];
-  const rows = await supabase.select('company_module_daily_reports', query).catch(() => []);
-  return [...new Set(rows.map(row => row.report_date).filter(Boolean))].sort();
-}
-
-async function saveDailyReports(result = {}) {
+async function saveReportHistoryDay(result = {}) {
+  const tenantId = resolveTenantId(result.tenant_id);
   const reportDate = result.report_date || tashkentDateKey();
-  const companies = Array.isArray(result.companies) ? result.companies : [];
-  const fetchedAt = result.fetched_at || new Date().toISOString();
-  const sourceUrl = result.source || '';
-  const rows = companies.map(company => ({
+  const history = pruneReportHistory(await getReportHistory({ tenantId }));
+  history.days[reportDate] = {
     report_date: reportDate,
-    company_id: company.company_id,
-    company_name: company.company_name || '',
-    module_usage: company.module_usage || {},
-    module_last_dates: company.module_last_dates || {},
-    module_active_count: Number(company.module_active_count || 0),
-    raw: company.raw || null,
-    source_url: sourceUrl,
-    fetched_at: fetchedAt
-  }));
-
-  if (rows.length) {
-    await supabase.insert('company_module_daily_reports', rows, {
-      upsert: true,
-      onConflict: 'report_date,company_id',
-      prefer: 'return=minimal'
-    });
-  }
-
-  return { report_date: reportDate, companies_count: rows.length };
+    fetched_at: result.fetched_at || new Date().toISOString(),
+    source: result.source || '',
+    companies: Array.isArray(result.companies) ? result.companies : [],
+    summary: result.summary || buildReportSummary(result.companies || [])
+  };
+  history.dates = [...new Set([...(history.dates || []), reportDate])].sort((a, b) => String(a).localeCompare(String(b)));
+  history.updated_at = new Date().toISOString();
+  const snapshot = pruneReportHistory(history);
+  await supabase.insert('bot_settings', [{
+    key: COMPANY_REPORT_HISTORY_KEY,
+    value: snapshot,
+    updated_at: snapshot.updated_at
+  }], { upsert: true, onConflict: 'key', prefer: 'return=minimal' });
+  return snapshot;
 }
 
-async function saveSyncRun({
-  reportDate,
-  status,
-  companiesCount = 0,
-  sourceUrl = '',
-  errorMessage = null,
-  startedAt,
-  finishedAt
-}) {
-  await supabase.insert('company_module_sync_runs', [{
-    report_date: reportDate,
-    status,
-    companies_count: companiesCount,
-    source_url: sourceUrl || null,
-    error_message: errorMessage,
-    started_at: startedAt || new Date().toISOString(),
-    finished_at: finishedAt || new Date().toISOString()
-  }], { prefer: 'return=minimal' });
+async function saveCompanyReportSnapshot(result = {}) {
+  const snapshot = reportSnapshot(result);
+  await supabase.insert('bot_settings', [{
+    key: COMPANY_REPORT_CACHE_KEY,
+    value: snapshot,
+    updated_at: snapshot.cached_at
+  }], { upsert: true, onConflict: 'key', prefer: 'return=minimal' });
+  return snapshot;
 }
 
 async function getCachedCompanyReport(options = {}) {
   const tenantId = resolveTenantId(options.tenantId);
-  const reportDate = options.reportDate || await getLatestReportDate();
-  if (!reportDate) return null;
-
-  const rows = await selectDailyReports({ report_date: reportDate });
-  if (!rows.length) return null;
-
-  const companies = rows.map(mapDbRowToCompany);
-  const fetchedAt = rows.reduce((latest, row) => {
-    const value = row.fetched_at || '';
-    return value > latest ? value : latest;
-  }, rows[0].fetched_at || new Date().toISOString());
-
+  const rows = await supabase.select('bot_settings', {
+    select: 'key,value,updated_at',
+    key: supabase.eq(COMPANY_REPORT_CACHE_KEY),
+    limit: '1'
+  }).catch(() => []);
+  const row = rows[0] || null;
+  if (!row?.value || typeof row.value !== 'object') return null;
+  if (resolveTenantId(row.value.tenant_id) !== tenantId && tenantId !== DEFAULT_TENANT_ID) return null;
   return {
-    tenant_id: tenantId,
-    report_date: reportDate,
-    companies,
-    summary: buildReportSummary(companies),
-    fetched_at: fetchedAt,
-    cached_at: fetchedAt,
-    source: rows[0]?.source_url || '',
+    ...row.value,
+    tenant_id: resolveTenantId(row.value.tenant_id),
+    cached_at: row.value.cached_at || row.updated_at || null,
     from_cache: true
+  };
+}
+
+function historyDatesForPeriod(period = 'all', history = {}) {
+  const dates = [...(Array.isArray(history.dates) ? history.dates : Object.keys(objectValue(history.days)))].sort();
+  if (!dates.length) return [];
+  const latest = dates.at(-1);
+  if (period === 'today') return [tashkentDateKey()];
+  if (period === 'yesterday') return [shiftDateKey(tashkentDateKey(), -1)];
+  if (period === 'week' || period === '7d') {
+    const end = tashkentDateKey();
+    const start = shiftDateKey(end, -6);
+    return dates.filter(date => date >= start && date <= end);
+  }
+  if (period === 'month' || period === '30d') {
+    const end = tashkentDateKey();
+    const start = shiftDateKey(end, -29);
+    return dates.filter(date => date >= start && date <= end);
+  }
+  return latest ? [latest] : [];
+}
+
+function companiesForHistoryDates(history = {}, dates = []) {
+  const days = objectValue(history.days);
+  const rows = [];
+  dates.forEach(date => {
+    const day = days[date];
+    if (!day || !Array.isArray(day.companies)) return;
+    day.companies.forEach(company => rows.push({
+      ...company,
+      report_date: company.report_date || date
+    }));
+  });
+  return rows;
+}
+
+function cacheDateInPeriod(reportDate = '', period = 'all') {
+  const cacheDate = String(reportDate || '').trim();
+  if (!cacheDate) return false;
+  if (!period || period === 'all') return true;
+  if (period === 'today') return cacheDate === tashkentDateKey();
+  if (period === 'yesterday') return cacheDate === shiftDateKey(tashkentDateKey(), -1);
+  if (period === 'week' || period === '7d') {
+    const end = tashkentDateKey();
+    return cacheDate >= shiftDateKey(end, -6) && cacheDate <= end;
+  }
+  if (period === 'month' || period === '30d') {
+    const end = tashkentDateKey();
+    return cacheDate >= shiftDateKey(end, -29) && cacheDate <= end;
+  }
+  return true;
+}
+
+async function companiesFromCacheForPeriod(period = 'all', tenantId) {
+  const cached = await getCachedCompanyReport({ tenantId });
+  if (!cached?.companies?.length) return { companies: [], dates: [] };
+  const reportDate = cached.report_date || tashkentDateKey();
+  if (!cacheDateInPeriod(reportDate, period)) return { companies: [], dates: [] };
+  return {
+    companies: cached.companies.map(company => ({
+      ...company,
+      report_date: company.report_date || reportDate
+    })),
+    dates: [reportDate]
   };
 }
 
@@ -262,56 +322,34 @@ async function syncCompanyReport(options = {}) {
   const reportDate = options.reportDate || tashkentDateKey();
   const url = companyReportUrl(tenantId);
   const auth = assertTenantCompanyReportAuth(tenantId);
-  const startedAt = new Date().toISOString();
 
-  try {
-    const payload = await requestCompanyReport(url, auth);
-    const companies = extractReportRows(payload)
-      .map(row => normalizeReportCompany(row, reportDate))
-      .filter(row => row.company_id);
-    const fetchedAt = new Date().toISOString();
-    const result = {
-      tenant_id: tenantId,
-      report_date: reportDate,
-      companies,
-      summary: buildReportSummary(companies),
-      fetched_at: fetchedAt,
-      source: url
+  const payload = await requestCompanyReport(url, auth);
+  const companies = extractReportRows(payload)
+    .map(row => normalizeReportCompany(row, reportDate))
+    .filter(row => row.company_id);
+  const fetchedAt = new Date().toISOString();
+  const result = {
+    tenant_id: tenantId,
+    report_date: reportDate,
+    companies,
+    summary: buildReportSummary(companies),
+    fetched_at: fetchedAt,
+    source: url
+  };
+
+  if (options.persist !== false) {
+    const snapshot = await saveCompanyReportSnapshot(result);
+    const history = await saveReportHistoryDay(result);
+    return {
+      ...result,
+      persisted: true,
+      cached_at: snapshot.cached_at,
+      history_dates: history.dates || [],
+      storage: 'bot_settings'
     };
-
-    if (options.persist !== false) {
-      const saved = await saveDailyReports(result);
-      await saveSyncRun({
-        reportDate,
-        status: 'success',
-        companiesCount: saved.companies_count,
-        sourceUrl: url,
-        startedAt,
-        finishedAt: fetchedAt
-      });
-      return {
-        ...result,
-        persisted: true,
-        storage: 'supabase',
-        companies_count: saved.companies_count
-      };
-    }
-
-    return result;
-  } catch (error) {
-    if (options.persist !== false) {
-      await saveSyncRun({
-        reportDate,
-        status: 'failed',
-        companiesCount: 0,
-        sourceUrl: url,
-        errorMessage: error.message,
-        startedAt,
-        finishedAt: new Date().toISOString()
-      }).catch(() => null);
-    }
-    throw error;
   }
+
+  return result;
 }
 
 function enrichCompaniesWithModuleReport(companies = [], reportCompanies = []) {
@@ -355,37 +393,18 @@ async function getCompanyModuleReports(query = {}) {
   const tenantId = resolveTenantId(query.tenantId);
   const period = String(query.period || query.periodKey || 'all').trim().toLowerCase();
   const reportDate = String(query.report_date || query.date || '').trim();
-  let dates = [];
-  let list = [];
-
-  if (reportDate) {
-    dates = [reportDate];
-    list = await selectDailyReports({ report_date: reportDate });
-  } else if (period === 'today') {
-    dates = [tashkentDateKey()];
-    list = await selectDailyReports({ report_date: dates[0] });
-  } else if (period === 'yesterday') {
-    dates = [shiftDateKey(tashkentDateKey(), -1)];
-    list = await selectDailyReports({ report_date: dates[0] });
-  } else if (period === 'week' || period === '7d') {
-    const end = tashkentDateKey();
-    const start = shiftDateKey(end, -6);
-    dates = await getAvailableReportDates({ start, end });
-    list = await selectDailyReports({ report_date: [`gte.${start}`, `lte.${end}`] });
-  } else if (period === 'month' || period === '30d') {
-    const end = tashkentDateKey();
-    const start = shiftDateKey(end, -29);
-    dates = await getAvailableReportDates({ start, end });
-    list = await selectDailyReports({ report_date: [`gte.${start}`, `lte.${end}`] });
-  } else {
-    const latest = await getLatestReportDate();
-    if (latest) {
-      dates = [latest];
-      list = await selectDailyReports({ report_date: latest });
+  const history = await getReportHistory({ tenantId });
+  let dates = reportDate
+    ? [reportDate]
+    : historyDatesForPeriod(period, history);
+  let list = companiesForHistoryDates(history, dates);
+  if (!list.length) {
+    const cached = await companiesFromCacheForPeriod(period, tenantId);
+    if (cached.companies.length) {
+      list = cached.companies;
+      if (!dates.length) dates = cached.dates;
     }
   }
-
-  list = list.map(mapDbRowToCompany);
 
   if (['week', '7d', 'month', '30d'].includes(period)) {
     const grouped = new Map();
@@ -413,7 +432,7 @@ async function getCompanyModuleReports(query = {}) {
     return {
       tenant_id: tenantId,
       period,
-      storage: 'supabase',
+      storage: 'bot_settings',
       companies,
       report_dates: dates
     };
@@ -433,13 +452,18 @@ async function getCompanyModuleReports(query = {}) {
   return {
     tenant_id: tenantId,
     period,
-    storage: 'supabase',
+    storage: 'bot_settings',
     companies,
     report_dates: dates
   };
 }
 
 module.exports = {
+  COMPANY_REPORT_CACHE_KEY,
+  COMPANY_REPORT_HISTORY_KEY,
+  COMPANY_REPORT_CACHE_SCHEMA_VERSION,
+  COMPANY_REPORT_HISTORY_SCHEMA_VERSION,
+  REPORT_HISTORY_MAX_DAYS,
   MODULE_KEYS,
   ACTIVITY_KEY_MAP,
   companyReportUrl,
@@ -447,6 +471,7 @@ module.exports = {
   extractReportRows,
   syncCompanyReport,
   getCachedCompanyReport,
+  getReportHistory,
   enrichCompaniesWithModuleReport,
   getCompanyModuleReports,
   aggregateModuleUsage,
