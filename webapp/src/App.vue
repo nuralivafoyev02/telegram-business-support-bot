@@ -594,7 +594,10 @@
                           <span class="support-owner">{{ companySupportLabel(row) }}</span>
                         </td>
                         <td class="module-count-col">
-                          <span class="module-count-badge">{{ row.module_active_count }}</span>
+                          <span class="module-count-badge"
+                            :title="`${row.module_active_count} / ${companyModuleKeys.length}`">
+                            {{ row.module_active_percent }}%
+                          </span>
                         </td>
                         <td v-for="column in companyModuleColumns" :key="`${row.id || row.name}-${column.key}`"
                           class="module-status-cell">
@@ -4542,6 +4545,12 @@ function companyModuleActiveCount(usage = {}) {
   return companyModuleKeys.reduce((sum, key) => sum + (usage[key] ? 1 : 0), 0);
 }
 
+function companyModuleActivePercent(usage = {}) {
+  const total = companyModuleKeys.length;
+  if (!total) return 0;
+  return Math.round((companyModuleActiveCount(usage) / total) * 100);
+}
+
 function companyModulePeriodQuery(period = 'all') {
   if (!period || period === 'custom') return { period: 'all' };
   return { period };
@@ -4577,6 +4586,7 @@ const companyModuleTableRows = computed(() => {
       module_usage,
       module_last_dates,
       module_active_count: companyModuleActiveCount(module_usage),
+      module_active_percent: companyModuleActivePercent(module_usage),
       report_date: report?.report_date || row.report_date || null
     };
   });
