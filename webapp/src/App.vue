@@ -882,11 +882,14 @@
                       <option value="true">Yoqilgan (AI va 👀 ochganda)</option>
                     </select>
                   </label>
-                  <label v-if="settingsForm.ticket_notifications === 'true'" class="label">Ticket guruh chat ID
+                  <label v-if="settingsForm.ticket_notifications === 'true'" class="label">Topic guruh chat ID
                     <input v-model.trim="settingsForm.ticket_group_id" class="input" placeholder="-1001234567890" />
                   </label>
+                  <label v-if="settingsForm.ticket_notifications === 'true'" class="label">Topic thread ID (message_thread_id)
+                    <input v-model.trim="settingsForm.ticket_message_thread_id" class="input" placeholder="42" inputmode="numeric" />
+                  </label>
                   <p v-if="settingsForm.ticket_notifications === 'true'" class="card-note wide">
-                    Yangi ticket ochilganda shu guruhga xabar ketadi. Shaxsiy chat ticketlari faqat mijoz va support ikkalasi bir quruvchi guruhda bo‘lsa ochiladi. «Boshqa hodimga» da faqat support xodimlar (kompaniya mas’uli va menejerlar yo‘q).
+                    Yangi ticket ochilganda shu forum topic guruhiga xabar ketadi. Forum guruhda Topics yoqilgan bo‘lishi va bot admin bo‘lishi kerak. Thread ID bo‘lmasa xabar General mavzusiga tushadi. Shaxsiy chat ticketlari faqat mijoz va support ikkalasi bir quruvchi guruhda bo‘lsa ochiladi.
                   </p>
                   <label class="label">Guruh xabari saqlansa
                     <select v-model="settingsForm.group_message_audit" class="select">
@@ -2578,7 +2581,7 @@ const floatingTooltipStyle = computed(() => ({
   transform: floatingTooltip.value.placement === 'top' ? 'translate(-50%, -100%)' : 'translate(-50%, 0)'
 }));
 
-const settingsForm = reactive({ ai_mode: 'false', auto_reply: 'true', message_reactions: 'true', ticket_notifications: 'false', ticket_group_id: '', done_tag: '#done', main_group_id: '', group_message_audit: 'main_group', group_message_audit_channel_id: '', request_detection: 'keyword' });
+const settingsForm = reactive({ ai_mode: 'false', auto_reply: 'true', message_reactions: 'true', ticket_notifications: 'false', ticket_group_id: '', ticket_message_thread_id: '', done_tag: '#done', main_group_id: '', group_message_audit: 'main_group', group_message_audit_channel_id: '', request_detection: 'keyword' });
 const isManagerMode = computed(() => false);
 const mainTabs = computed(() => tabs.filter(tab => mainTabKeys.includes(tab.key)));
 const otherTabs = computed(() => tabs.filter(tab => otherTabKeys.includes(tab.key) && (tab.key !== 'clickup' || clickUpIntegrationReady.value)));
@@ -6124,6 +6127,7 @@ async function loadSettings() {
     ? 'false'
     : String(!!ticketNotifications?.enabled);
   settingsForm.ticket_group_id = ticketNotifications?.target_chat_id || ticketNotifications?.targetChatId || '';
+  settingsForm.ticket_message_thread_id = ticketNotifications?.message_thread_id ?? ticketNotifications?.messageThreadId ?? '';
   settingsForm.done_tag = done?.tag || '#done';
   settingsForm.main_group_id = mainGroup?.chat_id || '';
   settingsForm.group_message_audit = groupMessageAudit === undefined
@@ -8415,6 +8419,7 @@ async function saveSettings() {
           value: {
             enabled: settingsForm.ticket_notifications === 'true',
             target_chat_id: settingsForm.ticket_group_id,
+            message_thread_id: settingsForm.ticket_message_thread_id || null,
             notify_on_ai: true,
             notify_on_reaction: true
           }

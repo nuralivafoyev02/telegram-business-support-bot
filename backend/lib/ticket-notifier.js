@@ -56,10 +56,19 @@ function isMissingSchemaColumnError(error) {
   return text.includes('pgrst204') || text.includes('schema cache') || text.includes('could not find');
 }
 
+function normalizeMessageThreadId(value = '') {
+  const text = String(value ?? '').trim();
+  if (!text) return null;
+  const number = Number(text);
+  if (!Number.isFinite(number) || number <= 0) return null;
+  return Math.trunc(number);
+}
+
 function normalizeTicketNotifications(value = {}) {
   return {
     enabled: value.enabled === true,
     target_chat_id: normalizeTargetChatId(value.target_chat_id || value.targetChatId || ''),
+    message_thread_id: normalizeMessageThreadId(value.message_thread_id ?? value.messageThreadId),
     notify_on_ai: value.notify_on_ai !== false && value.notifyOnAi !== false,
     notify_on_reaction: value.notify_on_reaction !== false && value.notifyOnReaction !== false
   };
@@ -70,6 +79,14 @@ function normalizeTargetChatId(value = '') {
   if (!text) return '';
   if (/^-?\d+$/.test(text)) return text;
   return text.startsWith('@') ? text : `@${text.replace(/^@/, '')}`;
+}
+
+function ticketMessageOptions(config = {}, extra = {}) {
+  const options = { ...extra };
+  const threadId = normalizeMessageThreadId(config.message_thread_id ?? extra.message_thread_id);
+  if (threadId) options.message_thread_id = threadId;
+  else delete options.message_thread_id;
+  return options;
 }
 
 function telegramMessageLink(chat = {}, messageId) {
@@ -431,7 +448,14 @@ async function refreshTicketNotificationMessage(request = {}, options = {}) {
     options
   });
   const keyboard = resolved.status === 'open' ? buildTicketKeyboard(resolved, 'main') : { inline_keyboard: [] };
-  await editMessageText(target.chatId, target.messageId, text, { reply_markup: keyboard, parse_mode: 'HTML' }).catch(error => {
+  const settings = await getBotSettings();
+  const config = normalizeTicketNotifications(settings.ticketNotifications || {});
+  await editMessageText(
+    target.chatId,
+    target.messageId,
+    text,
+    ticketMessageOptions(config, { reply_markup: keyboard, parse_mode: 'HTML' })
+  ).catch(error => {
     console.warn('[ticket-notifier:refresh]', { request_id: resolved.id, error: error.message });
   });
 }
@@ -479,11 +503,11 @@ async function notifyTicketOpened({ request, message, openSource = 'ai', openedB
 
   let result;
   try {
-    result = await sendMessage(targetChatId, text, {
+    result = await sendMessage(targetChatId, text, ticketMessageOptions(config, {
       parse_mode: 'HTML',
       disable_web_page_preview: false,
       reply_markup: keyboard
-    });
+    }));
   } catch (error) {
     console.warn('[ticket-notifier:send]', {
       request_id: request.id,
@@ -631,13 +655,14 @@ async function handleTicketCallback(query = {}, parsed = {}) {
 
   const chatId = query.message?.chat?.id;
   const messageId = query.message?.message_id;
+  const threadOptions = ticketMessageOptions({}, { message_thread_id: query.message?.message_thread_id });
   const action = parsed.action;
 
   if (action === TICKET_ACTIONS.REASSIGN) {
     const page = Number.parseInt(parsed.extra, 10) || 0;
     const keyboard = await buildReassignKeyboard(request, page);
     if (chatId && messageId) {
-      await editMessageReplyMarkup(chatId, messageId, keyboard).catch(() => null);
+      await editMessageReplyMarkup(chatId, messageId, keyboard, threadOptions).catch(() => null);
     }
     await answerCallbackQuery(query.id).catch(() => null);
     return { ok: true, handled: 'reassign_menu' };
@@ -646,7 +671,7 @@ async function handleTicketCallback(query = {}, parsed = {}) {
   if (action === TICKET_ACTIONS.REASSIGN_BACK) {
     const keyboard = buildTicketKeyboard(request, 'main');
     if (chatId && messageId) {
-      await editMessageReplyMarkup(chatId, messageId, keyboard).catch(() => null);
+      await editMessageReplyMarkup(chatId, messageId, keyboard, threadOptions).catch(() => null);
     }
     await answerCallbackQuery(query.id).catch(() => null);
     return { ok: true, handled: 'reassign_back' };
@@ -671,7 +696,7 @@ async function handleTicketCallback(query = {}, parsed = {}) {
       previousEmployeeId: previousId
     });
     if (chatId && messageId) {
-      await editMessageReplyMarkup(chatId, messageId, buildTicketKeyboard(request, 'main')).catch(() => null);
+      await editMessageReplyMarkup(chatId, messageId, buildTicketKeyboard(request, 'main'), threadOptions).catch(() => null);
     }
     await answerCallbackQuery(query.id, `${employeeLabel(target)} ga o‘tkazildi.`).catch(() => null);
     return { ok: true, handled: 'reassigned', employee_id: target.id };

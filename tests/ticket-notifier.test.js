@@ -45,11 +45,13 @@ function testNormalizeTicketNotifications() {
   const config = normalizeTicketNotifications({
     enabled: true,
     target_chat_id: ' -1003349113901 ',
+    message_thread_id: ' 42 ',
     notify_on_ai: true,
     notify_on_reaction: true
   });
   assert.strictEqual(config.enabled, true);
   assert.strictEqual(config.target_chat_id, '-1003349113901');
+  assert.strictEqual(config.message_thread_id, 42);
 }
 
 function testCloseOnlyAssignedEmployee() {

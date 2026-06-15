@@ -105,11 +105,12 @@ async function editMessageText(chatId, messageId, text, options = {}) {
   return telegram('editMessageText', payload);
 }
 
-async function editMessageReplyMarkup(chatId, messageId, replyMarkup = null) {
+async function editMessageReplyMarkup(chatId, messageId, replyMarkup = null, options = {}) {
   return telegram('editMessageReplyMarkup', {
     chat_id: chatId,
     message_id: messageId,
-    reply_markup: replyMarkup
+    reply_markup: replyMarkup,
+    ...options
   });
 }
 

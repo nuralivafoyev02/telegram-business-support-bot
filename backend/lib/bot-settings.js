@@ -25,6 +25,7 @@ const DEFAULT_SETTINGS = Object.freeze({
   ticketNotifications: Object.freeze({
     enabled: false,
     target_chat_id: '',
+    message_thread_id: null,
     notify_on_ai: true,
     notify_on_reaction: true
   }),
@@ -121,10 +122,19 @@ function normalizeTargetChatId(value = '') {
   return text.startsWith('@') ? text : `@${text.replace(/^@/, '')}`;
 }
 
+function normalizeMessageThreadId(value = '') {
+  const text = String(value ?? '').trim();
+  if (!text) return null;
+  const number = Number(text);
+  if (!Number.isFinite(number) || number <= 0) return null;
+  return Math.trunc(number);
+}
+
 function normalizeTicketNotifications(value = {}) {
   return {
     enabled: value.enabled === true,
     target_chat_id: normalizeTargetChatId(value.target_chat_id || value.targetChatId || ''),
+    message_thread_id: normalizeMessageThreadId(value.message_thread_id ?? value.messageThreadId),
     notify_on_ai: value.notify_on_ai !== false && value.notifyOnAi !== false,
     notify_on_reaction: value.notify_on_reaction !== false && value.notifyOnReaction !== false
   };
