@@ -572,9 +572,9 @@
                                 :key="`module-filter-menu-${group.key}`"
                                 type="button"
                                 class="company-module-filter-menu-group"
-                                @click="openCompanyModuleFilterGroup(group.key)">
+                                @click="group.key === 'show' ? selectCompanyModuleControlOption(group, group.options[0]) : openCompanyModuleFilterGroup(group.key)">
                                 <span>{{ group.label }}</span>
-                                <span class="company-module-filter-menu-arrow">›</span>
+                                <span v-if="group.key !== 'show'" class="company-module-filter-menu-arrow">›</span>
                               </button>
                             </template>
                             <template v-else-if="companyModuleFilterActiveGroup">
@@ -4975,7 +4975,7 @@ const companyModuleControlGroups = computed(() => {
   return [
     {
       key: 'show',
-      label: 'Ko‘rsatish',
+      label: 'Hammasi',
       type: 'filter',
       options: [{ key: 'all', label: 'Hammasi' }]
     },
