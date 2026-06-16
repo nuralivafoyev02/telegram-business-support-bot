@@ -644,6 +644,12 @@
                     <div class="company-module-summary-cell">
                       <span class="company-module-summary-label">Ishlatilgan</span>
                       <b class="company-module-summary-value">{{ companyModuleTableSummary.avgPercent }}%</b>
+                      <em
+                        v-if="companyModuleCompareEnabled && companyModuleTableSummary.usedComparison"
+                        class="company-module-summary-meta"
+                      >
+                        {{ companyModuleTableSummary.usedComparison.percentText }}
+                      </em>
                     </div>
                     <div
                       v-for="column in companyModuleColumns"
@@ -651,6 +657,12 @@
                       class="company-module-summary-cell">
                       <span class="company-module-summary-label">{{ column.label }}</span>
                       <b class="company-module-summary-value">{{ companyModuleTableSummary.modulePercents[column.key] }}%</b>
+                      <em
+                        v-if="companyModuleCompareEnabled && companyModuleTableSummary.moduleComparisons[column.key]"
+                        class="company-module-summary-meta"
+                      >
+                        {{ companyModuleTableSummary.moduleComparisons[column.key].percentText }}
+                      </em>
                     </div>
                   </div>
                   <div
@@ -5053,7 +5065,16 @@ const companyModuleTableSummary = computed(() => {
   const rows = companyModuleFilteredRows.value;
   const total = rows.length;
   if (!total) {
-    return { total: 0, usedCount: 0, avgPercent: 0, modules: {}, modulePercents: {}, supportStaff: [] };
+    return {
+      total: 0,
+      usedCount: 0,
+      avgPercent: 0,
+      modules: {},
+      modulePercents: {},
+      usedComparison: null,
+      moduleComparisons: {},
+      supportStaff: []
+    };
   }
   const usedCount = rows.filter(row => Number(row.module_active_count || 0) > 0).length;
   const avgPercent = Math.round(
@@ -5071,12 +5092,33 @@ const companyModuleTableSummary = computed(() => {
       Math.round((modules[column.key] / total) * 100)
     ])
   );
+
+  let usedComparison = null;
+  const moduleComparisons = {};
+  const hasPreviousReports = (companyModuleReportsPrevious.value?.report_dates || []).length > 0;
+  if (companyModuleCompareEnabled.value && hasPreviousReports) {
+    const prevAvgPercent = Math.round(
+      rows.reduce((sum, row) => sum + Number(companyModuleActivePercent(row.previous_usage || {})), 0) / total
+    );
+    usedComparison = compareValue(avgPercent, prevAvgPercent, { isPercentage: true });
+
+    companyModuleColumns.forEach(column => {
+      const key = column.key;
+      const currentPercent = modulePercents[key] || 0;
+      const prevCount = rows.filter(row => Boolean(row.previous_usage?.[key])).length;
+      const prevPercent = total ? Math.round((prevCount / total) * 100) : 0;
+      moduleComparisons[key] = compareValue(currentPercent, prevPercent, { isPercentage: true });
+    });
+  }
+
   return {
     total,
     usedCount,
     avgPercent,
     modules,
     modulePercents,
+    usedComparison,
+    moduleComparisons,
     supportStaff: companyModuleSupportStaffLabels(rows)
   };
 });
