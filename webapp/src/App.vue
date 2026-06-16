@@ -557,14 +557,16 @@
                         :value="companyModuleControl"
                         class="select mini-select"
                         @change="handleCompanyModuleControlChange($event.target.value)">
-                        <optgroup label="Ko‘rsatish">
-                          <option
-                            v-for="option in companyModuleFilterOptions"
-                            :key="`module-filter-${option.key}`"
-                            :value="`filter:${option.key}`">
-                            {{ option.label }}
-                          </option>
-                        </optgroup>
+                        <template v-for="group in companyModuleFilterGroups" :key="`module-filter-group-${group.key}`">
+                          <optgroup :label="group.label">
+                            <option
+                              v-for="option in group.options"
+                              :key="`module-filter-${option.key}`"
+                              :value="`filter:${option.key}`">
+                              {{ option.label }}
+                            </option>
+                          </optgroup>
+                        </template>
                         <optgroup label="Saralash">
                           <option
                             v-for="option in companyModuleSortOptions"
@@ -4843,30 +4845,47 @@ const companyModuleBaseRows = computed(() => {
   });
 });
 
-const companyModuleFilterOptions = computed(() => {
-  const options = [
-    { key: 'all', label: 'Hammasi' },
-    { key: 'used', label: 'Ishlatilgan' },
-    { key: 'unused', label: 'Ishlatilmagan' }
+const companyModuleFilterGroups = computed(() => {
+  const usedModuleOptions = companyModuleColumns.map(column => ({
+    key: `module:${column.key}`,
+    label: column.label
+  }));
+  const unusedModuleOptions = companyModuleColumns.map(column => ({
+    key: `module_not:${column.key}`,
+    label: column.label
+  }));
+  return [
+    {
+      key: 'show',
+      label: 'Ko‘rsatish',
+      options: [{ key: 'all', label: 'Hammasi' }]
+    },
+    {
+      key: 'used',
+      label: 'Ishlatilgan',
+      options: [
+        { key: 'used', label: 'Ishlatilgan' },
+        ...usedModuleOptions
+      ]
+    },
+    {
+      key: 'unused',
+      label: 'Ishlatilmagan',
+      options: [
+        { key: 'unused', label: 'Ishlatilmagan' },
+        ...unusedModuleOptions
+      ]
+    },
+    {
+      key: 'business',
+      label: 'Biznes holat bo‘yicha',
+      options: [
+        { key: 'business:ACTIVE', label: 'Aktiv' },
+        { key: 'business:NEW', label: 'Yangi' },
+        { key: 'business:PAUSED', label: 'Pauza' }
+      ]
+    }
   ];
-  companyModuleColumns.forEach(column => {
-    options.push({
-      key: `module:${column.key}`,
-      label: `${column.label} ✓`
-    });
-    options.push({
-      key: `module_not:${column.key}`,
-      label: `${column.label} ✗`
-    });
-  });
-  [
-    { key: 'business:ACTIVE', label: 'Aktiv' },
-    { key: 'business:NEW', label: 'Yangi' },
-    { key: 'business:PAUSED', label: 'Pauza' }
-  ].forEach(item => {
-    options.push({ key: item.key, label: item.label });
-  });
-  return options;
 });
 
 const companyModuleTableSummary = computed(() => {
