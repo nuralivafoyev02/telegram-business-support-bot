@@ -599,6 +599,7 @@
                       <tr>
                         <th>№</th>
                         <th>Kompaniya</th>
+                        <th class="module-business-col">Biznes holati</th>
                         <th class="module-support-col">Mas’ul xodim</th>
                         <th class="module-count-col">Ishlatilgan</th>
                         <th v-for="column in companyModuleColumns" :key="`module-head-${column.key}`">{{ column.label }}</th>
@@ -615,6 +616,10 @@
                               <small>{{ row.brand || 'Brend kiritilmagan' }}</small>
                             </span>
                           </span>
+                        </td>
+                        <td class="module-business-col">
+                          <span class="status-pill mini" :class="businessStatusClass(row.business_status)">{{
+                            businessStatusLabel(row.business_status) }}</span>
                         </td>
                         <td class="module-support-col">
                           <span class="support-owner">{{ companySupportLabel(row) }}</span>
