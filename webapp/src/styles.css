@@ -3849,6 +3849,11 @@ td,
   padding: 4px 30px 4px 10px;
 }
 
+.company-module-filter-wide .mini-select {
+  min-width: 168px;
+  max-width: 220px;
+}
+
 .company-module-table-wrap {
   max-height: min(520px, 62vh);
   overflow: auto;
@@ -3886,6 +3891,67 @@ td,
 
 .company-module-table tbody tr:hover {
   background: color-mix(in srgb, var(--primary) 4%, var(--surface));
+}
+
+.company-module-filter-empty {
+  padding: 20px 14px;
+  color: var(--muted);
+  text-align: center;
+  font-size: 13px;
+}
+
+.company-module-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-soft);
+}
+
+.company-module-summary-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.company-module-summary-main strong {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.company-module-summary-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+}
+
+.company-module-summary-stat {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  color: var(--muted-strong);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.company-module-summary-stat b {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.company-module-summary-stat em {
+  color: var(--muted);
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 700;
 }
 
 .module-index-col {

@@ -551,13 +551,28 @@
                     </div>
                   </div>
                   <div class="company-module-table-controls">
-                    <label class="company-module-filter">
-                      <span>Sortlash</span>
-                      <select v-model="companyModuleSort" class="select mini-select">
-                        <option value="modules_desc">Ko‘p ishlatilgan</option>
-                        <option value="modules_asc">Kam ishlatilgan</option>
-                        <option value="name">Kompaniya nomi</option>
-                        <option value="support">Mas’ul xodim</option>
+                    <label class="company-module-filter company-module-filter-wide">
+                      <span>Filter</span>
+                      <select
+                        :value="companyModuleControl"
+                        class="select mini-select"
+                        @change="handleCompanyModuleControlChange($event.target.value)">
+                        <optgroup label="Ko‘rsatish">
+                          <option
+                            v-for="option in companyModuleFilterOptions"
+                            :key="`module-filter-${option.key}`"
+                            :value="`filter:${option.key}`">
+                            {{ option.label }}
+                          </option>
+                        </optgroup>
+                        <optgroup label="Saralash">
+                          <option
+                            v-for="option in companyModuleSortOptions"
+                            :key="`module-sort-${option.key}`"
+                            :value="`sort:${option.key}`">
+                            {{ option.label }}
+                          </option>
+                        </optgroup>
                       </select>
                     </label>
                     <label class="company-module-filter">
@@ -594,7 +609,7 @@
                   </div>
                 </div>
                 <div class="company-module-table-wrap">
-                  <table v-if="companyModuleTableRows.length" class="company-module-table">
+                  <table v-if="companyModuleBaseRows.length" class="company-module-table">
                     <thead>
                       <tr>
                         <th>№</th>
@@ -649,9 +664,34 @@
                           </span>
                         </td>
                       </tr>
+                      <tr v-if="!companyModuleTableRows.length">
+                        <td :colspan="5 + companyModuleColumns.length" class="company-module-filter-empty">
+                          Filter bo‘yicha kompaniya topilmadi
+                        </td>
+                      </tr>
                     </tbody>
                   </table>
                   <div v-else class="empty compact">Kompaniya ma’lumoti topilmadi</div>
+                </div>
+                <div v-if="companyModuleTableSummary.total" class="company-module-summary">
+                  <div class="company-module-summary-main">
+                    <strong>Umumiy</strong>
+                    <span>{{ companyModuleTableSummary.total }} ta kompaniya</span>
+                  </div>
+                  <div class="company-module-summary-stats">
+                    <span class="company-module-summary-stat">
+                      Ishlatilgan
+                      <b>{{ companyModuleTableSummary.usedCount }}/{{ companyModuleTableSummary.total }}</b>
+                      <em>({{ companyModuleTableSummary.avgPercent }}%)</em>
+                    </span>
+                    <span
+                      v-for="column in companyModuleColumns"
+                      :key="`module-summary-${column.key}`"
+                      class="company-module-summary-stat">
+                      {{ column.label }}
+                      <b>{{ companyModuleTableSummary.modules[column.key] }}/{{ companyModuleTableSummary.total }}</b>
+                    </span>
+                  </div>
                 </div>
               </section>
 
@@ -4594,7 +4634,16 @@ const companyModuleColumns = [
 ];
 const companyModuleKeys = companyModuleColumns.map(column => column.key);
 const companyModulePeriod = ref('today');
+const companyModuleFilter = ref('all');
 const companyModuleSort = ref('modules_desc');
+const companyModuleControl = ref('filter:all');
+const companyModuleSortOptions = [
+  { key: 'modules_desc', label: 'Ko‘p ishlatilgan' },
+  { key: 'modules_asc', label: 'Kam ishlatilgan' },
+  { key: 'name', label: 'Kompaniya nomi' },
+  { key: 'support', label: 'Mas’ul xodim' },
+  { key: 'business_status', label: 'Biznes holati' }
+];
 const companyModulePeriodOptions = [
   { key: 'today', label: 'Bugun' },
   { key: 'yesterday', label: 'Kecha' },
@@ -4633,6 +4682,59 @@ function companyModuleActivePercent(usage = {}) {
   const total = companyModuleKeys.length;
   if (!total) return 0;
   return Math.round((companyModuleActiveCount(usage) / total) * 100);
+}
+
+const BUSINESS_STATUS_SORT_ORDER = Object.freeze({
+  ACTIVE: 0,
+  NEW: 1,
+  PAUSED: 2
+});
+
+function matchesCompanyModuleFilter(row = {}, filter = 'all') {
+  const key = String(filter || 'all');
+  if (!key || key === 'all') return true;
+  if (key === 'used') return Number(row.module_active_count || 0) > 0;
+  if (key === 'unused') return Number(row.module_active_count || 0) === 0;
+  if (key.startsWith('module:')) return Boolean(row.module_usage?.[key.slice(7)]);
+  if (key.startsWith('module_not:')) return !row.module_usage?.[key.slice(11)];
+  if (key.startsWith('business:')) {
+    return String(row.business_status || '').toUpperCase() === key.slice(9).toUpperCase();
+  }
+  return true;
+}
+
+function sortCompanyModuleRows(rows = [], sort = 'modules_desc') {
+  return [...rows].sort((a, b) => {
+    if (sort === 'name') return String(a.name || '').localeCompare(String(b.name || ''));
+    if (sort === 'support') {
+      return companySupportLabel(a).localeCompare(companySupportLabel(b), 'uz')
+        || String(a.name || '').localeCompare(String(b.name || ''));
+    }
+    if (sort === 'business_status') {
+      const left = BUSINESS_STATUS_SORT_ORDER[String(a.business_status || '').toUpperCase()] ?? 99;
+      const right = BUSINESS_STATUS_SORT_ORDER[String(b.business_status || '').toUpperCase()] ?? 99;
+      return left - right || String(a.name || '').localeCompare(String(b.name || ''));
+    }
+    if (sort === 'modules_asc') {
+      return a.module_active_count - b.module_active_count
+        || String(a.name || '').localeCompare(String(b.name || ''));
+    }
+    return b.module_active_count - a.module_active_count
+      || String(a.name || '').localeCompare(String(b.name || ''));
+  });
+}
+
+function handleCompanyModuleControlChange(value = '') {
+  const next = String(value || '').trim();
+  if (next.startsWith('sort:')) {
+    companyModuleSort.value = next.slice(5) || 'modules_desc';
+    companyModuleControl.value = `filter:${companyModuleFilter.value}`;
+    return;
+  }
+  if (next.startsWith('filter:')) {
+    companyModuleFilter.value = next.slice(7) || 'all';
+    companyModuleControl.value = next;
+  }
 }
 
 function companyModulePeriodQuery(period = 'today') {
@@ -4710,14 +4812,14 @@ const companyModuleReportPreviousByCompanyId = computed(() => {
   return map;
 });
 
-const companyModuleTableRows = computed(() => {
+const companyModuleBaseRows = computed(() => {
   const reportById = companyModuleReportByCompanyId.value;
   const previousById = companyModuleReportPreviousByCompanyId.value;
   const hasPeriodReports = (companyModuleReports.value?.report_dates || []).length > 0;
   const hasPreviousReports = (companyModuleReportsPrevious.value?.report_dates || []).length > 0;
   const period = companyModulePeriod.value;
   const compareEnabled = companyModuleCompareEnabled.value;
-  const rows = filteredCompanyInfoRows.value.map(row => {
+  return filteredCompanyInfoRows.value.map(row => {
     const report = reportById.get(String(row.id));
     const previousReport = previousById.get(String(row.id));
     const module_usage = report?.module_usage
@@ -4739,20 +4841,56 @@ const companyModuleTableRows = computed(() => {
       report_date: report?.report_date || row.report_date || null
     };
   });
-  const sort = companyModuleSort.value;
-  return [...rows].sort((a, b) => {
-    if (sort === 'name') return String(a.name || '').localeCompare(String(b.name || ''));
-    if (sort === 'support') {
-      return companySupportLabel(a).localeCompare(companySupportLabel(b), 'uz')
-        || String(a.name || '').localeCompare(String(b.name || ''));
-    }
-    if (sort === 'modules_asc') {
-      return a.module_active_count - b.module_active_count
-        || String(a.name || '').localeCompare(String(b.name || ''));
-    }
-    return b.module_active_count - a.module_active_count
-      || String(a.name || '').localeCompare(String(b.name || ''));
+});
+
+const companyModuleFilterOptions = computed(() => {
+  const options = [
+    { key: 'all', label: 'Hammasi' },
+    { key: 'used', label: 'Ishlatilgan' },
+    { key: 'unused', label: 'Ishlatilmagan' }
+  ];
+  companyModuleColumns.forEach(column => {
+    options.push({
+      key: `module:${column.key}`,
+      label: `${column.label} ✓`
+    });
+    options.push({
+      key: `module_not:${column.key}`,
+      label: `${column.label} ✗`
+    });
   });
+  [
+    { key: 'business:ACTIVE', label: 'Aktiv' },
+    { key: 'business:NEW', label: 'Yangi' },
+    { key: 'business:PAUSED', label: 'Pauza' }
+  ].forEach(item => {
+    options.push({ key: item.key, label: item.label });
+  });
+  return options;
+});
+
+const companyModuleTableSummary = computed(() => {
+  const rows = companyModuleBaseRows.value;
+  const total = rows.length;
+  if (!total) {
+    return { total: 0, usedCount: 0, avgPercent: 0, modules: {} };
+  }
+  const usedCount = rows.filter(row => Number(row.module_active_count || 0) > 0).length;
+  const avgPercent = Math.round(
+    rows.reduce((sum, row) => sum + Number(row.module_active_percent || 0), 0) / total
+  );
+  const modules = Object.fromEntries(
+    companyModuleColumns.map(column => [
+      column.key,
+      rows.filter(row => Boolean(row.module_usage?.[column.key])).length
+    ])
+  );
+  return { total, usedCount, avgPercent, modules };
+});
+
+const companyModuleTableRows = computed(() => {
+  const rows = companyModuleBaseRows.value.filter(row => matchesCompanyModuleFilter(row, companyModuleFilter.value));
+  return sortCompanyModuleRows(rows, companyModuleSort.value);
 });
 const companyAlerts = computed(() => visibleCompanyInfoRows.value
   .filter(row => ['expired', 'soon'].includes(row.expiry_state))
