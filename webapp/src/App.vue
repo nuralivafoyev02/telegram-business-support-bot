@@ -683,6 +683,13 @@
                         </td>
                         <td v-for="column in companyModuleColumns" :key="`${row.id || row.name}-${column.key}`"
                           class="module-status-cell">
+                          <span
+                            v-if="moduleUsageDeltaMark(row, column.key)"
+                            class="module-status-delta"
+                            :class="moduleUsageDeltaMark(row, column.key) === '+' ? 'plus' : 'minus'"
+                            :title="companyModuleCompareAgainstLabel">
+                            {{ moduleUsageDeltaMark(row, column.key) }}
+                          </span>
                           <span class="module-status-icon" :class="row.module_usage[column.key] ? 'yes' : 'no'"
                             :title="moduleStatusTitle(row, column.key)"
                             :aria-label="row.module_usage[column.key] ? 'Ishlatilgan' : 'Ishlatilmagan'">
@@ -4817,6 +4824,14 @@ function selectCompanyModuleControlOption(group = {}, option = {}) {
   closeCompanyModuleFilterMenu();
 }
 
+function moduleUsageDeltaMark(row = {}, moduleKey = '') {
+  if (!companyModuleCompareEnabled.value || !row?.has_previous_report) return '';
+  const current = Boolean(row.module_usage?.[moduleKey]);
+  const previous = Boolean(row.previous_usage?.[moduleKey]);
+  if (current === previous) return '';
+  return current ? '+' : '-';
+}
+
 function companyModulePeriodQuery(period = 'today') {
   if (period === 'custom') {
     if (!companyModuleCustomPeriodForm.appliedStart || !companyModuleCustomPeriodForm.appliedEnd) {
@@ -4912,9 +4927,11 @@ const companyModuleBaseRows = computed(() => {
     return {
       ...row,
       module_usage,
+      previous_usage,
       module_last_dates,
       module_active_count,
       module_active_percent,
+      has_previous_report: Boolean(previousReport),
       module_percent_comparison: compareEnabled && hasPreviousReports
         ? compareValue(module_active_percent, previous_percent, { isPercentage: true })
         : null,

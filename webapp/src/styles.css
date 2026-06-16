@@ -4116,6 +4116,26 @@ td,
 .module-status-cell {
   width: 96px;
   text-align: center;
+  white-space: nowrap;
+}
+
+.module-status-delta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 14px;
+  margin-right: 4px;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.module-status-delta.plus {
+  color: #16a34a;
+}
+
+.module-status-delta.minus {
+  color: #dc2626;
 }
 
 .module-status-icon {
@@ -4138,8 +4158,13 @@ td,
 }
 
 .module-status-icon.no {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, #ef4444 35%, transparent);
+  background: color-mix(in srgb, #ef4444 10%, var(--surface));
   color: #ef4444;
-  font-size: 18px;
+  font-size: 15px;
 }
 
 .donut::after {
