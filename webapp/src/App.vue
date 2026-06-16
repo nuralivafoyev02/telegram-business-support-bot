@@ -635,6 +635,34 @@
                     </div>
                   </div>
                 </div>
+                <div v-if="companyModuleTableSummary.total" class="company-module-summary">
+                  <div class="company-module-summary-main">
+                    <strong>Umumiy</strong>
+                    <span>{{ companyModuleTableSummary.total }} ta kompaniya</span>
+                  </div>
+                  <div class="company-module-summary-grid">
+                    <div class="company-module-summary-cell">
+                      <span class="company-module-summary-label">Ishlatilgan</span>
+                      <b class="company-module-summary-value">
+                        {{ companyModuleTableSummary.usedCount }}/{{ companyModuleTableSummary.total }}
+                      </b>
+                      <em class="company-module-summary-meta">({{ companyModuleTableSummary.avgPercent }}%)</em>
+                    </div>
+                    <div
+                      v-for="column in companyModuleColumns"
+                      :key="`module-summary-${column.key}`"
+                      class="company-module-summary-cell">
+                      <span class="company-module-summary-label">{{ column.label }}</span>
+                      <b class="company-module-summary-value">{{ companyModuleTableSummary.modulePercents[column.key] }}%</b>
+                    </div>
+                  </div>
+                  <div
+                    v-if="companyModuleTableSummary.supportStaff.length"
+                    class="company-module-summary-support">
+                    <span class="company-module-summary-support-label">Mas’ul xodimlar</span>
+                    <b class="company-module-summary-support-value">{{ companyModuleTableSummary.supportStaff.join(', ') }}</b>
+                  </div>
+                </div>
                 <div class="company-module-table-wrap">
                   <table v-if="companyModuleBaseRows.length" class="company-module-table">
                     <thead>
@@ -706,36 +734,6 @@
                     </tbody>
                   </table>
                   <div v-else class="empty compact">Kompaniya ma’lumoti topilmadi</div>
-                </div>
-                <div v-if="companyModuleTableSummary.total" class="company-module-summary">
-                  <div class="company-module-summary-main">
-                    <strong>Umumiy</strong>
-                    <span>{{ companyModuleTableSummary.total }} ta kompaniya</span>
-                  </div>
-                  <div class="company-module-summary-grid">
-                    <div class="company-module-summary-cell">
-                      <span class="company-module-summary-label">Ishlatilgan</span>
-                      <b class="company-module-summary-value">
-                        {{ companyModuleTableSummary.usedCount }}/{{ companyModuleTableSummary.total }}
-                      </b>
-                      <em class="company-module-summary-meta">({{ companyModuleTableSummary.avgPercent }}%)</em>
-                    </div>
-                    <div
-                      v-for="column in companyModuleColumns"
-                      :key="`module-summary-${column.key}`"
-                      class="company-module-summary-cell">
-                      <span class="company-module-summary-label">{{ column.label }}</span>
-                      <b class="company-module-summary-value">
-                        {{ companyModuleTableSummary.modules[column.key] }}/{{ companyModuleTableSummary.total }}
-                      </b>
-                    </div>
-                  </div>
-                  <div
-                    v-if="companyModuleTableSummary.supportStaff.length"
-                    class="company-module-summary-support">
-                    <span class="company-module-summary-support-label">Mas’ul xodimlar</span>
-                    <b class="company-module-summary-support-value">{{ companyModuleTableSummary.supportStaff.join(', ') }}</b>
-                  </div>
                 </div>
               </section>
 
@@ -4689,9 +4687,8 @@ const companyModuleColumns = [
 ];
 const companyModuleKeys = companyModuleColumns.map(column => column.key);
 const companyModulePeriod = ref('today');
-const companyModuleFilter = ref('all');
+const companyModuleFilterKeys = ref([]);
 const companyModuleSort = ref('modules_desc');
-const companyModuleControl = ref('filter:all');
 const companyModuleSortOptions = [
   { key: 'modules_desc', label: 'Ko‘p ishlatilgan' },
   { key: 'modules_asc', label: 'Kam ishlatilgan' },
@@ -4744,16 +4741,28 @@ const BUSINESS_STATUS_SORT_ORDER = Object.freeze({
   PAUSED: 2
 });
 
-function matchesCompanyModuleFilter(row = {}, filter = 'all') {
-  const key = String(filter || 'all');
-  if (!key || key === 'all') return true;
-  if (key === 'used') return Number(row.module_active_count || 0) > 0;
-  if (key === 'unused') return Number(row.module_active_count || 0) === 0;
-  if (key.startsWith('module:')) return Boolean(row.module_usage?.[key.slice(7)]);
-  if (key.startsWith('module_not:')) return !row.module_usage?.[key.slice(11)];
-  if (key.startsWith('business:')) {
-    return String(row.business_status || '').toUpperCase() === key.slice(9).toUpperCase();
+function matchesCompanyModuleFilter(row = {}, filters = []) {
+  const keys = Array.isArray(filters) ? filters.filter(Boolean) : [];
+  if (!keys.length) return true;
+
+  const businessKeys = keys.filter(key => key.startsWith('business:'));
+  if (businessKeys.length) {
+    const statuses = businessKeys.map(key => key.slice(9).toUpperCase());
+    if (!statuses.includes(String(row.business_status || '').toUpperCase())) return false;
   }
+
+  const moduleKeys = keys.filter(key => key.startsWith('module:'));
+  if (moduleKeys.length) {
+    if (!moduleKeys.some(key => Boolean(row.module_usage?.[key.slice(7)]))) return false;
+  }
+
+  const moduleNotKeys = keys.filter(key => key.startsWith('module_not:'));
+  if (moduleNotKeys.length) {
+    if (!moduleNotKeys.some(key => !row.module_usage?.[key.slice(11)])) return false;
+  }
+
+  if (keys.includes('used') && Number(row.module_active_count || 0) === 0) return false;
+  if (keys.includes('unused') && Number(row.module_active_count || 0) > 0) return false;
   return true;
 }
 
@@ -4782,12 +4791,7 @@ function handleCompanyModuleControlChange(value = '') {
   const next = String(value || '').trim();
   if (next.startsWith('sort:')) {
     companyModuleSort.value = next.slice(5) || 'modules_desc';
-    companyModuleControl.value = `filter:${companyModuleFilter.value}`;
     return;
-  }
-  if (next.startsWith('filter:')) {
-    companyModuleFilter.value = next.slice(7) || 'all';
-    companyModuleControl.value = next;
   }
 }
 
@@ -4816,12 +4820,31 @@ function findCompanyModuleControlOption(type = 'filter', key = '') {
 
 function isCompanyModuleControlOptionActive(group = {}, option = {}) {
   if (group.type === 'sort') return companyModuleSort.value === option.key;
-  return companyModuleFilter.value === option.key;
+  if (option.key === 'all') return !companyModuleFilterKeys.value.length;
+  return companyModuleFilterKeys.value.includes(option.key);
 }
 
 function selectCompanyModuleControlOption(group = {}, option = {}) {
-  handleCompanyModuleControlChange(`${group.type}:${option.key}`);
-  closeCompanyModuleFilterMenu();
+  if (group.type === 'sort') {
+    handleCompanyModuleControlChange(`sort:${option.key}`);
+    closeCompanyModuleFilterMenu();
+    return;
+  }
+  if (option.key === 'all') {
+    companyModuleFilterKeys.value = [];
+    closeCompanyModuleFilterMenu();
+    return;
+  }
+  if (!group.multi) {
+    companyModuleFilterKeys.value = [option.key];
+    closeCompanyModuleFilterMenu();
+    return;
+  }
+  const keys = [...companyModuleFilterKeys.value];
+  const index = keys.indexOf(option.key);
+  if (index >= 0) keys.splice(index, 1);
+  else keys.push(option.key);
+  companyModuleFilterKeys.value = keys;
 }
 
 function moduleUsageDeltaMark(row = {}, moduleKey = '') {
@@ -4960,6 +4983,7 @@ const companyModuleControlGroups = computed(() => {
       key: 'used',
       label: 'Ishlatilgan',
       type: 'filter',
+      multi: true,
       options: [
         { key: 'used', label: 'Ishlatilgan' },
         ...usedModuleOptions
@@ -4969,6 +4993,7 @@ const companyModuleControlGroups = computed(() => {
       key: 'unused',
       label: 'Ishlatilmagan',
       type: 'filter',
+      multi: true,
       options: [
         { key: 'unused', label: 'Ishlatilmagan' },
         ...unusedModuleOptions
@@ -4978,6 +5003,7 @@ const companyModuleControlGroups = computed(() => {
       key: 'business',
       label: 'Biznes holat bo‘yicha',
       type: 'filter',
+      multi: true,
       options: [
         { key: 'business:ACTIVE', label: 'Aktiv' },
         { key: 'business:NEW', label: 'Yangi' },
@@ -4997,8 +5023,16 @@ const companyModuleFilterActiveGroup = computed(() => companyModuleControlGroups
   .find(group => group.key === companyModuleFilterMenuGroup.value) || null);
 
 const companyModuleFilterButtonLabel = computed(() => {
-  const filter = findCompanyModuleControlOption('filter', companyModuleFilter.value);
-  const filterLabel = filter?.option?.label || 'Hammasi';
+  const keys = companyModuleFilterKeys.value;
+  let filterLabel = 'Hammasi';
+  if (keys.length) {
+    const labels = keys
+      .map(key => findCompanyModuleControlOption('filter', key)?.option?.label)
+      .filter(Boolean);
+    if (labels.length === 1) filterLabel = labels[0];
+    else if (labels.length === 2) filterLabel = labels.join(', ');
+    else if (labels.length > 2) filterLabel = `${labels[0]}, +${labels.length - 1}`;
+  }
   const sort = findCompanyModuleControlOption('sort', companyModuleSort.value);
   if (companyModuleSort.value !== 'modules_desc' && sort?.option?.label) {
     return `${filterLabel} · ${sort.option.label}`;
@@ -5016,13 +5050,13 @@ function companyModuleSupportStaffLabels(rows = []) {
 }
 
 const companyModuleFilteredRows = computed(() => companyModuleBaseRows.value
-  .filter(row => matchesCompanyModuleFilter(row, companyModuleFilter.value)));
+  .filter(row => matchesCompanyModuleFilter(row, companyModuleFilterKeys.value)));
 
 const companyModuleTableSummary = computed(() => {
   const rows = companyModuleFilteredRows.value;
   const total = rows.length;
   if (!total) {
-    return { total: 0, usedCount: 0, avgPercent: 0, modules: {}, supportStaff: [] };
+    return { total: 0, usedCount: 0, avgPercent: 0, modules: {}, modulePercents: {}, supportStaff: [] };
   }
   const usedCount = rows.filter(row => Number(row.module_active_count || 0) > 0).length;
   const avgPercent = Math.round(
@@ -5034,11 +5068,18 @@ const companyModuleTableSummary = computed(() => {
       rows.filter(row => Boolean(row.module_usage?.[column.key])).length
     ])
   );
+  const modulePercents = Object.fromEntries(
+    companyModuleColumns.map(column => [
+      column.key,
+      Math.round((modules[column.key] / total) * 100)
+    ])
+  );
   return {
     total,
     usedCount,
     avgPercent,
     modules,
+    modulePercents,
     supportStaff: companyModuleSupportStaffLabels(rows)
   };
 });
