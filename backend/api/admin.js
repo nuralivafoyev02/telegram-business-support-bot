@@ -5197,18 +5197,17 @@ async function sendTelegramProfilePhoto(query, res) {
   let profile;
   try {
     profile = await getUserProfilePhotos(tgUserId, { limit: 1 });
-  } catch (error) {
-    const silentError = new Error(error?.telegram?.description || error.message || 'profil rasmi yo\'q');
-    silentError.silent = true;
-    silentError.status = 204;
-    throw silentError;
+  } catch (_error) {
+    // "user not found" kabi holatlar uchun exception otmaymiz, shunchaki no-content qaytaramiz.
+    res.statusCode = 204;
+    res.end();
+    return;
   }
   const photo = bestPhotoSize(profile?.photos?.[0] || []);
   if (!photo?.file_id) {
-    const silentError = new Error('Telegram profil rasmi topilmadi');
-    silentError.silent = true;
-    silentError.status = 204;
-    throw silentError;
+    res.statusCode = 204;
+    res.end();
+    return;
   }
   await sendTelegramFile({ file_id: photo.file_id }, res);
 }
