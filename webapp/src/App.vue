@@ -705,25 +705,35 @@
                     <strong>Umumiy</strong>
                     <span>{{ companyModuleTableSummary.total }} ta kompaniya</span>
                   </div>
-                  <div class="company-module-summary-stats">
-                    <span class="company-module-summary-stat">
-                      Ishlatilgan
-                      <b>{{ companyModuleTableSummary.usedCount }}/{{ companyModuleTableSummary.total }}</b>
-                      <em>({{ companyModuleTableSummary.avgPercent }}%)</em>
-                    </span>
-                    <span
+                  <div class="company-module-summary-aligned">
+                    <span class="company-module-summary-slot"></span>
+                    <span class="company-module-summary-slot"></span>
+                    <span class="company-module-summary-slot"></span>
+                    <span class="company-module-summary-slot"></span>
+
+                    <div class="company-module-summary-cell">
+                      <span class="company-module-summary-label">Ishlatilgan</span>
+                      <b class="company-module-summary-value">
+                        {{ companyModuleTableSummary.usedCount }}/{{ companyModuleTableSummary.total }}
+                      </b>
+                      <em class="company-module-summary-meta">({{ companyModuleTableSummary.avgPercent }}%)</em>
+                    </div>
+
+                    <div
                       v-for="column in companyModuleColumns"
                       :key="`module-summary-${column.key}`"
-                      class="company-module-summary-stat">
-                      {{ column.label }}
-                      <b>{{ companyModuleTableSummary.modules[column.key] }}/{{ companyModuleTableSummary.total }}</b>
-                    </span>
-                    <span
-                      v-if="companyModuleTableSummary.supportStaff.length"
-                      class="company-module-summary-stat company-module-summary-stat-wide">
-                      Mas’ul xodimlar
-                      <b>{{ companyModuleTableSummary.supportStaff.join(', ') }}</b>
-                    </span>
+                      class="company-module-summary-cell">
+                      <span class="company-module-summary-label">{{ column.label }}</span>
+                      <b class="company-module-summary-value">
+                        {{ companyModuleTableSummary.modules[column.key] }}/{{ companyModuleTableSummary.total }}
+                      </b>
+                    </div>
+                  </div>
+                  <div
+                    v-if="companyModuleTableSummary.supportStaff.length"
+                    class="company-module-summary-support">
+                    <span class="company-module-summary-support-label">Mas’ul xodimlar</span>
+                    <b class="company-module-summary-support-value">{{ companyModuleTableSummary.supportStaff.join(', ') }}</b>
                   </div>
                 </div>
               </section>
