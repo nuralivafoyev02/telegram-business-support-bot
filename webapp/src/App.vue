@@ -643,10 +643,7 @@
                   <div class="company-module-summary-grid">
                     <div class="company-module-summary-cell">
                       <span class="company-module-summary-label">Ishlatilgan</span>
-                      <b class="company-module-summary-value">
-                        {{ companyModuleTableSummary.usedCount }}/{{ companyModuleTableSummary.total }}
-                      </b>
-                      <em class="company-module-summary-meta">({{ companyModuleTableSummary.avgPercent }}%)</em>
+                      <b class="company-module-summary-value">{{ companyModuleTableSummary.avgPercent }}%</b>
                     </div>
                     <div
                       v-for="column in companyModuleColumns"
