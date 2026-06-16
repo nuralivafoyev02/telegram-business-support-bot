@@ -3999,42 +3999,32 @@ td,
   text-transform: uppercase;
 }
 
-.company-module-summary-aligned {
+.company-module-summary-grid {
   display: grid;
-  grid-template-columns: 48px minmax(220px, 2.2fr) minmax(108px, 1fr) minmax(140px, 1.2fr) 108px repeat(5, minmax(88px, .95fr));
-  align-items: stretch;
-  gap: 6px;
-  overflow-x: auto;
-  padding-bottom: 2px;
-}
-
-.company-module-summary-slot {
-  display: block;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
 }
 
 .company-module-summary-cell {
   display: flex;
   flex-direction: column;
   gap: 3px;
-  min-width: 0;
-  padding: 7px 8px;
+  padding: 8px 10px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 10px;
   background: var(--surface);
 }
 
 .company-module-summary-label {
   color: var(--muted-strong);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   white-space: nowrap;
-  text-transform: uppercase;
-  letter-spacing: .02em;
 }
 
 .company-module-summary-value {
   color: var(--text);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 900;
   line-height: 1.2;
 }
@@ -4051,7 +4041,7 @@ td,
   flex-wrap: wrap;
   align-items: baseline;
   gap: 8px;
-  margin-top: 4px;
+  margin-top: 2px;
 }
 
 .company-module-summary-support-label {

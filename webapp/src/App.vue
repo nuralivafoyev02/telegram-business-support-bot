@@ -705,12 +705,7 @@
                     <strong>Umumiy</strong>
                     <span>{{ companyModuleTableSummary.total }} ta kompaniya</span>
                   </div>
-                  <div class="company-module-summary-aligned">
-                    <span class="company-module-summary-slot"></span>
-                    <span class="company-module-summary-slot"></span>
-                    <span class="company-module-summary-slot"></span>
-                    <span class="company-module-summary-slot"></span>
-
+                  <div class="company-module-summary-grid">
                     <div class="company-module-summary-cell">
                       <span class="company-module-summary-label">Ishlatilgan</span>
                       <b class="company-module-summary-value">
@@ -718,7 +713,6 @@
                       </b>
                       <em class="company-module-summary-meta">({{ companyModuleTableSummary.avgPercent }}%)</em>
                     </div>
-
                     <div
                       v-for="column in companyModuleColumns"
                       :key="`module-summary-${column.key}`"
