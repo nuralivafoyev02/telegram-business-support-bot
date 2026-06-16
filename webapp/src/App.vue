@@ -4691,8 +4691,8 @@ const companyModuleColumns = [
   { key: 'taminot', label: 'Ta’minot' },
   { key: 'kassa', label: 'Kassa' },
   { key: 'omborxona', label: 'Omborxona' },
-  { key: 'qurilish_jarayoni', label: 'Qurilish jarayoni' },
-  { key: 'monitoring', label: 'Monitoring' }
+  { key: 'monitoring', label: 'Monitoring' },
+  { key: 'qurilish_jarayoni', label: 'Qurilish jarayoni' }
 ];
 const companyModuleKeys = companyModuleColumns.map(column => column.key);
 const companyModulePeriod = ref('today');
