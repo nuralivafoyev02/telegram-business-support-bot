@@ -642,27 +642,31 @@
                   </div>
                   <div class="company-module-summary-grid">
                     <div class="company-module-summary-cell">
-                      <span class="company-module-summary-label">Ishlatilgan</span>
-                      <b class="company-module-summary-value">{{ companyModuleTableSummary.avgPercent }}%</b>
-                      <em
-                        v-if="companyModuleCompareEnabled && companyModuleTableSummary.usedComparison"
-                        class="company-module-summary-meta"
-                      >
-                        {{ companyModuleTableSummary.usedComparison.percentText }}
-                      </em>
+                      <span class="company-module-summary-label">Umumiy faollik</span>
+                      <div class="company-module-summary-metrics">
+                        <b class="company-module-summary-value">{{ companyModuleTableSummary.avgPercent }}%</b>
+                        <span
+                          v-if="companyModuleCompareEnabled && companyModuleTableSummary.usedComparison"
+                          class="trend-label module-trend-label company-module-summary-delta"
+                          :class="companyModuleTableSummary.usedComparison.tone">
+                          {{ companyModuleTableSummary.usedComparison.percentText }}
+                        </span>
+                      </div>
                     </div>
                     <div
                       v-for="column in companyModuleColumns"
                       :key="`module-summary-${column.key}`"
                       class="company-module-summary-cell">
                       <span class="company-module-summary-label">{{ column.label }}</span>
-                      <b class="company-module-summary-value">{{ companyModuleTableSummary.modulePercents[column.key] }}%</b>
-                      <em
-                        v-if="companyModuleCompareEnabled && companyModuleTableSummary.moduleComparisons[column.key]"
-                        class="company-module-summary-meta"
-                      >
-                        {{ companyModuleTableSummary.moduleComparisons[column.key].percentText }}
-                      </em>
+                      <div class="company-module-summary-metrics">
+                        <b class="company-module-summary-value">{{ companyModuleTableSummary.modulePercents[column.key] }}%</b>
+                        <span
+                          v-if="companyModuleCompareEnabled && companyModuleTableSummary.moduleComparisons[column.key]"
+                          class="trend-label module-trend-label company-module-summary-delta"
+                          :class="companyModuleTableSummary.moduleComparisons[column.key].tone">
+                          {{ companyModuleTableSummary.moduleComparisons[column.key].percentText }}
+                        </span>
+                      </div>
                     </div>
                   </div>
                   <div
@@ -680,7 +684,7 @@
                         <th>Kompaniya</th>
                         <th class="module-business-col">Biznes holati</th>
                         <th class="module-support-col">Mas’ul xodim</th>
-                        <th class="module-count-col">Ishlatilgan</th>
+                        <th class="module-count-col">Umumiy faollik</th>
                         <th v-for="column in companyModuleColumns" :key="`module-head-${column.key}`">{{ column.label }}</th>
                       </tr>
                     </thead>

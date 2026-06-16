@@ -4024,8 +4024,21 @@ td,
 
 .company-module-summary-value {
   color: var(--text);
-  font-size: 13px;
+  font-size: 18px;
   font-weight: 900;
+  line-height: 1.2;
+}
+
+.company-module-summary-metrics {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.company-module-summary-delta {
+  font-size: 14px;
+  font-weight: 800;
   line-height: 1.2;
 }
 
