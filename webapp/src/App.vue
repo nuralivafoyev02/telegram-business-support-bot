@@ -4982,8 +4982,20 @@ const companyModuleFilterButtonLabel = computed(() => {
   return filterLabel;
 });
 
+function companyModuleSupportStaffLabels(rows = []) {
+  const labels = new Set();
+  rows.forEach(row => {
+    const label = companySupportLabel(row);
+    if (label && label !== 'Biriktirilmagan') labels.add(label);
+  });
+  return [...labels].sort((a, b) => a.localeCompare(b, 'uz'));
+}
+
+const companyModuleFilteredRows = computed(() => companyModuleBaseRows.value
+  .filter(row => matchesCompanyModuleFilter(row, companyModuleFilter.value)));
+
 const companyModuleTableSummary = computed(() => {
-  const rows = companyModuleBaseRows.value.filter(row => matchesCompanyModuleFilter(row, companyModuleFilter.value));
+  const rows = companyModuleFilteredRows.value;
   const total = rows.length;
   if (!total) {
     return { total: 0, usedCount: 0, avgPercent: 0, modules: {}, supportStaff: [] };
@@ -4998,20 +5010,19 @@ const companyModuleTableSummary = computed(() => {
       rows.filter(row => Boolean(row.module_usage?.[column.key])).length
     ])
   );
-  const supportCounts = new Map();
-  rows.forEach(row => {
-    const label = companySupportLabel(row);
-    if (!label || label === 'Biriktirilmagan') return;
-    supportCounts.set(label, (supportCounts.get(label) || 0) + 1);
-  });
-  const supportStaff = [...supportCounts.keys()].sort((a, b) => a.localeCompare(b, 'uz'));
-  return { total, usedCount, avgPercent, modules, supportStaff };
+  return {
+    total,
+    usedCount,
+    avgPercent,
+    modules,
+    supportStaff: companyModuleSupportStaffLabels(rows)
+  };
 });
 
-const companyModuleTableRows = computed(() => {
-  const rows = companyModuleBaseRows.value.filter(row => matchesCompanyModuleFilter(row, companyModuleFilter.value));
-  return sortCompanyModuleRows(rows, companyModuleSort.value);
-});
+const companyModuleTableRows = computed(() => sortCompanyModuleRows(
+  companyModuleFilteredRows.value,
+  companyModuleSort.value
+));
 const companyAlerts = computed(() => visibleCompanyInfoRows.value
   .filter(row => ['expired', 'soon'].includes(row.expiry_state))
   .sort((a, b) => Number(a.days_until_expiry ?? 9999) - Number(b.days_until_expiry ?? 9999))
