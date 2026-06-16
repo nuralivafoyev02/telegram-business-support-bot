@@ -718,6 +718,12 @@
                       {{ column.label }}
                       <b>{{ companyModuleTableSummary.modules[column.key] }}/{{ companyModuleTableSummary.total }}</b>
                     </span>
+                    <span
+                      v-if="companyModuleTableSummary.supportStaff.length"
+                      class="company-module-summary-stat company-module-summary-stat-wide">
+                      Mas’ul xodimlar
+                      <b>{{ companyModuleTableSummary.supportStaff.join(', ') }}</b>
+                    </span>
                   </div>
                 </div>
               </section>
@@ -4980,7 +4986,7 @@ const companyModuleTableSummary = computed(() => {
   const rows = companyModuleBaseRows.value.filter(row => matchesCompanyModuleFilter(row, companyModuleFilter.value));
   const total = rows.length;
   if (!total) {
-    return { total: 0, usedCount: 0, avgPercent: 0, modules: {} };
+    return { total: 0, usedCount: 0, avgPercent: 0, modules: {}, supportStaff: [] };
   }
   const usedCount = rows.filter(row => Number(row.module_active_count || 0) > 0).length;
   const avgPercent = Math.round(
@@ -4992,7 +4998,14 @@ const companyModuleTableSummary = computed(() => {
       rows.filter(row => Boolean(row.module_usage?.[column.key])).length
     ])
   );
-  return { total, usedCount, avgPercent, modules };
+  const supportCounts = new Map();
+  rows.forEach(row => {
+    const label = companySupportLabel(row);
+    if (!label || label === 'Biriktirilmagan') return;
+    supportCounts.set(label, (supportCounts.get(label) || 0) + 1);
+  });
+  const supportStaff = [...supportCounts.keys()].sort((a, b) => a.localeCompare(b, 'uz'));
+  return { total, usedCount, avgPercent, modules, supportStaff };
 });
 
 const companyModuleTableRows = computed(() => {

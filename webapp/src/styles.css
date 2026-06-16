@@ -4027,6 +4027,17 @@ td,
   font-weight: 700;
 }
 
+.company-module-summary-stat-wide {
+  flex: 1 1 100%;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.company-module-summary-stat-wide b {
+  font-weight: 800;
+  line-height: 1.45;
+}
+
 .module-index-col {
   width: 48px;
   color: var(--muted);
