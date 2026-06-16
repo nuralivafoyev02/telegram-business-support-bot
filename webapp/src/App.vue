@@ -544,7 +544,7 @@
                   <div>
                     <div class="card-title">Bo‘limlar foydalanish statistikasi</div>
                     <div class="card-note">
-                      Kunlik saqlanadi · 365 kun tarix · {{ companyModulePeriodLabel }}:
+                      Kunlik saqlanadi · cheksiz tarix · {{ companyModulePeriodLabel }}:
                       {{ companyModuleReportDatesLabel }}
                       <template v-if="companyModuleFetchedAt"> · Oxirgi yangilanish: {{ fmtDate(companyModuleFetchedAt) }}</template>
                       · Bir kunda qayta yangilansa oxirgisi saqlanadi

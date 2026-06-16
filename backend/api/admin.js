@@ -33,7 +33,8 @@ const {
   syncCompanyReport,
   getCachedCompanyReport,
   enrichCompaniesWithModuleReport,
-  getCompanyModuleReports
+  getCompanyModuleReports,
+  migrateBotSettingsHistoryToDaily
 } = require('../lib/company-report');
 const { notifyOperationalLog, notifyOperationalError } = require('../lib/log-notifier');
 const stats = require('../lib/stats');
@@ -4050,6 +4051,17 @@ async function getCompanyReport(query = {}) {
   }
 }
 
+async function migrateCompanyReportHistory(query = {}) {
+  const dates = String(query.dates || query.date || '')
+    .split(',')
+    .map(value => value.trim())
+    .filter(Boolean);
+  return migrateBotSettingsHistoryToDaily({
+    tenantId: query.tenant_id || query.tenantId,
+    dates: dates.length ? dates : undefined
+  });
+}
+
 async function listEmployees(query) {
   const [employees, requests, chats, messages] = await Promise.all([
     supabase.select('employees', {
@@ -6281,6 +6293,7 @@ async function handleGet(action, query) {
     case 'companyInfo': return getCompanyInfo(query);
     case 'companyReport': return getCompanyReport(query);
     case 'companyModuleReports': return getCompanyModuleReports(query);
+    case 'migrateCompanyReportHistory': return migrateCompanyReportHistory(query);
     case 'employees': return listEmployees(query);
     case 'employeeActivity': return getEmployeeActivity(query);
     case 'settings': return listSettings();
