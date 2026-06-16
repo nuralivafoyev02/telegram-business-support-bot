@@ -551,24 +551,57 @@
                     </div>
                   </div>
                   <div class="company-module-table-controls">
-                    <label class="company-module-filter company-module-filter-wide">
+                    <div class="company-module-filter company-module-filter-wide company-module-filter-menu-wrap" ref="companyModuleFilterMenuRef">
                       <span>Filter</span>
-                      <select
-                        :value="companyModuleControl"
-                        class="select mini-select"
-                        @change="handleCompanyModuleControlChange($event.target.value)">
-                        <template v-for="group in companyModuleControlGroups" :key="`module-control-group-${group.key}`">
-                          <optgroup :label="group.label">
-                            <option
-                              v-for="option in group.options"
-                              :key="`${group.key}-${option.key}`"
-                              :value="`${group.type}:${option.key}`">
-                              {{ formatCompanyModuleControlLabel(option) }}
-                            </option>
-                          </optgroup>
-                        </template>
-                      </select>
-                    </label>
+                      <div class="company-module-filter-picker">
+                        <button
+                          type="button"
+                          class="company-module-filter-trigger select mini-select"
+                          @click.stop="toggleCompanyModuleFilterMenu">
+                          <span class="company-module-filter-trigger-label">{{ companyModuleFilterButtonLabel }}</span>
+                          <span class="company-module-filter-trigger-caret">▾</span>
+                        </button>
+                        <Transition name="fade">
+                          <div
+                            v-if="companyModuleFilterMenuOpen"
+                            class="company-module-filter-menu actions-dropdown"
+                            @click.stop>
+                            <template v-if="!companyModuleFilterMenuGroup">
+                              <button
+                                v-for="group in companyModuleControlGroups"
+                                :key="`module-filter-menu-${group.key}`"
+                                type="button"
+                                class="company-module-filter-menu-group"
+                                @click="openCompanyModuleFilterGroup(group.key)">
+                                <span>{{ group.label }}</span>
+                                <span class="company-module-filter-menu-arrow">›</span>
+                              </button>
+                            </template>
+                            <template v-else-if="companyModuleFilterActiveGroup">
+                              <button
+                                type="button"
+                                class="company-module-filter-back"
+                                @click="companyModuleFilterMenuGroup = ''">
+                                <span class="company-module-filter-menu-arrow">‹</span>
+                                <span>{{ companyModuleFilterActiveGroup.label }}</span>
+                              </button>
+                              <button
+                                v-for="option in companyModuleFilterActiveGroup.options"
+                                :key="`module-filter-option-${companyModuleFilterActiveGroup.key}-${option.key}`"
+                                type="button"
+                                class="company-module-filter-option"
+                                :class="{ active: isCompanyModuleControlOptionActive(companyModuleFilterActiveGroup, option) }"
+                                @click="selectCompanyModuleControlOption(companyModuleFilterActiveGroup, option)">
+                                <span>{{ option.label }}</span>
+                                <span
+                                  v-if="isCompanyModuleControlOptionActive(companyModuleFilterActiveGroup, option)"
+                                  class="company-module-filter-check">✓</span>
+                              </button>
+                            </template>
+                          </div>
+                        </Transition>
+                      </div>
+                    </div>
                     <label class="company-module-filter">
                       <span>Davr</span>
                       <select
@@ -2570,6 +2603,9 @@ const rankingMenuOpen = ref(false);
 const rankingMenuRef = ref(null);
 const moduleCompareMenuOpen = ref(false);
 const moduleCompareMenuRef = ref(null);
+const companyModuleFilterMenuOpen = ref(false);
+const companyModuleFilterMenuGroup = ref('');
+const companyModuleFilterMenuRef = ref(null);
 const comparisonEnabled = ref(getStoredComparisonEnabled());
 const themeMode = ref(getStoredThemeMode());
 applyThemeMode(themeMode.value);
@@ -3670,6 +3706,10 @@ function handleDocumentPointerDown(event) {
     const root = moduleCompareMenuRef.value;
     if (!root || !root.contains(event.target)) moduleCompareMenuOpen.value = false;
   }
+  if (companyModuleFilterMenuOpen.value) {
+    const root = companyModuleFilterMenuRef.value;
+    if (!root || !root.contains(event.target)) closeCompanyModuleFilterMenu();
+  }
 }
 
 function handleDocumentKeydown(event) {
@@ -3677,6 +3717,7 @@ function handleDocumentKeydown(event) {
     actionMenuOpen.value = false;
     rankingMenuOpen.value = false;
     moduleCompareMenuOpen.value = false;
+    closeCompanyModuleFilterMenu();
     hideFloatingTooltip();
     if (modal.value) closeModal();
   }
@@ -4730,6 +4771,39 @@ function handleCompanyModuleControlChange(value = '') {
   }
 }
 
+function toggleCompanyModuleFilterMenu() {
+  companyModuleFilterMenuOpen.value = !companyModuleFilterMenuOpen.value;
+  companyModuleFilterMenuGroup.value = '';
+}
+
+function closeCompanyModuleFilterMenu() {
+  companyModuleFilterMenuOpen.value = false;
+  companyModuleFilterMenuGroup.value = '';
+}
+
+function openCompanyModuleFilterGroup(groupKey = '') {
+  companyModuleFilterMenuGroup.value = String(groupKey || '');
+}
+
+function findCompanyModuleControlOption(type = 'filter', key = '') {
+  for (const group of companyModuleControlGroups.value) {
+    if (group.type !== type) continue;
+    const option = group.options.find(item => item.key === key);
+    if (option) return { group, option };
+  }
+  return null;
+}
+
+function isCompanyModuleControlOptionActive(group = {}, option = {}) {
+  if (group.type === 'sort') return companyModuleSort.value === option.key;
+  return companyModuleFilter.value === option.key;
+}
+
+function selectCompanyModuleControlOption(group = {}, option = {}) {
+  handleCompanyModuleControlChange(`${group.type}:${option.key}`);
+  closeCompanyModuleFilterMenu();
+}
+
 function companyModulePeriodQuery(period = 'today') {
   if (period === 'custom') {
     if (!companyModuleCustomPeriodForm.appliedStart || !companyModuleCustomPeriodForm.appliedEnd) {
@@ -4836,21 +4910,14 @@ const companyModuleBaseRows = computed(() => {
   });
 });
 
-function formatCompanyModuleControlLabel(option = {}) {
-  if (!option.nested) return option.label;
-  return `  ${option.label}`;
-}
-
 const companyModuleControlGroups = computed(() => {
   const usedModuleOptions = companyModuleColumns.map(column => ({
     key: `module:${column.key}`,
-    label: column.label,
-    nested: true
+    label: column.label
   }));
   const unusedModuleOptions = companyModuleColumns.map(column => ({
     key: `module_not:${column.key}`,
-    label: column.label,
-    nested: true
+    label: column.label
   }));
   return [
     {
@@ -4882,9 +4949,9 @@ const companyModuleControlGroups = computed(() => {
       label: 'Biznes holat bo‘yicha',
       type: 'filter',
       options: [
-        { key: 'business:ACTIVE', label: 'Aktiv', nested: true },
-        { key: 'business:NEW', label: 'Yangi', nested: true },
-        { key: 'business:PAUSED', label: 'Pauza', nested: true }
+        { key: 'business:ACTIVE', label: 'Aktiv' },
+        { key: 'business:NEW', label: 'Yangi' },
+        { key: 'business:PAUSED', label: 'Pauza' }
       ]
     },
     {
@@ -4894,6 +4961,19 @@ const companyModuleControlGroups = computed(() => {
       options: companyModuleSortOptions.map(option => ({ ...option }))
     }
   ];
+});
+
+const companyModuleFilterActiveGroup = computed(() => companyModuleControlGroups.value
+  .find(group => group.key === companyModuleFilterMenuGroup.value) || null);
+
+const companyModuleFilterButtonLabel = computed(() => {
+  const filter = findCompanyModuleControlOption('filter', companyModuleFilter.value);
+  const filterLabel = filter?.option?.label || 'Hammasi';
+  const sort = findCompanyModuleControlOption('sort', companyModuleSort.value);
+  if (companyModuleSort.value !== 'modules_desc' && sort?.option?.label) {
+    return `${filterLabel} · ${sort.option.label}`;
+  }
+  return filterLabel;
 });
 
 const companyModuleTableSummary = computed(() => {
