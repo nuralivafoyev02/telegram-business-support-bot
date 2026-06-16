@@ -9,7 +9,9 @@ const COMPANY_REPORT_CACHE_KEY = 'uyqur_company_report_cache';
 const COMPANY_REPORT_HISTORY_KEY = 'uyqur_company_report_history';
 const COMPANY_REPORT_CACHE_SCHEMA_VERSION = 1;
 const COMPANY_REPORT_HISTORY_SCHEMA_VERSION = 1;
-const REPORT_HISTORY_MAX_DAYS = 365;
+const REPORT_HISTORY_MAX_DAYS = 0;
+const COMPANY_MODULE_DAILY_TABLE = 'company_module_daily_reports';
+const COMPANY_MODULE_SYNC_RUNS_TABLE = 'company_module_sync_runs';
 const MODULE_KEYS = Object.freeze(['taminot', 'kassa', 'omborxona', 'qurilish_jarayoni', 'monitoring']);
 const ACTIVITY_KEY_MAP = Object.freeze({
   supply: 'taminot',
@@ -160,7 +162,8 @@ function pruneReportHistory(history = {}, maxDays = REPORT_HISTORY_MAX_DAYS) {
   const days = objectValue(history.days);
   const dates = [...new Set((Array.isArray(history.dates) ? history.dates : Object.keys(days)).filter(Boolean))]
     .sort((a, b) => String(b).localeCompare(String(a)));
-  const keptDates = dates.slice(0, maxDays);
+  const limit = Number(maxDays || 0);
+  const keptDates = limit > 0 ? dates.slice(0, limit) : dates;
   const nextDays = Object.fromEntries(
     keptDates.map(date => [date, days[date]]).filter(([, value]) => value && typeof value === 'object')
   );
@@ -171,7 +174,132 @@ function pruneReportHistory(history = {}, maxDays = REPORT_HISTORY_MAX_DAYS) {
   };
 }
 
-async function getReportHistory(options = {}) {
+async function loadAllDailyReportRows(tenantId) {
+  const rows = [];
+  const pageSize = 5000;
+  let offset = 0;
+  while (true) {
+    const batch = await supabase.select(COMPANY_MODULE_DAILY_TABLE, {
+      select: 'report_date,company_id,company_name,module_usage,module_last_dates,module_active_count,fetched_at',
+      order: ['report_date.desc', 'company_id.asc'],
+      limit: String(pageSize),
+      offset: String(offset)
+    }).catch(() => []);
+    if (!batch.length) break;
+    rows.push(...batch);
+    if (batch.length < pageSize) break;
+    offset += pageSize;
+  }
+  return rows;
+}
+
+function normalizeDailyReportRow(row = {}) {
+  return {
+    company_id: Number(row.company_id || 0) || null,
+    company_name: String(row.company_name || '').trim(),
+    report_date: row.report_date ? String(row.report_date) : '',
+    module_usage: objectValue(row.module_usage),
+    module_last_dates: objectValue(row.module_last_dates),
+    module_active_count: Number(row.module_active_count || 0),
+    fetched_at: row.fetched_at || null
+  };
+}
+
+async function saveCompanyReportDailyRows(result = {}) {
+  const tenantId = resolveTenantId(result.tenant_id);
+  const reportDate = result.report_date || tashkentDateKey();
+  const fetchedAt = result.fetched_at || new Date().toISOString();
+  const rows = (Array.isArray(result.companies) ? result.companies : [])
+    .filter(row => row && row.company_id)
+    .map(row => ({
+      tenant_id: tenantId,
+      report_date: reportDate,
+      company_id: row.company_id,
+      company_name: row.company_name || '',
+      module_usage: row.module_usage || {},
+      module_last_dates: row.module_last_dates || {},
+      module_active_count: Number(row.module_active_count || 0),
+      raw: row.raw || null,
+      source_url: result.source || '',
+      fetched_at: fetchedAt
+    }));
+  if (!rows.length) return 0;
+  await supabase.insert(COMPANY_MODULE_DAILY_TABLE, rows, {
+    upsert: true,
+    onConflict: 'tenant_id,report_date,company_id',
+    prefer: 'return=minimal'
+  });
+  return rows.length;
+}
+
+async function saveCompanyReportSyncRun({
+  tenantId,
+  reportDate,
+  status = 'success',
+  companiesCount = 0,
+  sourceUrl = '',
+  errorMessage = '',
+  startedAt = null
+} = {}) {
+  const finishedAt = new Date().toISOString();
+  await supabase.insert(COMPANY_MODULE_SYNC_RUNS_TABLE, [{
+    tenant_id: resolveTenantId(tenantId),
+    report_date: reportDate || tashkentDateKey(),
+    status: status === 'failed' ? 'failed' : 'success',
+    companies_count: Number(companiesCount || 0),
+    source_url: sourceUrl || '',
+    error_message: errorMessage ? String(errorMessage).slice(0, 4000) : null,
+    started_at: startedAt || finishedAt,
+    finished_at: finishedAt
+  }], { prefer: 'return=minimal' }).catch(() => null);
+}
+
+async function getReportHistoryFromDaily(options = {}) {
+  const tenantId = resolveTenantId(options.tenantId);
+  const rows = await loadAllDailyReportRows(tenantId);
+  if (!rows.length) return null;
+
+  const allowedDates = new Set();
+  for (const row of rows) {
+    const date = String(row.report_date || '').trim();
+    if (!date) continue;
+    allowedDates.add(date);
+  }
+  const days = {};
+  rows.forEach(row => {
+    const normalized = normalizeDailyReportRow(row);
+    if (!normalized.report_date || !allowedDates.has(normalized.report_date)) return;
+    if (!days[normalized.report_date]) {
+      days[normalized.report_date] = {
+        report_date: normalized.report_date,
+        fetched_at: normalized.fetched_at,
+        source: '',
+        companies: [],
+        summary: {}
+      };
+    }
+    days[normalized.report_date].companies.push({
+      company_id: normalized.company_id,
+      company_name: normalized.company_name,
+      report_date: normalized.report_date,
+      module_usage: normalized.module_usage,
+      module_last_dates: normalized.module_last_dates,
+      module_active_count: normalized.module_active_count
+    });
+  });
+  Object.values(days).forEach(day => {
+    day.summary = buildReportSummary(day.companies);
+  });
+  return pruneReportHistory({
+    tenant_id: tenantId,
+    cache_schema_version: COMPANY_REPORT_HISTORY_SCHEMA_VERSION,
+    days,
+    dates: Object.keys(days).sort((a, b) => String(a).localeCompare(String(b))),
+    updated_at: new Date().toISOString()
+  });
+}
+
+async function getReportHistoryFromSettings(options = {}) {
   const tenantId = resolveTenantId(options.tenantId);
   const rows = await supabase.select('bot_settings', {
     select: 'key,value,updated_at',
@@ -192,7 +320,7 @@ async function getReportHistory(options = {}) {
 async function saveReportHistoryDay(result = {}) {
   const tenantId = resolveTenantId(result.tenant_id);
   const reportDate = result.report_date || tashkentDateKey();
-  const history = pruneReportHistory(await getReportHistory({ tenantId }));
+  const history = pruneReportHistory(await getReportHistoryFromSettings({ tenantId }));
   history.days[reportDate] = {
     report_date: reportDate,
     fetched_at: result.fetched_at || new Date().toISOString(),
@@ -221,7 +349,60 @@ async function saveCompanyReportSnapshot(result = {}) {
   return snapshot;
 }
 
+async function getCachedCompanyReportFromDaily(options = {}) {
+  const tenantId = resolveTenantId(options.tenantId);
+  const latestRows = await supabase.select(COMPANY_MODULE_DAILY_TABLE, {
+    select: 'report_date,fetched_at',
+    order: ['report_date.desc', 'fetched_at.desc'],
+    limit: '1'
+  }).catch(() => []);
+  const latest = latestRows[0];
+  if (!latest?.report_date) return null;
+
+  const date = String(latest.report_date);
+  const rows = await supabase.select(COMPANY_MODULE_DAILY_TABLE, {
+    select: 'company_id,company_name,report_date,module_usage,module_last_dates,module_active_count,fetched_at',
+    report_date: supabase.eq(date),
+    order: supabase.order('company_id', true),
+    limit: '10000'
+  }).catch(() => []);
+  if (!rows.length) return null;
+
+  const companies = rows.map(normalizeDailyReportRow).map(row => ({
+    company_id: row.company_id,
+    company_name: row.company_name,
+    report_date: row.report_date,
+    module_usage: row.module_usage,
+    module_last_dates: row.module_last_dates,
+    module_active_count: row.module_active_count
+  }));
+  const fetchedAt = rows.map(row => row.fetched_at).filter(Boolean).sort((a, b) => String(b).localeCompare(String(a)))[0] || null;
+  return {
+    tenant_id: tenantId,
+    cache_schema_version: COMPANY_REPORT_CACHE_SCHEMA_VERSION,
+    report_date: date,
+    companies,
+    summary: buildReportSummary(companies),
+    fetched_at: fetchedAt,
+    cached_at: fetchedAt,
+    source: '',
+    from_cache: true
+  };
+}
+
+async function getReportHistory(options = {}) {
+  const daily = await getReportHistoryFromDaily(options);
+  if (daily && Array.isArray(daily.dates) && daily.dates.length) return daily;
+  return getReportHistoryFromSettings(options);
+}
+
 async function getCachedCompanyReport(options = {}) {
+  const daily = await getCachedCompanyReportFromDaily(options);
+  if (daily?.companies?.length) return daily;
+  return getCachedCompanyReportFromSettings(options);
+}
+
+async function getCachedCompanyReportFromSettings(options = {}) {
   const tenantId = resolveTenantId(options.tenantId);
   const rows = await supabase.select('bot_settings', {
     select: 'key,value,updated_at',
@@ -378,34 +559,58 @@ async function syncCompanyReport(options = {}) {
   const reportDate = options.reportDate || tashkentDateKey();
   const url = companyReportUrl(tenantId);
   const auth = assertTenantCompanyReportAuth(tenantId);
+  const startedAt = new Date().toISOString();
 
-  const payload = await requestCompanyReport(url, auth);
-  const companies = extractReportRows(payload)
-    .map(row => normalizeReportCompany(row, reportDate))
-    .filter(row => row.company_id);
-  const fetchedAt = new Date().toISOString();
-  const result = {
-    tenant_id: tenantId,
-    report_date: reportDate,
-    companies,
-    summary: buildReportSummary(companies),
-    fetched_at: fetchedAt,
-    source: url
-  };
-
-  if (options.persist !== false) {
-    const snapshot = await saveCompanyReportSnapshot(result);
-    const history = await saveReportHistoryDay(result);
-    return {
-      ...result,
-      persisted: true,
-      cached_at: snapshot.cached_at,
-      history_dates: history.dates || [],
-      storage: 'bot_settings'
+  try {
+    const payload = await requestCompanyReport(url, auth);
+    const companies = extractReportRows(payload)
+      .map(row => normalizeReportCompany(row, reportDate))
+      .filter(row => row.company_id);
+    const fetchedAt = new Date().toISOString();
+    const result = {
+      tenant_id: tenantId,
+      report_date: reportDate,
+      companies,
+      summary: buildReportSummary(companies),
+      fetched_at: fetchedAt,
+      source: url
     };
-  }
 
-  return result;
+    if (options.persist !== false) {
+      const dailyCount = await saveCompanyReportDailyRows(result);
+      // Legacy cache remains for backward compatibility.
+      const snapshot = await saveCompanyReportSnapshot(result);
+      const history = await saveReportHistoryDay(result);
+      await saveCompanyReportSyncRun({
+        tenantId,
+        reportDate,
+        status: 'success',
+        companiesCount: dailyCount,
+        sourceUrl: url,
+        startedAt
+      });
+      return {
+        ...result,
+        persisted: true,
+        cached_at: snapshot.cached_at,
+        history_dates: history.dates || [],
+        storage: 'company_module_daily_reports'
+      };
+    }
+
+    return result;
+  } catch (error) {
+    await saveCompanyReportSyncRun({
+      tenantId,
+      reportDate,
+      status: 'failed',
+      companiesCount: 0,
+      sourceUrl: url,
+      errorMessage: error.message,
+      startedAt
+    });
+    throw error;
+  }
 }
 
 function enrichCompaniesWithModuleReport(companies = [], reportCompanies = []) {
@@ -502,7 +707,7 @@ async function getCompanyModuleReports(query = {}) {
     return {
       tenant_id: tenantId,
       period,
-      storage: 'bot_settings',
+      storage: COMPANY_MODULE_DAILY_TABLE,
       companies,
       report_dates: dates,
       fetched_at
@@ -523,7 +728,7 @@ async function getCompanyModuleReports(query = {}) {
   return {
     tenant_id: tenantId,
     period,
-    storage: 'bot_settings',
+    storage: COMPANY_MODULE_DAILY_TABLE,
     companies,
     report_dates: dates,
     fetched_at
