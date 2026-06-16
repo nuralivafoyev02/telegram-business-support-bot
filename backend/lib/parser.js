@@ -125,6 +125,26 @@ function isCompletionIntent(text = '') {
   return COMPLETION_RE.test(value);
 }
 
+function isInformalEmployeeStatusUpdate(text = '') {
+  const value = normalizedLower(text);
+  if (!value) return false;
+  if (/\bmuammo\b/.test(value) && /\b(yopildi|hal\s+bo'?ldi|tugadi|yechildi|echildi)\b/.test(value)) return true;
+  if (/\b(qo'?ydim|qildim|sozladim|o'?zgartirdim|chiqmaydigan|chiqmayapti|o'?chirib)\b/.test(value)
+    && /\b(yopildi|hal|tayyor)\b/.test(value)) {
+    return true;
+  }
+  return false;
+}
+
+function isEmployeeDoneIntent(text = '', options = {}) {
+  if (isDoneMessage(text, options)) return true;
+  if (!isCompletionIntent(text)) return false;
+  const value = normalizedLower(text);
+  if (isInformalEmployeeStatusUpdate(value)) return false;
+  if (meaningfulLength(value) > 48) return false;
+  return true;
+}
+
 function isCommand(text = '') {
   return text.trim().startsWith('/');
 }
@@ -309,7 +329,7 @@ function classifyMessage({
   if (!cleaned || isNoiseOnly(cleaned)) return 'ignore';
   if (isDoneMessage(cleaned, options)) return 'done';
   if (isCommand(cleaned)) return 'command';
-  if (isKnownEmployee && isCompletionIntent(cleaned)) return 'done';
+  if (isKnownEmployee && isEmployeeDoneIntent(cleaned, options)) return 'done';
   if (isKnownEmployee) return 'employee_message';
   if (isConversationalOnly(cleaned)) return 'message';
   if ((isBusiness || chatType === 'private') && shouldOpenPrivateRequest(cleaned, options)) return 'request';
@@ -323,6 +343,7 @@ module.exports = {
   getMessageText,
   isDoneMessage,
   isCompletionIntent,
+  isEmployeeDoneIntent,
   isCommand,
   isGreetingOnly,
   isSmallTalk,

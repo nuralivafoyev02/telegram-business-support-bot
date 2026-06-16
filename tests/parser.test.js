@@ -8,6 +8,16 @@ assert.strictEqual(isDoneMessage('hal bo‘ldi #done rahmat'), true);
 assert.strictEqual(isDoneMessage('#hal qilindi', { doneTag: '#hal' }), true);
 assert.strictEqual(isCompletionIntent('Tayyor, hal bo‘ldi'), true);
 assert.strictEqual(isCompletionIntent('Tayyor emas'), false);
+assert.strictEqual(classifyMessage({
+  text: 'xizmatlar chiqmaydigan qilib qo‘ydim muammo yopildi',
+  chatType: 'supergroup',
+  isKnownEmployee: true
+}), 'employee_message');
+assert.strictEqual(classifyMessage({
+  text: 'muammo yopildi',
+  chatType: 'supergroup',
+  isKnownEmployee: true
+}), 'employee_message');
 assert.strictEqual(isRequestIntent('Assalamu aleykum taminot bo‘limida yordam kerak qarab yuboringlar'), true);
 assert.strictEqual(isRequestIntent('Salom'), false);
 assert.strictEqual(isRequestIntent('Assalomu alaykum'), false);

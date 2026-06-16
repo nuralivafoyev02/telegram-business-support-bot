@@ -4,7 +4,7 @@ const { sendJson, readBody, getQuery } = require('../lib/http');
 const { optionalEnv, boolEnv } = require('../lib/env');
 const supabase = require('../lib/supabase');
 const { sendMessage, deleteMessage, reactToMessage, answerCallbackQuery, editMessageReplyMarkup, escapeHtml, tgUserName, getWebhookInfo, getMe, getChatMember, getFile, downloadFile } = require('../lib/telegram');
-const { getMessageText, normalizeText, classifyMessage, isGreetingOnly, isSmallTalk, isCompletionIntent } = require('../lib/parser');
+const { getMessageText, normalizeText, classifyMessage, isGreetingOnly, isSmallTalk, isCompletionIntent, isDoneMessage } = require('../lib/parser');
 const { getBotSettings } = require('../lib/bot-settings');
 const { runWithTenant, resolveTenantFromQuery } = require('../lib/tenant');
 const { resolveMainStatsChatId, sendMainStatsReport, buildMainStatsQuestionReply, isMainStatsQuestion } = require('../lib/report');
@@ -1832,14 +1832,16 @@ async function maybeReactToTicketClose(message, settings = null, { closedRequest
 async function maybeReplyDone(message, result, settings = null) {
   if (result.closed) {
     await maybeReactToTicketClose(message, settings, { closedRequest: result.request });
-  } else {
-    if (isGroupChat(message.chat || {})) return;
-    const silent = boolEnv('SILENT_DONE_REPLY', false);
-    if (silent) return;
-    await sendTrackedBotReply({ message, text: '⚠️ #done qabul qilindi, lekin bu chatda ochiq so‘rov topilmadi.', options: {
-      reply_to_message_id: message.message_id
-    }, updateKind: 'bot_done_miss', rawSource: 'bot_done_miss' }).catch(error => logBackgroundError('reply-done', error));
+    return;
   }
+  if (isGroupChat(message.chat || {})) return;
+  const text = getMessageText(message);
+  if (!isDoneMessage(text, settings || {})) return;
+  const silent = boolEnv('SILENT_DONE_REPLY', false);
+  if (silent) return;
+  await sendTrackedBotReply({ message, text: '⚠️ #done qabul qilindi, lekin bu chatda ochiq so‘rov topilmadi.', options: {
+    reply_to_message_id: message.message_id
+  }, updateKind: 'bot_done_miss', rawSource: 'bot_done_miss' }).catch(error => logBackgroundError('reply-done', error));
 }
 
 function parseBroadcastCallbackData(data = '') {
