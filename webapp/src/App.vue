@@ -642,7 +642,7 @@
                   </div>
                   <div class="company-module-summary-grid">
                     <div class="company-module-summary-cell">
-                      <span class="company-module-summary-label">Umumiy faollik</span>
+                      <span class="company-module-summary-label">O'rtacha faollik</span>
                       <div class="company-module-summary-metrics">
                         <b class="company-module-summary-value">{{ companyModuleTableSummary.avgPercent }}%</b>
                         <span
@@ -684,7 +684,7 @@
                         <th>Kompaniya</th>
                         <th class="module-business-col">Biznes holati</th>
                         <th class="module-support-col">Mas’ul xodim</th>
-                        <th class="module-count-col">Umumiy faollik</th>
+                        <th class="module-count-col">O'rtacha faollik</th>
                         <th v-for="column in companyModuleColumns" :key="`module-head-${column.key}`">{{ column.label }}</th>
                       </tr>
                     </thead>
