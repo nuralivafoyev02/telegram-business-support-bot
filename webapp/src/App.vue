@@ -771,7 +771,16 @@
                     </g>
                     <g v-for="line in companyModuleChartLines" :key="`module-chart-line-${line.key}`">
                       <path
+                        v-if="line.points.length > 2 && line.path"
                         :d="line.path"
+                        fill="none"
+                        :stroke="line.color"
+                        stroke-width="2.5"
+                        stroke-linecap="round"
+                        stroke-linejoin="round" />
+                      <polyline
+                        v-else-if="line.points.length > 1"
+                        :points="line.polyline"
                         fill="none"
                         :stroke="line.color"
                         stroke-width="2.5"
@@ -2710,6 +2719,7 @@ const employees = ref([]);
 const clickupTasks = ref([]);
 const companyInfo = ref({ summary: {}, companies: [], fetched_at: '', source: '' });
 const companyModuleReports = ref({ companies: [], report_dates: [], period: 'all' });
+const companyModuleChartSource = ref({ daily_companies: [], report_dates: [] });
 const companyModuleReportsPrevious = ref({ companies: [], report_dates: [], period: '' });
 const companyModuleCompareEnabled = ref(false);
 const requestRows = ref([]);
@@ -5319,11 +5329,49 @@ function companyModuleRowForChart(company = {}, reportRow = {}) {
   };
 }
 
+function companyModuleChartSourceEndDate(period = 'today') {
+  if (period === 'yesterday') return addDaysToDateKey(tashkentDateKey(), -1);
+  if (period === 'day_before_yesterday') return addDaysToDateKey(tashkentDateKey(), -2);
+  if (period === 'custom') {
+    return companyModuleCustomPeriodForm.appliedEnd
+      || companyModuleCustomPeriodForm.appliedStart
+      || tashkentDateKey();
+  }
+  return tashkentDateKey();
+}
+
+function companyModuleChartSourceQuery(period = 'today') {
+  if (period === 'week' || period === 'month') return null;
+  if (period === 'custom') {
+    const start = companyModuleCustomPeriodForm.appliedStart;
+    const end = companyModuleCustomPeriodForm.appliedEnd;
+    if (!start || !end || start !== end) return null;
+    return {
+      period: 'custom',
+      start_date: addDaysToDateKey(end, -6),
+      end_date: end
+    };
+  }
+  const end = companyModuleChartSourceEndDate(period);
+  return {
+    period: 'custom',
+    start_date: addDaysToDateKey(end, -6),
+    end_date: end
+  };
+}
+
+function companyModuleChartDateKeys(dates = [], period = 'today') {
+  const sorted = [...dates].filter(Boolean).sort();
+  if (sorted.length >= 2) return sorted;
+  const end = sorted.at(-1) || companyModuleChartSourceEndDate(period);
+  return Array.from({ length: 7 }, (_, index) => addDaysToDateKey(end, index - 6));
+}
+
 const companyModuleChartRows = computed(() => {
-  const dailyRows = Array.isArray(companyModuleReports.value.daily_companies)
-    ? companyModuleReports.value.daily_companies
-    : [];
-  const dates = [...(companyModuleReports.value.report_dates || [])].filter(Boolean).sort();
+  const source = companyModuleChartSource.value;
+  const dailyRows = Array.isArray(source.daily_companies) ? source.daily_companies : [];
+  const period = companyModulePeriod.value;
+  const dates = companyModuleChartDateKeys(source.report_dates || [], period);
   const companyMap = companyInfoById.value;
   const filters = companyModuleFilterKeys.value;
 
@@ -5357,11 +5405,12 @@ const companyModuleChartRows = computed(() => {
       if (row.module_usage?.[key]) counts[key] += 1;
     });
   });
-  return [{
-    date_key: fallbackDate,
-    date_label: companyModuleChartDateLabel(fallbackDate, 1),
-    counts
-  }];
+  const fallbackDates = companyModuleChartDateKeys([fallbackDate], period);
+  return fallbackDates.map((date, index) => ({
+    date_key: date,
+    date_label: companyModuleChartDateLabel(date, fallbackDates.length),
+    counts: index === fallbackDates.length - 1 ? counts : Object.fromEntries(companyModuleKeys.map(key => [key, 0]))
+  }));
 });
 
 const companyModuleChartMax = computed(() => {
@@ -5418,7 +5467,8 @@ const companyModuleChartLines = computed(() => {
       label: column.label,
       color: COMPANY_MODULE_CHART_COLORS[column.key] || 'var(--primary)',
       points,
-      path: smoothLinePath(points)
+      path: smoothLinePath(points),
+      polyline: points.map(point => `${point.x},${point.y}`).join(' ')
     };
   });
 });
@@ -6754,9 +6804,34 @@ async function loadCompanyModuleReportsPreviousOptional(query = {}) {
   }
 }
 
+async function syncCompanyModuleChartSource() {
+  const period = companyModulePeriod.value;
+  const chartQuery = companyModuleChartSourceQuery(period);
+  if (!chartQuery) {
+    companyModuleChartSource.value = {
+      daily_companies: companyModuleReports.value.daily_companies || [],
+      report_dates: companyModuleReports.value.report_dates || []
+    };
+    return;
+  }
+  try {
+    const data = await api.companyModuleReports(chartQuery);
+    companyModuleChartSource.value = {
+      daily_companies: data.daily_companies || [],
+      report_dates: data.report_dates || []
+    };
+  } catch {
+    companyModuleChartSource.value = {
+      daily_companies: companyModuleReports.value.daily_companies || [],
+      report_dates: companyModuleReports.value.report_dates || []
+    };
+  }
+}
+
 async function refreshCompanyModuleReports() {
   const period = companyModulePeriod.value;
   await loadCompanyModuleReportsOptional(companyModulePeriodQuery(period));
+  await syncCompanyModuleChartSource();
   if (!companyModuleCompareEnabled.value) {
     companyModuleReportsPrevious.value = { companies: [], report_dates: [], period: '' };
     return;
