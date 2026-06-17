@@ -766,10 +766,33 @@ async function findOpenRequestByMessageAuthor({ chatId, messageId }) {
   return candidateRows[0] || null;
 }
 
+function isStubLikeOpenRequest(request = {}) {
+  if (!request || !isOpenRequestStatus(request.status)) return false;
+  const text = String(request.initial_text || '').trim();
+  const noCustomer = request.customer_tg_id === undefined || request.customer_tg_id === null || request.customer_tg_id === '';
+  return noCustomer && (text === '--' || text === '');
+}
+
+async function findOpenStubRequestFallback({ chatId }) {
+  const queryChatId = telegramIdForQuery(chatId);
+  if (queryChatId === null) return null;
+  const rows = await supabase.select('support_requests', {
+    select: 'id,chat_id,status,created_at,initial_text,customer_tg_id,customer_name,initial_message_id',
+    chat_id: supabase.eq(queryChatId),
+    status: 'eq.open',
+    order: supabase.order('created_at', false),
+    limit: '30'
+  }).catch(() => []);
+  const stubRows = rows.filter(isStubLikeOpenRequest);
+  if (stubRows.length === 1) return stubRows[0];
+  return null;
+}
+
 async function findOpenRequestForReactionTarget({ chatId, messageId }) {
   return await findOpenRequestByMessage({ chatId, messageId })
     || await findOpenRequestByLinkedMessage({ chatId, messageId })
     || await findOpenRequestByMessageAuthor({ chatId, messageId })
+    || await findOpenStubRequestFallback({ chatId })
     || await findOpenRequestByInitialMessage(chatId, messageId);
 }
 
