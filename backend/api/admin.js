@@ -4858,6 +4858,12 @@ function sanitizeWebhookInfo(info = {}) {
   if (!missingAllowedUpdates.includes('message') && !companyInfoWebhook) {
     diagnostics.push('Agar guruhdagi oddiy xabarlar baribir kelmasa, BotFather’da /setprivacy → Disable qiling va bot guruhda admin ekanini tekshiring.');
   }
+  if (info.url && Number(info.pending_update_count || 0) === 0) {
+    diagnostics.push('Kutilayotgan yangilanishlar 0 — navbat bo‘sh, bu odatda normal (yangilanishlar kelmayapti degani emas).');
+  }
+  if (/read timeout expired/i.test(String(info.last_error_message || ''))) {
+    diagnostics.push('Read timeout: server webhookga tez 200 javob bermagan; kod yangilangach “Telegram ulanishini yangilash” ni bosing.');
+  }
   if (missingAllowedUpdates.includes('edited_message')) {
     diagnostics.push('allowed_updates ichida edited_message yo‘q: tahrirlangan guruh xabarlari kelmaydi.');
   }

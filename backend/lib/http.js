@@ -1,5 +1,10 @@
 'use strict';
 
+let vercelWaitUntil = null;
+try {
+  vercelWaitUntil = require('@vercel/functions').waitUntil;
+} catch (_error) {}
+
 function sendJson(res, status, payload, extraHeaders = {}) {
   res.statusCode = status;
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
@@ -56,17 +61,14 @@ function scheduleBackgroundWork(workPromise, res) {
     console.error('[http:background-work]', error);
     return null;
   });
+  if (typeof vercelWaitUntil === 'function') {
+    vercelWaitUntil(task);
+    return true;
+  }
   if (res && typeof res.waitUntil === 'function') {
     res.waitUntil(task);
     return true;
   }
-  try {
-    const { waitUntil } = require('@vercel/functions');
-    if (typeof waitUntil === 'function') {
-      waitUntil(task);
-      return true;
-    }
-  } catch (_error) {}
   return false;
 }
 
