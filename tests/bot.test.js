@@ -1541,6 +1541,71 @@ async function testEyeReactionAcceptsGroupCustomEmoji() {
   }
 }
 
+async function testEyeReactionOpensTicketForNonEmployee() {
+  const originalInsert = supabase.insert;
+  const originalSelect = supabase.select;
+  const inserted = [];
+  clearBotSettingsCache();
+
+  supabase.select = async (table, query = {}) => {
+    if (table === 'bot_settings') {
+      return [{ key: 'message_reactions', value: { enabled: true, ticket_close: true, emoji: '⚡' } }];
+    }
+    if (table === 'tg_chats') return [];
+    if (table === 'messages') {
+      return [{
+        id: 'message-row',
+        tg_message_id: 91,
+        chat_id: -100444,
+        from_tg_user_id: 1004,
+        from_name: 'Customer',
+        from_username: 'customer4',
+        source_type: 'group',
+        classification: 'message',
+        text: 'Yordam kerak',
+        raw: {
+          message_id: 91,
+          text: 'Yordam kerak',
+          chat: { id: -100444, type: 'supergroup', title: 'Test group' },
+          from: { id: 1004, first_name: 'Customer', username: 'customer4', is_bot: false }
+        },
+        created_at: new Date().toISOString()
+      }];
+    }
+    if (table === 'employees') return [];
+    if (table === 'support_requests' && query.status === 'eq.open') return [];
+    return [];
+  };
+  supabase.insert = async (table, rows) => {
+    inserted.push({ table, rows });
+    if (table === 'support_requests') return rows.map(row => ({ id: 'request-guest-eye', ...row }));
+    return rows.map(row => ({ id: `${table}-row`, ...row }));
+  };
+
+  try {
+    const result = await callHandler({
+      update_id: 155,
+      message_reaction: {
+        chat: { id: -100444, type: 'supergroup', title: 'Test group' },
+        message_id: 91,
+        date: 1777100600,
+        user: { id: 888, first_name: 'Guest', username: 'guest_user', is_bot: false },
+        old_reaction: [],
+        new_reaction: [{ type: 'emoji', emoji: '👀' }]
+      }
+    });
+
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.handled, 'message_reaction_eye');
+    assert.notStrictEqual(result.payload.skipped, 'not_employee');
+    assert.ok(inserted.some(item => item.table === 'support_requests'));
+  } finally {
+    supabase.insert = originalInsert;
+    supabase.select = originalSelect;
+    clearBotSettingsCache();
+  }
+}
+
 async function testHundredReactionClosesTicketAndClickUpTask() {
   const originalInsert = supabase.insert;
   const originalSelect = supabase.select;
@@ -1628,6 +1693,65 @@ async function testHundredReactionClosesTicketAndClickUpTask() {
     supabase.select = originalSelect;
     supabase.patch = originalPatch;
     global.fetch = originalFetch;
+    clearBotSettingsCache();
+  }
+}
+
+async function testHundredReactionClosesTicketForNonEmployee() {
+  const originalInsert = supabase.insert;
+  const originalSelect = supabase.select;
+  const originalPatch = supabase.patch;
+  const patched = [];
+  clearBotSettingsCache();
+
+  supabase.select = async (table, query = {}) => {
+    if (table === 'bot_settings') {
+      return [{ key: 'message_reactions', value: { enabled: true, ticket_close: true, emoji: '⚡' } }];
+    }
+    if (table === 'employees') return [];
+    if (table === 'tg_chats') return [];
+    if (table === 'support_requests' && query.status === 'eq.open') {
+      return [{
+        id: 'request-2',
+        chat_id: -100222,
+        status: 'open',
+        customer_tg_id: 1002,
+        customer_name: 'Customer',
+        initial_message_id: 88,
+        initial_text: 'Savol',
+        created_at: new Date().toISOString()
+      }];
+    }
+    return [];
+  };
+  supabase.insert = async (table, rows) => rows.map(row => ({ id: `${table}-row`, ...row }));
+  supabase.patch = async (table, query, values) => {
+    patched.push({ table, query, values });
+    return [{ id: 'request-2', ...values }];
+  };
+
+  try {
+    const result = await callHandler({
+      update_id: 154,
+      message_reaction: {
+        chat: { id: -100222, type: 'supergroup', title: 'Support group' },
+        message_id: 88,
+        date: 1777100500,
+        user: { id: 888, first_name: 'Guest', username: 'guest_user', is_bot: false },
+        old_reaction: [],
+        new_reaction: [{ type: 'emoji', emoji: '💯' }]
+      }
+    });
+
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.handled, 'message_reaction_done');
+    assert.notStrictEqual(result.payload.skipped, 'not_employee');
+    assert.strictEqual(result.payload.closed, true);
+    assert.strictEqual(patched.some(item => item.table === 'support_requests' && item.values.status === 'closed'), true);
+  } finally {
+    supabase.insert = originalInsert;
+    supabase.select = originalSelect;
+    supabase.patch = originalPatch;
     clearBotSettingsCache();
   }
 }
@@ -2078,7 +2202,9 @@ async function testGroupVoicePlaceholderOpensRequest() {
   await testEyeReactionCreatesClickUpTask();
   await testEyeReactionMatchesEmployeeByUsernameWithoutTelegramId();
   await testEyeReactionAcceptsGroupCustomEmoji();
+  await testEyeReactionOpensTicketForNonEmployee();
   await testHundredReactionClosesTicketAndClickUpTask();
+  await testHundredReactionClosesTicketForNonEmployee();
   await testMainGroupBroadcastPreview();
   await testMainGroupBroadcastConfirmSendsAndReports();
   await testMainGroupBroadcastDeletePreview();

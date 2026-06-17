@@ -626,19 +626,11 @@ async function ensureReactionContext(reaction = {}) {
 async function handleDoneReaction(reaction = {}, settings = {}) {
   const chat = reaction.chat || {};
   const actor = reactionActor(reaction);
+  if (actor?.is_bot) {
+    return { ok: false, skipped: 'bot_actor' };
+  }
   await ensureReactionContext(reaction);
   const employee = await resolveReactionEmployee(reaction);
-  if (!employee) {
-    console.warn('[bot:done-reaction]', {
-      skipped: 'not_employee',
-      actor_id: actor.id || null,
-      actor_username: actor.username || null,
-      actor_name: tgUserName(actor) || null,
-      chat_id: chat.id,
-      message_id: reaction.message_id || null
-    });
-    return { ok: false, skipped: 'not_employee' };
-  }
   const closeMessage = {
     message_id: reaction.message_id,
     date: reaction.date,
@@ -652,8 +644,9 @@ async function handleDoneReaction(reaction = {}, settings = {}) {
   } else {
     console.warn('[bot:done-reaction]', {
       skipped: 'no_open_request',
-      employee_id: employee.id || null,
-      employee_username: employee.username || null,
+      actor_id: actor.id || null,
+      actor_username: actor.username || null,
+      employee_id: employee?.id || null,
       chat_id: chat.id,
       message_id: reaction.message_id || null
     });
@@ -682,17 +675,10 @@ async function handleDoneReaction(reaction = {}, settings = {}) {
 async function handleEyeReaction(reaction = {}, settings = {}) {
   const chat = reaction.chat || {};
   const actor = reactionActor(reaction);
-  const employee = await resolveReactionEmployee(reaction);
-  if (!employee) {
-    console.warn('[bot:eye-reaction]', {
-      skipped: 'not_employee',
-      actor_id: actor.id || null,
-      actor_username: actor.username || null,
-      actor_name: tgUserName(actor) || null,
-      chat_id: chat.id
-    });
-    return { ok: false, skipped: 'not_employee' };
+  if (actor?.is_bot) {
+    return { ok: false, skipped: 'bot_actor' };
   }
+  const employee = await resolveReactionEmployee(reaction);
 
   await ensureReactionContext(reaction);
 
@@ -736,7 +722,8 @@ async function handleEyeReaction(reaction = {}, settings = {}) {
     console.warn('[bot:eye-reaction:no-ticket]', {
       chat_id: chat.id,
       message_id: reaction.message_id,
-      employee_id: employee.id || null
+      actor_id: actor.id || null,
+      employee_id: employee?.id || null
     });
   }
   const supportRequestId = supportRequest && supportRequest.id || null;
