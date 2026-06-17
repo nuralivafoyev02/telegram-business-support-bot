@@ -20,6 +20,14 @@ function normalizeTelegramKey(value) {
   return String(value).trim();
 }
 
+function telegramIdForQuery(value) {
+  if (value === undefined || value === null || value === '') return null;
+  const text = String(value).trim();
+  if (!text) return null;
+  const num = Number(text);
+  return Number.isFinite(num) ? num : text;
+}
+
 function nowIso() {
   return new Date().toISOString();
 }
@@ -166,17 +174,11 @@ async function getKnownEmployeeByTelegramId(tgUserId) {
 async function getKnownEmployeeByTelegramUser(user = {}) {
   if (!user || !user.id || user.is_bot) return null;
   const byId = await getKnownEmployeeByTelegramId(user.id);
-  if (byId) {
-    const username = normalizeEmployeeUsername(user.username);
-    const storedUsername = normalizeEmployeeUsername(byId.username);
-    if (!username || !storedUsername || usernamesLooselyMatch(byId.username, user.username)) {
-      return byId;
-    }
-  }
+  if (byId) return byId;
 
   const employees = await loadActiveEmployeesForLookup();
   const matched = matchEmployeeByTelegramProfile(employees, user);
-  if (!matched) return byId || null;
+  if (!matched) return null;
   return bindEmployeeTelegramId(matched, user.id);
 }
 
@@ -667,13 +669,14 @@ async function closeRequestByReply({ message, employee }) {
 }
 
 async function findOpenRequestByMessage({ chatId, messageId }) {
-  const normalizedChatId = normalizeTelegramKey(chatId);
+  const queryChatId = telegramIdForQuery(chatId);
+  const queryMessageId = telegramIdForQuery(messageId);
   const normalizedMessageId = normalizeTelegramKey(messageId);
-  if (!normalizedChatId || !normalizedMessageId) return null;
+  if (queryChatId === null || queryMessageId === null || !normalizedMessageId) return null;
   const rows = await supabase.select('support_requests', {
     select: 'id,chat_id,status,created_at,initial_text,customer_tg_id,customer_name,initial_message_id',
-    chat_id: supabase.eq(normalizedChatId),
-    initial_message_id: supabase.eq(normalizedMessageId),
+    chat_id: supabase.eq(queryChatId),
+    initial_message_id: supabase.eq(queryMessageId),
     status: 'eq.open',
     order: supabase.order('created_at', false),
     limit: '1'
@@ -682,7 +685,7 @@ async function findOpenRequestByMessage({ chatId, messageId }) {
 
   const openRows = await supabase.select('support_requests', {
     select: 'id,chat_id,status,created_at,initial_text,customer_tg_id,customer_name,initial_message_id',
-    chat_id: supabase.eq(normalizedChatId),
+    chat_id: supabase.eq(queryChatId),
     status: 'eq.open',
     order: supabase.order('created_at', false),
     limit: '100'
@@ -691,20 +694,20 @@ async function findOpenRequestByMessage({ chatId, messageId }) {
 }
 
 async function findOpenRequestByLinkedMessage({ chatId, messageId }) {
-  const normalizedChatId = normalizeTelegramKey(chatId);
-  const normalizedMessageId = normalizeTelegramKey(messageId);
-  if (!normalizedChatId || !normalizedMessageId) return null;
+  const queryChatId = telegramIdForQuery(chatId);
+  const queryMessageId = telegramIdForQuery(messageId);
+  if (queryChatId === null || queryMessageId === null) return null;
   const events = await supabase.select('request_events', {
     select: 'request_id,event_type,created_at',
-    chat_id: supabase.eq(normalizedChatId),
-    tg_message_id: supabase.eq(normalizedMessageId),
+    chat_id: supabase.eq(queryChatId),
+    tg_message_id: supabase.eq(queryMessageId),
     order: supabase.order('created_at', false),
     limit: '10'
   }).catch(() => []);
   for (const event of events) {
     if (!event?.request_id) continue;
     const request = await findOpenRequestById(event.request_id);
-    if (request) return request;
+    if (request && isOpenRequestStatus(request.status)) return request;
   }
   return null;
 }
@@ -713,7 +716,8 @@ async function closeRequestByMessage({ message, targetMessageId, employee }) {
   const chat = message.chat || {};
   const messageId = targetMessageId || message.message_id;
   const request = await findOpenRequestByMessage({ chatId: chat.id, messageId })
-    || await findOpenRequestByLinkedMessage({ chatId: chat.id, messageId });
+    || await findOpenRequestByLinkedMessage({ chatId: chat.id, messageId })
+    || await findOpenRequestByInitialMessage(chat.id, messageId);
   if (!request) {
     const existing = await findRequestByInitialMessage(chat.id, messageId);
     if (existing && isClosedLikeRequestStatus(existing.status)) {
