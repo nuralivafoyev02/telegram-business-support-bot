@@ -773,7 +773,12 @@ function isStubLikeOpenRequest(request = {}) {
   return noCustomer && (text === '--' || text === '');
 }
 
-async function findOpenStubRequestFallback({ chatId }) {
+function toNumericTelegramId(value) {
+  const number = Number(String(value === undefined || value === null ? '' : value).trim());
+  return Number.isFinite(number) ? number : null;
+}
+
+async function findOpenStubRequestFallback({ chatId, messageId }) {
   const queryChatId = telegramIdForQuery(chatId);
   if (queryChatId === null) return null;
   const rows = await supabase.select('support_requests', {
@@ -785,14 +790,30 @@ async function findOpenStubRequestFallback({ chatId }) {
   }).catch(() => []);
   const stubRows = rows.filter(isStubLikeOpenRequest);
   if (stubRows.length === 1) return stubRows[0];
-  return null;
+  if (stubRows.length <= 1) return null;
+
+  const targetMessageId = toNumericTelegramId(messageId);
+  if (targetMessageId === null) return null;
+
+  const withNumericIds = stubRows
+    .map(row => ({ row, initialId: toNumericTelegramId(row.initial_message_id) }))
+    .filter(item => item.initialId !== null);
+  if (!withNumericIds.length) return null;
+
+  const sameOrBefore = withNumericIds
+    .filter(item => item.initialId <= targetMessageId)
+    .sort((a, b) => b.initialId - a.initialId);
+  if (sameOrBefore[0]) return sameOrBefore[0].row;
+
+  return withNumericIds
+    .sort((a, b) => Math.abs(a.initialId - targetMessageId) - Math.abs(b.initialId - targetMessageId))[0]?.row || null;
 }
 
 async function findOpenRequestForReactionTarget({ chatId, messageId }) {
   return await findOpenRequestByMessage({ chatId, messageId })
     || await findOpenRequestByLinkedMessage({ chatId, messageId })
     || await findOpenRequestByMessageAuthor({ chatId, messageId })
-    || await findOpenStubRequestFallback({ chatId })
+    || await findOpenStubRequestFallback({ chatId, messageId })
     || await findOpenRequestByInitialMessage(chatId, messageId);
 }
 

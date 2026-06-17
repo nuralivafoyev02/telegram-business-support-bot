@@ -2083,6 +2083,110 @@ async function testHundredReactionClosesSingleStubTicketFallback() {
   }
 }
 
+async function testHundredReactionClosesNearestStubTicketFallback() {
+  const originalInsert = supabase.insert;
+  const originalSelect = supabase.select;
+  const originalPatch = supabase.patch;
+  const patched = [];
+  clearBotSettingsCache();
+
+  supabase.select = async (table, query = {}) => {
+    if (table === 'bot_settings') {
+      return [{ key: 'message_reactions', value: { enabled: true, ticket_close: true, emoji: '⚡' } }];
+    }
+    if (table === 'employees') {
+      return [{ id: 'employee-7', tg_user_id: 781, full_name: 'Mirshod', username: 'mirshod', is_active: true }];
+    }
+    if (table === 'tg_chats') return [];
+    if (table === 'messages') return [];
+    if (table === 'request_events') return [];
+    if (table === 'support_requests' && query.status === 'eq.open') {
+      return [
+        {
+          id: 'request-7a',
+          chat_id: -100777,
+          status: 'open',
+          customer_tg_id: null,
+          customer_name: '',
+          initial_message_id: 700,
+          initial_text: '--',
+          created_at: new Date().toISOString()
+        },
+        {
+          id: 'request-7b',
+          chat_id: -100777,
+          status: 'open',
+          customer_tg_id: null,
+          customer_name: '',
+          initial_message_id: 703,
+          initial_text: '--',
+          created_at: new Date().toISOString()
+        }
+      ];
+    }
+    if (table === 'support_requests' && query.id) {
+      const requestId = String(query.id || '');
+      if (requestId.includes('request-7b')) {
+        return [{
+          id: 'request-7b',
+          chat_id: -100777,
+          status: 'open',
+          customer_tg_id: null,
+          customer_name: '',
+          initial_message_id: 703,
+          initial_text: '--',
+          created_at: new Date().toISOString()
+        }];
+      }
+      if (requestId.includes('request-7a')) {
+        return [{
+          id: 'request-7a',
+          chat_id: -100777,
+          status: 'open',
+          customer_tg_id: null,
+          customer_name: '',
+          initial_message_id: 700,
+          initial_text: '--',
+          created_at: new Date().toISOString()
+        }];
+      }
+      return [];
+    }
+    if (table === 'support_requests' && query.initial_message_id) return [];
+    return [];
+  };
+  supabase.insert = async (table, rows) => rows.map(row => ({ id: `${table}-row`, ...row }));
+  supabase.patch = async (table, query, values) => {
+    patched.push({ table, query, values });
+    return [{ id: 'request-7b', ...values }];
+  };
+
+  try {
+    const result = await callHandler({
+      update_id: 159,
+      message_reaction: {
+        chat: { id: -100777, type: 'supergroup', title: 'China House' },
+        message_id: 704,
+        date: 1777101000,
+        user: { id: 781, first_name: 'Mirshod', username: 'mirshod', is_bot: false },
+        old_reaction: [],
+        new_reaction: [{ type: 'emoji', emoji: '💯' }]
+      }
+    });
+
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.handled, 'message_reaction_done');
+    assert.strictEqual(result.payload.closed, true);
+    assert.strictEqual(result.payload.request_id, 'request-7b');
+    assert.strictEqual(patched.some(item => item.table === 'support_requests' && String(item.query.id || '').includes('request-7b')), true);
+  } finally {
+    supabase.insert = originalInsert;
+    supabase.select = originalSelect;
+    supabase.patch = originalPatch;
+    clearBotSettingsCache();
+  }
+}
+
 async function testMainGroupBroadcastPreview() {
   const originalInsert = supabase.insert;
   const originalSelect = supabase.select;
@@ -2536,6 +2640,7 @@ async function testGroupVoicePlaceholderOpensRequest() {
   await testHundredReactionClosesTicketLinkedByEvent();
   await testHundredReactionClosesTicketByMessageAuthorFallback();
   await testHundredReactionClosesSingleStubTicketFallback();
+  await testHundredReactionClosesNearestStubTicketFallback();
   await testMainGroupBroadcastPreview();
   await testMainGroupBroadcastConfirmSendsAndReports();
   await testMainGroupBroadcastDeletePreview();
