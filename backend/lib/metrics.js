@@ -452,7 +452,7 @@ async function findRequestByInitialMessage(chatId, messageId) {
     select: 'id,source_type,chat_id,company_id,customer_tg_id,customer_name,initial_message_id,initial_text,status,created_at,closed_at,closed_by_employee_id,open_source,opened_by_employee_id,assigned_to_employee_id',
     chat_id: supabase.eq(queryChatId),
     order: supabase.order('created_at', false),
-    limit: '200'
+    limit: '5000'
   }).catch(() => []);
   return allRows.find(row => normalizeTelegramKey(row.initial_message_id) === normalizedMessageId) || null;
 }
@@ -699,7 +699,7 @@ async function findOpenRequestByMessage({ chatId, messageId }) {
     chat_id: supabase.eq(queryChatId),
     status: 'eq.open',
     order: supabase.order('created_at', false),
-    limit: '100'
+    limit: '1000'
   }).catch(() => []);
   return openRows.find(row => normalizeTelegramKey(row.initial_message_id) === normalizedMessageId) || null;
 }
@@ -734,7 +734,7 @@ async function findOpenRequestByLinkedMessage({ chatId, messageId }) {
     select: 'request_id,event_type,tg_message_id,created_at',
     chat_id: supabase.eq(queryChatId),
     order: supabase.order('created_at', false),
-    limit: '500'
+    limit: '5000'
   }).catch(() => []);
   return resolveFromEvents(linkedEvents);
 }
