@@ -78,7 +78,7 @@
       <header class="topbar">
         <div class="page-title">
           <h1>{{ currentTitle }}</h1>
-          <p>{{ currentSubtitle }}</p>
+          <p v-if="currentSubtitle">{{ currentSubtitle }}</p>
         </div>
         <div class="topbar-actions">
           <button class="btn topbar-refresh" type="button" :disabled="loadingAction === 'refresh'" @click="refresh">
@@ -197,7 +197,6 @@
               <div class="card-header performance-head">
                 <div>
                   <div class="card-title">Hodimlar reytingi</div>
-                  <div class="card-note">Yopish foizi va SLA: yopilgan / (yopilgan + shu xodimga biriktirilgan ochiq). O‘rtacha vaqt: har bir biriktirilgan ticket uchun birinchi javob (yoki hozirgacha kutish) ÷ ticketlar soni. Davr — yaratilgan sana (Toshkent).</div>
                 </div>
                 <div class="card-header-actions" ref="rankingMenuRef">
                   <button class="btn-icon mini-icon" @click="rankingMenuOpen = !rankingMenuOpen" title="Sozlamalar">
@@ -543,12 +542,6 @@
                 <div class="card-header company-module-table-head">
                   <div>
                     <div class="card-title">Bo‘limlar foydalanish statistikasi</div>
-                    <div class="card-note">
-                      Kunlik saqlanadi · cheksiz tarix · {{ companyModulePeriodLabel }}:
-                      {{ companyModuleReportDatesLabel }}
-                      <template v-if="companyModuleFetchedAt"> · Oxirgi yangilanish: {{ fmtDate(companyModuleFetchedAt) }}</template>
-                      · Bir kunda qayta yangilansa oxirgisi saqlanadi
-                    </div>
                   </div>
                   <div class="company-module-table-controls">
                     <div class="company-module-filter company-module-filter-wide company-module-filter-menu-wrap" ref="companyModuleFilterMenuRef">
@@ -2817,9 +2810,9 @@ const userInitials = computed(() => {
   return String(source).split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]?.toUpperCase()).join('') || 'UQ';
 });
 const currentSubtitle = computed(() => ({
-  stats: 'Xodimlar faolligi, javob tezligi va ochiq so‘rovlar nazorati',
+  stats: '',
   productAnalytics: 'Uyqur dasturidan foydalanish, biznes status va obuna risklari',
-  companyActivity: 'Kompaniyalar holati, support biriktirilishi va obuna nazorati',
+  companyActivity: '',
   groups: 'Bot ulangan guruhlar, so‘rov oqimi va mijoz murojaatlari',
   employees: 'Xodimlar aktivligi, javoblar va ochiq vazifalar',
   companies: 'Uyqur API’dan kelgan kompaniyalar, mas’ul va obuna ma’lumotlari',
@@ -4714,7 +4707,7 @@ const companyModuleColumns = [
 ];
 const companyModuleKeys = companyModuleColumns.map(column => column.key);
 const companyModulePeriod = ref('today');
-const companyModuleFilterKeys = ref([]);
+const companyModuleFilterKeys = ref(['business:ACTIVE']);
 const companyModuleSort = ref('modules_desc');
 const companyModuleSortOptions = [
   { key: 'modules_desc', label: 'Ko‘p ishlatilgan' },
@@ -4790,6 +4783,13 @@ function matchesCompanyModuleFilter(row = {}, filters = []) {
 
   if (keys.includes('used') && Number(row.module_active_count || 0) === 0) return false;
   if (keys.includes('unused') && Number(row.module_active_count || 0) > 0) return false;
+
+  const supportKeys = keys.filter(key => key.startsWith('support:') && key !== 'support:all');
+  if (supportKeys.length) {
+    const usernames = supportKeys.map(key => key.slice(8));
+    const rowUsername = normalizeSupportUsername(row.uyqur_support_username);
+    if (!usernames.includes(rowUsername)) return false;
+  }
   return true;
 }
 
@@ -4822,6 +4822,22 @@ function handleCompanyModuleControlChange(value = '') {
   }
 }
 
+function companyModuleFilterNamespace(key = '') {
+  if (key === 'all' || key === 'used' || key === 'unused') return 'global';
+  const colon = String(key).indexOf(':');
+  return colon >= 0 ? key.slice(0, colon) : key;
+}
+
+function companyModuleSupportDisplayLabel(username = '') {
+  const normalized = normalizeSupportUsername(username);
+  if (!normalized) return '';
+  const employee = employees.value.find(row =>
+    !isAdminLikeEmployee(row) && normalizeSupportUsername(row.username) === normalized
+  );
+  if (employee?.full_name) return employee.full_name;
+  return `@${normalized}`;
+}
+
 function toggleCompanyModuleFilterMenu() {
   companyModuleFilterMenuOpen.value = !companyModuleFilterMenuOpen.value;
   companyModuleFilterMenuGroup.value = '';
@@ -4848,6 +4864,9 @@ function findCompanyModuleControlOption(type = 'filter', key = '') {
 function isCompanyModuleControlOptionActive(group = {}, option = {}) {
   if (group.type === 'sort') return companyModuleSort.value === option.key;
   if (option.key === 'all') return !companyModuleFilterKeys.value.length;
+  if (option.key === 'support:all') {
+    return !companyModuleFilterKeys.value.some(key => key.startsWith('support:') && key !== 'support:all');
+  }
   return companyModuleFilterKeys.value.includes(option.key);
 }
 
@@ -4863,7 +4882,10 @@ function selectCompanyModuleControlOption(group = {}, option = {}) {
     return;
   }
   if (!group.multi) {
-    companyModuleFilterKeys.value = [option.key];
+    const namespace = companyModuleFilterNamespace(option.key);
+    const keys = companyModuleFilterKeys.value.filter(key => companyModuleFilterNamespace(key) !== namespace);
+    if (option.key !== 'support:all') keys.push(option.key);
+    companyModuleFilterKeys.value = keys;
     closeCompanyModuleFilterMenu();
     return;
   }
@@ -4990,6 +5012,20 @@ const companyModuleBaseRows = computed(() => {
   });
 });
 
+const companyModuleSupportFilterOptions = computed(() => {
+  const usernames = new Set();
+  companyModuleBaseRows.value.forEach(row => {
+    const username = normalizeSupportUsername(row.uyqur_support_username);
+    if (username) usernames.add(username);
+  });
+  return [...usernames]
+    .sort((a, b) => companyModuleSupportDisplayLabel(a).localeCompare(companyModuleSupportDisplayLabel(b), 'uz'))
+    .map(username => ({
+      key: `support:${username}`,
+      label: companyModuleSupportDisplayLabel(username)
+    }));
+});
+
 const companyModuleControlGroups = computed(() => {
   const usedModuleOptions = companyModuleColumns.map(column => ({
     key: `module:${column.key}`,
@@ -5035,6 +5071,16 @@ const companyModuleControlGroups = computed(() => {
         { key: 'business:ACTIVE', label: 'Aktiv' },
         { key: 'business:NEW', label: 'Yangi' },
         { key: 'business:PAUSED', label: 'Pauza' }
+      ]
+    },
+    {
+      key: 'support',
+      label: 'Mas’ul xodim',
+      type: 'filter',
+      multi: false,
+      options: [
+        { key: 'support:all', label: 'Hammasi' },
+        ...companyModuleSupportFilterOptions.value
       ]
     },
     {

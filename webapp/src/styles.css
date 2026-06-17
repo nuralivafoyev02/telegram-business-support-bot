@@ -3928,8 +3928,7 @@ td,
 }
 
 .company-module-table-wrap {
-  max-height: min(520px, 62vh);
-  overflow: auto;
+  overflow: visible;
   border: 1px solid var(--line);
   border-radius: var(--radius);
 }
