@@ -19,7 +19,7 @@
     "test:report": "node tests/report.test.js"
   },
   "engines": {
-    "node": ">=20"
+    "node": "20.x"
   },
   "dependencies": {
     "@vercel/functions": "^2.0.0"

@@ -2610,6 +2610,53 @@ async function testGroupVoicePlaceholderOpensRequest() {
   }
 }
 
+async function testSecondVoiceCreatesSeparateTicket() {
+  const metrics = require('../backend/lib/metrics');
+  const originalSelect = supabase.select;
+  const originalInsert = supabase.insert;
+  const created = [];
+
+  supabase.select = async (table, query = {}) => {
+    if (table === 'support_requests' && query.status === 'eq.open' && query.customer_tg_id) {
+      return [{
+        id: 'request-voice-1',
+        chat_id: -100777,
+        customer_tg_id: 5001,
+        initial_message_id: 701,
+        initial_text: 'Ovozli xabar',
+        status: 'open',
+        created_at: new Date().toISOString()
+      }];
+    }
+    if (table === 'support_requests' && query.initial_message_id) return [];
+    return [];
+  };
+  supabase.insert = async (table, rows) => {
+    created.push({ table, rows });
+    return rows.map((row, index) => ({ id: `${table}-${index}`, ...row }));
+  };
+
+  try {
+    const secondVoice = {
+      message_id: 702,
+      date: Math.floor(Date.now() / 1000),
+      chat: { id: -100777, type: 'supergroup' },
+      from: { id: 5001, first_name: 'Azimov', is_bot: false },
+      voice: { file_id: 'voice-2', duration: 5 }
+    };
+    const request = await metrics.createSupportRequest({
+      message: secondVoice,
+      sourceType: 'group'
+    });
+    assert.strictEqual(created.some(item => item.table === 'support_requests'), true);
+    assert.notStrictEqual(request.id, 'request-voice-1');
+    assert.strictEqual(request.initial_message_id, 702);
+  } finally {
+    supabase.select = originalSelect;
+    supabase.insert = originalInsert;
+  }
+}
+
 (async () => {
   await testStartRepliesWhenDbTrackingFails();
   await testChatMemberUpdateRegistersGroup();
@@ -2644,6 +2691,7 @@ async function testGroupVoicePlaceholderOpensRequest() {
   await testMainGroupBroadcastDeleteConfirmDeletesAndReports();
   await testBotRemovalMarksGroupInactive();
   await testGroupVoicePlaceholderOpensRequest();
+  await testSecondVoiceCreatesSeparateTicket();
   console.log('Bot tests passed');
 })().catch(error => {
   console.error(error);

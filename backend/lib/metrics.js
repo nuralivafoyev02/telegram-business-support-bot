@@ -298,11 +298,20 @@ async function saveMessage({ message, updateKind, sourceType, classification, em
   return Array.isArray(rows) ? rows[0] : null;
 }
 
+function isDistinctMediaTicketMessage(message = {}) {
+  if (message.voice || message.audio || message.video_note) return true;
+  const text = String(message.text || message.caption || '').trim().toLowerCase();
+  return text === MEDIA_TEXT.voice.toLowerCase()
+    || text === MEDIA_TEXT.audio.toLowerCase()
+    || text === MEDIA_TEXT.video_note.toLowerCase();
+}
+
 async function findMergeableOpenRequest({ message, sourceType }) {
   const from = message.from || {};
   const chat = message.chat || {};
   const text = (message.text || message.caption || '').trim().toLowerCase();
   if (!chat.id || !from.id || !text) return null;
+  if (isDistinctMediaTicketMessage(message)) return null;
 
   const rows = await supabase.select('support_requests', {
     select: 'id,source_type,chat_id,company_id,customer_tg_id,customer_name,initial_message_id,initial_text,status,created_at',
