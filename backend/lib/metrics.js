@@ -15,6 +15,11 @@ const MEDIA_TEXT = Object.freeze({
   document: 'Faylli xabar'
 });
 
+function normalizeTelegramKey(value) {
+  if (value === undefined || value === null || value === '') return '';
+  return String(value).trim();
+}
+
 function nowIso() {
   return new Date().toISOString();
 }
@@ -662,29 +667,42 @@ async function closeRequestByReply({ message, employee }) {
 }
 
 async function findOpenRequestByMessage({ chatId, messageId }) {
-  if (!chatId || !messageId) return null;
+  const normalizedChatId = normalizeTelegramKey(chatId);
+  const normalizedMessageId = normalizeTelegramKey(messageId);
+  if (!normalizedChatId || !normalizedMessageId) return null;
   const rows = await supabase.select('support_requests', {
     select: 'id,chat_id,status,created_at,initial_text,customer_tg_id,customer_name,initial_message_id',
-    chat_id: supabase.eq(chatId),
-    initial_message_id: supabase.eq(messageId),
+    chat_id: supabase.eq(normalizedChatId),
+    initial_message_id: supabase.eq(normalizedMessageId),
     status: 'eq.open',
     order: supabase.order('created_at', false),
     limit: '1'
   }).catch(() => []);
-  return rows[0] || null;
+  if (rows[0]) return rows[0];
+
+  const openRows = await supabase.select('support_requests', {
+    select: 'id,chat_id,status,created_at,initial_text,customer_tg_id,customer_name,initial_message_id',
+    chat_id: supabase.eq(normalizedChatId),
+    status: 'eq.open',
+    order: supabase.order('created_at', false),
+    limit: '100'
+  }).catch(() => []);
+  return openRows.find(row => normalizeTelegramKey(row.initial_message_id) === normalizedMessageId) || null;
 }
 
 async function findOpenRequestByLinkedMessage({ chatId, messageId }) {
-  if (!chatId || !messageId) return null;
+  const normalizedChatId = normalizeTelegramKey(chatId);
+  const normalizedMessageId = normalizeTelegramKey(messageId);
+  if (!normalizedChatId || !normalizedMessageId) return null;
   const events = await supabase.select('request_events', {
     select: 'request_id,event_type,created_at',
-    chat_id: supabase.eq(chatId),
-    tg_message_id: supabase.eq(messageId),
-    event_type: 'in.(opened,note)',
+    chat_id: supabase.eq(normalizedChatId),
+    tg_message_id: supabase.eq(normalizedMessageId),
     order: supabase.order('created_at', false),
-    limit: '5'
+    limit: '10'
   }).catch(() => []);
   for (const event of events) {
+    if (!event?.request_id) continue;
     const request = await findOpenRequestById(event.request_id);
     if (request) return request;
   }
@@ -739,5 +757,6 @@ module.exports = {
   closeLatestRequest,
   closeRequestByReply,
   closeRequestByMessage,
+  findOpenRequestByMessage,
   registerChatMemberUpdate
 };
