@@ -739,9 +739,37 @@ async function findOpenRequestByLinkedMessage({ chatId, messageId }) {
   return resolveFromEvents(linkedEvents);
 }
 
+async function findOpenRequestByMessageAuthor({ chatId, messageId }) {
+  const queryChatId = telegramIdForQuery(chatId);
+  const queryMessageId = telegramIdForQuery(messageId);
+  if (queryChatId === null || queryMessageId === null) return null;
+
+  const messageRows = await supabase.select('messages', {
+    select: 'from_tg_user_id,created_at',
+    chat_id: supabase.eq(queryChatId),
+    tg_message_id: supabase.eq(queryMessageId),
+    limit: '1'
+  }).catch(() => []);
+  const target = messageRows[0] || null;
+  const customerId = target?.from_tg_user_id;
+  if (!customerId) return null;
+
+  const candidateRows = await supabase.select('support_requests', {
+    select: 'id,chat_id,status,created_at,initial_text,customer_tg_id,customer_name,initial_message_id',
+    chat_id: supabase.eq(queryChatId),
+    customer_tg_id: supabase.eq(customerId),
+    status: 'eq.open',
+    order: supabase.order('created_at', false),
+    limit: '20'
+  }).catch(() => []);
+
+  return candidateRows[0] || null;
+}
+
 async function findOpenRequestForReactionTarget({ chatId, messageId }) {
   return await findOpenRequestByMessage({ chatId, messageId })
     || await findOpenRequestByLinkedMessage({ chatId, messageId })
+    || await findOpenRequestByMessageAuthor({ chatId, messageId })
     || await findOpenRequestByInitialMessage(chatId, messageId);
 }
 

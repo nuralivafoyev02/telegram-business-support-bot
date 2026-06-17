@@ -1926,6 +1926,86 @@ async function testHundredReactionClosesTicketLinkedByEvent() {
   }
 }
 
+async function testHundredReactionClosesTicketByMessageAuthorFallback() {
+  const originalInsert = supabase.insert;
+  const originalSelect = supabase.select;
+  const originalPatch = supabase.patch;
+  const patched = [];
+  clearBotSettingsCache();
+
+  supabase.select = async (table, query = {}) => {
+    if (table === 'bot_settings') {
+      return [{ key: 'message_reactions', value: { enabled: true, ticket_close: true, emoji: '⚡' } }];
+    }
+    if (table === 'employees') {
+      return [{ id: 'employee-5', tg_user_id: 779, full_name: 'Mirshod', username: 'mirshod', is_active: true }];
+    }
+    if (table === 'tg_chats') return [];
+    if (table === 'messages') {
+      return [{ from_tg_user_id: 5001, created_at: new Date().toISOString() }];
+    }
+    if (table === 'request_events') return [];
+    if (table === 'support_requests') {
+      if (query.initial_message_id) return [];
+      if (query.customer_tg_id && query.status === 'eq.open') {
+        return [{
+          id: 'request-5',
+          chat_id: -100555,
+          status: 'open',
+          customer_tg_id: 5001,
+          customer_name: 'Azimov',
+          initial_message_id: 333,
+          initial_text: 'Ovozli xabar',
+          created_at: new Date().toISOString()
+        }];
+      }
+      if (query.id) {
+        return [{
+          id: 'request-5',
+          chat_id: -100555,
+          status: 'open',
+          customer_tg_id: 5001,
+          customer_name: 'Azimov',
+          initial_message_id: 333,
+          initial_text: 'Ovozli xabar',
+          created_at: new Date().toISOString()
+        }];
+      }
+      if (query.status === 'eq.open') return [];
+    }
+    return [];
+  };
+  supabase.insert = async (table, rows) => rows.map(row => ({ id: `${table}-row`, ...row }));
+  supabase.patch = async (table, query, values) => {
+    patched.push({ table, query, values });
+    return [{ id: 'request-5', ...values }];
+  };
+
+  try {
+    const result = await callHandler({
+      update_id: 157,
+      message_reaction: {
+        chat: { id: -100555, type: 'supergroup', title: 'China House' },
+        message_id: 777,
+        date: 1777100800,
+        user: { id: 779, first_name: 'Mirshod', username: 'mirshod', is_bot: false },
+        old_reaction: [],
+        new_reaction: [{ type: 'emoji', emoji: '💯' }]
+      }
+    });
+
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.handled, 'message_reaction_done');
+    assert.strictEqual(result.payload.closed, true);
+    assert.strictEqual(patched.some(item => item.table === 'support_requests' && item.values.status === 'closed'), true);
+  } finally {
+    supabase.insert = originalInsert;
+    supabase.select = originalSelect;
+    supabase.patch = originalPatch;
+    clearBotSettingsCache();
+  }
+}
+
 async function testMainGroupBroadcastPreview() {
   const originalInsert = supabase.insert;
   const originalSelect = supabase.select;
@@ -2377,6 +2457,7 @@ async function testGroupVoicePlaceholderOpensRequest() {
   await testHundredReactionClosesTicketForNonEmployee();
   await testHundredReactionRetriesWhenDoneAlreadyPresent();
   await testHundredReactionClosesTicketLinkedByEvent();
+  await testHundredReactionClosesTicketByMessageAuthorFallback();
   await testMainGroupBroadcastPreview();
   await testMainGroupBroadcastConfirmSendsAndReports();
   await testMainGroupBroadcastDeletePreview();
