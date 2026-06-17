@@ -743,6 +743,72 @@
                 </div>
               </section>
 
+              <section v-if="companyModuleChartRows.length" class="card chart-card line-chart-card company-module-chart-card">
+                <div class="card-header chart-card-head">
+                  <div>
+                    <div class="card-title">Bo‘limlar dinamikasi</div>
+                  </div>
+                </div>
+                <div class="trend-chart company-module-trend-chart">
+                  <svg viewBox="0 0 820 220" role="img" :aria-label="companyModuleChartAriaLabel">
+                    <text class="company-module-chart-axis-title" x="12" y="110" transform="rotate(-90 12 110)">Amallar soni</text>
+                    <g class="trend-grid">
+                      <line
+                        v-for="tick in companyModuleChartYTicks"
+                        :key="`module-chart-y-${tick.value}`"
+                        :x1="COMPANY_MODULE_CHART_DIMS.left"
+                        :x2="COMPANY_MODULE_CHART_DIMS.right"
+                        :y1="tick.y"
+                        :y2="tick.y" />
+                    </g>
+                    <g class="trend-axis">
+                      <text
+                        v-for="tick in companyModuleChartYTicks"
+                        :key="`module-chart-y-label-${tick.value}`"
+                        x="48"
+                        :y="tick.y + 4"
+                        text-anchor="end">{{ tick.value }}</text>
+                    </g>
+                    <g v-for="line in companyModuleChartLines" :key="`module-chart-line-${line.key}`">
+                      <path
+                        :d="line.path"
+                        fill="none"
+                        :stroke="line.color"
+                        stroke-width="2.5"
+                        stroke-linecap="round"
+                        stroke-linejoin="round" />
+                      <circle
+                        v-for="(point, pointIndex) in line.points"
+                        :key="`module-chart-dot-${line.key}-${pointIndex}`"
+                        :cx="point.x"
+                        :cy="point.y"
+                        r="4"
+                        fill="var(--surface)"
+                        :stroke="line.color"
+                        stroke-width="2.5">
+                        <title>{{ line.label }} · {{ point.label }}: {{ fmtNumber(point.value) }}</title>
+                      </circle>
+                    </g>
+                    <g class="trend-axis">
+                      <text
+                        v-for="tick in companyModuleChartXTicks"
+                        :key="`module-chart-x-${tick.date_key}`"
+                        :x="tick.x"
+                        y="208"
+                        text-anchor="middle">{{ tick.label }}</text>
+                    </g>
+                  </svg>
+                  <div class="company-module-chart-legend">
+                    <span
+                      v-for="line in companyModuleChartLines"
+                      :key="`module-chart-legend-${line.key}`"
+                      class="company-module-chart-legend-item">
+                      <i :style="{ background: line.color }"></i>{{ line.label }}
+                    </span>
+                  </div>
+                </div>
+              </section>
+
               <section class="card">
                 <div class="card-header">
                   <div>
@@ -4033,6 +4099,34 @@ function lineChartPoints(rows = [], max = 1, dims) {
   });
 }
 
+function smoothLinePath(points = []) {
+  if (!points.length) return '';
+  if (points.length === 1) return `M ${points[0].x} ${points[0].y}`;
+  let path = `M ${points[0].x} ${points[0].y}`;
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const previous = points[index - 1] || points[index];
+    const current = points[index];
+    const next = points[index + 1];
+    const after = points[index + 2] || next;
+    const cp1x = current.x + (next.x - previous.x) / 6;
+    const cp1y = current.y + (next.y - previous.y) / 6;
+    const cp2x = next.x - (after.x - current.x) / 6;
+    const cp2y = next.y - (after.y - current.y) / 6;
+    path += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${next.x} ${next.y}`;
+  }
+  return path;
+}
+
+function companyModuleChartDateLabel(dateKey = '', total = 0) {
+  const key = String(dateKey || '').trim();
+  if (!key) return '—';
+  const [, month, day] = key.split('-').map(Number);
+  const months = ['Yan', 'Fev', 'Mar', 'Apr', 'May', 'Iyn', 'Iyl', 'Avg', 'Sen', 'Okt', 'Noy', 'Dek'];
+  if (!month) return key;
+  if (total > 20) return months[month - 1] || key;
+  return `${String(day || '').padStart(2, '0')}.${String(month).padStart(2, '0')}`;
+}
+
 function barChartColumns(rows = [], max = 1, dims) {
   const width = dims.right - dims.left;
   const height = dims.bottom - dims.top;
@@ -4705,6 +4799,19 @@ const companyModuleColumns = [
   { key: 'monitoring', label: 'Monitoring' },
   { key: 'qurilish_jarayoni', label: 'Qurilish jarayoni' }
 ];
+const COMPANY_MODULE_CHART_COLORS = Object.freeze({
+  taminot: '#3b82f6',
+  kassa: '#22c55e',
+  omborxona: '#f59e0b',
+  monitoring: '#8b5cf6',
+  qurilish_jarayoni: '#ef4444'
+});
+const COMPANY_MODULE_CHART_DIMS = Object.freeze({
+  left: 56,
+  right: 760,
+  top: 36,
+  bottom: 188
+});
 const companyModuleKeys = companyModuleColumns.map(column => column.key);
 const companyModulePeriod = ref('today');
 const companyModuleFilterKeys = ref(['business:ACTIVE']);
@@ -5191,6 +5298,137 @@ const companyModuleTableRows = computed(() => sortCompanyModuleRows(
   companyModuleFilteredRows.value,
   companyModuleSort.value
 ));
+
+const companyInfoById = computed(() => {
+  const map = new Map();
+  filteredCompanyInfoRows.value.forEach(row => {
+    const key = String(row.id || '').trim();
+    if (key) map.set(key, row);
+  });
+  return map;
+});
+
+function companyModuleRowForChart(company = {}, reportRow = {}) {
+  const module_usage = reportRow.module_usage || emptyCompanyModuleUsageMap();
+  return {
+    ...company,
+    module_usage,
+    module_active_count: Number(reportRow.module_active_count ?? companyModuleActiveCount(module_usage)),
+    business_status: company.business_status,
+    uyqur_support_username: company.uyqur_support_username
+  };
+}
+
+const companyModuleChartRows = computed(() => {
+  const dailyRows = Array.isArray(companyModuleReports.value.daily_companies)
+    ? companyModuleReports.value.daily_companies
+    : [];
+  const dates = [...(companyModuleReports.value.report_dates || [])].filter(Boolean).sort();
+  const companyMap = companyInfoById.value;
+  const filters = companyModuleFilterKeys.value;
+
+  if (dates.length && dailyRows.length) {
+    return dates.map(date => {
+      const counts = Object.fromEntries(companyModuleKeys.map(key => [key, 0]));
+      dailyRows
+        .filter(row => row.report_date === date)
+        .forEach(reportRow => {
+          const company = companyMap.get(String(reportRow.company_id));
+          if (!company) return;
+          const merged = companyModuleRowForChart(company, reportRow);
+          if (!matchesCompanyModuleFilter(merged, filters)) return;
+          companyModuleKeys.forEach(key => {
+            if (merged.module_usage?.[key]) counts[key] += 1;
+          });
+        });
+      return {
+        date_key: date,
+        date_label: companyModuleChartDateLabel(date, dates.length),
+        counts
+      };
+    });
+  }
+
+  const fallbackDate = dates[0] || companyModuleReports.value.report_dates?.[0] || '';
+  if (!fallbackDate) return [];
+  const counts = Object.fromEntries(companyModuleKeys.map(key => [key, 0]));
+  companyModuleFilteredRows.value.forEach(row => {
+    companyModuleKeys.forEach(key => {
+      if (row.module_usage?.[key]) counts[key] += 1;
+    });
+  });
+  return [{
+    date_key: fallbackDate,
+    date_label: companyModuleChartDateLabel(fallbackDate, 1),
+    counts
+  }];
+});
+
+const companyModuleChartMax = computed(() => {
+  let max = 0;
+  companyModuleChartRows.value.forEach(row => {
+    companyModuleKeys.forEach(key => {
+      max = Math.max(max, Number(row.counts?.[key] || 0));
+    });
+  });
+  return niceChartMax(Math.max(1, max));
+});
+
+const companyModuleChartYTicks = computed(() => chartYTicks(companyModuleChartMax.value, COMPANY_MODULE_CHART_DIMS));
+
+const companyModuleChartXTicks = computed(() => {
+  const rows = companyModuleChartRows.value;
+  if (!rows.length) return [];
+  const dims = COMPANY_MODULE_CHART_DIMS;
+  const width = dims.right - dims.left;
+  const step = rows.length > 1 ? width / (rows.length - 1) : 0;
+  const stride = rows.length > 12 ? Math.ceil(rows.length / 8) : 1;
+  return rows
+    .map((row, index) => ({
+      date_key: row.date_key,
+      label: row.date_label,
+      x: rows.length > 1 ? dims.left + step * index : dims.left + width / 2,
+      index
+    }))
+    .filter((tick, _, list) => tick.index === 0 || tick.index === list.length - 1 || tick.index % stride === 0);
+});
+
+const companyModuleChartLines = computed(() => {
+  const rows = companyModuleChartRows.value;
+  const maximum = companyModuleChartMax.value;
+  const dims = COMPANY_MODULE_CHART_DIMS;
+  const width = dims.right - dims.left;
+  const height = dims.bottom - dims.top;
+  const step = rows.length > 1 ? width / (rows.length - 1) : 0;
+
+  return companyModuleColumns.map(column => {
+    const points = rows.map((row, index) => {
+      const value = Number(row.counts?.[column.key] || 0);
+      const x = rows.length > 1 ? dims.left + step * index : dims.left + width / 2;
+      const y = dims.bottom - (value / maximum) * height;
+      return {
+        x: Math.round(x * 10) / 10,
+        y: Math.round(y * 10) / 10,
+        value,
+        label: row.date_label
+      };
+    });
+    return {
+      key: column.key,
+      label: column.label,
+      color: COMPANY_MODULE_CHART_COLORS[column.key] || 'var(--primary)',
+      points,
+      path: smoothLinePath(points)
+    };
+  });
+});
+
+const companyModuleChartAriaLabel = computed(() => {
+  const period = companyModulePeriodLabel.value;
+  const points = companyModuleChartRows.value.length;
+  return `Bo‘limlar dinamikasi grafigi, ${period}, ${points} ta nuqta`;
+});
+
 const companyAlerts = computed(() => visibleCompanyInfoRows.value
   .filter(row => ['expired', 'soon'].includes(row.expiry_state))
   .sort((a, b) => Number(a.days_until_expiry ?? 9999) - Number(b.days_until_expiry ?? 9999))

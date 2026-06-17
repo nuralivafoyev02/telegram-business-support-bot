@@ -148,6 +148,16 @@ function buildReportSummary(companies = []) {
   };
 }
 
+function serializeDailyCompanies(rows = []) {
+  return rows.map(row => ({
+    company_id: row.company_id,
+    company_name: row.company_name || '',
+    report_date: row.report_date,
+    module_usage: row.module_usage || {},
+    module_active_count: Number(row.module_active_count || 0)
+  }));
+}
+
 function emptyReportHistory(tenantId) {
   return {
     tenant_id: resolveTenantId(tenantId),
@@ -732,6 +742,7 @@ async function getCompanyModuleReports(query = {}) {
       period,
       storage: COMPANY_MODULE_DAILY_TABLE,
       companies,
+      daily_companies: serializeDailyCompanies(list),
       report_dates: dates,
       fetched_at
     };
@@ -753,6 +764,7 @@ async function getCompanyModuleReports(query = {}) {
     period,
     storage: COMPANY_MODULE_DAILY_TABLE,
     companies,
+    daily_companies: serializeDailyCompanies(list),
     report_dates: dates,
     fetched_at
   };

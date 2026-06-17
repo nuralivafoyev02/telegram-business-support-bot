@@ -3972,6 +3972,45 @@ td,
   font-size: 13px;
 }
 
+.company-module-chart-card {
+  margin-top: 18px;
+}
+
+.company-module-trend-chart {
+  padding-top: 8px;
+}
+
+.company-module-chart-axis-title {
+  fill: var(--muted-strong);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .04em;
+}
+
+.company-module-chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 14px 18px;
+  padding: 0 18px 18px;
+}
+
+.company-module-chart-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.company-module-chart-legend-item i {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+}
+
 .company-module-summary {
   display: flex;
   flex-direction: column;
