@@ -1611,8 +1611,8 @@ async function testEyeReactionOpensTicketForNonEmployee() {
 
     assert.strictEqual(result.status, 200);
     assert.strictEqual(result.payload.handled, 'message_reaction_eye');
-    assert.notStrictEqual(result.payload.skipped, 'not_employee');
-    assert.ok(inserted.some(item => item.table === 'support_requests'));
+    assert.strictEqual(result.payload.skipped, 'not_employee');
+    assert.strictEqual(inserted.some(item => item.table === 'support_requests'), false);
   } finally {
     supabase.insert = originalInsert;
     supabase.select = originalSelect;
@@ -1759,63 +1759,8 @@ async function testHundredReactionClosesTicketForNonEmployee() {
 
     assert.strictEqual(result.status, 200);
     assert.strictEqual(result.payload.handled, 'message_reaction_done');
-    assert.notStrictEqual(result.payload.skipped, 'not_employee');
-    assert.strictEqual(result.payload.closed, true);
-    assert.strictEqual(patched.some(item => item.table === 'support_requests' && item.values.status === 'closed'), true);
-  } finally {
-    supabase.insert = originalInsert;
-    supabase.select = originalSelect;
-    supabase.patch = originalPatch;
-    clearBotSettingsCache();
-  }
-}
-
-async function testGroupHundredTextClosesLatestWithoutReply() {
-  const originalInsert = supabase.insert;
-  const originalSelect = supabase.select;
-  const originalPatch = supabase.patch;
-  const patched = [];
-  clearBotSettingsCache();
-
-  supabase.select = async (table, query = {}) => {
-    if (table === 'bot_settings') return [];
-    if (table === 'employees') return [];
-    if (table === 'tg_chats') return [];
-    if (table === 'support_requests' && query.status === 'eq.open') {
-      return [{
-        id: 'request-100',
-        chat_id: -100333,
-        status: 'open',
-        customer_tg_id: 1003,
-        customer_name: 'Customer',
-        initial_message_id: 55,
-        initial_text: 'Savol',
-        created_at: new Date().toISOString()
-      }];
-    }
-    return [];
-  };
-  supabase.insert = async (table, rows) => rows.map(row => ({ id: `${table}-row`, ...row }));
-  supabase.patch = async (table, query, values) => {
-    patched.push({ table, query, values });
-    return [{ id: 'request-100', ...values }];
-  };
-
-  try {
-    const result = await callHandler({
-      update_id: 156,
-      message: {
-        message_id: 99,
-        date: 1777100700,
-        text: '100',
-        chat: { id: -100333, type: 'supergroup', title: 'Support group' },
-        from: { id: 888, first_name: 'Guest', username: 'guest_user', is_bot: false }
-      }
-    });
-
-    assert.strictEqual(result.status, 200);
-    assert.strictEqual(result.payload.handled, 'message');
-    assert.strictEqual(patched.some(item => item.table === 'support_requests' && item.values.status === 'closed'), true);
+    assert.strictEqual(result.payload.skipped, 'not_employee');
+    assert.strictEqual(patched.some(item => item.table === 'support_requests' && item.values.status === 'closed'), false);
   } finally {
     supabase.insert = originalInsert;
     supabase.select = originalSelect;
@@ -2273,7 +2218,6 @@ async function testGroupVoicePlaceholderOpensRequest() {
   await testEyeReactionOpensTicketForNonEmployee();
   await testHundredReactionClosesTicketAndClickUpTask();
   await testHundredReactionClosesTicketForNonEmployee();
-  await testGroupHundredTextClosesLatestWithoutReply();
   await testMainGroupBroadcastPreview();
   await testMainGroupBroadcastConfirmSendsAndReports();
   await testMainGroupBroadcastDeletePreview();

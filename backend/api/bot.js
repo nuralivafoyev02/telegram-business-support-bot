@@ -631,6 +631,17 @@ async function handleDoneReaction(reaction = {}, settings = {}) {
   }
   await ensureReactionContext(reaction);
   const employee = await resolveReactionEmployee(reaction);
+  if (!employee) {
+    console.warn('[bot:done-reaction]', {
+      skipped: 'not_employee',
+      actor_id: actor.id || null,
+      actor_username: actor.username || null,
+      actor_name: tgUserName(actor) || null,
+      chat_id: chat.id,
+      message_id: reaction.message_id || null
+    });
+    return { ok: false, skipped: 'not_employee' };
+  }
   const closeMessage = {
     message_id: reaction.message_id,
     date: reaction.date,
@@ -679,6 +690,16 @@ async function handleEyeReaction(reaction = {}, settings = {}) {
     return { ok: false, skipped: 'bot_actor' };
   }
   const employee = await resolveReactionEmployee(reaction);
+  if (!employee) {
+    console.warn('[bot:eye-reaction]', {
+      skipped: 'not_employee',
+      actor_id: actor.id || null,
+      actor_username: actor.username || null,
+      actor_name: tgUserName(actor) || null,
+      chat_id: chat.id
+    });
+    return { ok: false, skipped: 'not_employee' };
+  }
 
   await ensureReactionContext(reaction);
 
@@ -2336,23 +2357,8 @@ function isLikelyEmployeeSupportAnswer(message = {}, text = '') {
   return meaningfulTextLength(value) >= 8 || looksLikeEmployeeResolution(value);
 }
 
-function isGroupCloseShortcut(text = '') {
-  const value = String(text || '').trim();
-  return value === '💯' || /^100[!.\s]*$/i.test(value);
-}
-
-async function maybeCloseRequestFromGroupShortcut(message, settings = null) {
-  if (!isGroupChat(message.chat || {})) return false;
-  if (message.reply_to_message || (message.from && message.from.is_bot)) return false;
-  if (!isGroupCloseShortcut(getMessageText(message))) return false;
-  const result = await metrics.closeLatestRequest({ message, employee: null, recordMissing: false });
-  if (!result.closed) return false;
-  await refreshTicketNotificationAfterGroupClose(result, message);
-  await maybeReplyDone(message, result, settings);
-  return true;
-}
-
 async function maybeCloseRequestFromEmployeeAnswer(message, classification, employee, text, settings = null) {
+  if (!employee || !employee.id) return false;
   if (!isGroupChat(message.chat || {})) return false;
   if (message.from && message.from.is_bot) return false;
   if (message.reply_to_message) return false;
@@ -2720,8 +2726,6 @@ async function processMessage(updateKind, message, options = {}) {
   if (isGroupChat(chat) && message.reply_to_message && !(message.from && message.from.is_bot)) {
     if (await maybeCloseRequestFromReply(message, 'message', employee, settings)) return;
   }
-
-  if (await maybeCloseRequestFromGroupShortcut(message, settings)) return;
 
   const assistantKnownTask = isAssistantKnownTask(text);
   const assistantAddressCandidate = !assistantKnownTask && hasAssistantAddressCandidate(message, text);
