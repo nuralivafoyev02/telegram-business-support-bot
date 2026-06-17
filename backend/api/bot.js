@@ -548,10 +548,13 @@ async function attachReactionMediaToClickUp(config, taskId, media = []) {
 }
 
 async function getSavedReactionMessage(chatId, messageId) {
+  const queryChatId = metrics.telegramIdForQuery(chatId);
+  const queryMessageId = metrics.telegramIdForQuery(messageId);
+  if (queryChatId === null || queryMessageId === null) return null;
   const rows = await supabase.select('messages', {
     select: 'id,tg_message_id,chat_id,from_tg_user_id,from_name,from_username,source_type,classification,text,business_connection_id,raw,created_at',
-    chat_id: supabase.eq(chatId),
-    tg_message_id: supabase.eq(messageId),
+    chat_id: supabase.eq(queryChatId),
+    tg_message_id: supabase.eq(queryMessageId),
     limit: '1'
   }).catch(() => []);
   return rows[0] || null;
@@ -633,6 +636,7 @@ async function handleDoneReaction(reaction = {}, settings = {}) {
     return { ok: false, skipped: 'bot_actor' };
   }
   await ensureReactionContext(reaction);
+  await ensureReactionTargetMessage(reaction, chat);
   const employee = await resolveReactionEmployee(reaction);
   const allowAnonymousAdminClose = !employee && isAnonymousGroupReactionActor(reaction);
   if (!employee && !allowAnonymousAdminClose) {
@@ -657,7 +661,7 @@ async function handleDoneReaction(reaction = {}, settings = {}) {
   };
   const result = await metrics.closeRequestByMessage({ message: closeMessage, targetMessageId: reaction.message_id, employee });
   if (result.closed) {
-    await refreshTicketNotificationAfterGroupClose(result, closeMessage);
+    await refreshTicketNotificationAfterGroupClose(result, closeMessage, { closeSource: 'group_reaction' });
     await maybeReplyDone(closeMessage, result, settings);
   } else {
     console.warn('[bot:done-reaction]', {
@@ -2295,13 +2299,13 @@ async function classifyIncomingMessage({ text, chat, sourceType, updateKind, mes
   return classification;
 }
 
-async function refreshTicketNotificationAfterGroupClose(result, message = {}) {
+async function refreshTicketNotificationAfterGroupClose(result, message = {}, { closeSource = 'group_reply' } = {}) {
   if (!result?.closed || !result?.request?.id) return;
   const request = await loadRequestById(result.request.id) || result.request;
   const solutionText = String(getMessageText(message) || '').trim();
   const closedByName = String(request.closed_by_name || tgUserName(message.from || {})).trim();
   await refreshTicketNotificationMessage(request, {
-    closeSource: 'group_reply',
+    closeSource,
     solutionText,
     closedByName
   }).catch(() => null);

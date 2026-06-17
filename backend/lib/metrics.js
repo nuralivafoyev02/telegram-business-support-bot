@@ -739,82 +739,9 @@ async function findOpenRequestByLinkedMessage({ chatId, messageId }) {
   return resolveFromEvents(linkedEvents);
 }
 
-async function findOpenRequestByMessageAuthor({ chatId, messageId }) {
-  const queryChatId = telegramIdForQuery(chatId);
-  const queryMessageId = telegramIdForQuery(messageId);
-  if (queryChatId === null || queryMessageId === null) return null;
-
-  const messageRows = await supabase.select('messages', {
-    select: 'from_tg_user_id,created_at',
-    chat_id: supabase.eq(queryChatId),
-    tg_message_id: supabase.eq(queryMessageId),
-    limit: '1'
-  }).catch(() => []);
-  const target = messageRows[0] || null;
-  const customerId = target?.from_tg_user_id;
-  if (!customerId) return null;
-
-  const candidateRows = await supabase.select('support_requests', {
-    select: 'id,chat_id,status,created_at,initial_text,customer_tg_id,customer_name,initial_message_id',
-    chat_id: supabase.eq(queryChatId),
-    customer_tg_id: supabase.eq(customerId),
-    status: 'eq.open',
-    order: supabase.order('created_at', false),
-    limit: '20'
-  }).catch(() => []);
-
-  return candidateRows[0] || null;
-}
-
-function isStubLikeOpenRequest(request = {}) {
-  if (!request || !isOpenRequestStatus(request.status)) return false;
-  const text = String(request.initial_text || '').trim();
-  const noCustomer = request.customer_tg_id === undefined || request.customer_tg_id === null || request.customer_tg_id === '';
-  return noCustomer && (text === '--' || text === '');
-}
-
-function toNumericTelegramId(value) {
-  const number = Number(String(value === undefined || value === null ? '' : value).trim());
-  return Number.isFinite(number) ? number : null;
-}
-
-async function findOpenStubRequestFallback({ chatId, messageId }) {
-  const queryChatId = telegramIdForQuery(chatId);
-  if (queryChatId === null) return null;
-  const rows = await supabase.select('support_requests', {
-    select: 'id,chat_id,status,created_at,initial_text,customer_tg_id,customer_name,initial_message_id',
-    chat_id: supabase.eq(queryChatId),
-    status: 'eq.open',
-    order: supabase.order('created_at', false),
-    limit: '30'
-  }).catch(() => []);
-  const stubRows = rows.filter(isStubLikeOpenRequest);
-  if (stubRows.length === 1) return stubRows[0];
-  if (stubRows.length <= 1) return null;
-
-  const targetMessageId = toNumericTelegramId(messageId);
-  if (targetMessageId === null) return null;
-
-  const withNumericIds = stubRows
-    .map(row => ({ row, initialId: toNumericTelegramId(row.initial_message_id) }))
-    .filter(item => item.initialId !== null);
-  if (!withNumericIds.length) return null;
-
-  const sameOrBefore = withNumericIds
-    .filter(item => item.initialId <= targetMessageId)
-    .sort((a, b) => b.initialId - a.initialId);
-  if (sameOrBefore[0]) return sameOrBefore[0].row;
-
-  return withNumericIds
-    .sort((a, b) => Math.abs(a.initialId - targetMessageId) - Math.abs(b.initialId - targetMessageId))[0]?.row || null;
-}
-
 async function findOpenRequestForReactionTarget({ chatId, messageId }) {
   return await findOpenRequestByMessage({ chatId, messageId })
-    || await findOpenRequestByLinkedMessage({ chatId, messageId })
-    || await findOpenRequestByMessageAuthor({ chatId, messageId })
-    || await findOpenStubRequestFallback({ chatId, messageId })
-    || await findOpenRequestByInitialMessage(chatId, messageId);
+    || await findOpenRequestByLinkedMessage({ chatId, messageId });
 }
 
 async function closeRequestByMessage({ message, targetMessageId, employee }) {
@@ -866,5 +793,6 @@ module.exports = {
   closeRequestByMessage,
   findOpenRequestByMessage,
   findOpenRequestForReactionTarget,
+  telegramIdForQuery,
   registerChatMemberUpdate
 };

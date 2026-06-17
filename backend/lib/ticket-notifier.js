@@ -364,7 +364,7 @@ function enrichRequestForNotification(request = {}, { openSource = '', companyId
 }
 
 function isAnsweredCloseSource(closeSource = '') {
-  return closeSource === 'admin_panel' || closeSource === 'group_reply';
+  return closeSource === 'admin_panel' || closeSource === 'group_reply' || closeSource === 'group_reaction';
 }
 
 function closedStatusLabel(request = {}, options = {}) {

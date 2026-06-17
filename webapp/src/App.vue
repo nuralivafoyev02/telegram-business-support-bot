@@ -1626,7 +1626,7 @@
                         class="metric-request-card" :class="{ open: request.status === 'open' }">
                         <div class="metric-request-head">
                           <span class="badge" :class="request.status === 'closed' ? 'green' : 'orange'">
-                            {{ statusLabel(request.status) }}
+                            {{ requestStatusLabel(request) }}
                           </span>
                           <time>{{ fmtDate(request.created_at) }}</time>
                         </div>
@@ -1714,7 +1714,7 @@
                           <div v-if="chatMessageBodyText(message)" class="chat-message-text"
                             v-html="chatMessageHtml(message)"></div>
                           <div class="chat-bubble-footer">
-                            <span v-if="isClosedTicketMessage(message)" class="chat-ticket chat-ticket-closed">Yopilgan</span>
+                            <span v-if="isClosedTicketMessage(message)" class="chat-ticket chat-ticket-closed">{{ messageStatusLabel(message) }}</span>
                             <span v-else-if="showMessageStatus(message)" class="badge"
                               :class="messageStatusBadgeClass(message)">{{ messageStatusLabel(message) }}</span>
                             <span v-if="showRequestBadge(message)" class="chat-ticket">So‘rov</span>
@@ -1835,7 +1835,7 @@
                         :class="{ open: request.status === 'open' }">
                         <div class="metric-request-head">
                           <span class="badge" :class="request.status === 'closed' ? 'green' : 'orange'">
-                            {{ statusLabel(request.status) }}
+                            {{ requestStatusLabel(request) }}
                           </span>
                           <time>{{ fmtDate(request.created_at) }}</time>
                         </div>
@@ -1922,7 +1922,7 @@
                           <div v-if="chatMessageBodyText(message)" class="chat-message-text"
                             v-html="chatMessageHtml(message)"></div>
                           <div class="chat-bubble-footer">
-                            <span v-if="isClosedTicketMessage(message)" class="chat-ticket chat-ticket-closed">Yopilgan</span>
+                            <span v-if="isClosedTicketMessage(message)" class="chat-ticket chat-ticket-closed">{{ messageStatusLabel(message) }}</span>
                             <span v-else-if="showMessageStatus(message)" class="badge"
                               :class="messageStatusBadgeClass(message)">{{ messageStatusLabel(message) }}</span>
                             <span v-if="showRequestBadge(message)" class="chat-ticket">Ticket</span>
@@ -2139,7 +2139,7 @@
                       :class="{ open: request.status === 'open' }">
                       <div>
                         <b>Ticket #{{ shortId(request.id) }}</b>
-                        <span>{{ statusLabel(request.status) }}</span>
+                        <span>{{ requestStatusLabel(request) }}</span>
                       </div>
                       <p>{{ request.initial_text || 'So‘rov matni yo‘q' }}</p>
                       <template v-if="request.status === 'open'">
@@ -2225,7 +2225,7 @@
                           <div v-if="chatMessageBodyText(message)" class="chat-message-text"
                             v-html="chatMessageHtml(message)"></div>
                           <div class="chat-bubble-footer">
-                            <span v-if="isClosedTicketMessage(message)" class="chat-ticket chat-ticket-closed">Yopilgan</span>
+                            <span v-if="isClosedTicketMessage(message)" class="chat-ticket chat-ticket-closed">{{ messageStatusLabel(message) }}</span>
                             <span v-else-if="showMessageStatus(message)" class="badge"
                               :class="messageStatusBadgeClass(message)">{{ messageStatusLabel(message) }}</span>
                             <span v-if="showRequestBadge(message)" class="chat-ticket">So‘rov</span>
@@ -4184,6 +4184,20 @@ function statusLabel(value) {
   }[String(value || '').toLowerCase()] || value || '—');
 }
 
+function isReactionClosedRequest(request = {}, message = {}) {
+  if (String(request?.status || '').toLowerCase() !== 'closed') return false;
+  const messageId = String(message?.message_id || '').trim();
+  const doneId = String(request.done_message_id || '').trim();
+  if (messageId && doneId && messageId === doneId) return true;
+  const initialId = String(request.initial_message_id || '').trim();
+  return Boolean(initialId && doneId && initialId === doneId);
+}
+
+function requestStatusLabel(request = {}, message = {}) {
+  if (isReactionClosedRequest(request, message)) return 'Javob berildi';
+  return statusLabel(request?.status);
+}
+
 function chatMembershipLabel(chat = {}) {
   const sourceType = String(chat?.source_type || '').toLowerCase();
   if (sourceType !== 'group') return '';
@@ -5964,7 +5978,37 @@ function messageRequestStatus(message = {}) {
   return '';
 }
 
+function messageRequestRow(message = {}) {
+  const requestId = String(message.request_id || '').trim();
+  const messageId = String(message.message_id || '').trim();
+  const lookup = modal.value === 'companyGroupActivity'
+    ? [...(companyGroupRequests.value || [])]
+    : modal.value === 'employeeCompanies'
+      ? [
+        ...(employeeProfileChatDetail.value.requests || []),
+        ...(employeeProfileChatRequests.value || [])
+      ]
+      : modal.value === 'metricDetail'
+        ? [...(metricChatDetail.value.requests || [])]
+        : [
+          ...(chatDetail.value.requests || []),
+          ...(employeeProfileChatDetail.value.requests || []),
+          ...(employeeProfileChatRequests.value || [])
+        ];
+  if (requestId) {
+    const request = lookup.find(row => isSameRequest(row, requestId));
+    if (request) return request;
+  }
+  if (messageId) {
+    const request = lookup.find(row => String(row.initial_message_id || '') === messageId);
+    if (request) return request;
+  }
+  return null;
+}
+
 function messageStatusLabel(message = {}) {
+  const request = messageRequestRow(message);
+  if (request) return requestStatusLabel(request, message);
   const status = messageRequestStatus(message);
   return status ? statusLabel(status) : '';
 }

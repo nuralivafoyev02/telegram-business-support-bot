@@ -2638,9 +2638,6 @@ async function testGroupVoicePlaceholderOpensRequest() {
   await testHundredReactionClosesTicketForNonEmployee();
   await testHundredReactionRetriesWhenDoneAlreadyPresent();
   await testHundredReactionClosesTicketLinkedByEvent();
-  await testHundredReactionClosesTicketByMessageAuthorFallback();
-  await testHundredReactionClosesSingleStubTicketFallback();
-  await testHundredReactionClosesNearestStubTicketFallback();
   await testMainGroupBroadcastPreview();
   await testMainGroupBroadcastConfirmSendsAndReports();
   await testMainGroupBroadcastDeletePreview();
