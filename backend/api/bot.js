@@ -379,6 +379,14 @@ function reactionWasAddedDone(reaction = {}, settings = {}) {
     .some(key => reactionWasAddedKey(reaction, key));
 }
 
+function reactionHasDone(reaction = {}, settings = {}) {
+  const reactions = settings.messageReactions || {};
+  const newSet = reactionKeySet(reaction.new_reaction);
+  if (newSet.has(DONE_REACTION_EMOJI)) return true;
+  return configuredCustomEmojiKeys(reactions.doneCustomEmojiIds)
+    .some(key => newSet.has(key));
+}
+
 function reactionWasAddedEye(reaction = {}, settings = {}) {
   const reactions = settings.messageReactions || {};
   if (EYE_REACTION_EMOJIS.some(emoji => reactionWasAddedKey(reaction, emoji))) return true;
@@ -596,6 +604,13 @@ function reactionActor(reaction = {}) {
   return reaction.user || reaction.actor_chat || {};
 }
 
+function isAnonymousGroupReactionActor(reaction = {}) {
+  const actorChat = reaction.actor_chat || {};
+  const chat = reaction.chat || {};
+  if (!actorChat?.id || !actorChat.type) return false;
+  return String(actorChat.id) === String(chat.id);
+}
+
 async function resolveReactionEmployee(reaction = {}) {
   const actor = reactionActor(reaction);
   if (!actor?.id || actor.is_bot || actor.type) return null;
@@ -619,7 +634,8 @@ async function handleDoneReaction(reaction = {}, settings = {}) {
   }
   await ensureReactionContext(reaction);
   const employee = await resolveReactionEmployee(reaction);
-  if (!employee) {
+  const allowAnonymousAdminClose = !employee && isAnonymousGroupReactionActor(reaction);
+  if (!employee && !allowAnonymousAdminClose) {
     console.warn('[bot:done-reaction]', {
       skipped: 'not_employee',
       actor_id: actor.id || null,
@@ -635,7 +651,9 @@ async function handleDoneReaction(reaction = {}, settings = {}) {
     date: reaction.date,
     text: '💯',
     chat,
-    from: actor.id && !actor.type ? actor : {}
+    from: actor.id && !actor.type ? actor : {
+      first_name: tgUserName(actor) || 'Anonymous admin'
+    }
   };
   const result = await metrics.closeRequestByMessage({ message: closeMessage, targetMessageId: reaction.message_id, employee });
   if (result.closed) {
@@ -861,7 +879,7 @@ function reactionsEnabledForChat(reaction = {}, settings = {}) {
 
 async function handleMessageReaction(reaction = {}) {
   const settings = await getBotSettings();
-  if (settings.messageReactions?.ticketClose !== false && reactionWasAddedDone(reaction, settings)) {
+  if (settings.messageReactions?.ticketClose !== false && reactionHasDone(reaction, settings)) {
     const result = await handleDoneReaction(reaction, settings);
     if (result.skipped || result.closed === false) {
       console.warn('[bot:done-reaction:result]', result);
