@@ -104,6 +104,10 @@ function truncateText(value = '', max = 320) {
   return text.length > max ? `${text.slice(0, max - 1)}…` : text;
 }
 
+function normalizeSupportUsername(value = '') {
+  return String(value || '').replace(/^@/, '').trim().toLowerCase();
+}
+
 function employeeLabel(employee = null, fallback = '—') {
   if (!employee) return fallback;
   return String(employee.full_name || employee.username || fallback).trim() || fallback;
@@ -211,7 +215,16 @@ async function loadCompanyContext(companyId) {
     || externalRows.find(row => String(row.name || '').trim() === String(company?.name || '').trim());
   if (external) {
     externalName = String(external.name || '').trim();
-    supportEmployee = await loadEmployeeByUsername(external.uyqur_support_username);
+    const supportUsername = normalizeSupportUsername(external.uyqur_support_username);
+    if (supportUsername) {
+      supportEmployee = await loadEmployeeByUsername(supportUsername);
+      if (!supportEmployee) {
+        supportEmployee = {
+          username: supportUsername,
+          full_name: `@${supportUsername}`
+        };
+      }
+    }
   }
 
   return {

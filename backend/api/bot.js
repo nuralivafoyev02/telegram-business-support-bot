@@ -1781,7 +1781,7 @@ async function handleHelp(message) {
     '',
     '1) Mijoz Uyqur dasturidagi savol yoki muammoni guruh/business chatga yozadi.',
     '2) Bot uni <b>open request</b> sifatida saqlaydi.',
-    '3) Xodim tushuntirib yoki muammoni hal qilib javob yozganda ticket yopiladi. <b>#done</b> va reply ham ishlaydi.',
+    '3) Xodim tushuntirib yoki muammoni hal qilib javob yozganda ticket yopiladi. <b>#done</b>, savol xabariga <b>💯</b> reaksiya va reply ham ishlaydi.',
     '4) Statistika webappda yangilanadi.',
     '5) Guruh webappda ko‘rinmasa guruh ichida <b>/register</b> yuboring.',
     '',
