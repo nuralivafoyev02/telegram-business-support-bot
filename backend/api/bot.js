@@ -652,6 +652,7 @@ async function handleDoneReaction(reaction = {}, settings = {}) {
   const result = await metrics.closeRequestByMessage({ message: closeMessage, targetMessageId: reaction.message_id, employee });
   if (result.closed) {
     await refreshTicketNotificationAfterGroupClose(result, closeMessage);
+    await maybeReplyDone(closeMessage, result, settings);
   } else {
     console.warn('[bot:done-reaction]', {
       skipped: 'no_open_request',
@@ -1866,6 +1867,16 @@ async function maybeReactToTicketClose(message, settings = null, { closedRequest
 async function maybeReplyDone(message, result, settings = null) {
   if (result.closed) {
     await maybeReactToTicketClose(message, settings, { closedRequest: result.request });
+    const isHundredReactionClose = String(getMessageText(message) || '').trim() === '💯';
+    if (isHundredReactionClose && isGroupChat(message.chat || {}) && !boolEnv('SILENT_DONE_REPLY', false)) {
+      await sendTrackedBotReply({
+        message,
+        text: '✅ Yopildi',
+        options: { reply_to_message_id: message.message_id },
+        updateKind: 'bot_reaction_close',
+        rawSource: 'bot_reaction_close'
+      }).catch(error => logBackgroundError('reaction-close-reply', error));
+    }
     return;
   }
   if (isGroupChat(message.chat || {})) return;
