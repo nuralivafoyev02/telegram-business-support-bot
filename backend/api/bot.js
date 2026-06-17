@@ -602,18 +602,6 @@ async function resolveReactionEmployee(reaction = {}) {
   return metrics.getKnownEmployeeByTelegramUser(actor).catch(() => null);
 }
 
-function reactionWasAddedCustomDoneCandidate(reaction = {}, settings = {}) {
-  if (reactionWasAddedDone(reaction, settings)) return false;
-  const addedCustom = addedCustomEmojiIds(reaction);
-  if (!addedCustom.length) return false;
-  if (EYE_REACTION_EMOJIS.some(emoji => reactionWasAddedKey(reaction, emoji))) return false;
-  const reactions = settings.messageReactions || {};
-  if (configuredCustomEmojiKeys(reactions.eyeCustomEmojiIds).some(key => reactionWasAddedKey(reaction, key))) {
-    return false;
-  }
-  return true;
-}
-
 async function ensureReactionContext(reaction = {}) {
   const chat = reaction.chat || {};
   const actor = reactionActor(reaction);
@@ -873,7 +861,7 @@ function reactionsEnabledForChat(reaction = {}, settings = {}) {
 
 async function handleMessageReaction(reaction = {}) {
   const settings = await getBotSettings();
-  if (reactionWasAddedDone(reaction, settings) && settings.messageReactions?.ticketClose !== false) {
+  if (settings.messageReactions?.ticketClose !== false && reactionWasAddedDone(reaction, settings)) {
     const result = await handleDoneReaction(reaction, settings);
     if (result.skipped || result.closed === false) {
       console.warn('[bot:done-reaction:result]', result);
@@ -882,20 +870,6 @@ async function handleMessageReaction(reaction = {}) {
   }
   if (!reactionsEnabledForChat(reaction, settings)) {
     return { ok: true, handled: 'message_reaction_disabled' };
-  }
-  if (settings.messageReactions?.ticketClose !== false && reactionWasAddedCustomDoneCandidate(reaction, settings)) {
-    const chatId = reaction.chat?.id;
-    const messageId = reaction.message_id;
-    if (chatId && messageId) {
-      const openRequest = await metrics.findOpenRequestByMessage({ chatId, messageId }).catch(() => null);
-      if (openRequest) {
-        const result = await handleDoneReaction(reaction, settings);
-        if (result.skipped || result.closed === false) {
-          console.warn('[bot:done-reaction:custom-close:result]', result);
-        }
-        return { ok: true, handled: 'message_reaction_done', ...result };
-      }
-    }
   }
   if (reactionWasAddedEye(reaction, settings)) {
     const result = await handleEyeReaction(reaction, settings);

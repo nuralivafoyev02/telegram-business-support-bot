@@ -1769,6 +1769,163 @@ async function testHundredReactionClosesTicketForNonEmployee() {
   }
 }
 
+async function testHundredReactionRetriesWhenDoneAlreadyPresent() {
+  const originalInsert = supabase.insert;
+  const originalSelect = supabase.select;
+  const originalPatch = supabase.patch;
+  const patched = [];
+  clearBotSettingsCache();
+
+  supabase.select = async (table, query = {}) => {
+    if (table === 'bot_settings') {
+      return [{ key: 'message_reactions', value: { enabled: true, ticket_close: true, emoji: '⚡' } }];
+    }
+    if (table === 'employees') {
+      return [{ id: 'employee-3', tg_user_id: 777, full_name: 'Ali', username: 'ali', is_active: true }];
+    }
+    if (table === 'tg_chats') return [];
+    if (table === 'support_requests') {
+      if (query.id) {
+        return [{
+          id: 'request-3',
+          chat_id: -100333,
+          status: 'open',
+          customer_tg_id: 1003,
+          customer_name: 'Customer',
+          initial_message_id: 99,
+          initial_text: 'Navruz savol',
+          created_at: new Date().toISOString()
+        }];
+      }
+      if (query.status === 'eq.open') {
+        return [{
+          id: 'request-3',
+          chat_id: -100333,
+          status: 'open',
+          customer_tg_id: 1003,
+          customer_name: 'Customer',
+          initial_message_id: 99,
+          initial_text: 'Navruz savol',
+          created_at: new Date().toISOString()
+        }];
+      }
+    }
+    return [];
+  };
+  supabase.insert = async (table, rows) => rows.map(row => ({ id: `${table}-row`, ...row }));
+  supabase.patch = async (table, query, values) => {
+    patched.push({ table, query, values });
+    return [{ id: 'request-3', ...values }];
+  };
+
+  try {
+    const result = await callHandler({
+      update_id: 155,
+      message_reaction: {
+        chat: { id: -100333, type: 'supergroup', title: 'China House' },
+        message_id: 99,
+        date: 1777100600,
+        user: { id: 777, first_name: 'Ali', username: 'ali', is_bot: false },
+        old_reaction: [{ type: 'emoji', emoji: '💯' }],
+        new_reaction: [{ type: 'emoji', emoji: '💯' }, { type: 'emoji', emoji: '👍' }]
+      }
+    });
+
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.handled, 'message_reaction_done');
+    assert.strictEqual(result.payload.closed, true);
+    assert.strictEqual(patched.some(item => item.table === 'support_requests' && item.values.status === 'closed'), true);
+  } finally {
+    supabase.insert = originalInsert;
+    supabase.select = originalSelect;
+    supabase.patch = originalPatch;
+    clearBotSettingsCache();
+  }
+}
+
+async function testHundredReactionClosesTicketLinkedByEvent() {
+  const originalInsert = supabase.insert;
+  const originalSelect = supabase.select;
+  const originalPatch = supabase.patch;
+  const patched = [];
+  clearBotSettingsCache();
+
+  supabase.select = async (table, query = {}) => {
+    if (table === 'bot_settings') {
+      return [{ key: 'message_reactions', value: { enabled: true, ticket_close: true, emoji: '⚡' } }];
+    }
+    if (table === 'employees') {
+      return [{ id: 'employee-4', tg_user_id: 778, full_name: 'Mirshod', username: 'mirshod', is_active: true }];
+    }
+    if (table === 'tg_chats') return [];
+    if (table === 'request_events') {
+      return [{
+        request_id: 'request-4',
+        event_type: 'note',
+        tg_message_id: 120,
+        created_at: new Date().toISOString()
+      }];
+    }
+    if (table === 'support_requests') {
+      if (query.id) {
+        return [{
+          id: 'request-4',
+          chat_id: -100444,
+          status: 'open',
+          customer_tg_id: 1004,
+          customer_name: 'BAXTIYOR',
+          initial_message_id: 110,
+          initial_text: 'Birinchi xabar',
+          created_at: new Date().toISOString()
+        }];
+      }
+      if (query.initial_message_id) return [];
+      if (query.status === 'eq.open') {
+        return [{
+          id: 'request-4',
+          chat_id: -100444,
+          status: 'open',
+          customer_tg_id: 1004,
+          customer_name: 'BAXTIYOR',
+          initial_message_id: 110,
+          initial_text: 'Birinchi xabar',
+          created_at: new Date().toISOString()
+        }];
+      }
+    }
+    return [];
+  };
+  supabase.insert = async (table, rows) => rows.map(row => ({ id: `${table}-row`, ...row }));
+  supabase.patch = async (table, query, values) => {
+    patched.push({ table, query, values });
+    return [{ id: 'request-4', ...values }];
+  };
+
+  try {
+    const result = await callHandler({
+      update_id: 156,
+      message_reaction: {
+        chat: { id: -100444, type: 'supergroup', title: 'China House' },
+        message_id: 120,
+        date: 1777100700,
+        user: { id: 778, first_name: 'Mirshod', username: 'mirshod', is_bot: false },
+        old_reaction: [],
+        new_reaction: [{ type: 'emoji', emoji: '💯' }]
+      }
+    });
+
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.handled, 'message_reaction_done');
+    assert.strictEqual(result.payload.closed, true);
+    assert.strictEqual(patched.some(item => item.table === 'support_requests' && item.values.status === 'closed'), true);
+  } finally {
+    supabase.insert = originalInsert;
+    supabase.select = originalSelect;
+    supabase.patch = originalPatch;
+    clearBotSettingsCache();
+  }
+}
+
 async function testMainGroupBroadcastPreview() {
   const originalInsert = supabase.insert;
   const originalSelect = supabase.select;
@@ -2218,6 +2375,8 @@ async function testGroupVoicePlaceholderOpensRequest() {
   await testEyeReactionOpensTicketForNonEmployee();
   await testHundredReactionClosesTicketAndClickUpTask();
   await testHundredReactionClosesTicketForNonEmployee();
+  await testHundredReactionRetriesWhenDoneAlreadyPresent();
+  await testHundredReactionClosesTicketLinkedByEvent();
   await testMainGroupBroadcastPreview();
   await testMainGroupBroadcastConfirmSendsAndReports();
   await testMainGroupBroadcastDeletePreview();

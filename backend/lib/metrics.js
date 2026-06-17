@@ -435,15 +435,26 @@ function isClosedLikeRequestStatus(status = '') {
 }
 
 async function findRequestByInitialMessage(chatId, messageId) {
-  if (!chatId || !messageId) return null;
+  const queryChatId = telegramIdForQuery(chatId);
+  const queryMessageId = telegramIdForQuery(messageId);
+  const normalizedMessageId = normalizeTelegramKey(messageId);
+  if (queryChatId === null || queryMessageId === null || !normalizedMessageId) return null;
   const rows = await supabase.select('support_requests', {
     select: 'id,source_type,chat_id,company_id,customer_tg_id,customer_name,initial_message_id,initial_text,status,created_at,closed_at,closed_by_employee_id,open_source,opened_by_employee_id,assigned_to_employee_id',
-    chat_id: supabase.eq(chatId),
-    initial_message_id: supabase.eq(messageId),
+    chat_id: supabase.eq(queryChatId),
+    initial_message_id: supabase.eq(queryMessageId),
     order: supabase.order('created_at', false),
     limit: '1'
   }).catch(() => []);
-  return rows[0] || null;
+  if (rows[0]) return rows[0];
+
+  const allRows = await supabase.select('support_requests', {
+    select: 'id,source_type,chat_id,company_id,customer_tg_id,customer_name,initial_message_id,initial_text,status,created_at,closed_at,closed_by_employee_id,open_source,opened_by_employee_id,assigned_to_employee_id',
+    chat_id: supabase.eq(queryChatId),
+    order: supabase.order('created_at', false),
+    limit: '200'
+  }).catch(() => []);
+  return allRows.find(row => normalizeTelegramKey(row.initial_message_id) === normalizedMessageId) || null;
 }
 
 async function findOpenRequestByInitialMessage(chatId, messageId) {
@@ -696,28 +707,48 @@ async function findOpenRequestByMessage({ chatId, messageId }) {
 async function findOpenRequestByLinkedMessage({ chatId, messageId }) {
   const queryChatId = telegramIdForQuery(chatId);
   const queryMessageId = telegramIdForQuery(messageId);
-  if (queryChatId === null || queryMessageId === null) return null;
+  const normalizedMessageId = normalizeTelegramKey(messageId);
+  if (queryChatId === null || queryMessageId === null || !normalizedMessageId) return null;
+
+  async function resolveFromEvents(events = []) {
+    for (const event of events) {
+      if (!event?.request_id) continue;
+      if (normalizeTelegramKey(event.tg_message_id) !== normalizedMessageId) continue;
+      const request = await findOpenRequestById(event.request_id);
+      if (request && isOpenRequestStatus(request.status)) return request;
+    }
+    return null;
+  }
+
   const events = await supabase.select('request_events', {
-    select: 'request_id,event_type,created_at',
+    select: 'request_id,event_type,tg_message_id,created_at',
     chat_id: supabase.eq(queryChatId),
     tg_message_id: supabase.eq(queryMessageId),
     order: supabase.order('created_at', false),
     limit: '10'
   }).catch(() => []);
-  for (const event of events) {
-    if (!event?.request_id) continue;
-    const request = await findOpenRequestById(event.request_id);
-    if (request && isOpenRequestStatus(request.status)) return request;
-  }
-  return null;
+  const directMatch = await resolveFromEvents(events);
+  if (directMatch) return directMatch;
+
+  const linkedEvents = await supabase.select('request_events', {
+    select: 'request_id,event_type,tg_message_id,created_at',
+    chat_id: supabase.eq(queryChatId),
+    order: supabase.order('created_at', false),
+    limit: '500'
+  }).catch(() => []);
+  return resolveFromEvents(linkedEvents);
+}
+
+async function findOpenRequestForReactionTarget({ chatId, messageId }) {
+  return await findOpenRequestByMessage({ chatId, messageId })
+    || await findOpenRequestByLinkedMessage({ chatId, messageId })
+    || await findOpenRequestByInitialMessage(chatId, messageId);
 }
 
 async function closeRequestByMessage({ message, targetMessageId, employee }) {
   const chat = message.chat || {};
   const messageId = targetMessageId || message.message_id;
-  const request = await findOpenRequestByMessage({ chatId: chat.id, messageId })
-    || await findOpenRequestByLinkedMessage({ chatId: chat.id, messageId })
-    || await findOpenRequestByInitialMessage(chat.id, messageId);
+  const request = await findOpenRequestForReactionTarget({ chatId: chat.id, messageId });
   if (!request) {
     const existing = await findRequestByInitialMessage(chat.id, messageId);
     if (existing && isClosedLikeRequestStatus(existing.status)) {
@@ -762,5 +793,6 @@ module.exports = {
   closeRequestByReply,
   closeRequestByMessage,
   findOpenRequestByMessage,
+  findOpenRequestForReactionTarget,
   registerChatMemberUpdate
 };
