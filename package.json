@@ -20,5 +20,8 @@
   },
   "engines": {
     "node": ">=20"
+  },
+  "dependencies": {
+    "@vercel/functions": "^2.0.0"
   }
 }

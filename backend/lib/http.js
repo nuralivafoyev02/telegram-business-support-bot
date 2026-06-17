@@ -51,4 +51,23 @@ function allowCors(req, res) {
   return false;
 }
 
-module.exports = { sendJson, readBody, getQuery, allowCors };
+function scheduleBackgroundWork(workPromise, res) {
+  const task = Promise.resolve(workPromise).catch(error => {
+    console.error('[http:background-work]', error);
+    return null;
+  });
+  if (res && typeof res.waitUntil === 'function') {
+    res.waitUntil(task);
+    return true;
+  }
+  try {
+    const { waitUntil } = require('@vercel/functions');
+    if (typeof waitUntil === 'function') {
+      waitUntil(task);
+      return true;
+    }
+  } catch (_error) {}
+  return false;
+}
+
+module.exports = { sendJson, readBody, getQuery, allowCors, scheduleBackgroundWork };

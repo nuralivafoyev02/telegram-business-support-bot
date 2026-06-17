@@ -1,6 +1,6 @@
 'use strict';
 
-const { sendJson, readBody, getQuery } = require('../lib/http');
+const { sendJson, readBody, getQuery, scheduleBackgroundWork } = require('../lib/http');
 const { optionalEnv, boolEnv } = require('../lib/env');
 const supabase = require('../lib/supabase');
 const { sendMessage, deleteMessage, reactToMessage, answerCallbackQuery, editMessageReplyMarkup, escapeHtml, tgUserName, getWebhookInfo, getMe, getChatMember, getFile, downloadFile } = require('../lib/telegram');
@@ -2336,8 +2336,24 @@ function isLikelyEmployeeSupportAnswer(message = {}, text = '') {
   return meaningfulTextLength(value) >= 8 || looksLikeEmployeeResolution(value);
 }
 
+function isGroupCloseShortcut(text = '') {
+  const value = String(text || '').trim();
+  return value === '💯' || /^100[!.\s]*$/i.test(value);
+}
+
+async function maybeCloseRequestFromGroupShortcut(message, settings = null) {
+  if (!isGroupChat(message.chat || {})) return false;
+  if (message.reply_to_message || (message.from && message.from.is_bot)) return false;
+  if (!isGroupCloseShortcut(getMessageText(message))) return false;
+  const result = await metrics.closeLatestRequest({ message, employee: null, recordMissing: false });
+  if (!result.closed) return false;
+  await refreshTicketNotificationAfterGroupClose(result, message);
+  await maybeReplyDone(message, result, settings);
+  return true;
+}
+
 async function maybeCloseRequestFromEmployeeAnswer(message, classification, employee, text, settings = null) {
-  if (!employee || !employee.id) return false;
+  if (!isGroupChat(message.chat || {})) return false;
   if (message.from && message.from.is_bot) return false;
   if (message.reply_to_message) return false;
   if (['done', 'command'].includes(classification)) return false;
@@ -2701,6 +2717,12 @@ async function processMessage(updateKind, message, options = {}) {
     throw error;
   }
 
+  if (isGroupChat(chat) && message.reply_to_message && !(message.from && message.from.is_bot)) {
+    if (await maybeCloseRequestFromReply(message, 'message', employee, settings)) return;
+  }
+
+  if (await maybeCloseRequestFromGroupShortcut(message, settings)) return;
+
   const assistantKnownTask = isAssistantKnownTask(text);
   const assistantAddressCandidate = !assistantKnownTask && hasAssistantAddressCandidate(message, text);
   const possibleMainGroupAutomation = isGroupChat(chat)
@@ -2874,7 +2896,17 @@ async function handler(req, res) {
     const sourceBot = String(query.source_bot || '').trim().toLowerCase();
     const tenantId = resolveTenantFromQuery(query);
     const update = await readBody(req);
-    const result = await runWithTenant(tenantId, () => handleTelegramUpdate(update, { sourceBot, tenantId }));
+    const work = runWithTenant(tenantId, () => handleTelegramUpdate(update, { sourceBot, tenantId }))
+      .catch(error => {
+        console.error('[bot:error]', error);
+        notifyOperationalError('bot:error', error).catch(logError => console.error('[bot:notify-log:error]', logError));
+        return { ok: false, error: error.message };
+      });
+    const syncWebhook = ['1', 'true', 'yes'].includes(String(process.env.TELEGRAM_WEBHOOK_SYNC || '').toLowerCase());
+    if (!syncWebhook && scheduleBackgroundWork(work, res)) {
+      return sendJson(res, 200, { ok: true, accepted: true });
+    }
+    const result = await work;
     return sendJson(res, 200, result);
   } catch (error) {
     console.error('[bot:error]', error);

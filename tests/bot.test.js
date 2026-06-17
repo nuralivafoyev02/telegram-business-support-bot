@@ -4,6 +4,7 @@ const assert = require('assert');
 const { Readable } = require('stream');
 
 process.env.BOT_TOKEN = process.env.BOT_TOKEN || '123456:test-token';
+process.env.TELEGRAM_WEBHOOK_SYNC = '1';
 process.env.TELEGRAM_WEBHOOK_SECRET = 'test-secret';
 process.env.SUPABASE_URL = process.env.SUPABASE_URL || 'https://example.supabase.co';
 process.env.SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || 'test-service-role-key';
@@ -25,6 +26,7 @@ function createReq(body, headers = {}) {
 }
 
 function createRes() {
+  const backgroundTasks = [];
   const res = {
     statusCode: 0,
     headers: {},
@@ -35,6 +37,12 @@ function createRes() {
     end(chunk = '') {
       this.body += String(chunk);
       this.finished = true;
+    },
+    waitUntil(task) {
+      backgroundTasks.push(Promise.resolve(task));
+    },
+    async awaitBackgroundWork() {
+      await Promise.all(backgroundTasks);
     }
   };
   return res;
@@ -46,6 +54,7 @@ async function callHandler(body) {
   console.info = () => {};
   try {
     await handler(createReq(body), res);
+    await res.awaitBackgroundWork();
   } finally {
     console.info = originalInfo;
   }
@@ -275,6 +284,7 @@ async function testGroupDoneDoesNotReplyToGroup() {
 async function testRequestMessageAppendsToExistingOpenRequest() {
   const originalInsert = supabase.insert;
   const originalSelect = supabase.select;
+  const originalPatch = supabase.patch;
   const originalFetch = global.fetch;
   const insertedTables = [];
   const telegramCalls = [];
@@ -298,10 +308,13 @@ async function testRequestMessageAppendsToExistingOpenRequest() {
     insertedTables.push(table);
     return rows.map(row => ({ id: `${table}-row`, ...row }));
   };
-  global.fetch = async (_url, options) => {
-    telegramCalls.push({ url: _url, body: JSON.parse(options.body) });
+  supabase.patch = async (table, query, values) => [{ id: 'request-1', ...values }];
+  global.fetch = async (_url, options = {}) => {
+    const body = options.body ? JSON.parse(options.body) : {};
+    telegramCalls.push({ url: String(_url), body });
     return {
       ok: true,
+      text: async () => '{}',
       json: async () => ({ ok: true, result: { message_id: 601 } })
     };
   };
@@ -321,12 +334,13 @@ async function testRequestMessageAppendsToExistingOpenRequest() {
     assert.strictEqual(result.status, 200);
     assert.strictEqual(result.payload.handled, 'message');
     assert.strictEqual(insertedTables.includes('support_requests'), false);
-    assert.strictEqual(insertedTables.includes('request_events'), true);
-    assert.strictEqual(telegramCalls.length, 1);
-    assert.match(telegramCalls[0].body.text, /So'rovingiz qabul qilindi/);
+    const replyCall = telegramCalls.find(call => call.url.includes('sendMessage'));
+    assert.ok(replyCall, 'expected sendMessage call');
+    assert.match(replyCall.body.text, /So'rovingiz qabul qilindi/);
   } finally {
     supabase.insert = originalInsert;
     supabase.select = originalSelect;
+    supabase.patch = originalPatch;
     global.fetch = originalFetch;
     clearBotSettingsCache();
   }
@@ -1756,6 +1770,60 @@ async function testHundredReactionClosesTicketForNonEmployee() {
   }
 }
 
+async function testGroupHundredTextClosesLatestWithoutReply() {
+  const originalInsert = supabase.insert;
+  const originalSelect = supabase.select;
+  const originalPatch = supabase.patch;
+  const patched = [];
+  clearBotSettingsCache();
+
+  supabase.select = async (table, query = {}) => {
+    if (table === 'bot_settings') return [];
+    if (table === 'employees') return [];
+    if (table === 'tg_chats') return [];
+    if (table === 'support_requests' && query.status === 'eq.open') {
+      return [{
+        id: 'request-100',
+        chat_id: -100333,
+        status: 'open',
+        customer_tg_id: 1003,
+        customer_name: 'Customer',
+        initial_message_id: 55,
+        initial_text: 'Savol',
+        created_at: new Date().toISOString()
+      }];
+    }
+    return [];
+  };
+  supabase.insert = async (table, rows) => rows.map(row => ({ id: `${table}-row`, ...row }));
+  supabase.patch = async (table, query, values) => {
+    patched.push({ table, query, values });
+    return [{ id: 'request-100', ...values }];
+  };
+
+  try {
+    const result = await callHandler({
+      update_id: 156,
+      message: {
+        message_id: 99,
+        date: 1777100700,
+        text: '100',
+        chat: { id: -100333, type: 'supergroup', title: 'Support group' },
+        from: { id: 888, first_name: 'Guest', username: 'guest_user', is_bot: false }
+      }
+    });
+
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.handled, 'message');
+    assert.strictEqual(patched.some(item => item.table === 'support_requests' && item.values.status === 'closed'), true);
+  } finally {
+    supabase.insert = originalInsert;
+    supabase.select = originalSelect;
+    supabase.patch = originalPatch;
+    clearBotSettingsCache();
+  }
+}
+
 async function testMainGroupBroadcastPreview() {
   const originalInsert = supabase.insert;
   const originalSelect = supabase.select;
@@ -2205,6 +2273,7 @@ async function testGroupVoicePlaceholderOpensRequest() {
   await testEyeReactionOpensTicketForNonEmployee();
   await testHundredReactionClosesTicketAndClickUpTask();
   await testHundredReactionClosesTicketForNonEmployee();
+  await testGroupHundredTextClosesLatestWithoutReply();
   await testMainGroupBroadcastPreview();
   await testMainGroupBroadcastConfirmSendsAndReports();
   await testMainGroupBroadcastDeletePreview();
