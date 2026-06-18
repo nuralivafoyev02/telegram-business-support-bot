@@ -5128,7 +5128,8 @@ const companyModuleChartMetricKeys = ref(['activity']);
 const companyModuleChartVisibleModules = ref([...companyModuleKeys]);
 const companyModuleChartShowAverage = ref(true);
 const companyModuleChartMetricOptions = [
-  { key: 'activity', label: 'O‘rtacha faollik' }
+  { key: 'activity', label: 'O‘rtacha faollik' },
+  { key: 'actions', label: 'Amallar soni' }
 ];
 
 function emptyCompanyModuleUsageMap() {
