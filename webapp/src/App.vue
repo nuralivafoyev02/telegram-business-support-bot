@@ -744,9 +744,36 @@
               </section>
 
               <section v-if="companyModuleChartRows.length" class="card chart-card line-chart-card company-module-chart-card">
-                <div class="card-header chart-card-head">
+                <div class="card-header chart-card-head company-module-chart-head">
                   <div>
                     <div class="card-title">Bo‘limlar dinamikasi</div>
+                  </div>
+                  <div class="company-module-chart-controls">
+                    <div class="company-module-chart-metric-tabs">
+                      <button
+                        v-for="option in companyModuleChartMetricOptions"
+                        :key="`module-chart-metric-${option.key}`"
+                        type="button"
+                        class="company-module-chart-metric-btn"
+                        :class="{ active: companyModuleChartMetricKeys.includes(option.key) }"
+                        @click="toggleCompanyModuleChartMetric(option.key)">
+                        {{ option.label }}
+                      </button>
+                    </div>
+                    <label class="company-module-filter">
+                      <span>Davr</span>
+                      <select
+                        :value="companyModuleChartPeriod"
+                        class="select mini-select"
+                        @change="handleCompanyModuleChartPeriodChange($event.target.value)">
+                        <option
+                          v-for="period in companyModulePeriodOptions"
+                          :key="`module-chart-period-${period.key}`"
+                          :value="period.key">
+                          {{ period.label }}
+                        </option>
+                      </select>
+                    </label>
                   </div>
                 </div>
                 <div
@@ -754,12 +781,22 @@
                   ref="companyModuleChartRef"
                   @mouseleave="companyModuleChartHoverIndex = -1">
                   <div class="company-module-chart-legend top">
-                    <span
+                    <button
                       v-for="line in companyModuleChartLines"
                       :key="`module-chart-legend-${line.key}`"
-                      class="company-module-chart-legend-item">
+                      type="button"
+                      class="company-module-chart-legend-item"
+                      :class="{ inactive: !companyModuleChartVisibleModules.includes(line.key) }"
+                      @click="toggleCompanyModuleChartModule(line.key)">
                       <i :style="{ borderColor: line.color }"></i>{{ line.label }}
-                    </span>
+                    </button>
+                    <button
+                      type="button"
+                      class="company-module-chart-legend-item average"
+                      :class="{ inactive: !companyModuleChartShowAverage }"
+                      @click="companyModuleChartShowAverage = !companyModuleChartShowAverage">
+                      <i></i>O‘rtacha
+                    </button>
                   </div>
                   <div class="trend-chart company-module-trend-chart">
                     <svg
@@ -769,7 +806,7 @@
                       @mousemove="onCompanyModuleChartMove"
                       @touchstart.passive="onCompanyModuleChartTouch"
                       @touchmove.passive="onCompanyModuleChartTouch">
-                      <text class="company-module-chart-axis-title" x="14" y="132" transform="rotate(-90 14 132)">Amallar soni</text>
+                      <text class="company-module-chart-axis-title" x="14" y="132" transform="rotate(-90 14 132)">{{ companyModuleChartAxisLabel }}</text>
                       <g class="trend-grid">
                         <line
                           v-for="tick in companyModuleChartYTicks"
@@ -794,7 +831,7 @@
                         :x2="companyModuleChartTooltip.x"
                         :y1="COMPANY_MODULE_CHART_DIMS.top"
                         :y2="COMPANY_MODULE_CHART_DIMS.bottom" />
-                      <g v-for="line in companyModuleChartLines" :key="`module-chart-line-${line.key}`">
+                      <g v-for="line in companyModuleChartVisibleLines" :key="`module-chart-line-${line.key}`">
                         <path
                           v-if="line.points.length > 1 && line.path"
                           :d="line.path"
@@ -815,6 +852,24 @@
                           :stroke="line.color"
                           :stroke-width="companyModuleChartHoverIndex === pointIndex ? 3 : 2.5" />
                       </g>
+                      <g v-if="companyModuleChartShowAverage && companyModuleChartAverageLine.points.length > 1">
+                        <path
+                          :d="companyModuleChartAverageLine.path"
+                          fill="none"
+                          stroke="#111827"
+                          stroke-width="4"
+                          stroke-linecap="round"
+                          stroke-linejoin="round" />
+                        <circle
+                          v-for="(point, pointIndex) in companyModuleChartAverageLine.points"
+                          :key="`module-chart-avg-dot-${pointIndex}`"
+                          :cx="point.x"
+                          :cy="point.y"
+                          r="5"
+                          fill="#111827"
+                          stroke="#111827"
+                          stroke-width="2" />
+                      </g>
                       <g class="trend-axis company-module-chart-axis">
                         <text
                           v-for="tick in companyModuleChartXTicks"
@@ -834,7 +889,7 @@
                         :key="`module-chart-tip-${item.key}`"
                         class="company-module-chart-tooltip-row">
                         <span :style="{ color: item.color }">{{ item.label }}</span>
-                        <strong>{{ fmtNumber(item.value) }} amal</strong>
+                        <strong>{{ item.valueText }}</strong>
                       </div>
                     </div>
                   </div>
@@ -1448,6 +1503,26 @@
             <button class="btn" type="button" @click="cancelCompanyModuleCustomPeriod">Bekor qilish</button>
             <button class="btn primary" type="submit" :disabled="loadingAction === 'companyModuleCustomPeriod'">
               {{ loadingAction === 'companyModuleCustomPeriod' ? 'Yuklanmoqda...' : 'Qo‘llash' }}
+            </button>
+          </div>
+        </form>
+      </Modal>
+    </Transition>
+
+    <Transition name="modal-fade">
+      <Modal v-if="modal === 'companyModuleChartCustomPeriod'" title="Grafik davri" @close="cancelCompanyModuleChartCustomPeriod">
+        <form class="form two custom-period-form" @submit.prevent="applyCompanyModuleChartCustomPeriod">
+          <label class="label">Boshlanish sanasi
+            <input v-model="companyModuleChartCustomPeriodForm.start" class="input" type="date" required />
+          </label>
+          <label class="label">Tugash sanasi
+            <input v-model="companyModuleChartCustomPeriodForm.end" class="input" type="date" required />
+          </label>
+          <p v-if="companyModuleChartCustomPeriodError" class="form-error">{{ companyModuleChartCustomPeriodError }}</p>
+          <div class="form-actions">
+            <button class="btn" type="button" @click="cancelCompanyModuleChartCustomPeriod">Bekor qilish</button>
+            <button class="btn primary" type="submit" :disabled="loadingAction === 'companyModuleChartCustomPeriod'">
+              {{ loadingAction === 'companyModuleChartCustomPeriod' ? 'Yuklanmoqda...' : 'Qo‘llash' }}
             </button>
           </div>
         </form>
@@ -4161,9 +4236,9 @@ function moduleChartYMax(value = 0) {
   return Math.ceil(numeric / step) * step;
 }
 
-function moduleChartYTicks(max = 1, dims = COMPANY_MODULE_CHART_DIMS) {
+function moduleChartYTicks(max = 1, dims = COMPANY_MODULE_CHART_DIMS, stepOverride = 0) {
   const maximum = moduleChartYMax(max);
-  const step = maximum <= 50 ? 5 : 10;
+  const step = stepOverride || (maximum <= 50 ? 5 : 10);
   const count = Math.floor(maximum / step) + 1;
   const height = dims.bottom - dims.top;
   return Array.from({ length: count }, (_, index) => {
@@ -4922,6 +4997,17 @@ const companyModulePeriodOptions = [
 const companyModuleCustomPeriodForm = reactive({ start: '', end: '', appliedStart: '', appliedEnd: '' });
 const companyModuleCustomPeriodError = ref('');
 const previousCompanyModulePeriod = ref('today');
+const companyModuleChartPeriod = ref('week');
+const companyModuleChartCustomPeriodForm = reactive({ start: '', end: '', appliedStart: '', appliedEnd: '' });
+const companyModuleChartCustomPeriodError = ref('');
+const previousCompanyModuleChartPeriod = ref('week');
+const companyModuleChartMetricKeys = ref(['activity']);
+const companyModuleChartVisibleModules = ref([...companyModuleKeys]);
+const companyModuleChartShowAverage = ref(true);
+const companyModuleChartMetricOptions = [
+  { key: 'activity', label: 'O‘rtacha faollik' },
+  { key: 'actions', label: 'Amallar soni' }
+];
 
 function emptyCompanyModuleUsageMap() {
   return Object.fromEntries(companyModuleKeys.map(key => [key, false]));
@@ -5413,87 +5499,168 @@ function companyModuleChartSourceEndDate(period = 'today') {
   if (period === 'yesterday') return addDaysToDateKey(tashkentDateKey(), -1);
   if (period === 'day_before_yesterday') return addDaysToDateKey(tashkentDateKey(), -2);
   if (period === 'custom') {
-    return companyModuleCustomPeriodForm.appliedEnd
-      || companyModuleCustomPeriodForm.appliedStart
+    return companyModuleChartCustomPeriodForm.appliedEnd
+      || companyModuleChartCustomPeriodForm.appliedStart
       || tashkentDateKey();
   }
   return tashkentDateKey();
 }
 
-function companyModuleChartSourceQuery(period = 'today') {
-  if (period === 'month') return { period: 'month' };
-  if (period === 'week') return null;
+function companyModuleChartPeriodQuery(period = 'week') {
   if (period === 'custom') {
-    const start = companyModuleCustomPeriodForm.appliedStart;
-    const end = companyModuleCustomPeriodForm.appliedEnd;
-    if (!start || !end) return null;
-    if (start !== end) return null;
+    if (!companyModuleChartCustomPeriodForm.appliedStart || !companyModuleChartCustomPeriodForm.appliedEnd) {
+      return { period: 'week' };
+    }
     return {
       period: 'custom',
-      start_date: addDaysToDateKey(end, -6),
-      end_date: end
+      start_date: companyModuleChartCustomPeriodForm.appliedStart,
+      end_date: companyModuleChartCustomPeriodForm.appliedEnd
     };
   }
-  const end = companyModuleChartSourceEndDate(period);
-  return {
-    period: 'custom',
-    start_date: addDaysToDateKey(end, -6),
-    end_date: end
-  };
+  return { period: period || 'week' };
 }
 
-function companyModuleChartDateKeys(dates = [], period = 'today') {
+function companyModuleChartDateKeys(dates = [], period = 'week') {
   const sorted = [...dates].filter(Boolean).sort();
   if (sorted.length >= 2) return sorted;
   const end = sorted.at(-1) || companyModuleChartSourceEndDate(period);
   return Array.from({ length: 7 }, (_, index) => addDaysToDateKey(end, index - 6));
 }
 
+function buildCompanyModuleChartDayRow(date, dailyRows, companyMap, filters) {
+  const counts = Object.fromEntries(companyModuleKeys.map(key => [key, 0]));
+  let totalCompanies = 0;
+  let activitySum = 0;
+  dailyRows
+    .filter(row => row.report_date === date)
+    .forEach(reportRow => {
+      const company = companyMap.get(String(reportRow.company_id));
+      if (!company) return;
+      const merged = companyModuleRowForChart(company, reportRow);
+      if (!matchesCompanyModuleFilter(merged, filters)) return;
+      totalCompanies += 1;
+      activitySum += companyModuleActivePercent(merged.module_usage);
+      companyModuleKeys.forEach(key => {
+        if (merged.module_usage?.[key]) counts[key] += 1;
+      });
+    });
+  const percents = Object.fromEntries(companyModuleKeys.map(key => [
+    key,
+    totalCompanies ? Math.round((counts[key] / totalCompanies) * 100) : 0
+  ]));
+  return {
+    date_key: date,
+    counts,
+    percents,
+    totalCompanies,
+    avgActivity: totalCompanies ? Math.round(activitySum / totalCompanies) : 0
+  };
+}
+
+function companyModuleChartRowLabel(dateKey = '', total = 0) {
+  return companyModuleChartDateLabel(dateKey, total);
+}
+
+function companyModuleChartMetricValue(row = {}, key = '', metric = 'activity') {
+  if (metric === 'actions') return Number(row.counts?.[key] || 0);
+  return Number(row.percents?.[key] || 0);
+}
+
+function companyModuleChartValueText(value = 0, metric = 'activity') {
+  if (metric === 'actions') return `${fmtNumber(value)} amal`;
+  return `${fmtNumber(value)}%`;
+}
+
+function toggleCompanyModuleChartMetric(key = '') {
+  const keys = [...companyModuleChartMetricKeys.value];
+  const index = keys.indexOf(key);
+  if (index >= 0) {
+    if (keys.length === 1) return;
+    keys.splice(index, 1);
+  } else {
+    keys.push(key);
+  }
+  companyModuleChartMetricKeys.value = keys;
+}
+
+function toggleCompanyModuleChartModule(key = '') {
+  const keys = [...companyModuleChartVisibleModules.value];
+  const index = keys.indexOf(key);
+  if (index >= 0) {
+    if (keys.length === 1) return;
+    keys.splice(index, 1);
+  } else {
+    keys.push(key);
+  }
+  companyModuleChartVisibleModules.value = keys;
+}
+
+function companyModuleChartAverageForRow(row = {}, metric = 'activity', visibleKeys = []) {
+  const values = visibleKeys.map(key => companyModuleChartMetricValue(row, key, metric));
+  if (!values.length) return 0;
+  return Math.round((values.reduce((sum, value) => sum + value, 0) / values.length) * 10) / 10;
+}
+
 const companyModuleChartRows = computed(() => {
   const source = companyModuleChartSource.value;
   const dailyRows = Array.isArray(source.daily_companies) ? source.daily_companies : [];
-  const period = companyModulePeriod.value;
+  const period = companyModuleChartPeriod.value;
   const dates = companyModuleChartDateKeys(source.report_dates || [], period);
   const companyMap = companyInfoById.value;
   const filters = companyModuleFilterKeys.value;
 
   if (dates.length && dailyRows.length) {
     return finalizeCompanyModuleChartRows(dates.map(date => {
-      const counts = Object.fromEntries(companyModuleKeys.map(key => [key, 0]));
-      dailyRows
-        .filter(row => row.report_date === date)
-        .forEach(reportRow => {
-          const company = companyMap.get(String(reportRow.company_id));
-          if (!company) return;
-          const merged = companyModuleRowForChart(company, reportRow);
-          if (!matchesCompanyModuleFilter(merged, filters)) return;
-          companyModuleKeys.forEach(key => {
-            if (merged.module_usage?.[key]) counts[key] += 1;
-          });
-        });
+      const row = buildCompanyModuleChartDayRow(date, dailyRows, companyMap, filters);
       return {
-        date_key: date,
-        date_label: companyModuleChartDateLabel(date, dates.length),
-        counts
+        ...row,
+        date_label: companyModuleChartRowLabel(date, dates.length)
       };
     }));
   }
 
   const fallbackDate = dates[0] || companyModuleReports.value.report_dates?.[0] || '';
   if (!fallbackDate) return [];
-  const counts = Object.fromEntries(companyModuleKeys.map(key => [key, 0]));
-  companyModuleFilteredRows.value.forEach(row => {
+  const row = buildCompanyModuleChartDayRow(fallbackDate, [], companyMap, filters);
+  companyModuleFilteredRows.value.forEach(companyRow => {
+    row.totalCompanies += 1;
+    row.avgActivity += companyModuleActivePercent(companyRow.module_usage);
     companyModuleKeys.forEach(key => {
-      if (row.module_usage?.[key]) counts[key] += 1;
+      if (companyRow.module_usage?.[key]) row.counts[key] += 1;
     });
   });
+  if (row.totalCompanies) {
+    row.avgActivity = Math.round(row.avgActivity / row.totalCompanies);
+    row.percents = Object.fromEntries(companyModuleKeys.map(key => [
+      key,
+      Math.round((row.counts[key] / row.totalCompanies) * 100)
+    ]));
+  }
   const fallbackDates = companyModuleChartDateKeys([fallbackDate], period);
-  return finalizeCompanyModuleChartRows(fallbackDates.map((date, index) => ({
-    date_key: date,
-    date_label: companyModuleChartDateLabel(date, fallbackDates.length),
-    counts: index === fallbackDates.length - 1 ? counts : Object.fromEntries(companyModuleKeys.map(key => [key, 0]))
-  })));
+  return finalizeCompanyModuleChartRows(fallbackDates.map((date, index) => {
+    if (index === fallbackDates.length - 1) {
+      return { ...row, date_key: date, date_label: companyModuleChartRowLabel(date, fallbackDates.length) };
+    }
+    return {
+      date_key: date,
+      date_label: companyModuleChartRowLabel(date, fallbackDates.length),
+      counts: Object.fromEntries(companyModuleKeys.map(key => [key, 0])),
+      percents: Object.fromEntries(companyModuleKeys.map(key => [key, 0])),
+      totalCompanies: 0,
+      avgActivity: 0
+    };
+  }));
 });
+
+const companyModuleChartActiveMetric = computed(() => {
+  const keys = companyModuleChartMetricKeys.value;
+  if (keys.includes('actions')) return 'actions';
+  return 'activity';
+});
+
+const companyModuleChartAxisLabel = computed(() => (
+  companyModuleChartActiveMetric.value === 'actions' ? 'Amallar soni' : 'Foiz (%)'
+));
 
 function onCompanyModuleChartPointer(clientX = 0) {
   const root = companyModuleChartRef.value;
@@ -5537,21 +5704,34 @@ const companyModuleChartPlotPoints = computed(() => {
     date_key: row.date_key,
     label: row.date_label,
     x: rows.length > 1 ? dims.left + step * index : dims.left + width / 2,
-    counts: row.counts || {}
+    counts: row.counts || {},
+    percents: row.percents || {},
+    avgActivity: Number(row.avgActivity || 0)
   }));
 });
 
 const companyModuleChartMax = computed(() => {
+  const metric = companyModuleChartActiveMetric.value;
+  const visible = companyModuleChartVisibleModules.value;
   let max = 0;
   companyModuleChartRows.value.forEach(row => {
-    companyModuleKeys.forEach(key => {
-      max = Math.max(max, Number(row.counts?.[key] || 0));
+    visible.forEach(key => {
+      max = Math.max(max, companyModuleChartMetricValue(row, key, metric));
     });
+    if (companyModuleChartShowAverage.value) {
+      max = Math.max(max, companyModuleChartAverageForRow(row, metric, visible));
+    }
   });
+  if (metric === 'activity') return 100;
   return moduleChartYMax(Math.max(1, max));
 });
 
-const companyModuleChartYTicks = computed(() => moduleChartYTicks(companyModuleChartMax.value, COMPANY_MODULE_CHART_DIMS));
+const companyModuleChartYTicks = computed(() => {
+  if (companyModuleChartActiveMetric.value === 'activity') {
+    return moduleChartYTicks(100, COMPANY_MODULE_CHART_DIMS, 5);
+  }
+  return moduleChartYTicks(companyModuleChartMax.value, COMPANY_MODULE_CHART_DIMS);
+});
 
 const companyModuleChartXTicks = computed(() => {
   const rows = companyModuleChartRows.value;
@@ -5572,6 +5752,7 @@ const companyModuleChartXTicks = computed(() => {
 
 const companyModuleChartLines = computed(() => {
   const rows = companyModuleChartRows.value;
+  const metric = companyModuleChartActiveMetric.value;
   const maximum = companyModuleChartMax.value;
   const dims = COMPANY_MODULE_CHART_DIMS;
   const width = dims.right - dims.left;
@@ -5580,7 +5761,7 @@ const companyModuleChartLines = computed(() => {
 
   return companyModuleColumns.map(column => {
     const points = rows.map((row, index) => {
-      const value = Number(row.counts?.[column.key] || 0);
+      const value = companyModuleChartMetricValue(row, column.key, metric);
       const x = rows.length > 1 ? dims.left + step * index : dims.left + width / 2;
       const y = dims.bottom - (value / maximum) * height;
       return {
@@ -5595,26 +5776,71 @@ const companyModuleChartLines = computed(() => {
       label: column.label,
       color: COMPANY_MODULE_CHART_COLORS[column.key] || 'var(--primary)',
       points,
-      path: smoothLinePath(points),
-      polyline: points.map(point => `${point.x},${point.y}`).join(' ')
+      path: smoothLinePath(points)
     };
   });
+});
+
+const companyModuleChartVisibleLines = computed(() => companyModuleChartLines.value
+  .filter(line => companyModuleChartVisibleModules.value.includes(line.key)));
+
+const companyModuleChartAverageLine = computed(() => {
+  const rows = companyModuleChartRows.value;
+  const metric = companyModuleChartActiveMetric.value;
+  const visible = companyModuleChartVisibleModules.value;
+  const maximum = companyModuleChartMax.value;
+  const dims = COMPANY_MODULE_CHART_DIMS;
+  const width = dims.right - dims.left;
+  const height = dims.bottom - dims.top;
+  const step = rows.length > 1 ? width / (rows.length - 1) : 0;
+  const points = rows.map((row, index) => {
+    const value = companyModuleChartAverageForRow(row, metric, visible);
+    const x = rows.length > 1 ? dims.left + step * index : dims.left + width / 2;
+    const y = dims.bottom - (value / maximum) * height;
+    return {
+      x: Math.round(x * 10) / 10,
+      y: Math.round(y * 10) / 10,
+      value,
+      label: row.date_label
+    };
+  });
+  return {
+    points,
+    path: smoothLinePath(points)
+  };
 });
 
 const companyModuleChartTooltip = computed(() => {
   const index = companyModuleChartHoverIndex.value;
   if (index < 0) return null;
   const point = companyModuleChartPlotPoints.value[index];
-  if (!point) return null;
-  return {
-    label: point.label,
-    x: point.x,
-    items: companyModuleColumns.map(column => ({
+  const row = companyModuleChartRows.value[index];
+  if (!point || !row) return null;
+  const metric = companyModuleChartActiveMetric.value;
+  const visible = companyModuleChartVisibleModules.value;
+  const items = companyModuleColumns
+    .filter(column => visible.includes(column.key))
+    .map(column => ({
       key: column.key,
       label: column.label,
       color: COMPANY_MODULE_CHART_COLORS[column.key],
-      value: Number(point.counts?.[column.key] || 0)
-    }))
+      value: companyModuleChartMetricValue(row, column.key, metric),
+      valueText: companyModuleChartValueText(companyModuleChartMetricValue(row, column.key, metric), metric)
+    }));
+  if (companyModuleChartShowAverage.value) {
+    const average = companyModuleChartAverageForRow(row, metric, visible);
+    items.push({
+      key: 'average',
+      label: 'O‘rtacha',
+      color: '#111827',
+      value: average,
+      valueText: companyModuleChartValueText(average, metric)
+    });
+  }
+  return {
+    label: point.label,
+    x: point.x,
+    items
   };
 });
 
@@ -5637,9 +5863,19 @@ const companyModuleChartTooltipStyle = computed(() => {
 });
 
 const companyModuleChartAriaLabel = computed(() => {
-  const period = companyModulePeriodLabel.value;
+  const period = companyModuleChartPeriodLabel.value;
   const points = companyModuleChartRows.value.length;
-  return `Bo‘limlar dinamikasi grafigi, ${period}, ${points} ta nuqta`;
+  const metric = companyModuleChartActiveMetric.value === 'actions' ? 'amallar soni' : 'o‘rtacha faollik';
+  return `Bo‘limlar dinamikasi grafigi, ${period}, ${metric}, ${points} ta nuqta`;
+});
+
+const companyModuleChartPeriodLabel = computed(() => {
+  if (companyModuleChartPeriod.value === 'custom'
+    && companyModuleChartCustomPeriodForm.appliedStart
+    && companyModuleChartCustomPeriodForm.appliedEnd) {
+    return `${dateInputLabel(companyModuleChartCustomPeriodForm.appliedStart)} — ${dateInputLabel(companyModuleChartCustomPeriodForm.appliedEnd)}`;
+  }
+  return companyModulePeriodOptions.find(period => period.key === companyModuleChartPeriod.value)?.label || '7 kun';
 });
 
 const companyAlerts = computed(() => visibleCompanyInfoRows.value
@@ -6968,33 +7204,24 @@ async function loadCompanyModuleReportsPreviousOptional(query = {}) {
 }
 
 async function syncCompanyModuleChartSource() {
-  const period = companyModulePeriod.value;
-  const chartQuery = companyModuleChartSourceQuery(period);
-  if (!chartQuery) {
-    companyModuleChartSource.value = {
-      daily_companies: companyModuleReports.value.daily_companies || [],
-      report_dates: companyModuleReports.value.report_dates || []
-    };
-    return;
-  }
   try {
-    const data = await api.companyModuleReports(chartQuery);
+    const data = await api.companyModuleReports(companyModuleChartPeriodQuery(companyModuleChartPeriod.value));
     companyModuleChartSource.value = {
       daily_companies: data.daily_companies || [],
       report_dates: data.report_dates || []
     };
   } catch {
-    companyModuleChartSource.value = {
-      daily_companies: companyModuleReports.value.daily_companies || [],
-      report_dates: companyModuleReports.value.report_dates || []
-    };
+    companyModuleChartSource.value = { daily_companies: [], report_dates: [] };
   }
+}
+
+async function refreshCompanyModuleChartData() {
+  await syncCompanyModuleChartSource();
 }
 
 async function refreshCompanyModuleReports() {
   const period = companyModulePeriod.value;
   await loadCompanyModuleReportsOptional(companyModulePeriodQuery(period));
-  await syncCompanyModuleChartSource();
   if (!companyModuleCompareEnabled.value) {
     companyModuleReportsPrevious.value = { companies: [], report_dates: [], period: '' };
     return;
@@ -7065,6 +7292,64 @@ async function applyCompanyModuleCustomPeriod() {
   }
 }
 
+function openCompanyModuleChartCustomPeriodModal() {
+  const defaults = defaultCustomPeriodDates();
+  companyModuleChartCustomPeriodForm.start = companyModuleChartCustomPeriodForm.appliedStart || companyModuleChartCustomPeriodForm.start || defaults.start;
+  companyModuleChartCustomPeriodForm.end = companyModuleChartCustomPeriodForm.appliedEnd || companyModuleChartCustomPeriodForm.end || defaults.end;
+  companyModuleChartCustomPeriodError.value = '';
+  companyModuleChartPeriod.value = 'custom';
+  modal.value = 'companyModuleChartCustomPeriod';
+}
+
+async function handleCompanyModuleChartPeriodChange(value) {
+  if (value === 'custom') {
+    previousCompanyModuleChartPeriod.value = companyModuleChartPeriod.value === 'custom'
+      ? previousCompanyModuleChartPeriod.value
+      : companyModuleChartPeriod.value;
+    openCompanyModuleChartCustomPeriodModal();
+    return;
+  }
+  companyModuleChartCustomPeriodForm.appliedStart = '';
+  companyModuleChartCustomPeriodForm.appliedEnd = '';
+  previousCompanyModuleChartPeriod.value = value;
+  companyModuleChartPeriod.value = value;
+  await refreshCompanyModuleChartData();
+}
+
+function cancelCompanyModuleChartCustomPeriod() {
+  companyModuleChartCustomPeriodError.value = '';
+  if (!companyModuleChartCustomPeriodForm.appliedStart || !companyModuleChartCustomPeriodForm.appliedEnd) {
+    companyModuleChartPeriod.value = previousCompanyModuleChartPeriod.value || 'week';
+  }
+  modal.value = '';
+}
+
+async function applyCompanyModuleChartCustomPeriod() {
+  companyModuleChartCustomPeriodError.value = '';
+  if (!companyModuleChartCustomPeriodForm.start || !companyModuleChartCustomPeriodForm.end) {
+    companyModuleChartCustomPeriodError.value = 'Ikkala sanani ham tanlang';
+    return;
+  }
+  const start = companyModuleChartCustomPeriodForm.start <= companyModuleChartCustomPeriodForm.end
+    ? companyModuleChartCustomPeriodForm.start
+    : companyModuleChartCustomPeriodForm.end;
+  const end = companyModuleChartCustomPeriodForm.start <= companyModuleChartCustomPeriodForm.end
+    ? companyModuleChartCustomPeriodForm.end
+    : companyModuleChartCustomPeriodForm.start;
+  companyModuleChartCustomPeriodForm.appliedStart = start;
+  companyModuleChartCustomPeriodForm.appliedEnd = end;
+  companyModuleChartPeriod.value = 'custom';
+  modal.value = '';
+  startLoading('companyModuleChartCustomPeriod');
+  try {
+    await refreshCompanyModuleChartData();
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    stopLoading('companyModuleChartCustomPeriod');
+  }
+}
+
 async function loadCompanyInfo(query = {}) {
   const data = await api.companyInfo(query);
   companyInfo.value = data;
@@ -7103,12 +7388,16 @@ async function loadCompanyActivity() {
   const [data] = await Promise.all([
     loadCompanyInfo({ cached: true }),
     refreshCompanyModuleReports(),
+    refreshCompanyModuleChartData(),
     loadDashboard()
   ]);
   if (!companyModuleReports.value?.companies?.length) {
     try {
       await api.companyReport();
-      await refreshCompanyModuleReports();
+      await Promise.all([
+        refreshCompanyModuleReports(),
+        refreshCompanyModuleChartData()
+      ]);
     } catch (error) {
       showToast(error.message);
     }
