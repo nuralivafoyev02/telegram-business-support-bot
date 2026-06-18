@@ -2870,7 +2870,7 @@ const employees = ref([]);
 const clickupTasks = ref([]);
 const companyInfo = ref({ summary: {}, companies: [], fetched_at: '', source: '' });
 const companyModuleReports = ref({ companies: [], report_dates: [], period: 'all' });
-const companyModuleChartSource = ref({ daily_companies: [], report_dates: [] });
+const companyModuleChartSource = ref({ period: 'week', daily_companies: [], report_dates: [] });
 const companyModuleReportsPrevious = ref({ companies: [], report_dates: [], period: '' });
 const companyModuleCompareEnabled = ref(false);
 const requestRows = ref([]);
@@ -5643,11 +5643,57 @@ function companyModuleChartPeriodQuery(period = 'week') {
   return { period: period || 'week' };
 }
 
+function companyModuleChartExpectedDateKeys(period = 'week') {
+  const today = tashkentDateKey();
+  if (period === 'today') return [today];
+  if (period === 'yesterday') return [addDaysToDateKey(today, -1)];
+  if (period === 'week') {
+    return Array.from({ length: 7 }, (_, index) => addDaysToDateKey(today, index - 6));
+  }
+  if (period === 'month') {
+    return Array.from({ length: 30 }, (_, index) => addDaysToDateKey(today, index - 29));
+  }
+  if (period === 'custom') {
+    const start = companyModuleChartCustomPeriodForm.appliedStart;
+    const end = companyModuleChartCustomPeriodForm.appliedEnd;
+    if (!start || !end) return [];
+    const rangeStart = start <= end ? start : end;
+    const rangeEnd = start <= end ? end : start;
+    const keys = [];
+    let cursor = rangeStart;
+    while (cursor <= rangeEnd) {
+      keys.push(cursor);
+      if (cursor === rangeEnd) break;
+      cursor = addDaysToDateKey(cursor, 1);
+      if (keys.length > 400) break;
+    }
+    return keys;
+  }
+  return [today];
+}
+
 function companyModuleChartDateKeys(dates = [], period = 'week') {
-  const sorted = [...dates].filter(Boolean).sort();
-  if (sorted.length >= 2) return sorted;
-  const end = sorted.at(-1) || companyModuleChartSourceEndDate(period);
-  return Array.from({ length: 7 }, (_, index) => addDaysToDateKey(end, index - 6));
+  const expected = companyModuleChartExpectedDateKeys(period);
+  if (!expected.length) return [];
+
+  if (period === 'today' || period === 'yesterday') {
+    return expected;
+  }
+
+  if (period === 'week' || period === 'month') {
+    return expected;
+  }
+
+  if (period === 'custom') {
+    const available = [...new Set(dates.filter(Boolean))].sort();
+    if (!available.length) return expected;
+    const min = expected[0];
+    const max = expected.at(-1);
+    const inRange = available.filter(date => date >= min && date <= max);
+    return inRange.length ? inRange : expected;
+  }
+
+  return expected;
 }
 
 function buildCompanyModuleChartDayRow(date, dailyRows, companyMap, filters, companyId = '') {
@@ -5662,7 +5708,8 @@ function buildCompanyModuleChartDayRow(date, dailyRows, companyMap, filters, com
       const company = companyMap.get(String(reportRow.company_id));
       if (!company) return;
       const merged = companyModuleRowForChart(company, reportRow);
-      if (!matchesCompanyModuleFilter(merged, filters)) return;
+      const isSelectedCompany = selectedCompanyId && String(reportRow.company_id) === selectedCompanyId;
+      if (!isSelectedCompany && !matchesCompanyModuleFilter(merged, filters)) return;
       totalCompanies += 1;
       activitySum += companyModuleActivePercent(merged.module_usage);
       companyModuleKeys.forEach(key => {
@@ -5788,6 +5835,10 @@ watch(companyModuleChartCompanyOptions, (options) => {
   }
 });
 
+watch(companyModuleChartCompanyId, () => {
+  companyModuleChartHoverIndex.value = -1;
+});
+
 function companyModuleChartAverageForRow(row = {}, metric = 'activity', visibleKeys = []) {
   const values = visibleKeys.map(key => companyModuleChartMetricValue(row, key, metric));
   if (!values.length) return 0;
@@ -5799,52 +5850,19 @@ const companyModuleChartRows = computed(() => {
   const dailyRows = Array.isArray(source.daily_companies) ? source.daily_companies : [];
   const period = companyModuleChartPeriod.value;
   const dates = companyModuleChartDateKeys(source.report_dates || [], period);
+  if (!dates.length) return [];
+
   const companyMap = companyInfoById.value;
   const filters = companyModuleFilterKeys.value;
   const chartCompanyId = companyModuleChartCompanyId.value;
+  const dateSet = new Set(dates);
+  const scopedDailyRows = dailyRows.filter(row => dateSet.has(row.report_date));
 
-  if (dates.length && dailyRows.length) {
-    return finalizeCompanyModuleChartRows(dates.map(date => {
-      const row = buildCompanyModuleChartDayRow(date, dailyRows, companyMap, filters, chartCompanyId);
-      return {
-        ...row,
-        date_label: companyModuleChartRowLabel(date, dates.length)
-      };
-    }));
-  }
-
-  const fallbackDate = dates[0] || companyModuleReports.value.report_dates?.[0] || '';
-  if (!fallbackDate) return [];
-  const row = buildCompanyModuleChartDayRow(fallbackDate, [], companyMap, filters, chartCompanyId);
-  const fallbackCompanies = chartCompanyId
-    ? companyModuleFilteredRows.value.filter(companyRow => String(companyRow.id) === String(chartCompanyId))
-    : companyModuleFilteredRows.value;
-  fallbackCompanies.forEach(companyRow => {
-    row.totalCompanies += 1;
-    row.avgActivity += companyModuleActivePercent(companyRow.module_usage);
-    companyModuleKeys.forEach(key => {
-      if (companyRow.module_usage?.[key]) row.counts[key] += 1;
-    });
-  });
-  if (row.totalCompanies) {
-    row.avgActivity = Math.round(row.avgActivity / row.totalCompanies);
-    row.percents = Object.fromEntries(companyModuleKeys.map(key => [
-      key,
-      Math.round((row.counts[key] / row.totalCompanies) * 100)
-    ]));
-  }
-  const fallbackDates = companyModuleChartDateKeys([fallbackDate], period);
-  return finalizeCompanyModuleChartRows(fallbackDates.map((date, index) => {
-    if (index === fallbackDates.length - 1) {
-      return { ...row, date_key: date, date_label: companyModuleChartRowLabel(date, fallbackDates.length) };
-    }
+  return finalizeCompanyModuleChartRows(dates.map(date => {
+    const row = buildCompanyModuleChartDayRow(date, scopedDailyRows, companyMap, filters, chartCompanyId);
     return {
-      date_key: date,
-      date_label: companyModuleChartRowLabel(date, fallbackDates.length),
-      counts: Object.fromEntries(companyModuleKeys.map(key => [key, 0])),
-      percents: Object.fromEntries(companyModuleKeys.map(key => [key, 0])),
-      totalCompanies: 0,
-      avgActivity: 0
+      ...row,
+      date_label: companyModuleChartRowLabel(date, dates.length)
     };
   }));
 });
@@ -7416,14 +7434,16 @@ async function loadCompanyModuleReportsPreviousOptional(query = {}) {
 }
 
 async function syncCompanyModuleChartSource() {
+  const period = companyModuleChartPeriod.value;
   try {
-    const data = await api.companyModuleReports(companyModuleChartPeriodQuery(companyModuleChartPeriod.value));
+    const data = await api.companyModuleReports(companyModuleChartPeriodQuery(period));
     companyModuleChartSource.value = {
+      period,
       daily_companies: data.daily_companies || [],
       report_dates: data.report_dates || []
     };
   } catch {
-    companyModuleChartSource.value = { daily_companies: [], report_dates: [] };
+    companyModuleChartSource.value = { period, daily_companies: [], report_dates: [] };
   }
 }
 
@@ -7525,7 +7545,20 @@ async function handleCompanyModuleChartPeriodChange(value) {
   companyModuleChartCustomPeriodForm.appliedEnd = '';
   previousCompanyModuleChartPeriod.value = value;
   companyModuleChartPeriod.value = value;
-  await refreshCompanyModuleChartData();
+  companyModuleChartHoverIndex.value = -1;
+  companyModuleChartSource.value = {
+    period: value,
+    daily_companies: [],
+    report_dates: []
+  };
+  startLoading('companyModuleChartPeriod');
+  try {
+    await refreshCompanyModuleChartData();
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    stopLoading('companyModuleChartPeriod');
+  }
 }
 
 function cancelCompanyModuleChartCustomPeriod() {
