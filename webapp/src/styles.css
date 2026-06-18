@@ -3993,29 +3993,6 @@ td,
   gap: 12px 16px;
 }
 
-.company-module-chart-metric-tabs {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.company-module-chart-metric-btn {
-  padding: 8px 12px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--surface);
-  color: var(--muted-strong);
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 800;
-}
-
-.company-module-chart-metric-btn.active {
-  border-color: color-mix(in srgb, var(--primary) 35%, var(--line));
-  background: color-mix(in srgb, var(--primary) 10%, var(--surface));
-  color: var(--primary);
-}
-
 .company-module-chart-shell {
   position: relative;
   padding: 0 18px 18px;
@@ -4121,18 +4098,6 @@ td,
   color: #fff;
   font-size: 12px;
   font-weight: 800;
-}
-
-.company-module-chart-tooltip-pair {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  white-space: nowrap;
-}
-
-.company-module-chart-tooltip-sep {
-  color: rgba(255, 255, 255, .55);
-  font-weight: 700;
 }
 
 .company-module-summary {
