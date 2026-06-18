@@ -749,71 +749,94 @@
                     <div class="card-title">Bo‘limlar dinamikasi</div>
                   </div>
                 </div>
-                <div class="trend-chart company-module-trend-chart">
-                  <svg viewBox="0 0 820 220" role="img" :aria-label="companyModuleChartAriaLabel">
-                    <text class="company-module-chart-axis-title" x="12" y="110" transform="rotate(-90 12 110)">Amallar soni</text>
-                    <g class="trend-grid">
-                      <line
-                        v-for="tick in companyModuleChartYTicks"
-                        :key="`module-chart-y-${tick.value}`"
-                        :x1="COMPANY_MODULE_CHART_DIMS.left"
-                        :x2="COMPANY_MODULE_CHART_DIMS.right"
-                        :y1="tick.y"
-                        :y2="tick.y" />
-                    </g>
-                    <g class="trend-axis">
-                      <text
-                        v-for="tick in companyModuleChartYTicks"
-                        :key="`module-chart-y-label-${tick.value}`"
-                        x="48"
-                        :y="tick.y + 4"
-                        text-anchor="end">{{ tick.value }}</text>
-                    </g>
-                    <g v-for="line in companyModuleChartLines" :key="`module-chart-line-${line.key}`">
-                      <path
-                        v-if="line.points.length > 2 && line.path"
-                        :d="line.path"
-                        fill="none"
-                        :stroke="line.color"
-                        stroke-width="2.5"
-                        stroke-linecap="round"
-                        stroke-linejoin="round" />
-                      <polyline
-                        v-else-if="line.points.length > 1"
-                        :points="line.polyline"
-                        fill="none"
-                        :stroke="line.color"
-                        stroke-width="2.5"
-                        stroke-linecap="round"
-                        stroke-linejoin="round" />
-                      <circle
-                        v-for="(point, pointIndex) in line.points"
-                        :key="`module-chart-dot-${line.key}-${pointIndex}`"
-                        :cx="point.x"
-                        :cy="point.y"
-                        r="4"
-                        fill="var(--surface)"
-                        :stroke="line.color"
-                        stroke-width="2.5">
-                        <title>{{ line.label }} · {{ point.label }}: {{ fmtNumber(point.value) }}</title>
-                      </circle>
-                    </g>
-                    <g class="trend-axis">
-                      <text
-                        v-for="tick in companyModuleChartXTicks"
-                        :key="`module-chart-x-${tick.date_key}`"
-                        :x="tick.x"
-                        y="208"
-                        text-anchor="middle">{{ tick.label }}</text>
-                    </g>
-                  </svg>
-                  <div class="company-module-chart-legend">
+                <div
+                  class="company-module-chart-shell"
+                  ref="companyModuleChartRef"
+                  @mouseleave="companyModuleChartHoverIndex = -1">
+                  <div class="company-module-chart-legend top">
                     <span
                       v-for="line in companyModuleChartLines"
                       :key="`module-chart-legend-${line.key}`"
                       class="company-module-chart-legend-item">
-                      <i :style="{ background: line.color }"></i>{{ line.label }}
+                      <i :style="{ borderColor: line.color }"></i>{{ line.label }}
                     </span>
+                  </div>
+                  <div class="trend-chart company-module-trend-chart">
+                    <svg
+                      viewBox="0 0 820 260"
+                      role="img"
+                      :aria-label="companyModuleChartAriaLabel"
+                      @mousemove="onCompanyModuleChartMove"
+                      @touchstart.passive="onCompanyModuleChartTouch"
+                      @touchmove.passive="onCompanyModuleChartTouch">
+                      <text class="company-module-chart-axis-title" x="14" y="132" transform="rotate(-90 14 132)">Amallar soni</text>
+                      <g class="trend-grid">
+                        <line
+                          v-for="tick in companyModuleChartYTicks"
+                          :key="`module-chart-y-${tick.value}`"
+                          :x1="COMPANY_MODULE_CHART_DIMS.left"
+                          :x2="COMPANY_MODULE_CHART_DIMS.right"
+                          :y1="tick.y"
+                          :y2="tick.y" />
+                      </g>
+                      <g class="trend-axis company-module-chart-axis">
+                        <text
+                          v-for="tick in companyModuleChartYTicks"
+                          :key="`module-chart-y-label-${tick.value}`"
+                          x="52"
+                          :y="tick.y + 4"
+                          text-anchor="end">{{ tick.value }}</text>
+                      </g>
+                      <line
+                        v-if="companyModuleChartTooltip"
+                        class="company-module-chart-guide"
+                        :x1="companyModuleChartTooltip.x"
+                        :x2="companyModuleChartTooltip.x"
+                        :y1="COMPANY_MODULE_CHART_DIMS.top"
+                        :y2="COMPANY_MODULE_CHART_DIMS.bottom" />
+                      <g v-for="line in companyModuleChartLines" :key="`module-chart-line-${line.key}`">
+                        <path
+                          v-if="line.points.length > 1 && line.path"
+                          :d="line.path"
+                          fill="none"
+                          :stroke="line.color"
+                          stroke-width="2.5"
+                          stroke-linecap="round"
+                          stroke-linejoin="round" />
+                        <circle
+                          v-for="(point, pointIndex) in line.points"
+                          :key="`module-chart-dot-${line.key}-${pointIndex}`"
+                          class="company-module-chart-dot"
+                          :class="{ active: companyModuleChartHoverIndex === pointIndex }"
+                          :cx="point.x"
+                          :cy="point.y"
+                          :r="companyModuleChartHoverIndex === pointIndex ? 6 : 5"
+                          fill="#fff"
+                          :stroke="line.color"
+                          :stroke-width="companyModuleChartHoverIndex === pointIndex ? 3 : 2.5" />
+                      </g>
+                      <g class="trend-axis company-module-chart-axis">
+                        <text
+                          v-for="tick in companyModuleChartXTicks"
+                          :key="`module-chart-x-${tick.date_key}`"
+                          :x="tick.x"
+                          y="244"
+                          text-anchor="middle">{{ tick.label }}</text>
+                      </g>
+                    </svg>
+                    <div
+                      v-if="companyModuleChartTooltip"
+                      class="company-module-chart-tooltip"
+                      :style="companyModuleChartTooltipStyle">
+                      <b>{{ companyModuleChartTooltip.label }}</b>
+                      <div
+                        v-for="item in companyModuleChartTooltip.items"
+                        :key="`module-chart-tip-${item.key}`"
+                        class="company-module-chart-tooltip-row">
+                        <span :style="{ color: item.color }">{{ item.label }}</span>
+                        <strong>{{ fmtNumber(item.value) }} amal</strong>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </section>
@@ -2705,6 +2728,8 @@ const moduleCompareMenuRef = ref(null);
 const companyModuleFilterMenuOpen = ref(false);
 const companyModuleFilterMenuGroup = ref('');
 const companyModuleFilterMenuRef = ref(null);
+const companyModuleChartRef = ref(null);
+const companyModuleChartHoverIndex = ref(-1);
 const comparisonEnabled = ref(getStoredComparisonEnabled());
 const themeMode = ref(getStoredThemeMode());
 applyThemeMode(themeMode.value);
@@ -4112,6 +4137,9 @@ function lineChartPoints(rows = [], max = 1, dims) {
 function smoothLinePath(points = []) {
   if (!points.length) return '';
   if (points.length === 1) return `M ${points[0].x} ${points[0].y}`;
+  if (points.length === 2) {
+    return `M ${points[0].x} ${points[0].y} C ${points[0].x} ${points[0].y}, ${points[1].x} ${points[1].y}, ${points[1].x} ${points[1].y}`;
+  }
   let path = `M ${points[0].x} ${points[0].y}`;
   for (let index = 0; index < points.length - 1; index += 1) {
     const previous = points[index - 1] || points[index];
@@ -4127,13 +4155,64 @@ function smoothLinePath(points = []) {
   return path;
 }
 
+function moduleChartYMax(value = 0) {
+  const numeric = Math.max(1, Number(value || 0));
+  const step = numeric <= 50 ? 5 : 10;
+  return Math.ceil(numeric / step) * step;
+}
+
+function moduleChartYTicks(max = 1, dims = COMPANY_MODULE_CHART_DIMS) {
+  const maximum = moduleChartYMax(max);
+  const step = maximum <= 50 ? 5 : 10;
+  const count = Math.floor(maximum / step) + 1;
+  const height = dims.bottom - dims.top;
+  return Array.from({ length: count }, (_, index) => {
+    const value = maximum - step * index;
+    const y = dims.top + (height / Math.max(count - 1, 1)) * index;
+    return { value, y: Math.round(y * 10) / 10 };
+  });
+}
+
+function companyModuleChartMonthKey(dateKey = '') {
+  return String(dateKey || '').slice(0, 7);
+}
+
+function companyModuleChartMonthLabel(monthKey = '') {
+  const [, month] = String(monthKey || '').split('-').map(Number);
+  const months = ['Yan', 'Fev', 'Mar', 'Apr', 'May', 'Iyn', 'Iyl', 'Avg', 'Sen', 'Okt', 'Noy', 'Dek'];
+  return months[month - 1] || monthKey;
+}
+
+function aggregateCompanyModuleChartMonths(rows = []) {
+  const map = new Map();
+  rows.forEach(row => {
+    const monthKey = companyModuleChartMonthKey(row.date_key);
+    const current = map.get(monthKey);
+    if (!current || String(row.date_key) > String(current.date_key)) {
+      map.set(monthKey, {
+        date_key: row.date_key,
+        date_label: companyModuleChartMonthLabel(monthKey),
+        counts: { ...row.counts }
+      });
+    }
+  });
+  return [...map.values()].sort((a, b) => String(a.date_key).localeCompare(String(b.date_key)));
+}
+
+function finalizeCompanyModuleChartRows(rows = []) {
+  if (rows.length <= 14) return rows;
+  const months = new Set(rows.map(row => companyModuleChartMonthKey(row.date_key)));
+  if (months.size < 2) return rows;
+  return aggregateCompanyModuleChartMonths(rows);
+}
+
 function companyModuleChartDateLabel(dateKey = '', total = 0) {
   const key = String(dateKey || '').trim();
   if (!key) return '—';
   const [, month, day] = key.split('-').map(Number);
   const months = ['Yan', 'Fev', 'Mar', 'Apr', 'May', 'Iyn', 'Iyl', 'Avg', 'Sen', 'Okt', 'Noy', 'Dek'];
   if (!month) return key;
-  if (total > 20) return months[month - 1] || key;
+  if (total > 20 || key.length === 7) return months[month - 1] || key;
   return `${String(day || '').padStart(2, '0')}.${String(month).padStart(2, '0')}`;
 }
 
@@ -4817,11 +4896,12 @@ const COMPANY_MODULE_CHART_COLORS = Object.freeze({
   qurilish_jarayoni: '#ef4444'
 });
 const COMPANY_MODULE_CHART_DIMS = Object.freeze({
-  left: 56,
-  right: 760,
-  top: 36,
-  bottom: 188
+  left: 62,
+  right: 780,
+  top: 56,
+  bottom: 228
 });
+const COMPANY_MODULE_CHART_VIEW = Object.freeze({ width: 820, height: 260 });
 const companyModuleKeys = companyModuleColumns.map(column => column.key);
 const companyModulePeriod = ref('today');
 const companyModuleFilterKeys = ref(['business:ACTIVE']);
@@ -5341,11 +5421,13 @@ function companyModuleChartSourceEndDate(period = 'today') {
 }
 
 function companyModuleChartSourceQuery(period = 'today') {
-  if (period === 'week' || period === 'month') return null;
+  if (period === 'month') return { period: 'month' };
+  if (period === 'week') return null;
   if (period === 'custom') {
     const start = companyModuleCustomPeriodForm.appliedStart;
     const end = companyModuleCustomPeriodForm.appliedEnd;
-    if (!start || !end || start !== end) return null;
+    if (!start || !end) return null;
+    if (start !== end) return null;
     return {
       period: 'custom',
       start_date: addDaysToDateKey(end, -6),
@@ -5376,7 +5458,7 @@ const companyModuleChartRows = computed(() => {
   const filters = companyModuleFilterKeys.value;
 
   if (dates.length && dailyRows.length) {
-    return dates.map(date => {
+    return finalizeCompanyModuleChartRows(dates.map(date => {
       const counts = Object.fromEntries(companyModuleKeys.map(key => [key, 0]));
       dailyRows
         .filter(row => row.report_date === date)
@@ -5394,7 +5476,7 @@ const companyModuleChartRows = computed(() => {
         date_label: companyModuleChartDateLabel(date, dates.length),
         counts
       };
-    });
+    }));
   }
 
   const fallbackDate = dates[0] || companyModuleReports.value.report_dates?.[0] || '';
@@ -5406,10 +5488,56 @@ const companyModuleChartRows = computed(() => {
     });
   });
   const fallbackDates = companyModuleChartDateKeys([fallbackDate], period);
-  return fallbackDates.map((date, index) => ({
+  return finalizeCompanyModuleChartRows(fallbackDates.map((date, index) => ({
     date_key: date,
     date_label: companyModuleChartDateLabel(date, fallbackDates.length),
     counts: index === fallbackDates.length - 1 ? counts : Object.fromEntries(companyModuleKeys.map(key => [key, 0]))
+  })));
+});
+
+function onCompanyModuleChartPointer(clientX = 0) {
+  const root = companyModuleChartRef.value;
+  const svg = root?.querySelector('svg');
+  const points = companyModuleChartPlotPoints.value;
+  if (!svg || !points.length) {
+    companyModuleChartHoverIndex.value = -1;
+    return;
+  }
+  const rect = svg.getBoundingClientRect();
+  const x = ((clientX - rect.left) / Math.max(rect.width, 1)) * COMPANY_MODULE_CHART_VIEW.width;
+  let nearest = 0;
+  let minDistance = Infinity;
+  points.forEach((point, index) => {
+    const distance = Math.abs(point.x - x);
+    if (distance < minDistance) {
+      minDistance = distance;
+      nearest = index;
+    }
+  });
+  companyModuleChartHoverIndex.value = nearest;
+}
+
+function onCompanyModuleChartMove(event) {
+  onCompanyModuleChartPointer(event.clientX);
+}
+
+function onCompanyModuleChartTouch(event) {
+  const touch = event.touches?.[0];
+  if (!touch) return;
+  onCompanyModuleChartPointer(touch.clientX);
+}
+
+const companyModuleChartPlotPoints = computed(() => {
+  const rows = companyModuleChartRows.value;
+  const dims = COMPANY_MODULE_CHART_DIMS;
+  const width = dims.right - dims.left;
+  const step = rows.length > 1 ? width / (rows.length - 1) : 0;
+  return rows.map((row, index) => ({
+    index,
+    date_key: row.date_key,
+    label: row.date_label,
+    x: rows.length > 1 ? dims.left + step * index : dims.left + width / 2,
+    counts: row.counts || {}
   }));
 });
 
@@ -5420,10 +5548,10 @@ const companyModuleChartMax = computed(() => {
       max = Math.max(max, Number(row.counts?.[key] || 0));
     });
   });
-  return niceChartMax(Math.max(1, max));
+  return moduleChartYMax(Math.max(1, max));
 });
 
-const companyModuleChartYTicks = computed(() => chartYTicks(companyModuleChartMax.value, COMPANY_MODULE_CHART_DIMS));
+const companyModuleChartYTicks = computed(() => moduleChartYTicks(companyModuleChartMax.value, COMPANY_MODULE_CHART_DIMS));
 
 const companyModuleChartXTicks = computed(() => {
   const rows = companyModuleChartRows.value;
@@ -5471,6 +5599,41 @@ const companyModuleChartLines = computed(() => {
       polyline: points.map(point => `${point.x},${point.y}`).join(' ')
     };
   });
+});
+
+const companyModuleChartTooltip = computed(() => {
+  const index = companyModuleChartHoverIndex.value;
+  if (index < 0) return null;
+  const point = companyModuleChartPlotPoints.value[index];
+  if (!point) return null;
+  return {
+    label: point.label,
+    x: point.x,
+    items: companyModuleColumns.map(column => ({
+      key: column.key,
+      label: column.label,
+      color: COMPANY_MODULE_CHART_COLORS[column.key],
+      value: Number(point.counts?.[column.key] || 0)
+    }))
+  };
+});
+
+const companyModuleChartTooltipStyle = computed(() => {
+  const tooltip = companyModuleChartTooltip.value;
+  const root = companyModuleChartRef.value;
+  if (!tooltip || !root) return {};
+  const svg = root.querySelector('svg');
+  if (!svg) return {};
+  const rect = svg.getBoundingClientRect();
+  const shellRect = root.getBoundingClientRect();
+  const ratio = rect.width / COMPANY_MODULE_CHART_VIEW.width;
+  const left = (rect.left - shellRect.left) + tooltip.x * ratio;
+  const top = 72;
+  const clampedLeft = Math.max(12, Math.min(left, shellRect.width - 190));
+  return {
+    left: `${clampedLeft}px`,
+    top: `${top}px`
+  };
 });
 
 const companyModuleChartAriaLabel = computed(() => {

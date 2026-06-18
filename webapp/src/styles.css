@@ -3976,8 +3976,14 @@ td,
   margin-top: 18px;
 }
 
+.company-module-chart-shell {
+  position: relative;
+  padding: 0 18px 18px;
+}
+
 .company-module-trend-chart {
-  padding-top: 8px;
+  position: relative;
+  padding-top: 0;
 }
 
 .company-module-chart-axis-title {
@@ -3987,12 +3993,23 @@ td,
   letter-spacing: .04em;
 }
 
+.company-module-chart-axis text {
+  fill: var(--muted-strong);
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .company-module-chart-legend {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 14px 18px;
-  padding: 0 18px 18px;
+  gap: 12px 20px;
+  padding: 4px 0 16px;
+}
+
+.company-module-chart-legend.top {
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 8px;
 }
 
 .company-module-chart-legend-item {
@@ -4006,9 +4023,51 @@ td,
 
 .company-module-chart-legend-item i {
   display: inline-block;
-  width: 12px;
-  height: 12px;
-  border-radius: 999px;
+  width: 14px;
+  height: 14px;
+  border: 2px solid currentColor;
+  border-radius: 3px;
+  background: transparent;
+}
+
+.company-module-chart-guide {
+  stroke: color-mix(in srgb, var(--muted) 55%, transparent);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 4;
+}
+
+.company-module-chart-tooltip {
+  position: absolute;
+  z-index: 5;
+  min-width: 168px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #111827;
+  color: #fff;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, .28);
+  pointer-events: none;
+}
+
+.company-module-chart-tooltip b {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.company-module-chart-tooltip-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.company-module-chart-tooltip-row strong {
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .company-module-summary {
