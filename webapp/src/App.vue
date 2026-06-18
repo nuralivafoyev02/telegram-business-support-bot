@@ -4389,7 +4389,10 @@ function aggregateCompanyModuleChartMonths(rows = []) {
       map.set(monthKey, {
         date_key: row.date_key,
         date_label: companyModuleChartMonthLabel(monthKey),
-        counts: { ...row.counts }
+        counts: { ...(row.counts || {}) },
+        percents: { ...(row.percents || {}) },
+        avgActivity: Number(row.avgActivity || 0),
+        totalCompanies: Number(row.totalCompanies || 0)
       });
     }
   });
@@ -5780,6 +5783,7 @@ function toggleCompanyModuleChartMetric(key = '') {
     keys.push(key);
   }
   companyModuleChartMetricKeys.value = keys;
+  companyModuleChartHoverIndex.value = -1;
 }
 
 function toggleCompanyModuleChartModule(key = '') {
@@ -5847,10 +5851,13 @@ function companyModuleChartAverageForRow(row = {}, metric = 'activity', visibleK
 
 const companyModuleChartRows = computed(() => {
   const source = companyModuleChartSource.value;
-  const dailyRows = Array.isArray(source.daily_companies) ? source.daily_companies : [];
   const period = companyModuleChartPeriod.value;
   const dates = companyModuleChartDateKeys(source.report_dates || [], period);
   if (!dates.length) return [];
+
+  const dailyRows = (!source.period || source.period === period) && Array.isArray(source.daily_companies)
+    ? source.daily_companies
+    : [];
 
   const companyMap = companyInfoById.value;
   const filters = companyModuleFilterKeys.value;
@@ -7584,6 +7591,12 @@ async function applyCompanyModuleChartCustomPeriod() {
   companyModuleChartCustomPeriodForm.appliedStart = start;
   companyModuleChartCustomPeriodForm.appliedEnd = end;
   companyModuleChartPeriod.value = 'custom';
+  companyModuleChartHoverIndex.value = -1;
+  companyModuleChartSource.value = {
+    period: 'custom',
+    daily_companies: [],
+    report_dates: []
+  };
   modal.value = '';
   startLoading('companyModuleChartCustomPeriod');
   try {
