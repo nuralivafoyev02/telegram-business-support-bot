@@ -790,6 +790,17 @@
                         </Transition>
                       </div>
                     </div>
+                    <div class="company-module-chart-metric-tabs">
+                      <button
+                        v-for="option in companyModuleChartMetricOptions"
+                        :key="`module-chart-metric-${option.key}`"
+                        type="button"
+                        class="company-module-chart-metric-btn"
+                        :class="{ active: companyModuleChartMetricKeys.includes(option.key) }"
+                        @click="toggleCompanyModuleChartMetric(option.key)">
+                        {{ option.label }}
+                      </button>
+                    </div>
                     <label class="company-module-filter">
                       <span>Davr</span>
                       <select
@@ -920,7 +931,12 @@
                         :key="`module-chart-tip-${item.key}`"
                         class="company-module-chart-tooltip-row">
                         <span :style="{ color: item.color }">{{ item.label }}</span>
-                        <strong>{{ item.valueText }}</strong>
+                        <strong v-if="item.dual" class="company-module-chart-tooltip-pair">
+                          <span>{{ item.activityText }}</span>
+                          <span class="company-module-chart-tooltip-sep">·</span>
+                          <span>{{ item.actionsText }}</span>
+                        </strong>
+                        <strong v-else>{{ item.valueText }}</strong>
                       </div>
                     </div>
                   </div>
@@ -5108,8 +5124,12 @@ const companyModuleChartPeriod = ref('week');
 const companyModuleChartCustomPeriodForm = reactive({ start: '', end: '', appliedStart: '', appliedEnd: '' });
 const companyModuleChartCustomPeriodError = ref('');
 const previousCompanyModuleChartPeriod = ref('week');
+const companyModuleChartMetricKeys = ref(['activity']);
 const companyModuleChartVisibleModules = ref([...companyModuleKeys]);
 const companyModuleChartShowAverage = ref(true);
+const companyModuleChartMetricOptions = [
+  { key: 'activity', label: 'O‘rtacha faollik' }
+];
 
 function emptyCompanyModuleUsageMap() {
   return Object.fromEntries(companyModuleKeys.map(key => [key, false]));
@@ -5712,16 +5732,53 @@ function companyModuleChartRowLabel(dateKey = '', total = 0) {
   return companyModuleChartDateLabel(dateKey, total);
 }
 
-function companyModuleChartMetricValue(row = {}, key = '') {
+function companyModuleChartMetricValue(row = {}, key = '', metric = 'activity') {
+  if (metric === 'actions') return Number(row.counts?.[key] || 0);
   return Number(row.percents?.[key] || 0);
 }
 
-function companyModuleChartValueText(value = 0) {
+function companyModuleChartValueText(value = 0, metric = 'activity') {
+  if (metric === 'actions') return `${fmtNumber(value)} amal`;
   return `${fmtNumber(value)}%`;
 }
 
-function companyModuleChartModuleIsActive(row = {}, key = '') {
-  return companyModuleChartMetricValue(row, key) > 0;
+function companyModuleChartMetricKeysSelected() {
+  return [...companyModuleChartMetricKeys.value];
+}
+
+function companyModuleChartModuleIsActive(row = {}, key = '', metricKeys = []) {
+  if (metricKeys.includes('activity') && companyModuleChartMetricValue(row, key, 'activity') > 0) return true;
+  if (metricKeys.includes('actions') && companyModuleChartMetricValue(row, key, 'actions') > 0) return true;
+  return false;
+}
+
+function companyModuleChartTooltipMetricTexts(row = {}, key = '', metricKeys = []) {
+  const hasActivity = metricKeys.includes('activity');
+  const hasActions = metricKeys.includes('actions');
+  if (hasActivity && hasActions) {
+    return {
+      dual: true,
+      activityText: companyModuleChartValueText(companyModuleChartMetricValue(row, key, 'activity'), 'activity'),
+      actionsText: companyModuleChartValueText(companyModuleChartMetricValue(row, key, 'actions'), 'actions')
+    };
+  }
+  const metric = hasActions ? 'actions' : 'activity';
+  return {
+    dual: false,
+    valueText: companyModuleChartValueText(companyModuleChartMetricValue(row, key, metric), metric)
+  };
+}
+
+function toggleCompanyModuleChartMetric(key = '') {
+  const keys = [...companyModuleChartMetricKeys.value];
+  const index = keys.indexOf(key);
+  if (index >= 0) {
+    if (keys.length === 1) return;
+    keys.splice(index, 1);
+  } else {
+    keys.push(key);
+  }
+  companyModuleChartMetricKeys.value = keys;
 }
 
 function toggleCompanyModuleChartModule(key = '') {
@@ -5809,7 +5866,15 @@ const companyModuleChartRows = computed(() => {
   }));
 });
 
-const companyModuleChartAxisLabel = 'Foiz (%)';
+const companyModuleChartActiveMetric = computed(() => {
+  const keys = companyModuleChartMetricKeys.value;
+  if (keys.includes('actions')) return 'actions';
+  return 'activity';
+});
+
+const companyModuleChartAxisLabel = computed(() => (
+  companyModuleChartActiveMetric.value === 'actions' ? 'Amallar soni' : 'Foiz (%)'
+));
 
 function onCompanyModuleChartPointer(clientX = 0) {
   const root = companyModuleChartRef.value;
@@ -5860,7 +5925,7 @@ const companyModuleChartPlotPoints = computed(() => {
 });
 
 const companyModuleChartYRange = computed(() => buildCompanyModuleChartYRange(
-  'activity',
+  companyModuleChartActiveMetric.value,
   companyModuleChartRows.value,
   companyModuleChartVisibleModules.value,
   companyModuleChartShowAverage.value
@@ -5871,8 +5936,11 @@ const companyModuleChartMax = computed(() => companyModuleChartYRange.value.max)
 
 const companyModuleChartYTicks = computed(() => {
   const range = companyModuleChartYRange.value;
+  const metric = companyModuleChartActiveMetric.value;
   const span = range.max - range.min;
-  const step = span <= 24 ? 5 : span <= 50 ? 10 : 20;
+  const step = metric === 'activity'
+    ? (span <= 24 ? 5 : span <= 50 ? 10 : 20)
+    : (span <= 12 ? 2 : span <= 30 ? 5 : 10);
   return moduleChartYTicksRange(range.min, range.max, COMPANY_MODULE_CHART_DIMS, step);
 });
 
@@ -5895,6 +5963,7 @@ const companyModuleChartXTicks = computed(() => {
 
 const companyModuleChartLines = computed(() => {
   const rows = companyModuleChartRows.value;
+  const metric = companyModuleChartActiveMetric.value;
   const minimum = companyModuleChartMin.value;
   const maximum = companyModuleChartMax.value;
   const dims = COMPANY_MODULE_CHART_DIMS;
@@ -5903,7 +5972,7 @@ const companyModuleChartLines = computed(() => {
 
   return companyModuleColumns.map(column => {
     const points = rows.map((row, index) => {
-      const value = companyModuleChartMetricValue(row, column.key);
+      const value = companyModuleChartMetricValue(row, column.key, metric);
       const x = rows.length > 1 ? dims.left + step * index : dims.left + width / 2;
       const y = companyModuleChartPlotY(value, minimum, maximum, dims);
       return {
@@ -5928,6 +5997,7 @@ const companyModuleChartVisibleLines = computed(() => companyModuleChartLines.va
 
 const companyModuleChartAverageLine = computed(() => {
   const rows = companyModuleChartRows.value;
+  const metric = companyModuleChartActiveMetric.value;
   const visible = companyModuleChartVisibleModules.value;
   const minimum = companyModuleChartMin.value;
   const maximum = companyModuleChartMax.value;
@@ -5935,7 +6005,7 @@ const companyModuleChartAverageLine = computed(() => {
   const width = dims.right - dims.left;
   const step = rows.length > 1 ? width / (rows.length - 1) : 0;
   const points = rows.map((row, index) => {
-    const value = companyModuleChartAverageForRow(row, 'activity', visible);
+    const value = companyModuleChartAverageForRow(row, metric, visible);
     const x = rows.length > 1 ? dims.left + step * index : dims.left + width / 2;
     const y = companyModuleChartPlotY(value, minimum, maximum, dims);
     return {
@@ -5957,28 +6027,43 @@ const companyModuleChartTooltip = computed(() => {
   const point = companyModuleChartPlotPoints.value[index];
   const row = companyModuleChartRows.value[index];
   if (!point || !row) return null;
+  const metricKeys = companyModuleChartMetricKeysSelected();
   const visible = companyModuleChartVisibleModules.value;
   const items = companyModuleColumns
     .filter(column => visible.includes(column.key))
-    .filter(column => companyModuleChartModuleIsActive(row, column.key))
+    .filter(column => companyModuleChartModuleIsActive(row, column.key, metricKeys))
     .map(column => ({
       key: column.key,
       label: column.label,
       color: COMPANY_MODULE_CHART_COLORS[column.key],
-      valueText: companyModuleChartValueText(companyModuleChartMetricValue(row, column.key))
+      ...companyModuleChartTooltipMetricTexts(row, column.key, metricKeys)
     }));
   if (companyModuleChartShowAverage.value) {
-    const activeKeys = visible.filter(key => companyModuleChartModuleIsActive(row, key));
-    items.push({
-      key: 'average',
-      label: 'O‘rtacha',
-      color: '#111827',
-      valueText: companyModuleChartValueText(companyModuleChartAverageForRow(row, 'activity', activeKeys))
-    });
+    const activeKeys = visible.filter(key => companyModuleChartModuleIsActive(row, key, metricKeys));
+    if (metricKeys.includes('activity') && metricKeys.includes('actions')) {
+      items.push({
+        key: 'average',
+        label: 'O‘rtacha',
+        color: '#111827',
+        dual: true,
+        activityText: companyModuleChartValueText(companyModuleChartAverageForRow(row, 'activity', activeKeys), 'activity'),
+        actionsText: companyModuleChartValueText(companyModuleChartAverageForRow(row, 'actions', activeKeys), 'actions')
+      });
+    } else {
+      const metric = metricKeys.includes('actions') ? 'actions' : 'activity';
+      items.push({
+        key: 'average',
+        label: 'O‘rtacha',
+        color: '#111827',
+        dual: false,
+        valueText: companyModuleChartValueText(companyModuleChartAverageForRow(row, metric, activeKeys), metric)
+      });
+    }
   }
   return {
     label: point.label,
     x: point.x,
+    dual: metricKeys.includes('activity') && metricKeys.includes('actions'),
     items
   };
 });
@@ -5994,7 +6079,7 @@ const companyModuleChartTooltipStyle = computed(() => {
   const ratio = rect.width / COMPANY_MODULE_CHART_VIEW.width;
   const left = (rect.left - shellRect.left) + tooltip.x * ratio;
   const top = 72;
-  const clampedLeft = Math.max(12, Math.min(left, shellRect.width - 190));
+  const clampedLeft = Math.max(12, Math.min(left, shellRect.width - (tooltip.dual ? 230 : 190)));
   return {
     left: `${clampedLeft}px`,
     top: `${top}px`
@@ -6004,7 +6089,8 @@ const companyModuleChartTooltipStyle = computed(() => {
 const companyModuleChartAriaLabel = computed(() => {
   const period = companyModuleChartPeriodLabel.value;
   const points = companyModuleChartRows.value.length;
-  return `Bo‘limlar dinamikasi grafigi, ${period}, o‘rtacha faollik, ${points} ta nuqta`;
+  const metric = companyModuleChartActiveMetric.value === 'actions' ? 'amallar soni' : 'o‘rtacha faollik';
+  return `Bo‘limlar dinamikasi grafigi, ${period}, ${metric}, ${points} ta nuqta`;
 });
 
 const companyModuleChartPeriodLabel = computed(() => {
