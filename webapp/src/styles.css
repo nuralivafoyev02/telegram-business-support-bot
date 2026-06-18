@@ -3976,6 +3976,10 @@ td,
   margin-top: 18px;
 }
 
+.company-module-trend-chart svg {
+  min-height: 360px;
+}
+
 .company-module-chart-head {
   align-items: flex-start;
   gap: 16px;

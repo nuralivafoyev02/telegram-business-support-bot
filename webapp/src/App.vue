@@ -800,13 +800,13 @@
                   </div>
                   <div class="trend-chart company-module-trend-chart">
                     <svg
-                      viewBox="0 0 820 260"
+                      :viewBox="`0 0 ${COMPANY_MODULE_CHART_VIEW.width} ${COMPANY_MODULE_CHART_VIEW.height}`"
                       role="img"
                       :aria-label="companyModuleChartAriaLabel"
                       @mousemove="onCompanyModuleChartMove"
                       @touchstart.passive="onCompanyModuleChartTouch"
                       @touchmove.passive="onCompanyModuleChartTouch">
-                      <text class="company-module-chart-axis-title" x="14" y="132" transform="rotate(-90 14 132)">{{ companyModuleChartAxisLabel }}</text>
+                      <text class="company-module-chart-axis-title" x="14" :y="companyModuleChartAxisTitleY" :transform="`rotate(-90 14 ${companyModuleChartAxisTitleY})`">{{ companyModuleChartAxisLabel }}</text>
                       <g class="trend-grid">
                         <line
                           v-for="tick in companyModuleChartYTicks"
@@ -876,7 +876,7 @@
                           v-for="tick in companyModuleChartXTicks"
                           :key="`module-chart-x-${tick.date_key}`"
                           :x="tick.x"
-                          y="244"
+                          :y="COMPANY_MODULE_CHART_DIMS.bottom + 16"
                           text-anchor="middle">{{ tick.label }}</text>
                       </g>
                     </svg>
@@ -4249,6 +4249,71 @@ function moduleChartYTicks(max = 1, dims = COMPANY_MODULE_CHART_DIMS, stepOverri
   });
 }
 
+function moduleChartYTicksRange(min = 0, max = 100, dims = COMPANY_MODULE_CHART_DIMS, stepOverride = 0) {
+  const minimum = Number(min || 0);
+  const maximum = Number(max || minimum + 1);
+  const span = Math.max(maximum - minimum, 1);
+  const step = stepOverride || (span <= 24 ? 5 : span <= 50 ? 10 : 20);
+  const count = Math.floor(span / step) + 1;
+  const height = dims.bottom - dims.top;
+  return Array.from({ length: count }, (_, index) => {
+    const value = maximum - step * index;
+    const y = dims.top + (height / Math.max(count - 1, 1)) * index;
+    return { value: Math.round(value * 10) / 10, y: Math.round(y * 10) / 10 };
+  });
+}
+
+function companyModuleChartPlotY(value = 0, minimum = 0, maximum = 1, dims = COMPANY_MODULE_CHART_DIMS) {
+  const height = dims.bottom - dims.top;
+  const span = Math.max(maximum - minimum, 1);
+  const normalized = (Number(value || 0) - minimum) / span;
+  return Math.round((dims.bottom - normalized * height) * 10) / 10;
+}
+
+function buildCompanyModuleChartYRange(metric = 'activity', rows = [], visibleKeys = [], showAverage = true) {
+  let min = Infinity;
+  let max = -Infinity;
+  rows.forEach(row => {
+    visibleKeys.forEach(key => {
+      const value = companyModuleChartMetricValue(row, key, metric);
+      min = Math.min(min, value);
+      max = Math.max(max, value);
+    });
+    if (showAverage) {
+      const value = companyModuleChartAverageForRow(row, metric, visibleKeys);
+      min = Math.min(min, value);
+      max = Math.max(max, value);
+    }
+  });
+  if (!Number.isFinite(min) || !Number.isFinite(max)) {
+    return metric === 'activity' ? { min: 0, max: 100 } : { min: 0, max: 5 };
+  }
+  if (min === max) {
+    const pad = metric === 'activity' ? 8 : 2;
+    return {
+      min: Math.max(0, min - pad),
+      max: metric === 'activity' ? Math.min(100, max + pad) : max + pad
+    };
+  }
+  const span = max - min;
+  const pad = metric === 'activity'
+    ? Math.max(5, Math.round((span * 0.18) / 5) * 5)
+    : Math.max(1, Math.ceil(span * 0.18));
+  let rangeMin = metric === 'activity'
+    ? Math.max(0, Math.floor((min - pad) / 5) * 5)
+    : Math.max(0, Math.floor(min - pad));
+  let rangeMax = metric === 'activity'
+    ? Math.min(100, Math.ceil((max + pad) / 5) * 5)
+    : moduleChartYMax(max + pad);
+  const minSpan = metric === 'activity' ? 20 : 4;
+  if (rangeMax - rangeMin < minSpan) {
+    const extra = minSpan - (rangeMax - rangeMin);
+    rangeMin = Math.max(0, rangeMin - Math.ceil(extra / 2));
+    rangeMax = metric === 'activity' ? Math.min(100, rangeMax + Math.floor(extra / 2)) : rangeMax + extra;
+  }
+  return { min: rangeMin, max: rangeMax };
+}
+
 function companyModuleChartMonthKey(dateKey = '') {
   return String(dateKey || '').slice(0, 7);
 }
@@ -4975,9 +5040,10 @@ const COMPANY_MODULE_CHART_DIMS = Object.freeze({
   left: 62,
   right: 780,
   top: 56,
-  bottom: 228
+  bottom: 332
 });
-const COMPANY_MODULE_CHART_VIEW = Object.freeze({ width: 820, height: 260 });
+const COMPANY_MODULE_CHART_VIEW = Object.freeze({ width: 820, height: 360 });
+const companyModuleChartAxisTitleY = (COMPANY_MODULE_CHART_DIMS.top + COMPANY_MODULE_CHART_DIMS.bottom) / 2;
 const companyModuleKeys = companyModuleColumns.map(column => column.key);
 const companyModulePeriod = ref('today');
 const companyModuleFilterKeys = ref(['business:ACTIVE']);
@@ -5711,27 +5777,24 @@ const companyModuleChartPlotPoints = computed(() => {
   }));
 });
 
-const companyModuleChartMax = computed(() => {
-  const metric = companyModuleChartActiveMetric.value;
-  const visible = companyModuleChartVisibleModules.value;
-  let max = 0;
-  companyModuleChartRows.value.forEach(row => {
-    visible.forEach(key => {
-      max = Math.max(max, companyModuleChartMetricValue(row, key, metric));
-    });
-    if (companyModuleChartShowAverage.value) {
-      max = Math.max(max, companyModuleChartAverageForRow(row, metric, visible));
-    }
-  });
-  if (metric === 'activity') return 100;
-  return moduleChartYMax(Math.max(1, max));
-});
+const companyModuleChartYRange = computed(() => buildCompanyModuleChartYRange(
+  companyModuleChartActiveMetric.value,
+  companyModuleChartRows.value,
+  companyModuleChartVisibleModules.value,
+  companyModuleChartShowAverage.value
+));
+
+const companyModuleChartMin = computed(() => companyModuleChartYRange.value.min);
+const companyModuleChartMax = computed(() => companyModuleChartYRange.value.max);
 
 const companyModuleChartYTicks = computed(() => {
-  if (companyModuleChartActiveMetric.value === 'activity') {
-    return moduleChartYTicks(100, COMPANY_MODULE_CHART_DIMS, 5);
-  }
-  return moduleChartYTicks(companyModuleChartMax.value, COMPANY_MODULE_CHART_DIMS);
+  const range = companyModuleChartYRange.value;
+  const metric = companyModuleChartActiveMetric.value;
+  const span = range.max - range.min;
+  const step = metric === 'activity'
+    ? (span <= 24 ? 5 : span <= 50 ? 10 : 20)
+    : (span <= 12 ? 2 : span <= 30 ? 5 : 10);
+  return moduleChartYTicksRange(range.min, range.max, COMPANY_MODULE_CHART_DIMS, step);
 });
 
 const companyModuleChartXTicks = computed(() => {
@@ -5754,20 +5817,20 @@ const companyModuleChartXTicks = computed(() => {
 const companyModuleChartLines = computed(() => {
   const rows = companyModuleChartRows.value;
   const metric = companyModuleChartActiveMetric.value;
+  const minimum = companyModuleChartMin.value;
   const maximum = companyModuleChartMax.value;
   const dims = COMPANY_MODULE_CHART_DIMS;
   const width = dims.right - dims.left;
-  const height = dims.bottom - dims.top;
   const step = rows.length > 1 ? width / (rows.length - 1) : 0;
 
   return companyModuleColumns.map(column => {
     const points = rows.map((row, index) => {
       const value = companyModuleChartMetricValue(row, column.key, metric);
       const x = rows.length > 1 ? dims.left + step * index : dims.left + width / 2;
-      const y = dims.bottom - (value / maximum) * height;
+      const y = companyModuleChartPlotY(value, minimum, maximum, dims);
       return {
         x: Math.round(x * 10) / 10,
-        y: Math.round(y * 10) / 10,
+        y,
         value,
         label: row.date_label
       };
@@ -5789,18 +5852,18 @@ const companyModuleChartAverageLine = computed(() => {
   const rows = companyModuleChartRows.value;
   const metric = companyModuleChartActiveMetric.value;
   const visible = companyModuleChartVisibleModules.value;
+  const minimum = companyModuleChartMin.value;
   const maximum = companyModuleChartMax.value;
   const dims = COMPANY_MODULE_CHART_DIMS;
   const width = dims.right - dims.left;
-  const height = dims.bottom - dims.top;
   const step = rows.length > 1 ? width / (rows.length - 1) : 0;
   const points = rows.map((row, index) => {
     const value = companyModuleChartAverageForRow(row, metric, visible);
     const x = rows.length > 1 ? dims.left + step * index : dims.left + width / 2;
-    const y = dims.bottom - (value / maximum) * height;
+    const y = companyModuleChartPlotY(value, minimum, maximum, dims);
     return {
       x: Math.round(x * 10) / 10,
-      y: Math.round(y * 10) / 10,
+      y,
       value,
       label: row.date_label
     };
