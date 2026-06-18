@@ -4123,6 +4123,18 @@ td,
   font-weight: 800;
 }
 
+.company-module-chart-tooltip-pair {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.company-module-chart-tooltip-sep {
+  color: rgba(255, 255, 255, .55);
+  font-weight: 700;
+}
+
 .company-module-summary {
   display: flex;
   flex-direction: column;

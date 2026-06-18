@@ -749,6 +749,47 @@
                     <div class="card-title">Bo‘limlar dinamikasi</div>
                   </div>
                   <div class="company-module-chart-controls">
+                    <div
+                      class="company-module-filter company-module-filter-wide company-module-filter-menu-wrap"
+                      ref="companyModuleChartCompanyMenuRef">
+                      <span>Kompaniyalar</span>
+                      <div class="company-module-filter-picker">
+                        <button
+                          type="button"
+                          class="company-module-filter-trigger select mini-select"
+                          @click.stop="toggleCompanyModuleChartCompanyMenu">
+                          <span class="company-module-filter-trigger-label">{{ companyModuleChartCompanyLabel }}</span>
+                          <span class="company-module-filter-trigger-caret">▾</span>
+                        </button>
+                        <Transition name="fade">
+                          <div
+                            v-if="companyModuleChartCompanyMenuOpen"
+                            class="company-module-filter-menu actions-dropdown"
+                            @click.stop>
+                            <button
+                              type="button"
+                              class="company-module-filter-option"
+                              :class="{ active: !companyModuleChartCompanyId }"
+                              @click="selectCompanyModuleChartCompany('')">
+                              <span>Hammasi</span>
+                              <span v-if="!companyModuleChartCompanyId" class="company-module-filter-check">✓</span>
+                            </button>
+                            <button
+                              v-for="company in companyModuleChartCompanyOptions"
+                              :key="`module-chart-company-${company.id}`"
+                              type="button"
+                              class="company-module-filter-option"
+                              :class="{ active: companyModuleChartCompanyId === company.id }"
+                              @click="selectCompanyModuleChartCompany(company.id)">
+                              <span>{{ company.name }}</span>
+                              <span
+                                v-if="companyModuleChartCompanyId === company.id"
+                                class="company-module-filter-check">✓</span>
+                            </button>
+                          </div>
+                        </Transition>
+                      </div>
+                    </div>
                     <div class="company-module-chart-metric-tabs">
                       <button
                         v-for="option in companyModuleChartMetricOptions"
@@ -890,7 +931,12 @@
                         :key="`module-chart-tip-${item.key}`"
                         class="company-module-chart-tooltip-row">
                         <span :style="{ color: item.color }">{{ item.label }}</span>
-                        <strong>{{ item.valueText }}</strong>
+                        <strong v-if="item.dual" class="company-module-chart-tooltip-pair">
+                          <span>{{ item.activityText }}</span>
+                          <span class="company-module-chart-tooltip-sep">·</span>
+                          <span>{{ item.actionsText }}</span>
+                        </strong>
+                        <strong v-else>{{ item.valueText }}</strong>
                       </div>
                     </div>
                   </div>
@@ -1128,7 +1174,7 @@
                   <label class="label">Telegram reaksiyalari
                     <select v-model="settingsForm.message_reactions" class="select">
                       <option value="false">O‘chirilgan</option>
-                      <option value="true">👀 task yaratish, 💯 yopish va ⚡ tasdiqlash</option>
+                      <option value="true">👀 task yaratish va 💯 yopish</option>
                     </select>
                   </label>
                   <label class="label">Yopish tegi
@@ -2715,6 +2761,7 @@ const SETTINGS_SECTION_STORAGE_KEY = 'uyqur_support_settings_section';
 const THEME_STORAGE_KEY = 'uyqur_support_theme';
 const COMPARISON_STORAGE_KEY = 'uyqur_support_comparison_enabled';
 const TELEGRAM_AUTO_SYNC_INTERVAL_MS = 25_000;
+const COMPANY_ACTIVITY_SYNC_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const SETTINGS_SECTION_KEYS = ['bot', 'integrations', 'telegram', 'admin'];
 const tabs = [
   { key: 'stats', label: 'Support performance', icon: '📊' },
@@ -2804,6 +2851,9 @@ const moduleCompareMenuRef = ref(null);
 const companyModuleFilterMenuOpen = ref(false);
 const companyModuleFilterMenuGroup = ref('');
 const companyModuleFilterMenuRef = ref(null);
+const companyModuleChartCompanyId = ref('');
+const companyModuleChartCompanyMenuOpen = ref(false);
+const companyModuleChartCompanyMenuRef = ref(null);
 const companyModuleChartRef = ref(null);
 const companyModuleChartHoverIndex = ref(-1);
 const comparisonEnabled = ref(getStoredComparisonEnabled());
@@ -2880,6 +2930,7 @@ const loginError = ref('');
 const nowTick = ref(Date.now());
 let durationTimer = null;
 let telegramAutoSyncTimer = null;
+let companyActivitySyncTimer = null;
 let telegramAutoSyncBusy = false;
 let modalScrollY = 0;
 let activeTooltipTarget = null;
@@ -3911,6 +3962,10 @@ function handleDocumentPointerDown(event) {
     const root = companyModuleFilterMenuRef.value;
     if (!root || !root.contains(event.target)) closeCompanyModuleFilterMenu();
   }
+  if (companyModuleChartCompanyMenuOpen.value) {
+    const root = companyModuleChartCompanyMenuRef.value;
+    if (!root || !root.contains(event.target)) closeCompanyModuleChartCompanyMenu();
+  }
 }
 
 function handleDocumentKeydown(event) {
@@ -3919,6 +3974,7 @@ function handleDocumentKeydown(event) {
     rankingMenuOpen.value = false;
     moduleCompareMenuOpen.value = false;
     closeCompanyModuleFilterMenu();
+    closeCompanyModuleChartCompanyMenu();
     hideFloatingTooltip();
     if (modal.value) closeModal();
   }
@@ -5594,13 +5650,15 @@ function companyModuleChartDateKeys(dates = [], period = 'week') {
   return Array.from({ length: 7 }, (_, index) => addDaysToDateKey(end, index - 6));
 }
 
-function buildCompanyModuleChartDayRow(date, dailyRows, companyMap, filters) {
+function buildCompanyModuleChartDayRow(date, dailyRows, companyMap, filters, companyId = '') {
   const counts = Object.fromEntries(companyModuleKeys.map(key => [key, 0]));
   let totalCompanies = 0;
   let activitySum = 0;
+  const selectedCompanyId = String(companyId || '').trim();
   dailyRows
     .filter(row => row.report_date === date)
     .forEach(reportRow => {
+      if (selectedCompanyId && String(reportRow.company_id) !== selectedCompanyId) return;
       const company = companyMap.get(String(reportRow.company_id));
       if (!company) return;
       const merged = companyModuleRowForChart(company, reportRow);
@@ -5638,6 +5696,33 @@ function companyModuleChartValueText(value = 0, metric = 'activity') {
   return `${fmtNumber(value)}%`;
 }
 
+function companyModuleChartMetricKeysSelected() {
+  return [...companyModuleChartMetricKeys.value];
+}
+
+function companyModuleChartModuleIsActive(row = {}, key = '', metricKeys = []) {
+  if (metricKeys.includes('activity') && companyModuleChartMetricValue(row, key, 'activity') > 0) return true;
+  if (metricKeys.includes('actions') && companyModuleChartMetricValue(row, key, 'actions') > 0) return true;
+  return false;
+}
+
+function companyModuleChartTooltipMetricTexts(row = {}, key = '', metricKeys = []) {
+  const hasActivity = metricKeys.includes('activity');
+  const hasActions = metricKeys.includes('actions');
+  if (hasActivity && hasActions) {
+    return {
+      dual: true,
+      activityText: companyModuleChartValueText(companyModuleChartMetricValue(row, key, 'activity'), 'activity'),
+      actionsText: companyModuleChartValueText(companyModuleChartMetricValue(row, key, 'actions'), 'actions')
+    };
+  }
+  const metric = hasActions ? 'actions' : 'activity';
+  return {
+    dual: false,
+    valueText: companyModuleChartValueText(companyModuleChartMetricValue(row, key, metric), metric)
+  };
+}
+
 function toggleCompanyModuleChartMetric(key = '') {
   const keys = [...companyModuleChartMetricKeys.value];
   const index = keys.indexOf(key);
@@ -5662,6 +5747,47 @@ function toggleCompanyModuleChartModule(key = '') {
   companyModuleChartVisibleModules.value = keys;
 }
 
+function toggleCompanyModuleChartCompanyMenu() {
+  companyModuleChartCompanyMenuOpen.value = !companyModuleChartCompanyMenuOpen.value;
+}
+
+function closeCompanyModuleChartCompanyMenu() {
+  companyModuleChartCompanyMenuOpen.value = false;
+}
+
+function selectCompanyModuleChartCompany(companyId = '') {
+  companyModuleChartCompanyId.value = String(companyId || '').trim();
+  closeCompanyModuleChartCompanyMenu();
+}
+
+function isCompanyModuleBusinessActive(row = {}) {
+  return String(row.business_status || '').toUpperCase() === 'ACTIVE';
+}
+
+const companyModuleChartCompanyOptions = computed(() => companyModuleBaseRows.value
+  .filter(isCompanyModuleBusinessActive)
+  .map(row => ({
+    id: String(row.id || '').trim(),
+    name: row.name || 'Kompaniya'
+  }))
+  .filter(row => row.id)
+  .sort((a, b) => a.name.localeCompare(b.name, 'uz')));
+
+const companyModuleChartCompanyLabel = computed(() => {
+  const selected = String(companyModuleChartCompanyId.value || '').trim();
+  if (!selected) return 'Hammasi';
+  const option = companyModuleChartCompanyOptions.value.find(row => row.id === selected);
+  return option?.name || 'Hammasi';
+});
+
+watch(companyModuleChartCompanyOptions, (options) => {
+  const selected = String(companyModuleChartCompanyId.value || '').trim();
+  if (!selected) return;
+  if (!options.some(row => row.id === selected)) {
+    companyModuleChartCompanyId.value = '';
+  }
+});
+
 function companyModuleChartAverageForRow(row = {}, metric = 'activity', visibleKeys = []) {
   const values = visibleKeys.map(key => companyModuleChartMetricValue(row, key, metric));
   if (!values.length) return 0;
@@ -5675,10 +5801,11 @@ const companyModuleChartRows = computed(() => {
   const dates = companyModuleChartDateKeys(source.report_dates || [], period);
   const companyMap = companyInfoById.value;
   const filters = companyModuleFilterKeys.value;
+  const chartCompanyId = companyModuleChartCompanyId.value;
 
   if (dates.length && dailyRows.length) {
     return finalizeCompanyModuleChartRows(dates.map(date => {
-      const row = buildCompanyModuleChartDayRow(date, dailyRows, companyMap, filters);
+      const row = buildCompanyModuleChartDayRow(date, dailyRows, companyMap, filters, chartCompanyId);
       return {
         ...row,
         date_label: companyModuleChartRowLabel(date, dates.length)
@@ -5688,8 +5815,11 @@ const companyModuleChartRows = computed(() => {
 
   const fallbackDate = dates[0] || companyModuleReports.value.report_dates?.[0] || '';
   if (!fallbackDate) return [];
-  const row = buildCompanyModuleChartDayRow(fallbackDate, [], companyMap, filters);
-  companyModuleFilteredRows.value.forEach(companyRow => {
+  const row = buildCompanyModuleChartDayRow(fallbackDate, [], companyMap, filters, chartCompanyId);
+  const fallbackCompanies = chartCompanyId
+    ? companyModuleFilteredRows.value.filter(companyRow => String(companyRow.id) === String(chartCompanyId))
+    : companyModuleFilteredRows.value;
+  fallbackCompanies.forEach(companyRow => {
     row.totalCompanies += 1;
     row.avgActivity += companyModuleActivePercent(companyRow.module_usage);
     companyModuleKeys.forEach(key => {
@@ -5880,30 +6010,43 @@ const companyModuleChartTooltip = computed(() => {
   const point = companyModuleChartPlotPoints.value[index];
   const row = companyModuleChartRows.value[index];
   if (!point || !row) return null;
-  const metric = companyModuleChartActiveMetric.value;
+  const metricKeys = companyModuleChartMetricKeysSelected();
   const visible = companyModuleChartVisibleModules.value;
   const items = companyModuleColumns
     .filter(column => visible.includes(column.key))
+    .filter(column => companyModuleChartModuleIsActive(row, column.key, metricKeys))
     .map(column => ({
       key: column.key,
       label: column.label,
       color: COMPANY_MODULE_CHART_COLORS[column.key],
-      value: companyModuleChartMetricValue(row, column.key, metric),
-      valueText: companyModuleChartValueText(companyModuleChartMetricValue(row, column.key, metric), metric)
+      ...companyModuleChartTooltipMetricTexts(row, column.key, metricKeys)
     }));
   if (companyModuleChartShowAverage.value) {
-    const average = companyModuleChartAverageForRow(row, metric, visible);
-    items.push({
-      key: 'average',
-      label: 'O‘rtacha',
-      color: '#111827',
-      value: average,
-      valueText: companyModuleChartValueText(average, metric)
-    });
+    const activeKeys = visible.filter(key => companyModuleChartModuleIsActive(row, key, metricKeys));
+    if (metricKeys.includes('activity') && metricKeys.includes('actions')) {
+      items.push({
+        key: 'average',
+        label: 'O‘rtacha',
+        color: '#111827',
+        dual: true,
+        activityText: companyModuleChartValueText(companyModuleChartAverageForRow(row, 'activity', activeKeys), 'activity'),
+        actionsText: companyModuleChartValueText(companyModuleChartAverageForRow(row, 'actions', activeKeys), 'actions')
+      });
+    } else {
+      const metric = metricKeys.includes('actions') ? 'actions' : 'activity';
+      items.push({
+        key: 'average',
+        label: 'O‘rtacha',
+        color: '#111827',
+        dual: false,
+        valueText: companyModuleChartValueText(companyModuleChartAverageForRow(row, metric, activeKeys), metric)
+      });
+    }
   }
   return {
     label: point.label,
     x: point.x,
+    dual: metricKeys.includes('activity') && metricKeys.includes('actions'),
     items
   };
 });
@@ -5919,7 +6062,7 @@ const companyModuleChartTooltipStyle = computed(() => {
   const ratio = rect.width / COMPANY_MODULE_CHART_VIEW.width;
   const left = (rect.left - shellRect.left) + tooltip.x * ratio;
   const top = 72;
-  const clampedLeft = Math.max(12, Math.min(left, shellRect.width - 190));
+  const clampedLeft = Math.max(12, Math.min(left, shellRect.width - (tooltip.dual ? 230 : 190)));
   return {
     left: `${clampedLeft}px`,
     top: `${top}px`
@@ -7194,7 +7337,12 @@ async function refresh() {
   try {
     if (activeTab.value === 'stats') await loadSupportPerformance();
     if (activeTab.value === 'productAnalytics') await loadProductAnalytics();
-    if (activeTab.value === 'companyActivity') await loadCompanyActivity();
+    if (activeTab.value === 'companyActivity') {
+      await loadCompanyActivity();
+      startCompanyActivitySyncTimer();
+    } else {
+      stopCompanyActivitySyncTimer();
+    }
     if (activeTab.value === 'groups') {
       await Promise.all([
         api.groups().then(rows => { groups.value = rows; }),
@@ -7469,6 +7617,21 @@ async function loadCompanyActivity() {
   if (data?.from_cache) loadCompanyInfo().catch(error => showToast(error.message));
 }
 
+function stopCompanyActivitySyncTimer() {
+  if (!companyActivitySyncTimer) return;
+  clearInterval(companyActivitySyncTimer);
+  companyActivitySyncTimer = null;
+}
+
+function startCompanyActivitySyncTimer() {
+  stopCompanyActivitySyncTimer();
+  if (activeTab.value !== 'companyActivity') return;
+  companyActivitySyncTimer = setInterval(() => {
+    if (activeTab.value !== 'companyActivity') return;
+    loadCompanyActivity().catch(() => null);
+  }, COMPANY_ACTIVITY_SYNC_INTERVAL_MS);
+}
+
 watch(companyModuleCompareEnabled, refreshCompanyModuleReports);
 
 async function loadSettings() {
@@ -7654,7 +7817,12 @@ async function setTab(key) {
   try {
     if (activeTab.value === 'stats') await loadSupportPerformance();
     if (activeTab.value === 'productAnalytics') await loadProductAnalytics();
-    if (activeTab.value === 'companyActivity') await loadCompanyActivity();
+    if (activeTab.value === 'companyActivity') {
+      await loadCompanyActivity();
+      startCompanyActivitySyncTimer();
+    } else {
+      stopCompanyActivitySyncTimer();
+    }
     if (activeTab.value === 'groups') {
       await Promise.all([
         api.groups().then(rows => { groups.value = rows; }),
@@ -9824,7 +9992,7 @@ async function saveSettings() {
           }
         },
         { key: 'auto_reply', value: { enabled: settingsForm.auto_reply === 'true' } },
-        { key: 'message_reactions', value: { enabled: settingsForm.message_reactions === 'true', ticket_close: true, emoji: '⚡', accept_custom_emoji_as_eye: true } },
+        { key: 'message_reactions', value: { enabled: settingsForm.message_reactions === 'true', ticket_close: false, accept_custom_emoji_as_eye: true } },
         {
           key: 'ticket_notifications',
           value: {
@@ -10098,6 +10266,7 @@ onUnmounted(() => {
   }
   if (durationTimer) clearInterval(durationTimer);
   stopTelegramAutoSync();
+  stopCompanyActivitySyncTimer();
   setModalScrollLock(false);
   Object.values(employeeAvatarUrls.value).filter(Boolean).forEach(url => URL.revokeObjectURL(url));
   Object.values(chatAvatarUrls.value).filter(Boolean).forEach(url => URL.revokeObjectURL(url));

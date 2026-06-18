@@ -1839,25 +1839,8 @@ function resolveTicketCloseReactionTarget(message = {}) {
   return message.message_id;
 }
 
-async function maybeReactToTicketClose(message, settings = null, { closedRequest = null } = {}) {
-  if (message.business_connection_id) return;
-
-  const resolvedSettings = settings || await getBotSettings().catch(error => {
-    logBackgroundError('ticket-close-reaction-settings', error);
-    return null;
-  });
-  const reactions = resolvedSettings && resolvedSettings.messageReactions ? resolvedSettings.messageReactions : {};
-  if (!reactions.enabled || !reactions.ticketClose) return;
-
-  const chatId = closedRequest?.chat_id || message.chat?.id;
-  const messageId = resolveTicketCloseReactionTarget(message);
-  if (!chatId || !messageId) return;
-
-  await reactToMessage(chatId, messageId, reactions.emoji || '\u26a1')
-    .catch(error => {
-      if (isBenignReactionError(error)) return;
-      logBackgroundError('ticket-close-reaction', error);
-    });
+async function maybeReactToTicketClose() {
+  return;
 }
 
 async function maybeReplyDone(message, result, settings = null) {

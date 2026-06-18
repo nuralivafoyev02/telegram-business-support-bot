@@ -1263,11 +1263,7 @@ async function testMessageReactionSettingEnablesTicketCloseReaction() {
     assert.strictEqual(result.payload.handled, 'message');
     assert.strictEqual(patched.some(item => item.table === 'support_requests' && item.values.status === 'closed'), true);
     assert.strictEqual(inserted.some(item => item.table === 'request_events' && item.rows[0].event_type === 'closed'), true);
-    assert.strictEqual(telegramCalls.length, 1);
-    assert.match(telegramCalls[0].url, /setMessageReaction$/);
-    assert.strictEqual(telegramCalls[0].body.chat_id, -100200);
-    assert.strictEqual(telegramCalls[0].body.message_id, 43);
-    assert.deepStrictEqual(telegramCalls[0].body.reaction, [{ type: 'emoji', emoji: '⚡' }]);
+    assert.strictEqual(telegramCalls.length, 0);
   } finally {
     supabase.insert = originalInsert;
     supabase.select = originalSelect;
