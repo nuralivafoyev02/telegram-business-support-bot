@@ -831,7 +831,7 @@
                         :x2="companyModuleChartTooltip.x"
                         :y1="COMPANY_MODULE_CHART_DIMS.top"
                         :y2="COMPANY_MODULE_CHART_DIMS.bottom" />
-                      <g v-for="line in companyModuleChartVisibleLines" :key="`module-chart-line-${line.key}`">
+                      <g v-for="line in companyModuleChartVisibleLines" :key="`module-chart-line-${line.key}`" class="company-module-chart-module-line">
                         <path
                           v-if="line.points.length > 1 && line.path"
                           :d="line.path"
@@ -839,7 +839,8 @@
                           :stroke="line.color"
                           stroke-width="2.5"
                           stroke-linecap="round"
-                          stroke-linejoin="round" />
+                          stroke-linejoin="round"
+                          stroke-dasharray="8 6" />
                         <circle
                           v-for="(point, pointIndex) in line.points"
                           :key="`module-chart-dot-${line.key}-${pointIndex}`"
@@ -852,7 +853,7 @@
                           :stroke="line.color"
                           :stroke-width="companyModuleChartHoverIndex === pointIndex ? 3 : 2.5" />
                       </g>
-                      <g v-if="companyModuleChartShowAverage && companyModuleChartAverageLine.points.length > 1">
+                      <g v-if="companyModuleChartShowAverage && companyModuleChartAverageLine.points.length > 1" class="company-module-chart-average-line">
                         <path
                           :d="companyModuleChartAverageLine.path"
                           fill="none"
