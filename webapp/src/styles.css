@@ -759,8 +759,38 @@ tbody tr:hover {
   flex-wrap: wrap;
 }
 
-.search {
+.search-field {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
   min-width: min(360px, 100%);
+}
+
+.search-field-icon {
+  position: absolute;
+  left: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  color: var(--muted-soft, #94a3b8);
+  pointer-events: none;
+}
+
+.search-field-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.search-field .search {
+  width: 100%;
+  min-width: 0;
+  padding-left: 38px;
+}
+
+.search {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: rgba(255, 255, 255, .055);
@@ -823,7 +853,8 @@ tbody tr:hover {
 .input:focus,
 .textarea:focus,
 .select:focus,
-.search:focus {
+.search:focus,
+.search-field:focus-within .search {
   border-color: rgba(142, 199, 255, .62);
   background: rgba(7, 20, 38, .86);
 }
@@ -4449,10 +4480,15 @@ tbody tr:hover {
 .input:focus,
 .textarea:focus,
 .select:focus,
-.search:focus {
+.search:focus,
+.search-field:focus-within .search {
   border-color: #94a3b8;
   background: var(--surface);
   box-shadow: 0 0 0 3px rgba(100, 116, 139, .14);
+}
+
+.search-field:focus-within .search-field-icon {
+  color: var(--muted);
 }
 
 .label,

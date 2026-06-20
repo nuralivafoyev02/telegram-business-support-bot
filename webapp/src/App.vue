@@ -1037,7 +1037,7 @@
 
           <template v-if="activeTab === 'employees'">
             <div class="toolbar">
-              <input v-model="search" class="search" />
+              <SearchField v-model="search" />
               <TransitionGroup name="action-pop" tag="div" class="toolbar-actions">
                 <button key="send" class="btn primary" :disabled="!selectedEmployees.length"
                   @click="openSelectedMessage('employees')">
@@ -1074,7 +1074,7 @@
 
           <template v-if="activeTab === 'clickup'">
             <div class="toolbar">
-              <input v-model="search" class="search" />
+              <SearchField v-model="search" />
               <TransitionGroup name="action-pop" tag="div" class="toolbar-actions">
                 <button key="refresh" class="btn primary" :disabled="loadingAction === 'clickupTask'"
                   @click="loadClickUpTasks">Yangilash</button>
@@ -10349,16 +10349,46 @@ onUnmounted(() => {
   Object.values(chatAvatarUrls.value).filter(Boolean).forEach(url => URL.revokeObjectURL(url));
 });
 
+const SearchField = defineComponent({
+  props: { modelValue: String, placeholder: String },
+  emits: ['update:modelValue'],
+  setup(props, { emit }) {
+    return () => h('label', { class: 'search-field' }, [
+      h('span', { class: 'search-field-icon', 'aria-hidden': 'true' }, [
+        h('svg', { viewBox: '0 0 20 20', fill: 'none' }, [
+          h('path', {
+            d: 'M9 3.5a5.5 5.5 0 1 1 0 11 5.5 5.5 0 0 1 0-11Z',
+            stroke: 'currentColor',
+            'stroke-width': '1.6'
+          }),
+          h('path', {
+            d: 'm13.5 13.5 3 3',
+            stroke: 'currentColor',
+            'stroke-width': '1.6',
+            'stroke-linecap': 'round'
+          })
+        ])
+      ]),
+      h('input', {
+        class: 'search',
+        type: 'search',
+        value: props.modelValue,
+        ...(props.placeholder ? { placeholder: props.placeholder } : {}),
+        onInput: e => emit('update:modelValue', e.target.value)
+      })
+    ]);
+  }
+});
+
 const Toolbar = defineComponent({
   props: { modelValue: String, placeholder: String },
   emits: ['update:modelValue'],
   setup(props, { emit, slots }) {
     return () => h('div', { class: 'toolbar' }, [
-      h('input', {
-        class: 'search',
-        value: props.modelValue,
-        ...(props.placeholder ? { placeholder: props.placeholder } : {}),
-        onInput: e => emit('update:modelValue', e.target.value)
+      h(SearchField, {
+        modelValue: props.modelValue,
+        placeholder: props.placeholder,
+        'onUpdate:modelValue': value => emit('update:modelValue', value)
       }),
       slots.default ? slots.default() : null
     ]);
