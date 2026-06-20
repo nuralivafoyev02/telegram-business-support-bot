@@ -320,13 +320,11 @@
                 <div v-if="ticketTrendRows.length" class="ticket-trend-chart">
                   <article v-for="row in ticketTrendRows" :key="row.date_key" class="ticket-trend-day">
                     <div class="ticket-trend-bars" :aria-label="ticketTrendTooltip(row)">
-                      <div class="ticket-bar-stack" :data-tooltip="ticketTrendMetricTooltip(row, 'total')" tabindex="0"
+                      <div class="ticket-bar-stack" :data-tooltip="ticketTrendBarTooltip(row)" tabindex="0"
                         :style="{ height: chartBarHeight(row.total_requests, ticketTrendMax) }">
-                        <span class="ticket-bar-segment closed" :data-tooltip="ticketTrendMetricTooltip(row, 'closed')"
-                          tabindex="0"
+                        <span class="ticket-bar-segment closed"
                           :style="{ height: ticketTrendSegmentHeight(row.closed_requests, row.total_requests) }"></span>
-                        <span class="ticket-bar-segment open" :data-tooltip="ticketTrendMetricTooltip(row, 'open')"
-                          tabindex="0"
+                        <span class="ticket-bar-segment open"
                           :style="{ height: ticketTrendSegmentHeight(row.open_requests, row.total_requests) }"></span>
                       </div>
                     </div>
@@ -374,7 +372,7 @@
           </template>
 
           <template v-if="activeTab === 'productAnalytics'">
-            <Toolbar v-model="search" placeholder="Kompaniya, brand yoki support bo‘yicha qidirish" />
+            <Toolbar v-model="search" />
 
             <div class="spacer"></div>
 
@@ -466,7 +464,7 @@
           </template>
 
           <template v-if="activeTab === 'companyActivity'">
-            <Toolbar v-model="search" placeholder="Kompaniya, direktor, support yoki telefon bo‘yicha qidirish" />
+            <Toolbar v-model="search" />
 
             <div class="metric-strip company-metrics">
               <article class="card metric clickable-metric" role="button" tabindex="0"
@@ -971,7 +969,7 @@
           </template>
 
           <template v-if="activeTab === 'groups'">
-            <Toolbar v-model="search" placeholder="Guruh nomi yoki chat raqami bo‘yicha qidirish">
+            <Toolbar v-model="search">
               <TransitionGroup name="action-pop" tag="div" class="toolbar-actions">
                 <button key="send" class="btn primary" :disabled="!selectedGroups.length"
                   @click="openSelectedMessage('groups')">
@@ -1007,7 +1005,7 @@
           </template>
 
           <template v-if="activeTab === 'companies'">
-            <Toolbar v-model="search" placeholder="Kompaniya nomi, telefon yoki izoh bo‘yicha qidirish" />
+            <Toolbar v-model="search" />
             <section class="card">
               <div class="card-header">
                 <div>
@@ -1019,7 +1017,7 @@
           </template>
 
           <template v-if="activeTab === 'privates'">
-            <Toolbar v-model="search" placeholder="Mijoz nomi, chat raqami yoki foydalanuvchi nomi bo‘yicha qidirish" />
+            <Toolbar v-model="search" />
             <section class="card">
               <div class="card-header">
                 <div>
@@ -1039,8 +1037,7 @@
 
           <template v-if="activeTab === 'employees'">
             <div class="toolbar">
-              <input v-model="search" class="search"
-                placeholder="Xodim ismi, foydalanuvchi nomi yoki Telegram raqami bo‘yicha qidirish" />
+              <input v-model="search" class="search" />
               <TransitionGroup name="action-pop" tag="div" class="toolbar-actions">
                 <button key="send" class="btn primary" :disabled="!selectedEmployees.length"
                   @click="openSelectedMessage('employees')">
@@ -1077,8 +1074,7 @@
 
           <template v-if="activeTab === 'clickup'">
             <div class="toolbar">
-              <input v-model="search" class="search"
-                placeholder="Vazifa, guruh, mention yoki ClickUp ID bo‘yicha qidirish" />
+              <input v-model="search" class="search" />
               <TransitionGroup name="action-pop" tag="div" class="toolbar-actions">
                 <button key="refresh" class="btn primary" :disabled="loadingAction === 'clickupTask'"
                   @click="loadClickUpTasks">Yangilash</button>
@@ -4201,18 +4197,12 @@ function ticketTrendTooltip(row = {}) {
   return `${row.date_label}: ${fmtNumber(row.total_requests)} ticket, ${fmtNumber(row.closed_requests)} javob, ${fmtNumber(row.open_requests)} ochiq`;
 }
 
-function ticketTrendMetricTooltip(row = {}, metric = 'total') {
-  const labels = {
-    total: 'So‘rovlar',
-    closed: 'Javob berildi',
-    open: 'Javobsiz'
-  };
-  const values = {
-    total: row.total_requests,
-    closed: row.closed_requests,
-    open: row.open_requests
-  };
-  return `${row.date_label}: ${labels[metric] || labels.total}: ${fmtNumber(values[metric])}`;
+function ticketTrendBarTooltip(row = {}) {
+  return [
+    row.date_label,
+    `Javob berildi: ${fmtNumber(row.closed_requests)}`,
+    `Javobsiz: ${fmtNumber(row.open_requests)}`
+  ].join('\n');
 }
 
 function barWidth(value, max) {
@@ -5275,7 +5265,7 @@ function isCompanyModuleControlOptionActive(group = {}, option = {}) {
 
 function selectCompanyModuleControlOption(group = {}, option = {}) {
   if (group.type === 'sort') {
-    handleCompanyModuleControlChange(`sort:${option.key}`);
+    companyModuleSort.value = companyModuleSort.value === option.key ? 'modules_desc' : option.key;
     closeCompanyModuleFilterMenu();
     return;
   }
@@ -5287,6 +5277,11 @@ function selectCompanyModuleControlOption(group = {}, option = {}) {
   if (!group.multi) {
     const namespace = companyModuleFilterNamespace(option.key);
     const keys = companyModuleFilterKeys.value.filter(key => companyModuleFilterNamespace(key) !== namespace);
+    if (isCompanyModuleControlOptionActive(group, option)) {
+      companyModuleFilterKeys.value = keys;
+      closeCompanyModuleFilterMenu();
+      return;
+    }
     if (option.key !== 'support:all') keys.push(option.key);
     companyModuleFilterKeys.value = keys;
     closeCompanyModuleFilterMenu();
@@ -10362,7 +10357,7 @@ const Toolbar = defineComponent({
       h('input', {
         class: 'search',
         value: props.modelValue,
-        placeholder: props.placeholder,
+        ...(props.placeholder ? { placeholder: props.placeholder } : {}),
         onInput: e => emit('update:modelValue', e.target.value)
       }),
       slots.default ? slots.default() : null

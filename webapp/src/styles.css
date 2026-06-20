@@ -3666,8 +3666,7 @@ td,
   overflow: hidden;
 }
 
-.ticket-bar-stack::after,
-.ticket-bar-segment::after {
+.ticket-bar-stack::after {
   content: attr(data-tooltip);
   position: absolute;
   left: 50%;
@@ -3682,19 +3681,18 @@ td,
   background: var(--surface);
   box-shadow: var(--shadow);
   font-size: 12px;
-  font-weight: 900;
-  line-height: 1.25;
+  font-weight: 600;
+  line-height: 1.35;
   opacity: 0;
   pointer-events: none;
   transform: translate(-50%, 4px);
   transition: opacity .14s ease, transform .14s ease;
-  white-space: nowrap;
+  white-space: pre-line;
+  text-align: center;
 }
 
 .ticket-bar-stack:hover::after,
-.ticket-bar-stack:focus-visible::after,
-.ticket-bar-segment:hover::after,
-.ticket-bar-segment:focus-visible::after {
+.ticket-bar-stack:focus-visible::after {
   opacity: 1;
   transform: translate(-50%, 0);
 }
