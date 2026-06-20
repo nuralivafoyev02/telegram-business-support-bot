@@ -117,12 +117,9 @@ button:disabled {
   width: 42px;
   height: 42px;
   border-radius: var(--radius);
-  display: grid;
-  place-items: center;
-  font-weight: 800;
-  color: #061223;
-  background: var(--brand-blue);
-  box-shadow: none;
+  display: block;
+  object-fit: cover;
+  flex-shrink: 0;
 }
 
 .brand-title {
@@ -1007,6 +1004,11 @@ tbody tr:hover {
 .login-card h1 {
   margin: 10px 0 5px;
   letter-spacing: 0;
+}
+
+.login-logo {
+  width: 48px;
+  height: 48px;
 }
 
 .login-card p {
@@ -4576,8 +4578,7 @@ tbody tr:hover {
 }
 
 .logo {
-  color: var(--primary-contrast);
-  background: var(--primary);
+  border-radius: var(--radius);
 }
 
 .modal-backdrop {

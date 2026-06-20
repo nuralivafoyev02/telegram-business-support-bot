@@ -1,7 +1,7 @@
 <template>
   <main v-if="!token" class="login-screen">
     <section class="card login-card">
-      <div class="logo">UQ</div>
+      <img class="logo login-logo" :src="uyqurLogoUrl" alt="Uyqur" width="48" height="48" />
       <h1>Uyqur Yordam</h1>
       <form class="form" @submit.prevent="submitLogin">
         <label class="label">Kirish nomi
@@ -33,7 +33,7 @@
   <div v-else class="app-shell">
     <aside class="sidebar">
       <div class="brand">
-        <div class="logo">UQ</div>
+        <img class="logo" :src="uyqurLogoUrl" alt="Uyqur" width="42" height="42" />
         <div>
           <div class="brand-title">Uyqur Yordam</div>
         </div>
@@ -42,13 +42,11 @@
       <nav class="nav">
         <button v-for="item in mainTabs" :key="item.key" :class="{ active: activeTab === item.key }"
           @click="setTab(item.key)">
-          <span>{{ item.icon }}</span>
           <b>{{ item.label }}</b>
         </button>
         <div class="nav-group" :class="{ open: otherMenuOpen }">
           <button class="nav-disclosure" :class="{ active: isOtherTabActive }" type="button"
             :aria-expanded="otherMenuOpen ? 'true' : 'false'" @click="otherMenuOpen = !otherMenuOpen">
-            <span>⋯</span>
             <b>Boshqa menyular</b>
             <em>{{ otherMenuOpen ? '−' : '+' }}</em>
           </button>
@@ -56,7 +54,6 @@
             <div v-if="otherMenuOpen" class="nav-submenu">
               <button v-for="item in otherTabs" :key="item.key" :class="{ active: activeTab === item.key }"
                 @click="setTab(item.key)">
-                <span>{{ item.icon }}</span>
                 <b>{{ item.label }}</b>
               </button>
             </div>
@@ -66,7 +63,6 @@
 
       <nav class="nav nav-bottom">
         <button :class="{ active: activeTab === settingsTab.key }" @click="setTab(settingsTab.key)">
-          <span>{{ settingsTab.icon }}</span>
           <b>{{ settingsTab.label }}</b>
         </button>
       </nav>
@@ -175,8 +171,6 @@
                 <div class="card-header">
                   <div>
                     <div class="card-title">Rahbar nazorati: ochiq so‘rovlar</div>
-                    <div class="card-note">Qaysi chatdan kelgani, qancha vaqtdan beri ochiq turgani va mas’ul xodim
-                    </div>
                   </div>
                 </div>
                 <DataTable :columns="managerOpenRequestColumns" :rows="managerOpenRequests"
@@ -322,7 +316,6 @@
                 <div class="card-header chart-card-head">
                   <div>
                     <div class="card-title">Ticket va javoblar trendi</div>
-                    <div class="card-note">{{ selectedPeriodLabel }} bo‘yicha kunlik solishtirish</div>
                   </div>
                 </div>
                 <div v-if="ticketTrendRows.length" class="ticket-trend-chart">
@@ -347,14 +340,6 @@
                 <div class="card-header chart-card-head">
                   <div>
                     <div class="card-title">Kompaniyalar bo‘yicha ticketlar</div>
-                    <div class="card-note">
-                      {{ selectedPeriodLabel }}:
-                      barcha kanallar {{ fmtNumber(selectedPeriodStats.total_requests) }}
-                      (yopilgan {{ fmtNumber(selectedPeriodStats.closed_requests) }},
-                      ochiq {{ fmtNumber(selectedPeriodStats.open_requests) }})
-                      · guruhlar {{ fmtNumber(companyTicketTotals.total) }}
-                      ({{ fmtNumber(companyTicketTotals.closed) }}/{{ fmtNumber(companyTicketTotals.open) }})
-                    </div>
                   </div>
                 </div>
                 <div v-if="companyTicketRows.length" class="company-ticket-bars">
@@ -434,7 +419,6 @@
                 <div class="card-header">
                   <div>
                     <div class="card-title">Kompaniyalar obuna timeline diagrammasi</div>
-                    <div class="card-note">Boshlanish, obuna muddati va qancha vaqtdan beri ishlatayotgani</div>
                   </div>
                 </div>
                 <div v-if="subscriptionTimelineRows.length" class="subscription-diagram">
@@ -944,7 +928,6 @@
                 <div class="card-header">
                   <div>
                     <div class="card-title">Kompaniya aktivligi</div>
-                    <div class="card-note">API’dan olingan holat, mas’ul va obuna ma’lumotlari</div>
                   </div>
                 </div>
                 <DataTable :columns="companyActivityColumns" :rows="filteredCompanyInfoRows"
@@ -975,7 +958,6 @@
                 <div class="card-header">
                   <div>
                     <div class="card-title">Obuna nazorati</div>
-                    <div class="card-note">Tugagan yoki yaqin tugaydigan kompaniyalar</div>
                   </div>
                 </div>
                 <div class="alert-list">
@@ -1035,7 +1017,6 @@
               <div class="card-header">
                 <div>
                   <div class="card-title">Kompaniyalar</div>
-                  <div class="card-note">Uyqur API’dan kelgan mas’ul biriktirilgan kompaniyalar</div>
                 </div>
               </div>
               <DataTable :columns="companyColumns" :rows="filteredCompanies" empty="Kompaniya topilmadi" />
@@ -1112,7 +1093,6 @@
               <div class="card-header">
                 <div>
                   <div class="card-title">ClickUp vazifalar</div>
-                  <div class="card-note">👀 reaksiyasi orqali yaratilgan vazifalar va qo‘lda kuzatuv</div>
                 </div>
               </div>
               <DataTable :columns="clickupColumns" :rows="filteredClickUpTasks" empty="ClickUp vazifa topilmadi">
@@ -1144,7 +1124,6 @@
                   @click="activeSettingsSection = section.key">
                   <span>{{ section.icon }}</span>
                   <b>{{ section.label }}</b>
-                  <small>{{ section.note }}</small>
                 </button>
               </aside>
 
@@ -1249,7 +1228,6 @@
                   <div class="settings-head">
                     <div>
                       <div class="card-title">Integratsiya</div>
-                      <div class="card-note">Model ulanishi va asosiy guruhga yuboriladigan log oqimlari</div>
                     </div>
                     <span class="status-pill" :class="{ ready: aiIntegrationReady, error: aiIntegrationHasError }">{{
                       aiIntegrationStatus }}</span>
@@ -1294,7 +1272,6 @@
                   <div class="settings-head">
                     <div>
                       <div class="card-title">ClickUp integratsiya</div>
-                      <div class="card-note">Telegram reaksiyalaridan vazifa yaratish va yopish oqimi</div>
                     </div>
                     <span class="status-pill" :class="{ ready: clickUpIntegrationReady, error: clickUpIntegrationHasError }">
                       {{ clickUpIntegrationStatus }}
@@ -1338,7 +1315,6 @@
                     <div class="settings-head compact">
                       <div>
                         <div class="card-title">Asosiy guruh loglari</div>
-                        <div class="card-note">Xato va oddiy loglar tanlangan bo‘lsa asosiy guruhga yuboriladi</div>
                       </div>
                       <span class="status-pill" :class="{ ready: logForm.enabled, 'muted-status': !logForm.enabled }">
                         {{ logForm.enabled ? 'Yoqilgan' : 'O‘chiq' }}
@@ -1448,7 +1424,6 @@
                 <div class="settings-head">
                   <div>
                     <div class="card-title">Bilim bazasi</div>
-                    <div class="card-note">AI o‘qitish matni va import qilinadigan hujjatlar</div>
                   </div>
                   <span class="status-pill" :class="{ ready: aiIntegrationReady, error: aiIntegrationHasError }">{{
                     aiIntegrationStatus }}</span>
@@ -2752,6 +2727,7 @@
 <script setup>
 import { computed, defineComponent, h, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 import { api, getToken, setToken } from './api';
+import uyqurLogoUrl from './assets/uyqur-logo.png';
 
 const ACTIVE_TAB_STORAGE_KEY = 'uyqur_support_active_tab';
 const SETTINGS_SECTION_STORAGE_KEY = 'uyqur_support_settings_section';
