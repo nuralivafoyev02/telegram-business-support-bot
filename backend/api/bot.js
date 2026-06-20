@@ -564,12 +564,13 @@ async function ensureReactionTargetMessage(reaction = {}, chat = {}) {
   const saved = await getSavedReactionMessage(chat.id, reaction.message_id);
   if (saved) return saved;
 
+  const actor = reactionActor(reaction);
   const stubMessage = {
     message_id: reaction.message_id,
     date: reaction.date || Math.floor(Date.now() / 1000),
     chat,
     text: '',
-    from: {}
+    from: actor?.id && !actor.type ? actor : {}
   };
   await metrics.saveMessage({
     message: stubMessage,
@@ -638,8 +639,8 @@ async function handleDoneReaction(reaction = {}, settings = {}) {
   await ensureReactionContext(reaction);
   await ensureReactionTargetMessage(reaction, chat);
   const employee = await resolveReactionEmployee(reaction);
-  const allowAnonymousAdminClose = !employee && isAnonymousGroupReactionActor(reaction);
-  if (!employee && !allowAnonymousAdminClose) {
+  const actorAccess = canUseGroupReaction(reaction, employee);
+  if (!actorAccess.ok) {
     console.warn('[bot:done-reaction]', {
       skipped: 'not_employee',
       actor_id: actor.id || null,
@@ -659,7 +660,7 @@ async function handleDoneReaction(reaction = {}, settings = {}) {
       first_name: tgUserName(actor) || 'Anonymous admin'
     }
   };
-  const result = await metrics.closeRequestByMessage({ message: closeMessage, targetMessageId: reaction.message_id, employee });
+  const result = await metrics.closeRequestByMessage({ message: closeMessage, targetMessageId: reaction.message_id, employee: actorAccess.employee });
   if (result.closed) {
     await refreshTicketNotificationAfterGroupClose(result, closeMessage, { closeSource: 'group_reaction' });
     await maybeReplyDone(closeMessage, result, settings);
@@ -668,7 +669,7 @@ async function handleDoneReaction(reaction = {}, settings = {}) {
       skipped: 'no_open_request',
       actor_id: actor.id || null,
       actor_username: actor.username || null,
-      employee_id: employee?.id || null,
+      employee_id: actorAccess.employee?.id || null,
       chat_id: chat.id,
       message_id: reaction.message_id || null
     });
@@ -701,7 +702,8 @@ async function handleEyeReaction(reaction = {}, settings = {}) {
     return { ok: false, skipped: 'bot_actor' };
   }
   const employee = await resolveReactionEmployee(reaction);
-  if (!employee) {
+  const actorAccess = canUseGroupReaction(reaction, employee);
+  if (!actorAccess.ok) {
     console.warn('[bot:eye-reaction]', {
       skipped: 'not_employee',
       actor_id: actor.id || null,
@@ -743,7 +745,7 @@ async function handleEyeReaction(reaction = {}, settings = {}) {
     message: raw,
     sourceType,
     openSource: 'reaction',
-    openedByEmployee: employee
+    openedByEmployee: actorAccess.employee
   }).catch(error => {
     console.warn('[bot:eye-reaction:support-request:error]', error.message);
     return null;
@@ -755,7 +757,7 @@ async function handleEyeReaction(reaction = {}, settings = {}) {
       chat_id: chat.id,
       message_id: reaction.message_id,
       actor_id: actor.id || null,
-      employee_id: employee?.id || null
+      employee_id: actorAccess.employee?.id || null
     });
   }
   const supportRequestId = supportRequest && supportRequest.id || null;
@@ -877,20 +879,36 @@ async function handleEyeReaction(reaction = {}, settings = {}) {
 }
 
 function reactionsEnabledForChat(reaction = {}, settings = {}) {
-  if (settings.messageReactions?.enabled !== false) return true;
-  return isGroupChat(reaction.chat || {});
+  return settings.messageReactions?.enabled !== false;
+}
+
+function canUseGroupReaction(reaction = {}, employee = null) {
+  if (employee) return { ok: true, employee };
+  if (isAnonymousGroupReactionActor(reaction)) {
+    return { ok: true, employee: null, anonymousAdmin: true };
+  }
+  return { ok: false, employee: null };
 }
 
 async function handleMessageReaction(reaction = {}) {
   const settings = await getBotSettings();
-  if (settings.messageReactions?.ticketClose !== false && reactionHasDone(reaction, settings)) {
+  const reactionsOn = reactionsEnabledForChat(reaction, settings);
+  const ticketCloseOn = settings.messageReactions?.ticketClose !== false;
+
+  if (reactionsOn && ticketCloseOn && reactionWasAddedDone(reaction, settings)) {
     const result = await handleDoneReaction(reaction, settings);
-    if (result.skipped || result.closed === false) {
+    if (result.closed) {
+      console.info('[bot:done-reaction:ticket]', {
+        request_id: result.request_id || null,
+        chat_id: reaction.chat?.id || null,
+        message_id: reaction.message_id || null
+      });
+    } else if (result.skipped || result.closed === false) {
       console.warn('[bot:done-reaction:result]', result);
     }
     return { ok: true, handled: 'message_reaction_done', ...result };
   }
-  if (!reactionsEnabledForChat(reaction, settings)) {
+  if (!reactionsOn) {
     return { ok: true, handled: 'message_reaction_disabled' };
   }
   if (reactionWasAddedEye(reaction, settings)) {

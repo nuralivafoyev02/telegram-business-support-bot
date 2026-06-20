@@ -483,24 +483,27 @@ async function createSupportRequest({ message, sourceType, companyId = null, ski
     const existingByMessage = await findRequestByInitialMessage(chat.id, message.message_id);
     if (existingByMessage) {
       const optionalRow = buildSupportRequestOptionalFields(ticketMeta);
+      if (reactionOpen && isClosedLikeRequestStatus(existingByMessage.status)) {
+        return withTicketOutcome(await reopenSupportRequest({ request: existingByMessage, message, optionalRow }), 'reopened');
+      }
       if (existingByMessage.id && Object.keys(optionalRow).length) {
         await patchSupportRequestMetadata(existingByMessage.id, optionalRow).catch(patchError => {
           console.warn('[metrics:support-request:metadata-patch]', patchError.message);
         });
       }
       if (reactionOpen || isClosedLikeRequestStatus(existingByMessage.status)) {
-        return existingByMessage;
+        return withTicketOutcome(existingByMessage, 'unchanged');
       }
       if (isOpenRequestStatus(existingByMessage.status)) {
-        return addRequestNote({ request: existingByMessage, message });
+        return withTicketOutcome(await addRequestNote({ request: existingByMessage, message }), 'note');
       }
-      return existingByMessage;
+      return withTicketOutcome(existingByMessage, 'unchanged');
     }
   }
 
   if (!reactionOpen) {
     const existing = await findMergeableOpenRequest({ message, sourceType });
-    if (existing) return addRequestNote({ request: existing, message });
+    if (existing) return withTicketOutcome(await addRequestNote({ request: existing, message }), 'note');
   }
 
   const coreRow = {
@@ -539,7 +542,50 @@ async function createSupportRequest({ message, sourceType, companyId = null, ski
     raw: message,
     created_at: createdAt
   }], { prefer: 'return=minimal' }).catch(() => null);
-  return request;
+  return withTicketOutcome(request, 'created');
+}
+
+function withTicketOutcome(request, outcome) {
+  if (!request || typeof request !== 'object') return request;
+  return { ...request, ticket_outcome: outcome };
+}
+
+async function reopenSupportRequest({ request, message, optionalRow = {} } = {}) {
+  if (!request?.id) return request;
+  const chat = message.chat || {};
+  const from = message.from || {};
+  const text = messageDisplayText(message);
+  const reopenedAt = messageDateIso(message);
+  const patch = {
+    status: 'open',
+    closed_at: null,
+    closed_by_employee_id: null,
+    closed_by_tg_id: null,
+    closed_by_name: null,
+    done_message_id: null,
+    initial_text: text || request.initial_text || '',
+    ...optionalRow
+  };
+  const rows = await supabase.patch('support_requests', { id: supabase.eq(request.id) }, patch).catch(error => {
+    if (isMissingSchemaColumnError(error)) {
+      const { open_source, opened_by_employee_id, assigned_to_employee_id, assigned_at, notification_chat_id, notification_message_id, ...corePatch } = patch;
+      return supabase.patch('support_requests', { id: supabase.eq(request.id) }, corePatch);
+    }
+    throw error;
+  });
+  await supabase.insert('request_events', [{
+    request_id: request.id,
+    chat_id: chat.id || request.chat_id,
+    tg_message_id: message.message_id,
+    event_type: 'opened',
+    actor_tg_id: from.id || null,
+    actor_name: tgUserName(from),
+    employee_id: optionalRow.opened_by_employee_id || null,
+    text: text || '👀',
+    raw: message,
+    created_at: reopenedAt
+  }], { prefer: 'return=minimal' }).catch(() => null);
+  return rows[0] || { ...request, ...patch, status: 'open' };
 }
 
 async function findOpenRequestById(requestId) {
@@ -792,6 +838,7 @@ module.exports = {
   saveBusinessConnection,
   saveMessage,
   createSupportRequest,
+  reopenSupportRequest,
   findRequestByInitialMessage,
   findOpenRequestByInitialMessage,
   patchSupportRequestMetadata,

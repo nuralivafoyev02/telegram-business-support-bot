@@ -629,26 +629,29 @@ async function openSupportRequestAndNotify({
     assignedAt,
     skipMerge: openSource === 'reaction'
   });
+  const ticketOutcome = request?.ticket_outcome || 'created';
   const fresh = request?.id ? await loadRequestById(request.id) : null;
   const notifyRequest = enrichRequestForNotification(fresh || request, {
     openSource,
     companyId: companyCtx.companyId || resolvedCompanyId || companyId
   });
-  const notifyResult = await notifyTicketOpened({
-    request: notifyRequest,
-    message,
-    openSource,
-    openedByEmployee
-  }).catch(error => {
-    console.warn('[ticket-notifier:notify]', { request_id: request?.id, error: error.message });
-    return { sent: false, reason: 'error', error: error.message };
-  });
-  if (!notifyResult?.sent) {
-    console.warn('[ticket-notifier:notify:skipped]', {
-      request_id: request?.id,
-      open_source: openSource,
-      ...notifyResult
+  if (['created', 'reopened'].includes(ticketOutcome)) {
+    const notifyResult = await notifyTicketOpened({
+      request: notifyRequest,
+      message,
+      openSource,
+      openedByEmployee
+    }).catch(error => {
+      console.warn('[ticket-notifier:notify]', { request_id: request?.id, error: error.message });
+      return { sent: false, reason: 'error', error: error.message };
     });
+    if (!notifyResult?.sent) {
+      console.warn('[ticket-notifier:notify:skipped]', {
+        request_id: request?.id,
+        open_source: openSource,
+        ...notifyResult
+      });
+    }
   }
   return request;
 }
