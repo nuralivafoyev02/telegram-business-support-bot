@@ -3684,7 +3684,6 @@ const supportPerformanceRows = computed(() => {
     lookupKeys.forEach(key => openSummaryMap.delete(key));
     const assignedCompanyCount = visibleCompanyInfoRows.value.filter(company => companyMatchesEmployee(company, candidate)).length;
 
-    const rowKey = supportRowKey(candidate) || supportRowKey(row);
     const periodRowCounts = usePeriodTicketCounts ? periodTicketCounts.counts.get(rowKey) : null;
     const closedFallback = periodRow ? Number(periodRow.closed_requests || 0) : 0;
     const closedRaw = periodRowCounts
