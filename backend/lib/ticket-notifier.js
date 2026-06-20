@@ -3,6 +3,10 @@
 const supabase = require('./supabase');
 const { getBotSettings } = require('./bot-settings');
 const { getCachedCompanyInfo } = require('./company-info');
+const {
+  normalizeCompanyDirectoryName,
+  resolveCompanyInfoForTicket
+} = require('./company-resolution');
 const metrics = require('./metrics');
 const {
   canCreateTicketFromPrivateMessage,
@@ -176,45 +180,66 @@ async function loadChatRow(chatId) {
   return rows[0] || null;
 }
 
-async function resolveCompanyAndSupportEmployee({ companyId = null, chatId = null } = {}) {
+async function resolveCompanyAndSupportEmployee({
+  companyId = null,
+  chatId = null,
+  chatTitle = '',
+  companyNameHint = ''
+} = {}) {
   const chat = chatId ? await loadChatRow(chatId) : null;
-  let resolvedCompanyId = companyId || chat?.company_id || null;
   const cached = await getCachedCompanyInfo().catch(() => null);
-  const externalRows = Array.isArray(cached?.companies) ? cached.companies : [];
+  const companyInfoCompanies = Array.isArray(cached?.companies) ? cached.companies : [];
+  const directoryCompanies = await supabase.select('companies', {
+    select: 'id,name',
+    limit: '5000'
+  }).catch(() => []);
 
-  if (!resolvedCompanyId && chatId) {
-    const match = externalRows.find(company => {
-      const groups = Array.isArray(company.groups) ? company.groups : [];
-      return groups.some(group => String(group.chat_id) === String(chatId));
-    });
-    if (match) resolvedCompanyId = String(match.id || match.company_id || '').trim() || null;
-  }
+  const resolved = resolveCompanyInfoForTicket({
+    companyId: companyId || chat?.company_id || '',
+    chatId,
+    chatTitle: chat?.title || chatTitle,
+    companyNameHint: companyNameHint || chat?.company_name || '',
+    companyInfoCompanies,
+    directoryCompanies
+  });
 
-  const companyCtx = await loadCompanyContext(resolvedCompanyId);
+  const companyCtx = await loadCompanyContext(resolved.companyId, resolved.companyInfo, resolved.companyName);
   return {
-    companyId: resolvedCompanyId,
+    companyId: resolved.companyId,
     companyName: companyCtx.name,
     supportEmployee: companyCtx.supportEmployee
   };
 }
 
-async function loadCompanyContext(companyId) {
-  if (!companyId) return { name: 'Biriktirilmagan', supportEmployee: null };
-  const rows = await supabase.select('companies', {
-    select: 'id,name',
-    id: supabase.eq(companyId),
-    limit: '1'
-  }).catch(() => []);
-  const company = rows[0] || null;
+async function loadCompanyContext(companyId, companyInfo = null, nameHint = '') {
+  if (!companyId && !companyInfo && !nameHint) {
+    return { name: 'Biriktirilmagan', supportEmployee: null };
+  }
+
+  let company = null;
+  if (companyId) {
+    const rows = await supabase.select('companies', {
+      select: 'id,name',
+      id: supabase.eq(companyId),
+      limit: '1'
+    }).catch(() => []);
+    company = rows[0] || null;
+  }
+
   let supportEmployee = null;
-  let externalName = '';
+  let externalName = String(companyInfo?.name || nameHint || '').trim();
 
   const cached = await getCachedCompanyInfo().catch(() => null);
   const externalRows = cached && Array.isArray(cached.companies) ? cached.companies : [];
-  const external = externalRows.find(row => String(row.id || '') === String(companyId))
-    || externalRows.find(row => String(row.name || '').trim() === String(company?.name || '').trim());
+  const external = companyInfo
+    || (companyId ? externalRows.find(row => String(row.id || '') === String(companyId)) : null)
+    || externalRows.find(row => {
+      const hint = normalizeCompanyDirectoryName(company?.name || externalName);
+      return hint && normalizeCompanyDirectoryName(row.name) === hint;
+    });
+
   if (external) {
-    externalName = String(external.name || '').trim();
+    externalName = String(external.name || externalName || '').trim();
     const supportUsername = normalizeSupportUsername(external.uyqur_support_username);
     if (supportUsername) {
       supportEmployee = await loadEmployeeByUsername(supportUsername);
@@ -231,6 +256,16 @@ async function loadCompanyContext(companyId) {
     name: company?.name || externalName || 'Biriktirilmagan',
     supportEmployee
   };
+}
+
+async function persistRequestCompanyId(request = {}, companyId = null) {
+  const resolvedId = String(companyId || '').trim();
+  if (!request?.id || !resolvedId || String(request.company_id || '').trim() === resolvedId) return;
+  await supabase.patch('support_requests', { id: supabase.eq(request.id) }, {
+    company_id: resolvedId
+  }).catch(error => {
+    console.warn('[ticket-notifier:persist-company]', { request_id: request.id, error: error.message });
+  });
 }
 
 async function loadRequestById(requestId) {
@@ -347,11 +382,14 @@ async function buildReassignKeyboard(request = {}, page = 0) {
 async function loadNotificationCompany(request = {}, messageChat = {}) {
   const ctx = await resolveCompanyAndSupportEmployee({
     companyId: request.company_id,
-    chatId: request.chat_id || messageChat?.id
+    chatId: request.chat_id || messageChat?.id,
+    chatTitle: messageChat?.title || request.chat_title || '',
+    companyNameHint: request.company_name || messageChat?.company_name || ''
   });
   return {
     name: ctx.companyName,
-    supportEmployee: ctx.supportEmployee
+    supportEmployee: ctx.supportEmployee,
+    companyId: ctx.companyId
   };
 }
 
@@ -450,6 +488,7 @@ async function refreshTicketNotificationMessage(request = {}, options = {}) {
   const resolved = (request.id ? await loadRequestById(request.id) : null) || request;
   const chat = await loadChatRow(resolved.chat_id);
   const company = await loadNotificationCompany(resolved, chat || { id: resolved.chat_id });
+  await persistRequestCompanyId(resolved, company.companyId);
   const openedByEmployee = await loadEmployeeById(resolved.opened_by_employee_id);
   const assignedEmployee = await loadEmployeeById(resolved.assigned_to_employee_id);
   const text = await buildNotificationText({
@@ -508,6 +547,7 @@ async function notifyTicketOpened({ request, message, openSource = 'ai', openedB
 
   const chat = message?.chat || await loadChatRow(request.chat_id) || { id: request.chat_id };
   const company = await loadNotificationCompany(request, chat);
+  await persistRequestCompanyId(request, company.companyId);
   const openedBy = openedByEmployee || await loadEmployeeById(request.opened_by_employee_id);
   const assigned = await loadEmployeeById(request.assigned_to_employee_id);
   const text = await buildNotificationText({ request, chat, company, openedByEmployee: openedBy, assignedEmployee: assigned });
@@ -616,7 +656,11 @@ async function openSupportRequestAndNotify({
       return null;
     }
   }
-  const companyCtx = await resolveCompanyAndSupportEmployee({ companyId: resolvedCompanyId, chatId });
+  const companyCtx = await resolveCompanyAndSupportEmployee({
+    companyId: resolvedCompanyId,
+    chatId,
+    chatTitle: message?.chat?.title || ''
+  });
   const supportEmployee = companyCtx.supportEmployee;
   const assignedAt = supportEmployee?.id ? new Date().toISOString() : null;
   const request = await metrics.createSupportRequest({
