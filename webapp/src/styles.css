@@ -761,10 +761,9 @@ tbody tr:hover {
 
 .search-field {
   position: relative;
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  flex: 1 1 auto;
-  min-width: min(360px, 100%);
+  width: min(360px, 100%);
 }
 
 .search-field-icon {
