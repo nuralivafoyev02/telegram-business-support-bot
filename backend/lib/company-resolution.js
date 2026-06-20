@@ -1,5 +1,7 @@
 'use strict';
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 function telegramIdKey(value) {
   if (value === undefined || value === null || value === '') return '';
   return String(value).trim();
@@ -19,6 +21,54 @@ function normalizeCompanyDirectoryName(value = '') {
 function companyDirectoryId(company = {}) {
   if (!company || typeof company !== 'object') return '';
   return String(company.id || company.company_id || '').trim();
+}
+
+function isUuid(value = '') {
+  return UUID_RE.test(String(value || '').trim());
+}
+
+function sanitizeUuidField(value) {
+  const text = String(value || '').trim();
+  return isUuid(text) ? text : null;
+}
+
+function uyqurCompanyMarker(externalId) {
+  const text = String(externalId || '').trim();
+  return text ? `Uyqur API ID: ${text}` : '';
+}
+
+function resolvePersistableCompanyId({
+  externalCompanyId = '',
+  companyName = '',
+  chatCompanyId = '',
+  directoryCompanies = []
+} = {}) {
+  const linkedChatCompanyId = sanitizeUuidField(chatCompanyId);
+  if (linkedChatCompanyId) return linkedChatCompanyId;
+
+  const directCompanyId = sanitizeUuidField(externalCompanyId);
+  if (directCompanyId) return directCompanyId;
+
+  const normalizedName = normalizeCompanyDirectoryName(companyName);
+  if (normalizedName) {
+    const byName = directoryCompanies.find(company =>
+      normalizeCompanyDirectoryName(company.name) === normalizedName
+    );
+    const matchedId = sanitizeUuidField(byName?.id);
+    if (matchedId) return matchedId;
+  }
+
+  const externalId = String(externalCompanyId || '').trim();
+  if (externalId) {
+    const marker = uyqurCompanyMarker(externalId);
+    const byMarker = directoryCompanies.find(company =>
+      marker && String(company.notes || '').includes(marker)
+    );
+    const matchedId = sanitizeUuidField(byMarker?.id);
+    if (matchedId) return matchedId;
+  }
+
+  return null;
 }
 
 function groupChatKeys(group = {}) {
@@ -115,6 +165,9 @@ module.exports = {
   companyNameFromChatTitle,
   normalizeCompanyDirectoryName,
   companyDirectoryId,
+  isUuid,
+  sanitizeUuidField,
+  resolvePersistableCompanyId,
   groupChatKeys,
   findCompanyInfoByGroupChatId,
   findCompanyInfoRow,

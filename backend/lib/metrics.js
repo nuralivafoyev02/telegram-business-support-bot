@@ -1,6 +1,7 @@
 'use strict';
 
 const supabase = require('./supabase');
+const { sanitizeUuidField } = require('./company-resolution');
 const { tgUserName } = require('./telegram');
 const { scoreTextMatch } = require('./ai');
 
@@ -370,12 +371,10 @@ function buildSupportRequestOptionalFields(options = {}) {
   const optional = {};
   const openSource = String(options.openSource || options.open_source || '').trim();
   if (openSource) optional.open_source = openSource;
-  if (options.openedByEmployeeId || options.opened_by_employee_id) {
-    optional.opened_by_employee_id = options.openedByEmployeeId || options.opened_by_employee_id;
-  }
-  if (options.assignedToEmployeeId || options.assigned_to_employee_id) {
-    optional.assigned_to_employee_id = options.assignedToEmployeeId || options.assigned_to_employee_id;
-  }
+  const openedByEmployeeId = sanitizeUuidField(options.openedByEmployeeId || options.opened_by_employee_id);
+  if (openedByEmployeeId) optional.opened_by_employee_id = openedByEmployeeId;
+  const assignedToEmployeeId = sanitizeUuidField(options.assignedToEmployeeId || options.assigned_to_employee_id);
+  if (assignedToEmployeeId) optional.assigned_to_employee_id = assignedToEmployeeId;
   if (options.assignedAt || options.assigned_at) {
     optional.assigned_at = options.assignedAt || options.assigned_at;
   }
@@ -509,7 +508,7 @@ async function createSupportRequest({ message, sourceType, companyId = null, ski
   const coreRow = {
     source_type: sourceType,
     chat_id: chat.id,
-    company_id: companyId,
+    company_id: sanitizeUuidField(companyId),
     customer_tg_id: from.id || null,
     customer_name: tgUserName(from),
     customer_username: from.username || null,

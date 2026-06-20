@@ -5,7 +5,9 @@ const { getBotSettings } = require('./bot-settings');
 const { getCachedCompanyInfo } = require('./company-info');
 const {
   normalizeCompanyDirectoryName,
-  resolveCompanyInfoForTicket
+  resolveCompanyInfoForTicket,
+  resolvePersistableCompanyId,
+  sanitizeUuidField
 } = require('./company-resolution');
 const metrics = require('./metrics');
 const {
@@ -259,7 +261,7 @@ async function loadCompanyContext(companyId, companyInfo = null, nameHint = '') 
 }
 
 async function persistRequestCompanyId(request = {}, companyId = null) {
-  const resolvedId = String(companyId || '').trim();
+  const resolvedId = sanitizeUuidField(companyId);
   if (!request?.id || !resolvedId || String(request.company_id || '').trim() === resolvedId) return;
   await supabase.patch('support_requests', { id: supabase.eq(request.id) }, {
     company_id: resolvedId
@@ -666,10 +668,10 @@ async function openSupportRequestAndNotify({
   const request = await metrics.createSupportRequest({
     message,
     sourceType,
-    companyId: companyCtx.companyId || resolvedCompanyId || companyId,
+    companyId: companyCtx.companyId,
     openSource,
-    openedByEmployeeId: openedByEmployee?.id || null,
-    assignedToEmployeeId: supportEmployee?.id || null,
+    openedByEmployeeId: sanitizeUuidField(openedByEmployee?.id),
+    assignedToEmployeeId: sanitizeUuidField(supportEmployee?.id),
     assignedAt,
     skipMerge: openSource === 'reaction'
   });
@@ -677,7 +679,7 @@ async function openSupportRequestAndNotify({
   const fresh = request?.id ? await loadRequestById(request.id) : null;
   const notifyRequest = enrichRequestForNotification(fresh || request, {
     openSource,
-    companyId: companyCtx.companyId || resolvedCompanyId || companyId
+    companyId: companyCtx.companyId
   });
   if (['created', 'reopened'].includes(ticketOutcome)) {
     const notifyResult = await notifyTicketOpened({
