@@ -3,7 +3,6 @@
     <section class="card login-card">
       <div class="logo">UQ</div>
       <h1>Uyqur Yordam</h1>
-      <p>Texnik yordam paneli</p>
       <form class="form" @submit.prevent="submitLogin">
         <label class="label">Kirish nomi
           <input v-model.trim="loginForm.username" class="input" autocomplete="username" placeholder="admin"
@@ -37,7 +36,6 @@
         <div class="logo">UQ</div>
         <div>
           <div class="brand-title">Uyqur Yordam</div>
-          <div class="brand-subtitle">Texnik yordam paneli</div>
         </div>
       </div>
 
@@ -78,7 +76,6 @@
       <header class="topbar">
         <div class="page-title">
           <h1>{{ currentTitle }}</h1>
-          <p v-if="currentSubtitle">{{ currentSubtitle }}</p>
         </div>
         <div class="topbar-actions">
           <button class="btn topbar-refresh" type="button" :disabled="loadingAction === 'refresh'" @click="refresh">
@@ -3037,18 +3034,6 @@ const userInitials = computed(() => {
   const source = adminForm.full_name || adminForm.username || 'Uyqur';
   return String(source).split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]?.toUpperCase()).join('') || 'UQ';
 });
-const currentSubtitle = computed(() => ({
-  stats: '',
-  productAnalytics: 'Uyqur dasturidan foydalanish, biznes status va obuna risklari',
-  companyActivity: '',
-  groups: 'Bot ulangan guruhlar, so‘rov oqimi va mijoz murojaatlari',
-  employees: 'Xodimlar aktivligi, javoblar va ochiq vazifalar',
-  companies: 'Uyqur API’dan kelgan kompaniyalar, mas’ul va obuna ma’lumotlari',
-  clickup: 'Telegram reaction orqali yaratilgan ClickUp vazifalar kuzatuvi',
-  privates: 'Mijozlar bilan shaxsiy va biznes chatlar',
-  knowledgeBase: 'AI o‘qitish matnlari, fayllar va modelga beriladigan bilim',
-  settings: 'Bot, admin va Telegram ulanishi sozlamalari'
-}[activeTab.value] || 'Texnik yordam paneli'));
 const loginFeedback = computed(() => loginError.value || loginStatus.value);
 const loginButtonText = computed(() => loadingAction.value === 'login' ? 'Tekshirilmoqda...' : 'Kirish');
 function aiConnectionSignature(source = {}) {
