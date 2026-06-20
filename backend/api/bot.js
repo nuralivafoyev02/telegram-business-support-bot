@@ -399,6 +399,37 @@ function reactionWasAddedEye(reaction = {}, settings = {}) {
   return addedCustomEmojiIds(reaction).some(id => !doneCustomIds.has(id));
 }
 
+function reactionCountMap(reactions = []) {
+  const map = {};
+  for (const item of Array.isArray(reactions) ? reactions : []) {
+    for (const key of reactionItemKeys(item)) {
+      map[key] = Math.max(Number(map[key] || 0), Number(item.total_count || 0));
+    }
+  }
+  return map;
+}
+
+function reactionCountKeys(keys = []) {
+  return (Array.isArray(keys) ? keys : [keys]).flatMap(key => (typeof key === 'string' && key.startsWith('custom:') ? [key] : [key]));
+}
+
+function reactionCountIncreased(previous = {}, current = {}, keys = []) {
+  return reactionCountKeys(keys).some(key => Number(current[key] || 0) > Number(previous[key] || 0));
+}
+
+async function loadStoredReactionCounts(chatId, messageId) {
+  const saved = await getSavedReactionMessage(chatId, messageId);
+  const raw = jsonObject(saved?.raw);
+  return raw.reaction_counts && typeof raw.reaction_counts === 'object' ? raw.reaction_counts : {};
+}
+
+async function saveStoredReactionCounts(chatId, messageId, counts = {}) {
+  const saved = await getSavedReactionMessage(chatId, messageId);
+  if (!saved?.id) return;
+  const raw = { ...jsonObject(saved.raw), reaction_counts: counts };
+  await supabase.patch('messages', { id: supabase.eq(saved.id) }, { raw }).catch(() => null);
+}
+
 function bestPhotoSize(photo = []) {
   if (!Array.isArray(photo) || !photo.length) return null;
   return [...photo].sort((a, b) => Number(b.file_size || 0) - Number(a.file_size || 0))[0] || photo.at(-1);
@@ -630,26 +661,29 @@ async function ensureReactionContext(reaction = {}) {
   ]);
 }
 
-async function handleDoneReaction(reaction = {}, settings = {}) {
+async function handleDoneReaction(reaction = {}, settings = {}, options = {}) {
   const chat = reaction.chat || {};
   const actor = reactionActor(reaction);
-  if (actor?.is_bot) {
+  if (!options.skipActorCheck && actor?.is_bot) {
     return { ok: false, skipped: 'bot_actor' };
   }
   await ensureReactionContext(reaction);
   await ensureReactionTargetMessage(reaction, chat);
-  const employee = await resolveReactionEmployee(reaction);
-  const actorAccess = canUseGroupReaction(reaction, employee);
-  if (!actorAccess.ok) {
-    console.warn('[bot:done-reaction]', {
-      skipped: 'not_employee',
-      actor_id: actor.id || null,
-      actor_username: actor.username || null,
-      actor_name: tgUserName(actor) || null,
-      chat_id: chat.id,
-      message_id: reaction.message_id || null
-    });
-    return { ok: false, skipped: 'not_employee' };
+  let actorAccess = { ok: true, employee: null };
+  if (!options.skipActorCheck) {
+    const employee = await resolveReactionEmployee(reaction);
+    actorAccess = canUseGroupReaction(reaction, employee);
+    if (!actorAccess.ok) {
+      console.warn('[bot:done-reaction]', {
+        skipped: 'not_employee',
+        actor_id: actor.id || null,
+        actor_username: actor.username || null,
+        actor_name: tgUserName(actor) || null,
+        chat_id: chat.id,
+        message_id: reaction.message_id || null
+      });
+      return { ok: false, skipped: 'not_employee' };
+    }
   }
   const closeMessage = {
     message_id: reaction.message_id,
@@ -695,23 +729,26 @@ async function handleDoneReaction(reaction = {}, settings = {}) {
   return { ok: true, closed: result.closed, request_id: result.request && result.request.id || null };
 }
 
-async function handleEyeReaction(reaction = {}, settings = {}) {
+async function handleEyeReaction(reaction = {}, settings = {}, options = {}) {
   const chat = reaction.chat || {};
   const actor = reactionActor(reaction);
-  if (actor?.is_bot) {
+  if (!options.skipActorCheck && actor?.is_bot) {
     return { ok: false, skipped: 'bot_actor' };
   }
-  const employee = await resolveReactionEmployee(reaction);
-  const actorAccess = canUseGroupReaction(reaction, employee);
-  if (!actorAccess.ok) {
-    console.warn('[bot:eye-reaction]', {
-      skipped: 'not_employee',
-      actor_id: actor.id || null,
-      actor_username: actor.username || null,
-      actor_name: tgUserName(actor) || null,
-      chat_id: chat.id
-    });
-    return { ok: false, skipped: 'not_employee' };
+  let actorAccess = { ok: true, employee: null };
+  if (!options.skipActorCheck) {
+    const employee = await resolveReactionEmployee(reaction);
+    actorAccess = canUseGroupReaction(reaction, employee);
+    if (!actorAccess.ok) {
+      console.warn('[bot:eye-reaction]', {
+        skipped: 'not_employee',
+        actor_id: actor.id || null,
+        actor_username: actor.username || null,
+        actor_name: tgUserName(actor) || null,
+        chat_id: chat.id
+      });
+      return { ok: false, skipped: 'not_employee' };
+    }
   }
 
   await ensureReactionContext(reaction);
@@ -926,6 +963,59 @@ async function handleMessageReaction(reaction = {}) {
     new_reaction: reaction.new_reaction || []
   });
   return { ok: true, handled: 'message_reaction_ignored' };
+}
+
+async function handleMessageReactionCount(reactionCount = {}) {
+  const chat = reactionCount.chat || {};
+  if (!isGroupChat(chat)) {
+    return { ok: true, handled: 'message_reaction_count_non_group' };
+  }
+
+  const settings = await getBotSettings();
+  if (!reactionsEnabledForChat(reactionCount, settings)) {
+    return { ok: true, handled: 'message_reaction_count_disabled' };
+  }
+
+  const previousCounts = await loadStoredReactionCounts(chat.id, reactionCount.message_id);
+  const currentCounts = reactionCountMap(reactionCount.reactions);
+  console.info('[bot:reaction-count]', {
+    chat_id: chat.id,
+    message_id: reactionCount.message_id || null,
+    previous: previousCounts,
+    current: currentCounts
+  });
+
+  await ensureReactionContext(reactionCount);
+  await ensureReactionTargetMessage(reactionCount, chat);
+  await saveStoredReactionCounts(chat.id, reactionCount.message_id, currentCounts);
+
+  const syntheticReaction = {
+    chat,
+    message_id: reactionCount.message_id,
+    date: reactionCount.date
+  };
+  const ticketCloseOn = settings.messageReactions?.ticketClose !== false;
+  const countOptions = { skipActorCheck: true };
+
+  if (ticketCloseOn && reactionCountIncreased(previousCounts, currentCounts, DONE_REACTION_EMOJI)) {
+    const result = await handleDoneReaction(syntheticReaction, settings, countOptions);
+    if (result.closed) {
+      console.info('[bot:done-reaction:ticket]', {
+        request_id: result.request_id || null,
+        chat_id: chat.id,
+        message_id: reactionCount.message_id || null,
+        source: 'reaction_count'
+      });
+    }
+    return { ok: true, handled: 'message_reaction_count_done', ...result };
+  }
+
+  if (reactionCountIncreased(previousCounts, currentCounts, EYE_REACTION_EMOJIS)) {
+    const result = await handleEyeReaction(syntheticReaction, settings, countOptions);
+    return { ok: true, handled: 'message_reaction_count_eye', ...result };
+  }
+
+  return { ok: true, handled: 'message_reaction_count' };
 }
 
 function isChannelLogPost(updateKind = '', chat = {}) {
@@ -2856,7 +2946,8 @@ async function handleTelegramUpdate(update = {}, options = {}) {
   }
 
   if (update.message_reaction_count) {
-    return { ok: true, handled: 'message_reaction_count' };
+    const reactionCountResult = await handleMessageReactionCount(update.message_reaction_count);
+    return { ok: true, ...reactionCountResult };
   }
 
   if (update.callback_query) {
