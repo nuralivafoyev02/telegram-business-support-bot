@@ -16,7 +16,7 @@ const DEFAULT_SETTINGS = Object.freeze({
   groupMessageAudit: Object.freeze({ enabled: true, target: 'main_group', channelId: '' }),
   messageReactions: Object.freeze({
     enabled: true,
-    ticketClose: false,
+    ticketClose: true,
     emoji: '\u26a1',
     acceptCustomEmojiAsEye: true,
     eyeCustomEmojiIds: [],
