@@ -1677,7 +1677,6 @@
     <Transition name="modal-fade">
       <Modal v-if="modal === 'ticketList'" :title="ticketList.title" wide @close="closeModal">
         <div class="ticket-list-modal">
-          <p class="modal-subtitle">Tanlangan davr bo‘yicha jami, ochiq va yopilgan ticketlar</p>
           <div class="ticket-filter-tabs source-tabs">
             <button :class="{ active: ticketList.source === 'all' }" @click="ticketList.source = 'all'">Umumiy</button>
             <button :class="{ active: ticketList.source === 'group' }" @click="ticketList.source = 'group'">
@@ -1698,8 +1697,7 @@
             </button>
           </div>
           <div class="ticket-list-toolbar">
-            <input v-model.trim="ticketListSearch" class="input"
-              placeholder="Ticket ID, so‘rov matni, kompaniya bo‘yicha qidirish" />
+            <SearchField v-model="ticketListSearch" />
             <select v-model="ticketListSupport" class="select">
               <option v-for="option in ticketListSupportOptions" :key="option.value" :value="option.value">
                 {{ option.label }}

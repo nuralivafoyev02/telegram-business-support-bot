@@ -2882,6 +2882,11 @@ body {
   align-items: center;
 }
 
+.ticket-list-toolbar .search-field {
+  width: 100%;
+  max-width: none;
+}
+
 .ticket-list-meta {
   display: flex;
   align-items: center;
