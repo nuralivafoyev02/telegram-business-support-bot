@@ -255,6 +255,10 @@ function summarizeUpdate(update = {}) {
       type: picked.kind,
       chat_id: message.chat && message.chat.id,
       chat_type: message.chat && message.chat.type,
+      message_id: message.message_id,
+      text: text ? text.slice(0, 160) : undefined,
+      has_voice: !!message.voice,
+      has_photo: Array.isArray(message.photo) && message.photo.length > 0,
       command: text.startsWith('/') ? text.split(/\s+/)[0] : undefined
     };
   }
@@ -275,7 +279,11 @@ function summarizeUpdate(update = {}) {
       type: 'message_reaction',
       chat_id: reaction.chat && reaction.chat.id,
       chat_type: reaction.chat && reaction.chat.type,
-      message_id: reaction.message_id
+      message_id: reaction.message_id,
+      user_id: reaction.user && reaction.user.id,
+      actor_chat_id: reaction.actor_chat && reaction.actor_chat.id,
+      old_reaction: reaction.old_reaction || [],
+      new_reaction: reaction.new_reaction || []
     };
   }
   if (update.message_reaction_count) {
@@ -285,7 +293,8 @@ function summarizeUpdate(update = {}) {
       type: 'message_reaction_count',
       chat_id: reactionCount.chat && reactionCount.chat.id,
       chat_type: reactionCount.chat && reactionCount.chat.type,
-      message_id: reactionCount.message_id
+      message_id: reactionCount.message_id,
+      reactions: reactionCount.reactions || []
     };
   }
   if (update.business_connection) {
@@ -301,6 +310,36 @@ function summarizeUpdate(update = {}) {
     };
   }
   return { update_id: update.update_id, type: 'ignored' };
+}
+
+function redactUpdateForLog(value, depth = 0) {
+  if (depth > 8) return '[max-depth]';
+  if (value === null || value === undefined) return value;
+  if (typeof value !== 'object') return value;
+  if (Array.isArray(value)) {
+    if (value.length > 20) return `[array:${value.length}]`;
+    return value.map(item => redactUpdateForLog(item, depth + 1));
+  }
+  const output = {};
+  for (const [key, item] of Object.entries(value)) {
+    if (key === 'photo' && Array.isArray(item)) {
+      output[key] = `[photo:${item.length}]`;
+      continue;
+    }
+    if (key === 'file_id' && typeof item === 'string' && item.length > 24) {
+      output[key] = `${item.slice(0, 16)}...`;
+      continue;
+    }
+    output[key] = redactUpdateForLog(item, depth + 1);
+  }
+  return output;
+}
+
+function logTelegramUpdate(update = {}) {
+  console.info('[bot:update]', summarizeUpdate(update));
+  if (boolEnv('TELEGRAM_UPDATE_VERBOSE', false)) {
+    console.info('[bot:update:raw]', redactUpdateForLog(update));
+  }
 }
 
 async function handleStart(message) {
@@ -2933,7 +2972,7 @@ async function processMessage(updateKind, message, options = {}) {
 }
 
 async function handleTelegramUpdate(update = {}, options = {}) {
-  console.info('[bot:update]', summarizeUpdate(update));
+  logTelegramUpdate(update);
 
   if (update.business_connection) {
     await metrics.saveBusinessConnection(update.business_connection);
