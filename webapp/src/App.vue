@@ -3145,9 +3145,29 @@ const selectedPeriodLabel = computed(() => {
   if (currentRange) return currentRange;
   return periodOptions.find(period => period.key === selectedStatsPeriod.value)?.label || '7 kun';
 });
+function computePeriodTicketStats(rows = []) {
+  const openRows = rows.filter(row => isOpenTicketStatus(row.status));
+  const closedRows = rows.filter(row => isClosedLikeTicketStatus(row.status));
+  const handledTotal = openRows.length + closedRows.length;
+  return {
+    total_requests: rows.length,
+    open_requests: openRows.length,
+    closed_requests: closedRows.length,
+    close_rate: handledTotal ? Math.round((closedRows.length / handledTotal) * 1000) / 10 : 0,
+    overdue_open_requests: openRows.filter(row => openMinutes(row.created_at) > 30).length
+  };
+}
+
+const periodTicketStats = computed(() => computePeriodTicketStats(periodTicketRows.value || []));
+
 const selectedPeriodStats = computed(() => {
   if (!analyticsMatchesSelectedPeriod()) return emptyPeriodStats;
-  return analytics.value.periods?.[selectedStatsPeriod.value] || emptyPeriodStats;
+  const base = analytics.value.periods?.[selectedStatsPeriod.value] || emptyPeriodStats;
+  if (!periodTicketRows.value.length) return base;
+  return {
+    ...base,
+    ...periodTicketStats.value
+  };
 });
 const topEmployeeRows = computed(() => (analytics.value.employeePerformance?.[selectedStatsPeriod.value] || [])
   .filter(row => !row.is_unassigned && !isUnassignedRankingRow(row)));
@@ -3607,6 +3627,8 @@ const supportPerformanceRows = computed(() => {
   const openSummaryMap = employeeOpenRequestSummaryMap();
   const periodStatsLookup = buildPerformanceStatsLookup(topEmployeeRows.value);
   const periodClosedLookup = periodClosedCountLookup();
+  const periodTicketCounts = buildPeriodTicketCountsByEmployeeKey();
+  const usePeriodTicketCounts = periodTicketRows.value.length > 0;
 
   // Faqat ma'lum bo'lgan xodimlarning kalitlarini yig'ib olamiz
   const knownEmployeeKeys = new Set([
@@ -3662,9 +3684,15 @@ const supportPerformanceRows = computed(() => {
     lookupKeys.forEach(key => openSummaryMap.delete(key));
     const assignedCompanyCount = visibleCompanyInfoRows.value.filter(company => companyMatchesEmployee(company, candidate)).length;
 
+    const rowKey = supportRowKey(candidate) || supportRowKey(row);
+    const periodRowCounts = usePeriodTicketCounts ? periodTicketCounts.counts.get(rowKey) : null;
     const closedFallback = periodRow ? Number(periodRow.closed_requests || 0) : 0;
-    const closedRaw = resolvePeriodClosedCount(lookupKeys, closedFallback, periodClosedLookup);
-    const openRaw = openSummary ? Number(openSummary.open_requests || 0) : 0;
+    const closedRaw = periodRowCounts
+      ? Number(periodRowCounts.closed || 0)
+      : resolvePeriodClosedCount(lookupKeys, closedFallback, periodClosedLookup);
+    const openRaw = periodRowCounts
+      ? Number(periodRowCounts.open || 0)
+      : (openSummary ? Number(openSummary.open_requests || 0) : 0);
     const totalRaw = closedRaw + openRaw;
     const slaRaw = totalRaw > 0 ? (closedRaw / totalRaw) * 100 : 100;
     const avgRaw = periodRow ? Number(periodRow.avg_close_minutes || 0) : 0;
@@ -3683,7 +3711,7 @@ const supportPerformanceRows = computed(() => {
 
     const grade = performanceGrade(sla, avg);
     return {
-      key: supportRowKey(row) || `${row.full_name || 'employee'}-${index}`,
+      key: rowKey || `${row.full_name || 'employee'}-${index}`,
       id: row.id || row.employee_id || stat.id || stat.employee_id || '',
       employee_id: row.employee_id || row.id || stat.employee_id || stat.id || '',
       tg_user_id: row.tg_user_id || stat.tg_user_id || '',
@@ -3770,8 +3798,10 @@ const supportPerformanceRows = computed(() => {
       prev_open_requests: 0
     };
   });
-  const unassignedSummary = openSummaryMap.get('unassigned:open');
-  if (unassignedSummary && Number(unassignedSummary.open_requests || 0) > 0) {
+  const unassignedOpen = usePeriodTicketCounts
+    ? Number(periodTicketCounts.unassigned.open || 0)
+    : Number(openSummaryMap.get('unassigned:open')?.open_requests || 0);
+  if (unassignedOpen > 0) {
     rows.push({
       key: 'unassigned:open',
       id: '',
@@ -3784,10 +3814,10 @@ const supportPerformanceRows = computed(() => {
       telegram_is_premium: false,
       is_support_employee: false,
       is_unassigned: true,
-      handled_chats: unassignedSummary.chat_keys?.size || 0,
-      closed_requests: 0,
-      open_requests: Number(unassignedSummary.open_requests || 0),
-      total_requests: Number(unassignedSummary.open_requests || 0),
+      handled_chats: openSummaryMap.get('unassigned:open')?.chat_keys?.size || 0,
+      closed_requests: usePeriodTicketCounts ? Number(periodTicketCounts.unassigned.closed || 0) : 0,
+      open_requests: unassignedOpen,
+      total_requests: unassignedOpen + (usePeriodTicketCounts ? Number(periodTicketCounts.unassigned.closed || 0) : 0),
       company_total: 0,
       assigned_company_count: 0,
       avg_close_minutes: 0,
@@ -3802,7 +3832,9 @@ const supportPerformanceRows = computed(() => {
   }
 
   if (allManagerRows.length) {
-    const closedRequests = allManagerRows.reduce((sum, row) => sum + Number(row.closed_requests || 0), 0);
+    const closedRequests = usePeriodTicketCounts
+      ? Number(periodTicketCounts.managerClosed || 0)
+      : allManagerRows.reduce((sum, row) => sum + Number(row.closed_requests || 0), 0);
     const openRequests = 0;
     const totalRequests = closedRequests;
     const managerSla = closedRequests > 0 ? 100 : 0;
@@ -9087,6 +9119,44 @@ function classifyRankingOpenRequestAssignment(request = {}, employeeMappings = [
   return { assigned: true, mapping: matchedEmp };
 }
 
+function buildPeriodTicketCountsByEmployeeKey() {
+  const counts = new Map();
+  const managerTotals = new Map();
+  const unassigned = { open: 0, closed: 0 };
+  if (!periodTicketRows.value.length) {
+    return { counts, managerTotals, unassigned, managerClosed: 0 };
+  }
+
+  const employeeMappings = buildTicketListEmployeeMappings();
+  const bump = (employee, field) => {
+    if (!employee) return false;
+    if (isManagerEmployee(employee)) {
+      const managerKey = supportRowKey(employee);
+      const current = managerTotals.get(managerKey) || { open: 0, closed: 0, employee };
+      current[field] += 1;
+      managerTotals.set(managerKey, current);
+      return true;
+    }
+    const key = supportRowKey(employee);
+    if (!key) return false;
+    const current = counts.get(key) || { open: 0, closed: 0 };
+    current[field] += 1;
+    counts.set(key, current);
+    return true;
+  };
+
+  periodTicketRows.value.forEach(request => {
+    const mapping = resolveOpenRequestEmployeeMapping(request, employeeMappings)
+      || findEmployeeMappingForOpenRequest(request, employeeMappings);
+    const employee = mapping?.employee || null;
+    if (isOpenTicketStatus(request.status) && !bump(employee, 'open')) unassigned.open += 1;
+    if (isClosedLikeTicketStatus(request.status) && !bump(employee, 'closed')) unassigned.closed += 1;
+  });
+
+  const managerClosed = [...managerTotals.values()].reduce((sum, row) => sum + Number(row.closed || 0), 0);
+  return { counts, managerTotals, unassigned, managerClosed };
+}
+
 function periodClosedCountLookup() {
   const lookup = new Map();
   if (!periodTicketRows.value.length) return lookup;
@@ -9423,11 +9493,14 @@ async function openSupportSummaryCard(action = 'requests') {
   startLoading('ticketList');
   try {
     if (!employees.value.length) await loadEmployeesOptional();
-    const rows = await api.requests({
-      period: selectedStatsPeriod.value,
-      ...dashboardPeriodQuery(),
-      limit: 5000
-    });
+    if (!periodTicketRows.value.length) await loadPeriodOpenTickets();
+    const rows = periodTicketRows.value.length
+      ? periodTicketRows.value
+      : await api.requests({
+        period: selectedStatsPeriod.value,
+        ...dashboardPeriodQuery(),
+        limit: 5000
+      });
     ticketList.value = {
       rows: Array.isArray(rows) ? rows : [],
       active: ticketFilterFromAction(action),
@@ -9692,6 +9765,7 @@ function applyInlineReplyLocally(requestId = '', result = {}, text = '') {
     ...ticketList.value,
     rows: updateRequestListForClose(ticketList.value.rows, requestId, closedRequest)
   };
+  periodTicketRows.value = updateRequestListForClose(periodTicketRows.value, requestId, closedRequest);
   employeeOpenRequests.value = (employeeOpenRequests.value || []).filter(request => !isSameRequest(request, requestId));
   dashboard.openRequests = (dashboard.openRequests || []).filter(request => !isSameRequest(request, requestId));
   chatDetail.value = {
