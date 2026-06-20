@@ -137,7 +137,6 @@
                   </div>
                   <div class="support-summary-note">{{ card.note }}</div>
                 </div>
-                <span class="support-summary-icon" aria-hidden="true">{{ card.icon }}</span>
               </article>
             </div>
 
@@ -448,9 +447,9 @@
                             :style="{ width: row.used_width }"></span>
                         </div>
                         <div class="timeline-labels">
-                          <span>Boshlanish: {{ row.start_label }}</span>
-                          <span>{{ row.subscription_label }}</span>
-                          <span>{{ row.usage_duration_label }}</span>
+                          <span class="timeline-label-start">Boshlanish: {{ row.start_label }}</span>
+                          <span class="timeline-label-subscription">{{ row.subscription_label }}</span>
+                          <span class="timeline-label-usage">{{ row.usage_duration_label }}</span>
                         </div>
                       </div>
                       <div class="timeline-status">

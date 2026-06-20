@@ -5722,6 +5722,7 @@ tbody tr.unassigned-ranking-row td:first-child {
   top: 0;
   bottom: 0;
   border-radius: var(--radius);
+  min-width: 4px;
 }
 
 .timeline-total {
@@ -5742,13 +5743,15 @@ tbody tr.unassigned-ranking-row td:first-child {
 
 .timeline-labels {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
+  grid-template-columns: minmax(170px, 1fr) minmax(130px, .85fr) minmax(130px, .85fr);
+  gap: 12px;
   color: var(--muted);
   font-size: 12px;
 }
 
-.timeline-labels span {
+.timeline-label-start,
+.timeline-label-subscription,
+.timeline-label-usage {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
