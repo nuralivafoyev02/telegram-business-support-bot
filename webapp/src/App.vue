@@ -320,12 +320,15 @@
                 <div v-if="ticketTrendRows.length" class="ticket-trend-chart">
                   <article v-for="row in ticketTrendRows" :key="row.date_key" class="ticket-trend-day">
                     <div class="ticket-trend-bars" :aria-label="ticketTrendTooltip(row)">
-                      <span class="ticket-bar total" :data-tooltip="ticketTrendMetricTooltip(row, 'total')" tabindex="0"
-                        :style="{ height: chartBarHeight(row.total_requests, ticketTrendMax) }"></span>
-                      <span class="ticket-bar closed" :data-tooltip="ticketTrendMetricTooltip(row, 'closed')"
-                        tabindex="0" :style="{ height: chartBarHeight(row.closed_requests, ticketTrendMax) }"></span>
-                      <span class="ticket-bar open" :data-tooltip="ticketTrendMetricTooltip(row, 'open')" tabindex="0"
-                        :style="{ height: chartBarHeight(row.open_requests, ticketTrendMax) }"></span>
+                      <div class="ticket-bar-stack" :data-tooltip="ticketTrendMetricTooltip(row, 'total')" tabindex="0"
+                        :style="{ height: chartBarHeight(row.total_requests, ticketTrendMax) }">
+                        <span class="ticket-bar-segment closed" :data-tooltip="ticketTrendMetricTooltip(row, 'closed')"
+                          tabindex="0"
+                          :style="{ height: ticketTrendSegmentHeight(row.closed_requests, row.total_requests) }"></span>
+                        <span class="ticket-bar-segment open" :data-tooltip="ticketTrendMetricTooltip(row, 'open')"
+                          tabindex="0"
+                          :style="{ height: ticketTrendSegmentHeight(row.open_requests, row.total_requests) }"></span>
+                      </div>
                     </div>
                     <b>{{ row.weekday_label }}</b>
                     <span>{{ row.date_label }}</span>
@@ -382,7 +385,6 @@
                 @keydown.space.prevent="openProductMetricDetail('total')">
                 <div class="metric-head">
                   <div class="metric-label">Kuzatuvdagi kompaniya</div>
-                  <span class="metric-icon">🏢</span>
                 </div>
                 <div class="metric-value">{{ fmtNumber(productUsageSummary.total) }}</div>
                 <div class="metric-mini">Texnik yordam biriktirilgan kompaniyalar</div>
@@ -393,7 +395,6 @@
                 @keydown.space.prevent="openProductMetricDetail('active')">
                 <div class="metric-head">
                   <div class="metric-label">Biznes aktiv</div>
-                  <span class="metric-icon good">✅</span>
                 </div>
                 <div class="metric-value">{{ fmtNumber(productUsageSummary.active) }}</div>
                 <div class="metric-mini">Biznes holati ACTIVE</div>
@@ -404,7 +405,6 @@
                 @keydown.space.prevent="openProductMetricDetail('risk')">
                 <div class="metric-head">
                   <div class="metric-label">Risk va churn</div>
-                  <span class="metric-icon warn">⚠️</span>
                 </div>
                 <div class="metric-value">{{ fmtNumber(productUsageSummary.risk) }}</div>
                 <div class="metric-mini">{{ fmtNumber(productUsageSummary.expiring_soon) }} ta obuna yaqin</div>
@@ -475,7 +475,6 @@
                 @keydown.space.prevent="openCompanyMetricDetail('total')">
                 <div class="metric-head">
                   <div class="metric-label">Kompaniyalar</div>
-                  <span class="metric-icon">🏢</span>
                 </div>
                 <div class="metric-value">{{ fmtNumber(companyActivitySummary.total) }}</div>
                 <div class="metric-mini">{{ fmtNumber(companyActivitySummary.real) }} tasi real kompaniya</div>
@@ -486,7 +485,6 @@
                 @keydown.space.prevent="openCompanyMetricDetail('active')">
                 <div class="metric-head">
                   <div class="metric-label">Biznes aktiv</div>
-                  <span class="metric-icon good">✅</span>
                 </div>
                 <div class="metric-value">{{ fmtNumber(companyActivitySummary.business_active) }}</div>
                 <div class="metric-mini">{{ fmtNumber(companyActivitySummary.business_new) }} ta yangi kompaniya</div>
@@ -497,7 +495,6 @@
                 @keydown.space.prevent="openCompanyMetricDetail('paused')">
                 <div class="metric-head">
                   <div class="metric-label">Churn/Pauza</div>
-                  <span class="metric-icon warn">⚠️</span>
                 </div>
                 <div class="metric-value">{{ fmtNumber(companyActivitySummary.business_paused) }}</div>
                 <div class="metric-mini">Biznes holati pauzada</div>
@@ -508,7 +505,6 @@
                 @keydown.space.prevent="openCompanyMetricDetail('expiry')">
                 <div class="metric-head">
                   <div class="metric-label">Obuna yaqin</div>
-                  <span class="metric-icon">📅</span>
                 </div>
                 <div class="metric-value">{{ fmtNumber(companyActivitySummary.expiring_soon) }}</div>
                 <div class="metric-mini">{{ fmtNumber(companyActivitySummary.expired) }} ta obuna tugagan</div>
@@ -4169,6 +4165,13 @@ function chartBarHeight(value, max) {
   return `${Math.max(20, Math.round((numeric / maximum) * 316))}px`;
 }
 
+function ticketTrendSegmentHeight(part, total) {
+  const segment = Number(part || 0);
+  const whole = Number(total || 0);
+  if (!segment || !whole) return '0%';
+  return `${Math.max(0, Math.min(100, (segment / whole) * 100))}%`;
+}
+
 function companyTicketWidth(value) {
   return barWidth(value, companyTicketMax.value);
 }
@@ -4201,8 +4204,8 @@ function ticketTrendTooltip(row = {}) {
 function ticketTrendMetricTooltip(row = {}, metric = 'total') {
   const labels = {
     total: 'So‘rovlar',
-    closed: 'Javob berilgan',
-    open: 'Ochiq qolgan'
+    closed: 'Javob berildi',
+    open: 'Javobsiz'
   };
   const values = {
     total: row.total_requests,

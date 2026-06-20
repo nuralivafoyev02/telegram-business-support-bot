@@ -3634,13 +3634,13 @@ td,
   display: flex;
   align-items: end;
   justify-content: center;
-  gap: 10px;
   min-height: 320px;
   width: 100%;
   overflow: visible;
 }
 
-.ticket-bar {
+.ticket-bar-stack,
+.ticket-bar-segment {
   display: block;
   position: relative;
   width: 28px;
@@ -3648,7 +3648,17 @@ td,
   transition: height .18s ease;
 }
 
-.ticket-bar::after {
+.ticket-bar-stack {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  min-height: 4px;
+  background: var(--line-strong);
+  overflow: hidden;
+}
+
+.ticket-bar-stack::after,
+.ticket-bar-segment::after {
   content: attr(data-tooltip);
   position: absolute;
   left: 50%;
@@ -3672,21 +3682,26 @@ td,
   white-space: nowrap;
 }
 
-.ticket-bar:hover::after,
-.ticket-bar:focus-visible::after {
+.ticket-bar-stack:hover::after,
+.ticket-bar-stack:focus-visible::after,
+.ticket-bar-segment:hover::after,
+.ticket-bar-segment:focus-visible::after {
   opacity: 1;
   transform: translate(-50%, 0);
 }
 
-.ticket-bar.total {
-  background: var(--line-strong);
+.ticket-bar-segment {
+  width: 100%;
+  flex-shrink: 0;
+  border-radius: 0;
+  min-height: 0;
 }
 
-.ticket-bar.closed {
+.ticket-bar-segment.closed {
   background: var(--primary);
 }
 
-.ticket-bar.open {
+.ticket-bar-segment.open {
   background: var(--danger);
 }
 
