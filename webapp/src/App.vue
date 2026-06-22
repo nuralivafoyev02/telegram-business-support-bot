@@ -575,7 +575,11 @@
                         :value="companyModulePeriod"
                         class="select mini-select"
                         @change="handleCompanyModulePeriodChange($event.target.value)">
-                        <option v-for="period in companyModulePeriodOptions" :key="`module-period-${period.key}`" :value="period.key">
+                        <option
+                          v-for="period in companyModulePeriodOptions"
+                          :key="`module-period-${period.key}`"
+                          :value="period.key"
+                          @mousedown="period.key === 'custom' ? handleCompanyModuleCustomOptionMouseDown() : null">
                           {{ period.label }}
                         </option>
                       </select>
@@ -784,7 +788,8 @@
                         <option
                           v-for="period in companyModulePeriodOptions"
                           :key="`module-chart-period-${period.key}`"
-                          :value="period.key">
+                          :value="period.key"
+                          @mousedown="period.key === 'custom' ? handleCompanyModuleChartCustomOptionMouseDown() : null">
                           {{ period.label }}
                         </option>
                       </select>
@@ -7469,6 +7474,11 @@ function openCompanyModuleCustomPeriodModal() {
   modal.value = 'companyModuleCustomPeriod';
 }
 
+function handleCompanyModuleCustomOptionMouseDown() {
+  if (companyModulePeriod.value !== 'custom') return;
+  openCompanyModuleCustomPeriodModal();
+}
+
 async function handleCompanyModulePeriodChange(value) {
   if (value === 'custom') {
     previousCompanyModulePeriod.value = companyModulePeriod.value === 'custom'
@@ -7525,6 +7535,11 @@ function openCompanyModuleChartCustomPeriodModal() {
   companyModuleChartCustomPeriodError.value = '';
   companyModuleChartPeriod.value = 'custom';
   modal.value = 'companyModuleChartCustomPeriod';
+}
+
+function handleCompanyModuleChartCustomOptionMouseDown() {
+  if (companyModuleChartPeriod.value !== 'custom') return;
+  openCompanyModuleChartCustomPeriodModal();
 }
 
 async function handleCompanyModuleChartPeriodChange(value) {

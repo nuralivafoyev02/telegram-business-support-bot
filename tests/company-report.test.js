@@ -1,7 +1,7 @@
 'use strict';
 
 const assert = require('node:assert/strict');
-const { normalizeReportCompany, extractReportRows, aggregateModuleUsage } = require('../backend/lib/company-report');
+const { normalizeReportCompany, extractReportRows, aggregateModuleUsage, normalizeReportDateKey, periodDateRange } = require('../backend/lib/company-report');
 
 const sample = {
   id: 60,
@@ -39,5 +39,18 @@ const aggregated = aggregateModuleUsage([
 assert.strictEqual(aggregated.module_active_count, 2);
 assert.strictEqual(aggregated.module_usage.taminot, true);
 assert.strictEqual(aggregated.module_usage.kassa, true);
+
+assert.strictEqual(normalizeReportDateKey('2026-06-15'), '2026-06-15');
+assert.strictEqual(normalizeReportDateKey('2026-06-15T00:00:00.000Z'), '2026-06-15');
+assert.strictEqual(normalizeReportDateKey(''), '');
+
+const todayRange = periodDateRange('today');
+assert.ok(todayRange);
+assert.strictEqual(todayRange.start, todayRange.end);
+assert.strictEqual(todayRange.dates.length, 1);
+
+const yesterdayRange = periodDateRange('yesterday');
+assert.ok(yesterdayRange);
+assert.notStrictEqual(yesterdayRange.start, todayRange.start);
 
 console.log('company-report.test.js: ok');
