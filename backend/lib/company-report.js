@@ -117,6 +117,7 @@ const MODULE_LAST_DATE_MONTHS = Object.freeze({
 function normalizeModuleLastDateToken(value = '') {
   return String(value || '').trim().toLowerCase()
     .replace(/[.’'`]/g, '')
+    .replace(/[.,;:!?()[\]{}«»"]/g, '')
     .replace(/\s+/g, '');
 }
 
@@ -175,12 +176,30 @@ function moduleUsageForReportDate(moduleLastDates = {}, reportDate = '') {
   };
 }
 
+function moduleLastDatesFromRow(row = {}) {
+  const direct = objectValue(row.module_last_dates);
+  if (MODULE_KEYS.some(key => direct[key])) return direct;
+
+  const raw = objectValue(row.raw);
+  const activity = objectValue(objectValue(raw.data).activity);
+  if (!Object.keys(activity).length) return direct;
+
+  const fromActivity = {};
+  Object.entries(ACTIVITY_KEY_MAP).forEach(([sourceKey, targetKey]) => {
+    const module = normalizeActivityModule(activity, sourceKey);
+    if (module.last_date) fromActivity[targetKey] = module.last_date;
+  });
+  return Object.keys(fromActivity).length ? fromActivity : direct;
+}
+
 function reconcileCompanyModuleRow(row = {}) {
   const reportDate = normalizeReportDateKey(row.report_date);
   if (!reportDate) return row;
-  const scoped = moduleUsageForReportDate(row.module_last_dates || {}, reportDate);
+  const module_last_dates = moduleLastDatesFromRow(row);
+  const scoped = moduleUsageForReportDate(module_last_dates, reportDate);
   return {
     ...row,
+    module_last_dates,
     module_usage: scoped.module_usage,
     module_active_count: scoped.module_active_count
   };
@@ -276,7 +295,7 @@ async function loadAllDailyReportRows(tenantId) {
   let offset = 0;
   while (true) {
     const batch = await supabase.select(COMPANY_MODULE_DAILY_TABLE, {
-      select: 'report_date,company_id,company_name,module_usage,module_last_dates,module_active_count,fetched_at',
+      select: 'report_date,company_id,company_name,module_usage,module_last_dates,module_active_count,fetched_at,raw',
       tenant_id: supabase.eq(id),
       order: ['report_date.desc', 'company_id.asc'],
       limit: String(pageSize),
@@ -304,20 +323,62 @@ function normalizeDailyReportRow(row = {}) {
     module_usage: objectValue(row.module_usage),
     module_last_dates: objectValue(row.module_last_dates),
     module_active_count: Number(row.module_active_count || 0),
-    fetched_at: row.fetched_at || null
+    fetched_at: row.fetched_at || null,
+    raw: row.raw || null
   };
 }
 
+function mergeCompanyDailyRows(existing = [], incoming = [], reportDate = '', fetchedAt = null) {
+  const date = normalizeReportDateKey(reportDate);
+  if (!date) return existing;
+  const byId = new Map();
+  existing
+    .filter(row => normalizeReportDateKey(row.report_date) === date)
+    .forEach(row => byId.set(String(row.company_id), { ...row, report_date: date }));
+  incoming.forEach(row => {
+    const companyId = Number(row.company_id || 0);
+    if (!companyId) return;
+    const next = {
+      company_id: companyId,
+      company_name: row.company_name || '',
+      report_date: date,
+      module_usage: row.module_usage || {},
+      module_last_dates: row.module_last_dates || {},
+      module_active_count: Number(row.module_active_count || 0),
+      fetched_at: row.fetched_at || fetchedAt || null,
+      raw: row.raw || null
+    };
+    const current = byId.get(String(companyId));
+    if (!current || String(next.fetched_at || '').localeCompare(String(current.fetched_at || '')) > 0) {
+      byId.set(String(companyId), next);
+    }
+  });
+  return [...byId.values()];
+}
+
 function dailyRowsToCompanyList(rows = []) {
-  return rows.map(row => ({
-    company_id: row.company_id,
-    company_name: row.company_name || '',
-    report_date: row.report_date,
-    module_usage: row.module_usage || {},
-    module_last_dates: row.module_last_dates || {},
-    module_active_count: Number(row.module_active_count || 0),
-    fetched_at: row.fetched_at || null
-  }));
+  const byKey = new Map();
+  rows.forEach(row => {
+    const companyId = Number(row.company_id || 0);
+    const reportDate = normalizeReportDateKey(row.report_date);
+    if (!companyId || !reportDate) return;
+    const key = `${companyId}:${reportDate}`;
+    const next = {
+      company_id: companyId,
+      company_name: row.company_name || '',
+      report_date: reportDate,
+      module_usage: row.module_usage || {},
+      module_last_dates: row.module_last_dates || {},
+      module_active_count: Number(row.module_active_count || 0),
+      fetched_at: row.fetched_at || null,
+      raw: row.raw || null
+    };
+    const current = byKey.get(key);
+    if (!current || String(next.fetched_at || '').localeCompare(String(current.fetched_at || '')) > 0) {
+      byKey.set(key, next);
+    }
+  });
+  return [...byKey.values()];
 }
 
 function datesFromDailyRows(rows = []) {
@@ -336,7 +397,7 @@ async function loadDailyReportRowsForDateRange(tenantId, startDate = '', endDate
   let offset = 0;
   while (true) {
     const batch = await supabase.select(COMPANY_MODULE_DAILY_TABLE, {
-      select: 'report_date,company_id,company_name,module_usage,module_last_dates,module_active_count,fetched_at',
+      select: 'report_date,company_id,company_name,module_usage,module_last_dates,module_active_count,fetched_at,raw',
       tenant_id: supabase.eq(id),
       report_date: [`gte.${start}`, `lte.${end}`],
       order: ['report_date.desc', 'company_id.asc'],
@@ -594,6 +655,21 @@ async function getCachedCompanyReportFromSettings(options = {}) {
   };
 }
 
+function calendarDatesBetween(startDate = '', endDate = '') {
+  const start = normalizeReportDateKey(startDate);
+  const end = normalizeReportDateKey(endDate);
+  if (!start || !end) return [];
+  const rangeStart = start <= end ? start : end;
+  const rangeEnd = start <= end ? end : start;
+  const dates = [];
+  let cursor = rangeStart;
+  while (cursor <= rangeEnd) {
+    dates.push(cursor);
+    cursor = shiftDateKey(cursor, 1);
+  }
+  return dates;
+}
+
 function periodDateRange(period = '') {
   const key = String(period || '').trim().toLowerCase();
   if (key === 'today') {
@@ -608,6 +684,26 @@ function periodDateRange(period = '') {
     const date = shiftDateKey(tashkentDateKey(), -2);
     return { start: date, end: date, dates: [date] };
   }
+  if (key === 'week' || key === '7d') {
+    const end = tashkentDateKey();
+    const start = shiftDateKey(end, -6);
+    return { start, end, dates: calendarDatesBetween(start, end) };
+  }
+  if (key === 'prev_week' || key === 'prev_7d') {
+    const end = shiftDateKey(tashkentDateKey(), -7);
+    const start = shiftDateKey(tashkentDateKey(), -13);
+    return { start, end, dates: calendarDatesBetween(start, end) };
+  }
+  if (key === 'month' || key === '30d') {
+    const end = tashkentDateKey();
+    const start = shiftDateKey(end, -29);
+    return { start, end, dates: calendarDatesBetween(start, end) };
+  }
+  if (key === 'prev_month' || key === 'prev_30d') {
+    const end = shiftDateKey(tashkentDateKey(), -30);
+    const start = shiftDateKey(tashkentDateKey(), -59);
+    return { start, end, dates: calendarDatesBetween(start, end) };
+  }
   return null;
 }
 
@@ -619,6 +715,30 @@ async function loadCompanyModuleListForDateRange(tenantId, startDate = '', endDa
     dates = historyDatesForRange(history, startDate, endDate);
     list = companiesForHistoryDates(history, dates);
   }
+  return { list, dates };
+}
+
+async function loadCompanyModuleSnapshotForDate(tenantId, reportDate = '', history = null) {
+  const date = normalizeReportDateKey(reportDate);
+  if (!date) return { list: [], dates: [] };
+
+  let { list, dates } = await loadCompanyModuleListForDateRange(tenantId, date, date, history);
+  if (!list.length && history) {
+    const historyDates = historyDatesForRange(history, date, date);
+    list = companiesForHistoryDates(history, historyDates.length ? historyDates : [date]);
+    dates = historyDates.length ? historyDates : (list.length ? [date] : []);
+  }
+
+  const cached = await getCachedCompanyReportFromDaily({ tenantId }).catch(() => null);
+  if (cached?.companies?.length && normalizeReportDateKey(cached.report_date) === date) {
+    list = mergeCompanyDailyRows(list, cached.companies, date, cached.fetched_at);
+    dates = [date];
+  } else if (!dates.length && list.length) {
+    dates = [date];
+  } else if (!dates.length) {
+    dates = [date];
+  }
+
   return { list, dates };
 }
 
@@ -840,10 +960,11 @@ function aggregateModuleUsage(rows = []) {
   const lastDates = {};
   rows.forEach(row => {
     const reportDate = normalizeReportDateKey(row.report_date);
-    const scoped = moduleUsageForReportDate(row.module_last_dates || {}, reportDate);
+    const moduleLastDates = moduleLastDatesFromRow(row);
+    const scoped = moduleUsageForReportDate(moduleLastDates, reportDate);
     MODULE_KEYS.forEach(key => {
       if (scoped.module_usage[key]) usage[key] = true;
-      if (row.module_last_dates?.[key]) lastDates[key] = row.module_last_dates[key];
+      if (moduleLastDates[key]) lastDates[key] = moduleLastDates[key];
     });
   });
   return {
@@ -869,21 +990,31 @@ async function getCompanyModuleReports(query = {}) {
   let list = [];
 
   if (reportDate) {
-    ({ list, dates } = await loadCompanyModuleListForDateRange(tenantId, reportDate, reportDate, history));
-    if (!dates.length) dates = [reportDate];
+    ({ list, dates } = await loadCompanyModuleSnapshotForDate(tenantId, reportDate, history));
   } else if (customRange) {
-    ({ list, dates } = await loadCompanyModuleListForDateRange(tenantId, customRange.start, customRange.end, history));
-    if (!dates.length) {
-      dates = historyDatesForRange(history, customRange.start, customRange.end);
+    if (customRange.start === customRange.end) {
+      ({ list, dates } = await loadCompanyModuleSnapshotForDate(tenantId, customRange.start, history));
+    } else {
+      ({ list, dates } = await loadCompanyModuleListForDateRange(tenantId, customRange.start, customRange.end, history));
+      if (!dates.length) {
+        dates = historyDatesForRange(history, customRange.start, customRange.end);
+      }
     }
   } else if (fixedDayRange) {
-    ({ list, dates } = await loadCompanyModuleListForDateRange(
-      tenantId,
-      fixedDayRange.start,
-      fixedDayRange.end,
-      history
-    ));
-    if (!dates.length) dates = fixedDayRange.dates;
+    if (fixedDayRange.dates.length === 1) {
+      ({ list, dates } = await loadCompanyModuleSnapshotForDate(tenantId, fixedDayRange.start, history));
+    } else {
+      ({ list, dates } = await loadCompanyModuleListForDateRange(
+        tenantId,
+        fixedDayRange.start,
+        fixedDayRange.end,
+        history
+      ));
+      if (!dates.length) {
+        dates = historyDatesForRange(history, fixedDayRange.start, fixedDayRange.end);
+      }
+      if (!dates.length) dates = fixedDayRange.dates;
+    }
   } else {
     dates = historyDatesForPeriod(period, history);
     list = companiesForHistoryDates(history, dates);
@@ -951,15 +1082,20 @@ async function getCompanyModuleReports(query = {}) {
     };
   }
 
-  const targetDate = dates.at(-1) || null;
-  const companies = (targetDate ? list.filter(row => row.report_date === targetDate) : list)
+  const targetDate = customRange?.start === customRange?.end
+    ? normalizeReportDateKey(customRange.start)
+    : (fixedDayRange?.dates?.length === 1
+      ? normalizeReportDateKey(fixedDayRange.start)
+      : (reportDate || dates.at(-1) || null));
+  const companies = (targetDate ? list.filter(row => normalizeReportDateKey(row.report_date) === targetDate) : list)
     .map(row => reconcileCompanyModuleRow({
       company_id: row.company_id,
       company_name: row.company_name || '',
       report_date: row.report_date,
       module_usage: row.module_usage || {},
       module_last_dates: row.module_last_dates || {},
-      module_active_count: Number(row.module_active_count || 0)
+      module_active_count: Number(row.module_active_count || 0),
+      raw: row.raw || null
     }));
 
   return {
@@ -1046,6 +1182,7 @@ module.exports = {
   normalizeReportDateKey,
   parseModuleLastDateKey,
   moduleUsageForReportDate,
+  reconcileCompanyModuleRow,
   periodDateRange,
   migrateBotSettingsHistoryToDaily,
   tashkentDateKey

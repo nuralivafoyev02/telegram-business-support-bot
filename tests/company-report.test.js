@@ -7,7 +7,8 @@ const {
   aggregateModuleUsage,
   normalizeReportDateKey,
   periodDateRange,
-  moduleUsageForReportDate
+  moduleUsageForReportDate,
+  reconcileCompanyModuleRow
 } = require('../backend/lib/company-report');
 
 const sample = {
@@ -75,6 +76,17 @@ const scoped = moduleUsageForReportDate(chinaJune20.module_last_dates, '2026-06-
 assert.strictEqual(scoped.module_active_count, 1);
 assert.strictEqual(scoped.module_usage.kassa, true);
 
+const chinaFromRaw = reconcileCompanyModuleRow({
+  company_id: 999,
+  company_name: 'China House',
+  report_date: '2026-06-20',
+  module_last_dates: {},
+  raw: chinaHouse
+});
+assert.strictEqual(chinaFromRaw.module_active_count, 1);
+assert.strictEqual(chinaFromRaw.module_usage.kassa, true);
+assert.strictEqual(chinaFromRaw.module_last_dates.kassa, '20 Июн');
+
 assert.strictEqual(normalizeReportDateKey('2026-06-15'), '2026-06-15');
 assert.strictEqual(normalizeReportDateKey('2026-06-15T00:00:00.000Z'), '2026-06-15');
 assert.strictEqual(normalizeReportDateKey(''), '');
@@ -87,5 +99,22 @@ assert.strictEqual(todayRange.dates.length, 1);
 const yesterdayRange = periodDateRange('yesterday');
 assert.ok(yesterdayRange);
 assert.notStrictEqual(yesterdayRange.start, todayRange.start);
+
+const weekRange = periodDateRange('week');
+assert.ok(weekRange);
+assert.strictEqual(weekRange.dates.length, 7);
+assert.strictEqual(weekRange.end, todayRange.start);
+assert.strictEqual(weekRange.dates[0], weekRange.start);
+assert.strictEqual(weekRange.dates.at(-1), weekRange.end);
+
+const weekAggregate = aggregateModuleUsage([
+  { report_date: '2026-06-19', module_last_dates: { taminot: '19 Июн', omborxona: '19 Июн' } },
+  { report_date: '2026-06-20', module_last_dates: { kassa: '20 Июн' } }
+]);
+assert.strictEqual(weekAggregate.module_active_count, 3);
+assert.strictEqual(weekAggregate.module_usage.taminot, true);
+assert.strictEqual(weekAggregate.module_usage.kassa, true);
+assert.strictEqual(weekAggregate.module_usage.omborxona, true);
+assert.strictEqual(weekAggregate.module_usage.monitoring, false);
 
 console.log('company-report.test.js: ok');
