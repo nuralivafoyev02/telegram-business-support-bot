@@ -198,11 +198,17 @@ function reconcileCompanyModuleRow(row = {}) {
   const module_last_dates = moduleLastDatesFromRow(row);
   const scoped = moduleUsageForReportDate(module_last_dates, reportDate);
   return {
-    ...row,
+    company_id: row.company_id,
+    company_name: row.company_name || '',
+    report_date: reportDate,
     module_last_dates,
     module_usage: scoped.module_usage,
     module_active_count: scoped.module_active_count
   };
+}
+
+function toPublicCompanyModuleRow(row = {}) {
+  return reconcileCompanyModuleRow(row);
 }
 
 function normalizeReportCompany(row = {}, reportDate = tashkentDateKey()) {
@@ -295,7 +301,7 @@ async function loadAllDailyReportRows(tenantId) {
   let offset = 0;
   while (true) {
     const batch = await supabase.select(COMPANY_MODULE_DAILY_TABLE, {
-      select: 'report_date,company_id,company_name,module_usage,module_last_dates,module_active_count,fetched_at,raw',
+      select: 'report_date,company_id,company_name,module_usage,module_last_dates,module_active_count,fetched_at',
       tenant_id: supabase.eq(id),
       order: ['report_date.desc', 'company_id.asc'],
       limit: String(pageSize),
@@ -723,9 +729,10 @@ async function loadCompanyModuleSnapshotForDate(tenantId, reportDate = '', histo
   if (!date) return { list: [], dates: [] };
 
   let { list, dates } = await loadCompanyModuleListForDateRange(tenantId, date, date, history);
-  if (!list.length && history) {
-    const historyDates = historyDatesForRange(history, date, date);
-    list = companiesForHistoryDates(history, historyDates.length ? historyDates : [date]);
+  if (!list.length) {
+    const resolvedHistory = history || await getReportHistory({ tenantId });
+    const historyDates = historyDatesForRange(resolvedHistory, date, date);
+    list = companiesForHistoryDates(resolvedHistory, historyDates.length ? historyDates : [date]);
     dates = historyDates.length ? historyDates : (list.length ? [date] : []);
   }
 
@@ -980,7 +987,11 @@ async function getCompanyModuleReports(query = {}) {
   const reportDate = normalizeReportDateKey(query.report_date || query.date || '');
   const startDate = normalizeReportDateKey(query.start_date || query.startDate || '');
   const endDate = normalizeReportDateKey(query.end_date || query.endDate || '');
-  const history = await getReportHistory({ tenantId });
+  let history = null;
+  const resolveHistory = async () => {
+    if (!history) history = await getReportHistory({ tenantId });
+    return history;
+  };
   const customRange = startDate && endDate
     ? { start: startDate <= endDate ? startDate : endDate, end: startDate <= endDate ? endDate : startDate }
     : null;
@@ -990,34 +1001,41 @@ async function getCompanyModuleReports(query = {}) {
   let list = [];
 
   if (reportDate) {
-    ({ list, dates } = await loadCompanyModuleSnapshotForDate(tenantId, reportDate, history));
+    ({ list, dates } = await loadCompanyModuleSnapshotForDate(tenantId, reportDate, null));
   } else if (customRange) {
     if (customRange.start === customRange.end) {
-      ({ list, dates } = await loadCompanyModuleSnapshotForDate(tenantId, customRange.start, history));
+      ({ list, dates } = await loadCompanyModuleSnapshotForDate(tenantId, customRange.start, null));
     } else {
-      ({ list, dates } = await loadCompanyModuleListForDateRange(tenantId, customRange.start, customRange.end, history));
+      ({ list, dates } = await loadCompanyModuleListForDateRange(tenantId, customRange.start, customRange.end, null));
       if (!dates.length) {
-        dates = historyDatesForRange(history, customRange.start, customRange.end);
+        const resolvedHistory = await resolveHistory();
+        dates = historyDatesForRange(resolvedHistory, customRange.start, customRange.end);
+        if (!list.length) list = companiesForHistoryDates(resolvedHistory, dates);
       }
     }
   } else if (fixedDayRange) {
     if (fixedDayRange.dates.length === 1) {
-      ({ list, dates } = await loadCompanyModuleSnapshotForDate(tenantId, fixedDayRange.start, history));
+      ({ list, dates } = await loadCompanyModuleSnapshotForDate(tenantId, fixedDayRange.start, null));
     } else {
       ({ list, dates } = await loadCompanyModuleListForDateRange(
         tenantId,
         fixedDayRange.start,
         fixedDayRange.end,
-        history
+        null
       ));
-      if (!dates.length) {
-        dates = historyDatesForRange(history, fixedDayRange.start, fixedDayRange.end);
+      if (!dates.length || !list.length) {
+        const resolvedHistory = await resolveHistory();
+        if (!dates.length) {
+          dates = historyDatesForRange(resolvedHistory, fixedDayRange.start, fixedDayRange.end);
+        }
+        if (!list.length) list = companiesForHistoryDates(resolvedHistory, dates.length ? dates : fixedDayRange.dates);
       }
       if (!dates.length) dates = fixedDayRange.dates;
     }
   } else {
-    dates = historyDatesForPeriod(period, history);
-    list = companiesForHistoryDates(history, dates);
+    const resolvedHistory = await resolveHistory();
+    dates = historyDatesForPeriod(period, resolvedHistory);
+    list = companiesForHistoryDates(resolvedHistory, dates);
   }
 
   if (!list.length) {
@@ -1031,7 +1049,7 @@ async function getCompanyModuleReports(query = {}) {
   let fetched_at = list.length
     ? [...list].map(row => row.fetched_at).filter(Boolean).sort((a, b) => String(b).localeCompare(String(a)))[0] || null
     : null;
-  if (!fetched_at) {
+  if (!fetched_at && history) {
     fetched_at = latestFetchedAtForDates(history, dates);
   }
   if (!fetched_at) {
@@ -1088,15 +1106,7 @@ async function getCompanyModuleReports(query = {}) {
       ? normalizeReportDateKey(fixedDayRange.start)
       : (reportDate || dates.at(-1) || null));
   const companies = (targetDate ? list.filter(row => normalizeReportDateKey(row.report_date) === targetDate) : list)
-    .map(row => reconcileCompanyModuleRow({
-      company_id: row.company_id,
-      company_name: row.company_name || '',
-      report_date: row.report_date,
-      module_usage: row.module_usage || {},
-      module_last_dates: row.module_last_dates || {},
-      module_active_count: Number(row.module_active_count || 0),
-      raw: row.raw || null
-    }));
+    .map(row => toPublicCompanyModuleRow(row));
 
   return {
     tenant_id: tenantId,
