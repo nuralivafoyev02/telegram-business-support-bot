@@ -13,6 +13,7 @@ const REPORT_HISTORY_MAX_DAYS = 0;
 const COMPANY_MODULE_DAILY_TABLE = 'company_module_daily_reports';
 const COMPANY_MODULE_SYNC_RUNS_TABLE = 'company_module_sync_runs';
 const MODULE_KEYS = Object.freeze(['taminot', 'kassa', 'omborxona', 'qurilish_jarayoni', 'monitoring']);
+const MODULE_ACTIVE_GRACE_DAYS = 3;
 const ACTIVITY_KEY_MAP = Object.freeze({
   supply: 'taminot',
   cashier: 'kassa',
@@ -167,10 +168,17 @@ function parseModuleLastDateKey(lastDate = '', referenceDate = '') {
   return '';
 }
 
-function moduleLastDateMatchesReportDate(lastDate = '', reportDate = '') {
+function moduleLastDateWithinActiveWindow(lastDate = '', reportDate = '', graceDays = MODULE_ACTIVE_GRACE_DAYS) {
   const target = normalizeReportDateKey(reportDate);
+  if (!target || graceDays < 1) return false;
   const parsed = parseModuleLastDateKey(lastDate, target);
-  return Boolean(target && parsed && parsed === target);
+  if (!parsed || parsed > target) return false;
+  const windowStart = shiftDateKey(target, -(graceDays - 1));
+  return parsed >= windowStart && parsed <= target;
+}
+
+function moduleLastDateMatchesReportDate(lastDate = '', reportDate = '') {
+  return moduleLastDateWithinActiveWindow(lastDate, reportDate, 1);
 }
 
 function moduleUsageForReportDate(moduleLastDates = {}, reportDate = '') {
@@ -178,7 +186,7 @@ function moduleUsageForReportDate(moduleLastDates = {}, reportDate = '') {
   const target = normalizeReportDateKey(reportDate);
   if (target) {
     MODULE_KEYS.forEach(key => {
-      usage[key] = moduleLastDateMatchesReportDate(moduleLastDates[key], target);
+      usage[key] = moduleLastDateWithinActiveWindow(moduleLastDates[key], target);
     });
   }
   return {
@@ -1327,6 +1335,7 @@ module.exports = {
   COMPANY_REPORT_HISTORY_SCHEMA_VERSION,
   REPORT_HISTORY_MAX_DAYS,
   MODULE_KEYS,
+  MODULE_ACTIVE_GRACE_DAYS,
   ACTIVITY_KEY_MAP,
   companyReportUrl,
   normalizeReportCompany,
@@ -1340,6 +1349,7 @@ module.exports = {
   normalizeReportDateKey,
   parseModuleLastDateKey,
   moduleUsageForReportDate,
+  moduleLastDateWithinActiveWindow,
   resolveModuleUsageForDailyRow,
   resolveModuleUsageForTargetDate,
   reconcileCompanyModuleRow,

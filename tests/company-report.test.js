@@ -10,6 +10,7 @@ const {
   resolveQueryDateRange,
   parseModuleLastDateKey,
   moduleUsageForReportDate,
+  moduleLastDateWithinActiveWindow,
   resolveModuleUsageForDailyRow,
   resolveModuleUsageForTargetDate,
   reconcileCompanyModuleRow
@@ -32,9 +33,9 @@ const sample = {
 const normalized = normalizeReportCompany(sample, '2026-06-13');
 assert.strictEqual(normalized.company_id, 60);
 assert.strictEqual(normalized.company_name, 'Milliard House');
-assert.strictEqual(normalized.module_active_count, 0);
-assert.strictEqual(normalized.module_usage.taminot, false);
-assert.strictEqual(normalized.module_usage.kassa, false);
+assert.strictEqual(normalized.module_active_count, 4);
+assert.strictEqual(normalized.module_usage.taminot, true);
+assert.strictEqual(normalized.module_usage.kassa, true);
 assert.strictEqual(normalized.module_usage.monitoring, false);
 assert.strictEqual(normalized.module_last_dates.monitoring, '09 Июн');
 assert.strictEqual(normalized.module_last_dates.taminot, '11 Июн');
@@ -53,10 +54,12 @@ const chinaHouse = {
   }
 };
 const chinaJune20 = normalizeReportCompany(chinaHouse, '2026-06-20');
-assert.strictEqual(chinaJune20.module_active_count, 1);
+assert.strictEqual(chinaJune20.module_active_count, 4);
 assert.strictEqual(chinaJune20.module_usage.kassa, true);
-assert.strictEqual(chinaJune20.module_usage.taminot, false);
-assert.strictEqual(chinaJune20.module_usage.omborxona, false);
+assert.strictEqual(chinaJune20.module_usage.taminot, true);
+assert.strictEqual(chinaJune20.module_usage.omborxona, true);
+assert.strictEqual(chinaJune20.module_usage.monitoring, true);
+assert.strictEqual(chinaJune20.module_usage.qurilish_jarayoni, false);
 
 const rows = extractReportRows({ data: [sample] });
 assert.strictEqual(rows.length, 1);
@@ -71,13 +74,13 @@ const aggregated = aggregateModuleUsage([
     module_last_dates: { kassa: '2 Июн', omborxona: '1 Июн' }
   }
 ]);
-assert.strictEqual(aggregated.module_active_count, 2);
+assert.strictEqual(aggregated.module_active_count, 3);
 assert.strictEqual(aggregated.module_usage.taminot, true);
 assert.strictEqual(aggregated.module_usage.kassa, true);
-assert.strictEqual(aggregated.module_usage.omborxona, false);
+assert.strictEqual(aggregated.module_usage.omborxona, true);
 
 const scoped = moduleUsageForReportDate(chinaJune20.module_last_dates, '2026-06-20');
-assert.strictEqual(scoped.module_active_count, 1);
+assert.strictEqual(scoped.module_active_count, 4);
 assert.strictEqual(scoped.module_usage.kassa, true);
 
 const chinaFromRaw = reconcileCompanyModuleRow({
@@ -87,7 +90,7 @@ const chinaFromRaw = reconcileCompanyModuleRow({
   module_last_dates: {},
   raw: chinaHouse
 });
-assert.strictEqual(chinaFromRaw.module_active_count, 1);
+assert.strictEqual(chinaFromRaw.module_active_count, 4);
 assert.strictEqual(chinaFromRaw.module_usage.kassa, true);
 assert.strictEqual(chinaFromRaw.module_last_dates.kassa, '20 Июн');
 
@@ -175,12 +178,19 @@ const chinaDbJune20 = resolveModuleUsageForDailyRow({
     qurilish_jarayoni: '05 Июн'
   }
 });
-assert.strictEqual(chinaDbJune20.module_active_count, 1);
+assert.strictEqual(chinaDbJune20.module_active_count, 4);
 assert.strictEqual(chinaDbJune20.module_usage.kassa, true);
-assert.strictEqual(chinaDbJune20.module_usage.taminot, false);
+assert.strictEqual(chinaDbJune20.module_usage.taminot, true);
 
 assert.strictEqual(parseModuleLastDateKey('20 Июн', '2026-06-20'), '2026-06-20');
 assert.strictEqual(parseModuleLastDateKey('20Июн', '2026-06-20'), '2026-06-20');
+
+assert.strictEqual(moduleLastDateWithinActiveWindow('22 Июн', '2026-06-22'), true);
+assert.strictEqual(moduleLastDateWithinActiveWindow('22 Июн', '2026-06-23'), true);
+assert.strictEqual(moduleLastDateWithinActiveWindow('22 Июн', '2026-06-24'), true);
+assert.strictEqual(moduleLastDateWithinActiveWindow('22 Июн', '2026-06-25'), false);
+assert.strictEqual(moduleLastDateWithinActiveWindow('20 Июн', '2026-06-22'), true);
+assert.strictEqual(moduleLastDateWithinActiveWindow('20 Июн', '2026-06-23'), false);
 
 assert.strictEqual(normalizeReportDateKey('2026-06-15'), '2026-06-15');
 assert.strictEqual(normalizeReportDateKey('2026-06-15T00:00:00.000Z'), '2026-06-15');
@@ -280,8 +290,9 @@ const chinaExactSingle = resolveModuleUsageForTargetDate({
   }
 }, '2026-06-20');
 assert.strictEqual(chinaExactSingle.module_usage.kassa, true);
-assert.strictEqual(chinaExactSingle.module_usage.taminot, false);
-assert.strictEqual(chinaExactSingle.module_active_count, 1);
+assert.strictEqual(chinaExactSingle.module_usage.taminot, true);
+assert.strictEqual(chinaExactSingle.module_usage.monitoring, true);
+assert.strictEqual(chinaExactSingle.module_active_count, 4);
 
 const chinaCustomRange = aggregateModuleUsage([
   { report_date: '2026-06-19', module_last_dates: { taminot: '19 Июн', omborxona: '19 Июн' } },
