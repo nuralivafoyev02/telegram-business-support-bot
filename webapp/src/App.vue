@@ -5411,8 +5411,10 @@ function companyInfoRowWithoutModuleFields(row = {}) {
   return next;
 }
 
-function companyModuleUsageForPeriod(row = {}, report = null, expectedDates = []) {
+function companyModuleUsageForPeriod(row = {}, report = null, context = {}) {
   if (!report?.module_usage) return emptyCompanyModuleUsageMap();
+  const { expectedDates = [], mode = '', targetDate = '' } = context;
+  if (mode === 'single' && targetDate) return report.module_usage;
   const reportDate = String(report.report_date || '').trim();
   if (expectedDates.length === 1 && reportDate && reportDate !== expectedDates[0]) {
     return emptyCompanyModuleUsageMap();
@@ -5426,10 +5428,15 @@ const companyModuleBaseRows = computed(() => {
   const hasPreviousReports = (companyModuleReportsPrevious.value?.report_dates || []).length > 0;
   const compareEnabled = companyModuleCompareEnabled.value;
   const expectedDates = [...(companyModuleReports.value?.report_dates || [])].filter(Boolean);
+  const moduleReportContext = {
+    expectedDates,
+    mode: companyModuleReports.value?.mode || '',
+    targetDate: companyModuleReports.value?.target_date || ''
+  };
   return filteredCompanyInfoRows.value.map(row => {
     const report = findCompanyModuleReport(reportById, row);
     const previousReport = findCompanyModuleReport(previousById, row);
-    const module_usage = companyModuleUsageForPeriod(row, report, expectedDates);
+    const module_usage = companyModuleUsageForPeriod(row, report, moduleReportContext);
     const previous_usage = previousReport?.module_usage || emptyCompanyModuleUsageMap();
     const module_last_dates = report?.module_last_dates || {};
     const module_active_count = companyModuleActiveCount(module_usage);

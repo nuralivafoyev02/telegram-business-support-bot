@@ -11,6 +11,7 @@ const {
   parseModuleLastDateKey,
   moduleUsageForReportDate,
   resolveModuleUsageForDailyRow,
+  resolveModuleUsageForTargetDate,
   reconcileCompanyModuleRow
 } = require('../backend/lib/company-report');
 
@@ -254,5 +255,40 @@ assert.strictEqual(chinaWeek.module_usage.taminot, true);
 assert.strictEqual(chinaWeek.module_usage.omborxona, true);
 assert.strictEqual(chinaWeek.module_usage.monitoring, true);
 assert.strictEqual(chinaWeek.module_usage.qurilish_jarayoni, false);
+
+const chinaStrictSingle = resolveModuleUsageForTargetDate({
+  report_date: '2026-06-22',
+  module_last_dates: {
+    taminot: '19 Июн',
+    kassa: '20 Июн',
+    omborxona: '19 Июн',
+    monitoring: '18 Июн',
+    qurilish_jarayoni: '05 Июн'
+  }
+}, '2026-06-20');
+assert.strictEqual(chinaStrictSingle.module_active_count, 0);
+assert.strictEqual(chinaStrictSingle.module_usage.kassa, false);
+
+const chinaExactSingle = resolveModuleUsageForTargetDate({
+  report_date: '2026-06-20',
+  module_last_dates: {
+    taminot: '19 Июн',
+    kassa: '20 Июн',
+    omborxona: '19 Июн',
+    monitoring: '18 Июн',
+    qurilish_jarayoni: '05 Июн'
+  }
+}, '2026-06-20');
+assert.strictEqual(chinaExactSingle.module_usage.kassa, true);
+assert.strictEqual(chinaExactSingle.module_usage.taminot, false);
+assert.strictEqual(chinaExactSingle.module_active_count, 1);
+
+const chinaCustomRange = aggregateModuleUsage([
+  { report_date: '2026-06-19', module_last_dates: { taminot: '19 Июн', omborxona: '19 Июн' } },
+  { report_date: '2026-06-20', module_last_dates: { kassa: '20 Июн' } }
+], '2026-06-18', '2026-06-20');
+assert.strictEqual(chinaCustomRange.module_usage.kassa, true);
+assert.strictEqual(chinaCustomRange.module_usage.taminot, true);
+assert.strictEqual(chinaCustomRange.module_usage.qurilish_jarayoni, false);
 
 console.log('company-report.test.js: ok');

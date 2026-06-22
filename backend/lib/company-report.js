@@ -247,6 +247,20 @@ function resolveModuleUsageForDailyRow(row = {}) {
   };
 }
 
+function resolveModuleUsageForTargetDate(row = {}, targetDate = '') {
+  const target = normalizeReportDateKey(targetDate);
+  const reportDate = normalizeReportDateKey(row.report_date);
+  if (!target || reportDate !== target) {
+    const emptyUsage = Object.fromEntries(MODULE_KEYS.map(key => [key, false]));
+    return {
+      module_usage: emptyUsage,
+      module_last_dates: moduleLastDatesFromRow(row),
+      module_active_count: 0
+    };
+  }
+  return resolveModuleUsageForDailyRow(row);
+}
+
 function reconcileCompanyModuleRow(row = {}) {
   const reportDate = normalizeReportDateKey(row.report_date);
   const resolved = resolveModuleUsageForDailyRow(row);
@@ -1327,6 +1341,7 @@ module.exports = {
   parseModuleLastDateKey,
   moduleUsageForReportDate,
   resolveModuleUsageForDailyRow,
+  resolveModuleUsageForTargetDate,
   reconcileCompanyModuleRow,
   resolveQueryDateRange,
   aggregateCompaniesFromDailyRows,
