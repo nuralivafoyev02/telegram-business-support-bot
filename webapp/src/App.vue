@@ -2723,7 +2723,7 @@ const SETTINGS_SECTION_STORAGE_KEY = 'uyqur_support_settings_section';
 const THEME_STORAGE_KEY = 'uyqur_support_theme';
 const COMPARISON_STORAGE_KEY = 'uyqur_support_comparison_enabled';
 const TELEGRAM_AUTO_SYNC_INTERVAL_MS = 25_000;
-const COMPANY_ACTIVITY_SYNC_INTERVAL_MS = 6 * 60 * 60 * 1000;
+const COMPANY_ACTIVITY_SYNC_INTERVAL_MS = 60 * 60 * 1000;
 const SETTINGS_SECTION_KEYS = ['bot', 'integrations', 'telegram', 'admin'];
 const tabs = [
   { key: 'stats', label: 'Support performance', icon: '📊' },
@@ -7629,24 +7629,35 @@ async function loadProductAnalytics() {
   if (data?.from_cache) loadCompanyInfo().catch(error => showToast(error.message));
 }
 
-async function loadCompanyActivity() {
+async function syncCompanyModuleReportLive() {
+  try {
+    return await api.companyReport();
+  } catch {
+    return null;
+  }
+}
+
+async function loadCompanyActivity(options = {}) {
+  const syncLive = options.syncLive !== false;
+  const notifyOnSyncError = options.notifyOnSyncError !== false;
+  if (syncLive) {
+    const synced = await syncCompanyModuleReportLive();
+    if (!synced && notifyOnSyncError && !companyModuleReports.value?.companies?.length) {
+      showToast('Kompaniya modul hisoboti yangilanmadi');
+    }
+  } else if (!companyModuleReports.value?.companies?.length) {
+    try {
+      await api.companyReport();
+    } catch (error) {
+      showToast(error.message);
+    }
+  }
   const [data] = await Promise.all([
     loadCompanyInfo({ cached: true }),
     refreshCompanyModuleReports(),
     refreshCompanyModuleChartData(),
     loadDashboard()
   ]);
-  if (!companyModuleReports.value?.companies?.length) {
-    try {
-      await api.companyReport();
-      await Promise.all([
-        refreshCompanyModuleReports(),
-        refreshCompanyModuleChartData()
-      ]);
-    } catch (error) {
-      showToast(error.message);
-    }
-  }
   if (data?.from_cache) loadCompanyInfo().catch(error => showToast(error.message));
 }
 
@@ -7661,7 +7672,7 @@ function startCompanyActivitySyncTimer() {
   if (activeTab.value !== 'companyActivity') return;
   companyActivitySyncTimer = setInterval(() => {
     if (activeTab.value !== 'companyActivity') return;
-    loadCompanyActivity().catch(() => null);
+    loadCompanyActivity({ syncLive: true, notifyOnSyncError: false }).catch(() => null);
   }, COMPANY_ACTIVITY_SYNC_INTERVAL_MS);
 }
 

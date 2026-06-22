@@ -11,7 +11,7 @@
   "crons": [
     {
       "path": "/api/cron?action=companyInfo&syncReport=1",
-      "schedule": "50 0,6,12,18 * * *"
+      "schedule": "0 * * * *"
     }
   ],
   "headers": [

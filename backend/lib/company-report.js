@@ -289,6 +289,11 @@ async function getReportHistoryFromDaily(options = {}) {
         companies: [],
         summary: {}
       };
+    } else if (
+      normalized.fetched_at
+      && String(normalized.fetched_at).localeCompare(String(days[normalized.report_date].fetched_at || '')) > 0
+    ) {
+      days[normalized.report_date].fetched_at = normalized.fetched_at;
     }
     days[normalized.report_date].companies.push({
       company_id: normalized.company_id,
