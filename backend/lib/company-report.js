@@ -99,25 +99,110 @@ function normalizeActivityModule(activity = {}, sourceKey = '') {
   };
 }
 
+const MODULE_LAST_DATE_MONTHS = Object.freeze({
+  yan: 1, yanvar: 1, jan: 1, 'янв': 1,
+  fev: 2, february: 2, 'фев': 2,
+  mar: 3, mart: 3, 'мар': 3,
+  apr: 4, aprel: 4, 'апр': 4,
+  may: 5, mai: 5, 'май': 5,
+  iyun: 6, iun: 6, jun: 6, 'июн': 6,
+  iyul: 7, jul: 7, 'июл': 7,
+  avg: 8, aug: 8, avgust: 8, 'авг': 8,
+  sen: 9, sep: 9, sent: 9, 'сен': 9,
+  okt: 10, oct: 10, 'окт': 10,
+  noy: 11, nov: 11, 'ноя': 11,
+  dek: 12, dec: 12, 'дек': 12
+});
+
+function normalizeModuleLastDateToken(value = '') {
+  return String(value || '').trim().toLowerCase()
+    .replace(/[.’'`]/g, '')
+    .replace(/\s+/g, '');
+}
+
+function parseModuleLastDateKey(lastDate = '', referenceDate = '') {
+  const text = String(lastDate || '').trim();
+  if (!text) return '';
+  if (/^\d{4}-\d{2}-\d{2}/.test(text)) return normalizeReportDateKey(text);
+
+  const ref = normalizeReportDateKey(referenceDate) || tashkentDateKey();
+  const refYear = Number(ref.slice(0, 4));
+
+  const dotted = text.match(/^(\d{1,2})[.\-/](\d{1,2})(?:[.\-/](\d{2,4}))?$/);
+  if (dotted) {
+    const day = Number(dotted[1]);
+    const month = Number(dotted[2]);
+    let year = dotted[3] ? Number(dotted[3]) : refYear;
+    if (year < 100) year += 2000;
+    if (!day || !month) return '';
+    return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  }
+
+  const named = text.match(/^(\d{1,2})\s+(.+)$/);
+  if (named) {
+    const day = Number(named[1]);
+    const monthToken = normalizeModuleLastDateToken(named[2]);
+    let month = 0;
+    for (const [key, value] of Object.entries(MODULE_LAST_DATE_MONTHS)) {
+      if (monthToken.startsWith(key) || key.startsWith(monthToken.slice(0, Math.min(3, monthToken.length)))) {
+        month = value;
+        break;
+      }
+    }
+    if (!day || !month) return '';
+    return `${refYear}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  }
+  return '';
+}
+
+function moduleLastDateMatchesReportDate(lastDate = '', reportDate = '') {
+  const target = normalizeReportDateKey(reportDate);
+  const parsed = parseModuleLastDateKey(lastDate, target);
+  return Boolean(target && parsed && parsed === target);
+}
+
+function moduleUsageForReportDate(moduleLastDates = {}, reportDate = '') {
+  const usage = Object.fromEntries(MODULE_KEYS.map(key => [key, false]));
+  const target = normalizeReportDateKey(reportDate);
+  if (target) {
+    MODULE_KEYS.forEach(key => {
+      usage[key] = moduleLastDateMatchesReportDate(moduleLastDates[key], target);
+    });
+  }
+  return {
+    module_usage: usage,
+    module_active_count: MODULE_KEYS.reduce((sum, key) => sum + (usage[key] ? 1 : 0), 0)
+  };
+}
+
+function reconcileCompanyModuleRow(row = {}) {
+  const reportDate = normalizeReportDateKey(row.report_date);
+  if (!reportDate) return row;
+  const scoped = moduleUsageForReportDate(row.module_last_dates || {}, reportDate);
+  return {
+    ...row,
+    module_usage: scoped.module_usage,
+    module_active_count: scoped.module_active_count
+  };
+}
+
 function normalizeReportCompany(row = {}, reportDate = tashkentDateKey()) {
   const source = objectValue(row);
   const activity = objectValue(objectValue(source.data).activity);
-  const module_usage = {};
   const module_last_dates = {};
   Object.entries(ACTIVITY_KEY_MAP).forEach(([sourceKey, targetKey]) => {
     const module = normalizeActivityModule(activity, sourceKey);
-    module_usage[targetKey] = module.active;
     module_last_dates[targetKey] = module.last_date;
   });
-  const module_active_count = MODULE_KEYS.reduce((sum, key) => sum + (module_usage[key] ? 1 : 0), 0);
+  const scoped = moduleUsageForReportDate(module_last_dates, reportDate);
   const companyId = Number(source.id || source.company_id || 0);
   return {
     company_id: Number.isFinite(companyId) && companyId > 0 ? companyId : null,
     company_name: source.name || source.company_name || '',
     report_date: reportDate,
-    module_usage,
+    module_usage: scoped.module_usage,
     module_last_dates,
-    module_active_count,
+    module_active_count: scoped.module_active_count,
     raw: source
   };
 }
@@ -754,11 +839,11 @@ function aggregateModuleUsage(rows = []) {
   const usage = Object.fromEntries(MODULE_KEYS.map(key => [key, false]));
   const lastDates = {};
   rows.forEach(row => {
-    const moduleUsage = row.module_usage || {};
-    const moduleLastDates = row.module_last_dates || {};
+    const reportDate = normalizeReportDateKey(row.report_date);
+    const scoped = moduleUsageForReportDate(row.module_last_dates || {}, reportDate);
     MODULE_KEYS.forEach(key => {
-      if (moduleUsage[key]) usage[key] = true;
-      if (moduleLastDates[key]) lastDates[key] = moduleLastDates[key];
+      if (scoped.module_usage[key]) usage[key] = true;
+      if (row.module_last_dates?.[key]) lastDates[key] = row.module_last_dates[key];
     });
   });
   return {
@@ -868,7 +953,7 @@ async function getCompanyModuleReports(query = {}) {
 
   const targetDate = dates.at(-1) || null;
   const companies = (targetDate ? list.filter(row => row.report_date === targetDate) : list)
-    .map(row => ({
+    .map(row => reconcileCompanyModuleRow({
       company_id: row.company_id,
       company_name: row.company_name || '',
       report_date: row.report_date,
@@ -959,6 +1044,8 @@ module.exports = {
   getCompanyModuleReports,
   aggregateModuleUsage,
   normalizeReportDateKey,
+  parseModuleLastDateKey,
+  moduleUsageForReportDate,
   periodDateRange,
   migrateBotSettingsHistoryToDaily,
   tashkentDateKey
