@@ -312,6 +312,101 @@ function extractCompanyEmployeeActivity(row = {}) {
   };
 }
 
+function rowsInDateRange(rows = [], rangeStart = '', rangeEnd = '') {
+  const start = normalizeReportDateKey(rangeStart);
+  const end = normalizeReportDateKey(rangeEnd);
+  if (!start || !end) return [];
+  const rangeFrom = start <= end ? start : end;
+  const rangeTo = start <= end ? end : start;
+  return rows
+    .filter(row => {
+      const date = normalizeReportDateKey(row.report_date);
+      return date && date >= rangeFrom && date <= rangeTo;
+    })
+    .sort((a, b) => String(a.report_date).localeCompare(String(b.report_date)));
+}
+
+function mergeEmployeeActivityEntries(entries = []) {
+  const map = new Map();
+  entries.forEach(entry => {
+    const key = String(entry.id || entry.name || '').trim();
+    if (!key) return;
+    const current = map.get(key) || {
+      id: entry.id,
+      name: entry.name,
+      action_count: 0,
+      important_count: 0,
+      last_activity_date: entry.last_activity_date || ''
+    };
+    current.action_count += Number(entry.action_count || 0);
+    current.important_count = Math.max(current.important_count, Number(entry.important_count || 0));
+    if (entry.last_activity_date) {
+      current.last_activity_date = entry.last_activity_date;
+    }
+    map.set(key, current);
+  });
+  return [...map.values()];
+}
+
+function aggregateEmployeeActivityForPeriod(rows = [], rangeStart = '', rangeEnd = '') {
+  const scoped = rowsInDateRange(rows, rangeStart, rangeEnd);
+  if (!scoped.length) return null;
+
+  const start = normalizeReportDateKey(rangeStart);
+  const end = normalizeReportDateKey(rangeEnd);
+  const rangeFrom = start && end ? (start <= end ? start : end) : '';
+  const rangeTo = start && end ? (start <= end ? end : start) : '';
+  const isSingleDay = !rangeFrom || !rangeTo || rangeFrom === rangeTo;
+
+  if (isSingleDay) {
+    const target = rangeTo || rangeFrom;
+    const exact = scoped.find(row => normalizeReportDateKey(row.report_date) === target) || scoped[scoped.length - 1];
+    const activity = extractCompanyEmployeeActivity(exact);
+    if (!activity) return null;
+    return {
+      ...activity,
+      report_date: normalizeReportDateKey(exact.report_date) || target,
+      aggregated: false
+    };
+  }
+
+  let totalActions = 0;
+  const activeEntries = [];
+  scoped.forEach(row => {
+    const activity = extractCompanyEmployeeActivity(row);
+    if (!activity) return;
+    totalActions += Number(activity.total_actions || 0);
+    activeEntries.push(...activity.active_employees);
+  });
+
+  const mergedActive = mergeEmployeeActivityEntries(activeEntries)
+    .sort((a, b) => Number(b.action_count || 0) - Number(a.action_count || 0));
+  const endRow = scoped.find(row => normalizeReportDateKey(row.report_date) === rangeTo) || scoped[scoped.length - 1];
+  const endActivity = extractCompanyEmployeeActivity(endRow);
+  const activeKeys = new Set(
+    mergedActive
+      .filter(entry => Number(entry.action_count || 0) > 0)
+      .map(entry => String(entry.id || entry.name || '').trim())
+      .filter(Boolean)
+  );
+  const inactiveEmployees = (endActivity?.inactive_employees || [])
+    .filter(entry => !activeKeys.has(String(entry.id || entry.name || '').trim()));
+
+  if (!totalActions && !mergedActive.length && !inactiveEmployees.length) return null;
+
+  return {
+    total_actions: totalActions,
+    activity_period: `${rangeFrom} — ${rangeTo}`,
+    active_employees: mergedActive,
+    inactive_employees: inactiveEmployees,
+    active_employee_count: mergedActive.filter(entry => Number(entry.action_count || 0) > 0).length,
+    inactive_employee_count: inactiveEmployees.length,
+    support: endActivity?.support || {},
+    report_date: normalizeReportDateKey(endRow.report_date) || rangeTo,
+    aggregated: true
+  };
+}
+
 function reconcileCompanyModuleRow(row = {}) {
   const reportDate = normalizeReportDateKey(row.report_date);
   const resolved = resolveModuleUsageForDailyRow(row);
@@ -1342,12 +1437,15 @@ function aggregateCompaniesFromDailyRows(list = [], rangeStart = '', rangeEnd = 
   });
   return [...grouped.values()].map(group => {
     const aggregated = aggregateModuleUsage(group.rows, rangeStart, rangeEnd);
-    const latest = group.rows.sort((a, b) => String(b.report_date).localeCompare(String(a.report_date)))[0];
-    const employee_activity = latest ? extractCompanyEmployeeActivity(latest) : null;
+    const employee_activity = aggregateEmployeeActivityForPeriod(group.rows, rangeStart, rangeEnd);
+    const reportDate = employee_activity?.report_date
+      || normalizeReportDateKey(rangeEnd)
+      || normalizeReportDateKey(rangeStart)
+      || null;
     return {
       company_id: group.company_id,
       company_name: group.company_name,
-      report_date: latest?.report_date || null,
+      report_date: reportDate,
       ...aggregated,
       ...(employee_activity ? { employee_activity } : {})
     };
@@ -1499,6 +1597,7 @@ module.exports = {
   resolveModuleUsageForChartDate,
   reconcileCompanyModuleRow,
   extractCompanyEmployeeActivity,
+  aggregateEmployeeActivityForPeriod,
   resolveQueryDateRange,
   aggregateCompaniesFromDailyRows,
   slimCompanyReportResponse,

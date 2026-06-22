@@ -1566,8 +1566,8 @@
             <div>
               <div class="company-module-employee-company">{{ companyModuleEmployeeDetail.name || 'Kompaniya' }}</div>
               <div class="company-module-employee-meta">
-                <span v-if="companyModuleEmployeeDetail.report_date">Hisobot: {{ companyModuleEmployeeDetail.report_date }}</span>
-                <span v-if="companyModuleEmployeeActivityPeriod">{{ companyModuleEmployeeActivityPeriod }}</span>
+                <span v-if="companyModuleEmployeeReportLabel">{{ companyModuleEmployeeReportLabel }}</span>
+                <span v-if="companyModuleEmployeePanelPeriodLabel">{{ companyModuleEmployeePanelPeriodLabel }}</span>
                 <span v-if="companyModuleEmployeeSupportLabel">Mas’ul: {{ companyModuleEmployeeSupportLabel }}</span>
               </div>
             </div>
@@ -5579,7 +5579,7 @@ const companyModuleBaseRows = computed(() => {
       module_percent_comparison: compareEnabled && hasPreviousReports
         ? compareValue(module_active_percent, previous_percent, { isPercentage: true })
         : null,
-      report_date: report?.report_date || null,
+      report_date: report?.employee_activity?.report_date || report?.report_date || null,
       employee_activity: report?.employee_activity || null
     };
   });
@@ -5801,9 +5801,27 @@ const companyModuleEmployeeInactiveRows = computed(() => {
   return [...rows].sort((a, b) => String(a.last_activity_date || '').localeCompare(String(b.last_activity_date || '')));
 });
 
-const companyModuleEmployeeActivityPeriod = computed(() => {
-  const period = String(companyModuleEmployeeActivity.value?.activity_period || '').trim();
-  return period ? `Davr: ${period}` : '';
+const companyModuleEmployeeReportLabel = computed(() => {
+  const reports = companyModuleReports.value || {};
+  const activity = companyModuleEmployeeActivity.value || {};
+  const start = String(reports.range_start || '').trim();
+  const end = String(reports.range_end || activity.report_date || companyModuleEmployeeDetail.value?.report_date || '').trim();
+  if (reports.mode === 'range' && start && end && start !== end) {
+    return `Hisobot davri: ${start} — ${end}`;
+  }
+  const date = end || start || String(activity.report_date || '').trim();
+  return date ? `Hisobot: ${date}` : '';
+});
+
+const companyModuleEmployeePanelPeriodLabel = computed(() => {
+  const reports = companyModuleReports.value || {};
+  const activity = companyModuleEmployeeActivity.value;
+  const panelLabel = companyModulePeriodLabel.value;
+  if (!panelLabel) return '';
+  if (activity?.aggregated && reports.mode === 'range') {
+    return `Davr: ${panelLabel} · jamlangan`;
+  }
+  return `Davr: ${panelLabel}`;
 });
 
 const companyModuleEmployeeSupportLabel = computed(() => {

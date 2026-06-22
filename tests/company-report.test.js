@@ -15,7 +15,8 @@ const {
   resolveModuleUsageForTargetDate,
   buildChartDailyCompanies,
   reconcileCompanyModuleRow,
-  extractCompanyEmployeeActivity
+  extractCompanyEmployeeActivity,
+  aggregateEmployeeActivityForPeriod
 } = require('../backend/lib/company-report');
 
 const sample = {
@@ -359,5 +360,44 @@ const landHousePublic = reconcileCompanyModuleRow({
 });
 assert.strictEqual(landHousePublic.employee_activity.total_actions, 31);
 assert.strictEqual(landHousePublic.employee_activity.support.username, '@uyqur_mirshod');
+
+const employeeDayOne = {
+  report_date: '2026-06-21',
+  raw: {
+    data: {
+      total_actions: 10,
+      active_employees: [{ id: 1, name: 'Ali', action_count: 10, important_count: 0 }],
+      inactive_employees: [{ id: 2, name: 'Vali', last_activity_date: '20 Iyun', important_count: 0 }]
+    }
+  }
+};
+const employeeDayTwo = {
+  report_date: '2026-06-22',
+  raw: {
+    data: {
+      total_actions: 5,
+      active_employees: [{ id: 1, name: 'Ali', action_count: 5, important_count: 2 }],
+      inactive_employees: [{ id: 2, name: 'Vali', last_activity_date: '21 Iyun', important_count: 0 }]
+    }
+  }
+};
+const aggregatedEmployees = aggregateEmployeeActivityForPeriod(
+  [employeeDayOne, employeeDayTwo],
+  '2026-06-21',
+  '2026-06-22'
+);
+assert.strictEqual(aggregatedEmployees.total_actions, 15);
+assert.strictEqual(aggregatedEmployees.active_employee_count, 1);
+assert.strictEqual(aggregatedEmployees.active_employees[0].action_count, 15);
+assert.strictEqual(aggregatedEmployees.inactive_employee_count, 1);
+assert.strictEqual(aggregatedEmployees.aggregated, true);
+
+const singleDayEmployees = aggregateEmployeeActivityForPeriod(
+  [employeeDayTwo],
+  '2026-06-22',
+  '2026-06-22'
+);
+assert.strictEqual(singleDayEmployees.total_actions, 5);
+assert.strictEqual(singleDayEmployees.aggregated, false);
 
 console.log('company-report.test.js: ok');
