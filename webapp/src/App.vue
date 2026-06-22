@@ -574,13 +574,14 @@
                       <select
                         :value="companyModulePeriod"
                         class="select mini-select"
-                        @change="handleCompanyModulePeriodChange($event.target.value)">
+                        @change="handleCompanyModulePeriodChange($event.target.value)"
+                        @mousedown="handleCompanyModulePeriodSelectPointerDown"
+                        @mouseup="handleCompanyModulePeriodSelectPointerUp">
                         <option
                           v-for="period in companyModulePeriodOptions"
                           :key="`module-period-${period.key}`"
-                          :value="period.key"
-                          @mousedown.prevent="period.key === 'custom' ? handleCompanyModuleCustomOptionMouseDown() : null">
-                          {{ period.label }}
+                          :value="period.key">
+                          {{ companyModulePeriodOptionLabel(period) }}
                         </option>
                       </select>
                     </label>
@@ -784,13 +785,14 @@
                       <select
                         :value="companyModuleChartPeriod"
                         class="select mini-select"
-                        @change="handleCompanyModuleChartPeriodChange($event.target.value)">
+                        @change="handleCompanyModuleChartPeriodChange($event.target.value)"
+                        @mousedown="handleCompanyModuleChartPeriodSelectPointerDown"
+                        @mouseup="handleCompanyModuleChartPeriodSelectPointerUp">
                         <option
                           v-for="period in companyModulePeriodOptions"
                           :key="`module-chart-period-${period.key}`"
-                          :value="period.key"
-                          @mousedown="period.key === 'custom' ? handleCompanyModuleChartCustomOptionMouseDown() : null">
-                          {{ period.label }}
+                          :value="period.key">
+                          {{ companyModuleChartPeriodOptionLabel(period) }}
                         </option>
                       </select>
                     </label>
@@ -5344,6 +5346,25 @@ const companyModulePeriodLabel = computed(() => {
   return companyModulePeriodOptions.find(period => period.key === companyModulePeriod.value)?.label || 'Bugun';
 });
 
+function companyModulePeriodOptionLabel(period = {}) {
+  if (period.key === 'custom' && companyModuleCustomPeriodForm.appliedStart && companyModuleCustomPeriodForm.appliedEnd) {
+    return companyModulePeriodLabel.value;
+  }
+  return period.label || 'Ixtiyoriy';
+}
+
+function companyModuleChartPeriodOptionLabel(period = {}) {
+  if (period.key === 'custom'
+    && companyModuleChartCustomPeriodForm.appliedStart
+    && companyModuleChartCustomPeriodForm.appliedEnd) {
+    return companyModuleChartPeriodLabel.value;
+  }
+  return period.label || 'Ixtiyoriy';
+}
+
+let companyModulePeriodSelectValueOnPointerDown = '';
+let companyModuleChartPeriodSelectValueOnPointerDown = '';
+
 const companyModuleReportDatesLabel = computed(() => {
   const dates = [...(companyModuleReports.value?.report_dates || [])].filter(Boolean).sort();
   if (!dates.length) return 'ma’lumot yo‘q';
@@ -7534,11 +7555,21 @@ function openCompanyModuleCustomPeriodModal() {
   modal.value = 'companyModuleCustomPeriod';
 }
 
-function handleCompanyModuleCustomOptionMouseDown() {
-  previousCompanyModulePeriod.value = companyModulePeriod.value === 'custom'
-    ? previousCompanyModulePeriod.value
-    : companyModulePeriod.value;
-  openCompanyModuleCustomPeriodModal();
+function handleCompanyModulePeriodSelectPointerDown(event) {
+  const select = event.currentTarget;
+  if (select?.value) companyModulePeriodSelectValueOnPointerDown = select.value;
+}
+
+function handleCompanyModulePeriodSelectPointerUp(event) {
+  const select = event.currentTarget;
+  if (!(select instanceof HTMLSelectElement)) return;
+  const previousValue = companyModulePeriodSelectValueOnPointerDown;
+  companyModulePeriodSelectValueOnPointerDown = '';
+  requestAnimationFrame(() => {
+    if (select.value === 'custom' && previousValue === 'custom') {
+      openCompanyModuleCustomPeriodModal();
+    }
+  });
 }
 
 async function handleCompanyModulePeriodChange(value) {
@@ -7611,9 +7642,21 @@ function openCompanyModuleChartCustomPeriodModal() {
   modal.value = 'companyModuleChartCustomPeriod';
 }
 
-function handleCompanyModuleChartCustomOptionMouseDown() {
-  if (companyModuleChartPeriod.value !== 'custom') return;
-  openCompanyModuleChartCustomPeriodModal();
+function handleCompanyModuleChartPeriodSelectPointerDown(event) {
+  const select = event.currentTarget;
+  if (select?.value) companyModuleChartPeriodSelectValueOnPointerDown = select.value;
+}
+
+function handleCompanyModuleChartPeriodSelectPointerUp(event) {
+  const select = event.currentTarget;
+  if (!(select instanceof HTMLSelectElement)) return;
+  const previousValue = companyModuleChartPeriodSelectValueOnPointerDown;
+  companyModuleChartPeriodSelectValueOnPointerDown = '';
+  requestAnimationFrame(() => {
+    if (select.value === 'custom' && previousValue === 'custom') {
+      openCompanyModuleChartCustomPeriodModal();
+    }
+  });
 }
 
 async function handleCompanyModuleChartPeriodChange(value) {
