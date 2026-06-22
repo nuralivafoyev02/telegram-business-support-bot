@@ -5308,15 +5308,16 @@ function moduleUsageDeltaMark(row = {}, moduleKey = '') {
 function companyModulePeriodQuery(period = 'today') {
   if (period === 'custom') {
     if (!companyModuleCustomPeriodForm.appliedStart || !companyModuleCustomPeriodForm.appliedEnd) {
-      return { period: 'today' };
+      return { period: 'today', include_daily: 0 };
     }
     return {
       period: 'custom',
       start_date: companyModuleCustomPeriodForm.appliedStart,
-      end_date: companyModuleCustomPeriodForm.appliedEnd
+      end_date: companyModuleCustomPeriodForm.appliedEnd,
+      include_daily: 0
     };
   }
-  return { period: period || 'today' };
+  return { period: period || 'today', include_daily: 0 };
 }
 
 function companyModulePreviousPeriodKey(period = 'today') {
@@ -5634,15 +5635,16 @@ function companyModuleChartSourceEndDate(period = 'today') {
 function companyModuleChartPeriodQuery(period = 'week') {
   if (period === 'custom') {
     if (!companyModuleChartCustomPeriodForm.appliedStart || !companyModuleChartCustomPeriodForm.appliedEnd) {
-      return { period: 'week' };
+      return { period: 'week', include_daily: 1 };
     }
     return {
       period: 'custom',
       start_date: companyModuleChartCustomPeriodForm.appliedStart,
-      end_date: companyModuleChartCustomPeriodForm.appliedEnd
+      end_date: companyModuleChartCustomPeriodForm.appliedEnd,
+      include_daily: 1
     };
   }
-  return { period: period || 'week' };
+  return { period: period || 'week', include_daily: 1 };
 }
 
 function companyModuleChartExpectedDateKeys(period = 'week') {
@@ -7424,6 +7426,12 @@ async function loadCompanyModuleReportsOptional(query = {}) {
   try {
     await loadCompanyModuleReports(query);
   } catch (error) {
+    companyModuleReports.value = {
+      companies: [],
+      report_dates: [],
+      period: query.period || companyModulePeriod.value || 'today',
+      fetched_at: null
+    };
     showToast(error.message);
   }
 }
@@ -7469,7 +7477,7 @@ async function refreshCompanyModuleReports() {
     companyModuleReportsPrevious.value = { companies: [], report_dates: [], period: '' };
     return;
   }
-  await loadCompanyModuleReportsPreviousOptional({ period: previousPeriod });
+  await loadCompanyModuleReportsPreviousOptional({ period: previousPeriod, include_daily: 0 });
 }
 
 function openCompanyModuleCustomPeriodModal() {
@@ -7662,24 +7670,32 @@ async function syncCompanyModuleReportLive() {
 async function loadCompanyActivity(options = {}) {
   const syncLive = options.syncLive !== false;
   const notifyOnSyncError = options.notifyOnSyncError !== false;
-  if (syncLive) {
-    const synced = await syncCompanyModuleReportLive();
-    if (!synced && notifyOnSyncError && !companyModuleReports.value?.companies?.length) {
-      showToast('Kompaniya modul hisoboti yangilanmadi');
-    }
-  } else if (!companyModuleReports.value?.companies?.length) {
-    try {
-      await api.companyReport();
-    } catch (error) {
-      showToast(error.message);
-    }
-  }
   const [data] = await Promise.all([
     loadCompanyInfo({ cached: true }),
     refreshCompanyModuleReports(),
     refreshCompanyModuleChartData(),
     loadDashboard()
   ]);
+  if (syncLive) {
+    syncCompanyModuleReportLive()
+      .then(synced => {
+        if (!synced && notifyOnSyncError && !companyModuleReports.value?.companies?.length) {
+          showToast('Kompaniya modul hisoboti yangilanmadi');
+        }
+        if (synced) {
+          return refreshCompanyModuleReports();
+        }
+        return null;
+      })
+      .catch(() => null);
+  } else if (!companyModuleReports.value?.companies?.length) {
+    try {
+      await api.companyReport();
+      await refreshCompanyModuleReports();
+    } catch (error) {
+      showToast(error.message);
+    }
+  }
   if (data?.from_cache) loadCompanyInfo().catch(error => showToast(error.message));
 }
 

@@ -788,28 +788,75 @@ async function loadCompanyModuleListForDateRange(tenantId, startDate = '', endDa
   return { list, dates };
 }
 
-async function loadCompanyModuleSnapshotForDate(tenantId, reportDate = '', history = null) {
+async function getCachedCompanyReportForDate(options = {}) {
+  const tenantId = resolveTenantId(options.tenantId);
+  const date = normalizeReportDateKey(options.reportDate || options.date || '');
+  if (!date) return null;
+
+  const rows = await supabase.select(COMPANY_MODULE_DAILY_TABLE, {
+    select: 'company_id,company_name,report_date,module_usage,module_last_dates,module_active_count,fetched_at',
+    tenant_id: supabase.eq(tenantId),
+    report_date: supabase.eq(date),
+    order: supabase.order('company_id', true),
+    limit: '10000'
+  }).catch(() => []);
+  if (!rows.length) return null;
+
+  const companies = rows.map(normalizeDailyReportRow).map(row => ({
+    company_id: row.company_id,
+    company_name: row.company_name,
+    report_date: row.report_date,
+    module_usage: row.module_usage,
+    module_last_dates: row.module_last_dates,
+    module_active_count: row.module_active_count,
+    fetched_at: row.fetched_at
+  }));
+  const fetchedAt = rows.map(row => row.fetched_at).filter(Boolean).sort((a, b) => String(b).localeCompare(String(a)))[0] || null;
+  return {
+    tenant_id: tenantId,
+    report_date: date,
+    companies,
+    fetched_at: fetchedAt
+  };
+}
+
+async function historyFallbackForDateRange(tenantId, startDate = '', endDate = '') {
+  const history = await getReportHistoryFromSettings({ tenantId });
+  const dates = historyDatesForRange(history, startDate, endDate);
+  const list = companiesForHistoryDates(history, dates);
+  return { list, dates };
+}
+
+async function loadCompanyModuleSnapshotForDate(tenantId, reportDate = '') {
   const date = normalizeReportDateKey(reportDate);
   if (!date) return { list: [], dates: [] };
 
-  let { list, dates } = await loadCompanyModuleListForDateRange(tenantId, date, date, history);
+  let list = dailyRowsToCompanyList(await loadDailyReportRowsForDateRange(tenantId, date, date));
+  let dates = list.length ? [date] : [];
+
   if (!list.length) {
-    const resolvedHistory = history || await getReportHistory({ tenantId });
-    const historyDates = historyDatesForRange(resolvedHistory, date, date);
-    list = companiesForHistoryDates(resolvedHistory, historyDates.length ? historyDates : [date]);
-    dates = historyDates.length ? historyDates : (list.length ? [date] : []);
+    const settingsFallback = await historyFallbackForDateRange(tenantId, date, date);
+    if (settingsFallback.list.length) {
+      list = settingsFallback.list;
+      dates = settingsFallback.dates.length ? settingsFallback.dates : [date];
+    }
   }
 
-  const cached = await getCachedCompanyReportFromDaily({ tenantId }).catch(() => null);
-  if (cached?.companies?.length && normalizeReportDateKey(cached.report_date) === date) {
-    list = mergeCompanyDailyRows(list, cached.companies, date, cached.fetched_at);
-    dates = [date];
-  } else if (!dates.length && list.length) {
-    dates = [date];
-  } else if (!dates.length) {
-    dates = [date];
+  if (!list.length) {
+    const cached = await getCachedCompanyReportForDate({ tenantId, reportDate: date });
+    if (cached?.companies?.length) {
+      list = mergeCompanyDailyRows([], cached.companies, date, cached.fetched_at);
+      dates = [date];
+    }
+  } else if (date === tashkentDateKey()) {
+    const cached = await getCachedCompanyReportFromDaily({ tenantId }).catch(() => null);
+    if (cached?.companies?.length && normalizeReportDateKey(cached.report_date) === date) {
+      list = mergeCompanyDailyRows(list, cached.companies, date, cached.fetched_at);
+      dates = [date];
+    }
   }
 
+  if (!dates.length) dates = [date];
   return { list, dates };
 }
 
@@ -1045,17 +1092,22 @@ function aggregateModuleUsage(rows = []) {
   };
 }
 
+function finalizeCompanyModuleReportsResponse(payload = {}, includeDaily = false) {
+  if (includeDaily) return payload;
+  const next = { ...payload };
+  delete next.daily_companies;
+  return next;
+}
+
 async function getCompanyModuleReports(query = {}) {
   const tenantId = resolveTenantId(query.tenantId);
   const period = String(query.period || query.periodKey || 'today').trim().toLowerCase();
   const reportDate = normalizeReportDateKey(query.report_date || query.date || '');
   const startDate = normalizeReportDateKey(query.start_date || query.startDate || '');
   const endDate = normalizeReportDateKey(query.end_date || query.endDate || '');
-  let history = null;
-  const resolveHistory = async () => {
-    if (!history) history = await getReportHistory({ tenantId });
-    return history;
-  };
+  const includeDaily = ['1', 'true', 'yes'].includes(String(
+    query.include_daily || query.includeDaily || query.daily || ''
+  ).trim().toLowerCase());
   const customRange = startDate && endDate
     ? { start: startDate <= endDate ? startDate : endDate, end: startDate <= endDate ? endDate : startDate }
     : null;
@@ -1065,21 +1117,21 @@ async function getCompanyModuleReports(query = {}) {
   let list = [];
 
   if (reportDate) {
-    ({ list, dates } = await loadCompanyModuleSnapshotForDate(tenantId, reportDate, null));
+    ({ list, dates } = await loadCompanyModuleSnapshotForDate(tenantId, reportDate));
   } else if (customRange) {
     if (customRange.start === customRange.end) {
-      ({ list, dates } = await loadCompanyModuleSnapshotForDate(tenantId, customRange.start, null));
+      ({ list, dates } = await loadCompanyModuleSnapshotForDate(tenantId, customRange.start));
     } else {
       ({ list, dates } = await loadCompanyModuleListForDateRange(tenantId, customRange.start, customRange.end, null));
-      if (!dates.length) {
-        const resolvedHistory = await resolveHistory();
-        dates = historyDatesForRange(resolvedHistory, customRange.start, customRange.end);
-        if (!list.length) list = companiesForHistoryDates(resolvedHistory, dates);
+      if (!dates.length || !list.length) {
+        const settingsFallback = await historyFallbackForDateRange(tenantId, customRange.start, customRange.end);
+        if (!dates.length) dates = settingsFallback.dates;
+        if (!list.length) list = settingsFallback.list;
       }
     }
   } else if (fixedDayRange) {
     if (fixedDayRange.dates.length === 1) {
-      ({ list, dates } = await loadCompanyModuleSnapshotForDate(tenantId, fixedDayRange.start, null));
+      ({ list, dates } = await loadCompanyModuleSnapshotForDate(tenantId, fixedDayRange.start));
     } else {
       ({ list, dates } = await loadCompanyModuleListForDateRange(
         tenantId,
@@ -1088,18 +1140,20 @@ async function getCompanyModuleReports(query = {}) {
         null
       ));
       if (!dates.length || !list.length) {
-        const resolvedHistory = await resolveHistory();
-        if (!dates.length) {
-          dates = historyDatesForRange(resolvedHistory, fixedDayRange.start, fixedDayRange.end);
-        }
-        if (!list.length) list = companiesForHistoryDates(resolvedHistory, dates.length ? dates : fixedDayRange.dates);
+        const settingsFallback = await historyFallbackForDateRange(
+          tenantId,
+          fixedDayRange.start,
+          fixedDayRange.end
+        );
+        if (!dates.length) dates = settingsFallback.dates.length ? settingsFallback.dates : fixedDayRange.dates;
+        if (!list.length) list = settingsFallback.list;
       }
       if (!dates.length) dates = fixedDayRange.dates;
     }
   } else {
-    const resolvedHistory = await resolveHistory();
-    dates = historyDatesForPeriod(period, resolvedHistory);
-    list = companiesForHistoryDates(resolvedHistory, dates);
+    const settingsHistory = await getReportHistoryFromSettings({ tenantId });
+    dates = historyDatesForPeriod(period, settingsHistory);
+    list = companiesForHistoryDates(settingsHistory, dates);
   }
 
   if (!list.length) {
@@ -1113,9 +1167,6 @@ async function getCompanyModuleReports(query = {}) {
   let fetched_at = list.length
     ? [...list].map(row => row.fetched_at).filter(Boolean).sort((a, b) => String(b).localeCompare(String(a)))[0] || null
     : null;
-  if (!fetched_at && history) {
-    fetched_at = latestFetchedAtForDates(history, dates);
-  }
   if (!fetched_at) {
     const cached = await getCachedCompanyReport({ tenantId });
     fetched_at = cached?.fetched_at || null;
@@ -1153,7 +1204,7 @@ async function getCompanyModuleReports(query = {}) {
         ...aggregated
       };
     });
-    return {
+    return finalizeCompanyModuleReportsResponse({
       tenant_id: tenantId,
       period,
       storage: COMPANY_MODULE_DAILY_TABLE,
@@ -1161,7 +1212,7 @@ async function getCompanyModuleReports(query = {}) {
       daily_companies: serializeDailyCompanies(list),
       report_dates: dates,
       fetched_at
-    };
+    }, includeDaily);
   }
 
   const targetDate = customRange?.start === customRange?.end
@@ -1172,7 +1223,7 @@ async function getCompanyModuleReports(query = {}) {
   const companies = (targetDate ? list.filter(row => normalizeReportDateKey(row.report_date) === targetDate) : list)
     .map(row => toPublicCompanyModuleRow(row));
 
-  return {
+  return finalizeCompanyModuleReportsResponse({
     tenant_id: tenantId,
     period,
     storage: COMPANY_MODULE_DAILY_TABLE,
@@ -1180,7 +1231,7 @@ async function getCompanyModuleReports(query = {}) {
     daily_companies: serializeDailyCompanies(list),
     report_dates: dates,
     fetched_at
-  };
+  }, includeDaily);
 }
 
 async function migrateBotSettingsHistoryToDaily(options = {}) {
