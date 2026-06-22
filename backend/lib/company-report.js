@@ -831,32 +831,8 @@ async function loadCompanyModuleSnapshotForDate(tenantId, reportDate = '') {
   const date = normalizeReportDateKey(reportDate);
   if (!date) return { list: [], dates: [] };
 
-  let list = dailyRowsToCompanyList(await loadDailyReportRowsForDateRange(tenantId, date, date));
-  let dates = list.length ? [date] : [];
-
-  if (!list.length) {
-    const settingsFallback = await historyFallbackForDateRange(tenantId, date, date);
-    if (settingsFallback.list.length) {
-      list = settingsFallback.list;
-      dates = settingsFallback.dates.length ? settingsFallback.dates : [date];
-    }
-  }
-
-  if (!list.length) {
-    const cached = await getCachedCompanyReportForDate({ tenantId, reportDate: date });
-    if (cached?.companies?.length) {
-      list = mergeCompanyDailyRows([], cached.companies, date, cached.fetched_at);
-      dates = [date];
-    }
-  } else if (date === tashkentDateKey()) {
-    const cached = await getCachedCompanyReportFromDaily({ tenantId }).catch(() => null);
-    if (cached?.companies?.length && normalizeReportDateKey(cached.report_date) === date) {
-      list = mergeCompanyDailyRows(list, cached.companies, date, cached.fetched_at);
-      dates = [date];
-    }
-  }
-
-  if (!dates.length) dates = [date];
+  const list = dailyRowsToCompanyList(await loadDailyReportRowsForDateRange(tenantId, date, date));
+  const dates = list.length ? [date] : [];
   return { list, dates };
 }
 
@@ -1159,13 +1135,8 @@ async function loadCompanyModulePeriodFromDb(tenantId, range = {}) {
     return loadCompanyModuleSnapshotForDate(tenantId, start);
   }
 
-  let list = dailyRowsToCompanyList(await loadDailyReportRowsForDateRange(tenantId, start, end));
-  let dates = datesFromDailyRows(list);
-  if (!list.length) {
-    const settingsFallback = await historyFallbackForDateRange(tenantId, start, end);
-    list = settingsFallback.list;
-    dates = settingsFallback.dates;
-  }
+  const list = dailyRowsToCompanyList(await loadDailyReportRowsForDateRange(tenantId, start, end));
+  const dates = datesFromDailyRows(list);
   return { list, dates };
 }
 

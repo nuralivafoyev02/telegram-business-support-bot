@@ -5389,16 +5389,14 @@ function companyModuleUsageForPeriod(row = {}, report = null) {
 const companyModuleBaseRows = computed(() => {
   const reportById = companyModuleReportByCompanyId.value;
   const previousById = companyModuleReportPreviousByCompanyId.value;
-  const hasPeriodReports = (companyModuleReports.value?.report_dates || []).length > 0;
   const hasPreviousReports = (companyModuleReportsPrevious.value?.report_dates || []).length > 0;
-  const period = companyModulePeriod.value;
   const compareEnabled = companyModuleCompareEnabled.value;
   return filteredCompanyInfoRows.value.map(row => {
     const report = reportById.get(String(row.id));
     const previousReport = previousById.get(String(row.id));
     const module_usage = companyModuleUsageForPeriod(row, report);
     const previous_usage = previousReport?.module_usage || emptyCompanyModuleUsageMap();
-    const module_last_dates = report?.module_last_dates || row.module_last_dates || {};
+    const module_last_dates = report?.module_last_dates || {};
     const module_active_count = companyModuleActiveCount(module_usage);
     const module_active_percent = companyModuleActivePercent(module_usage);
     const previous_percent = companyModuleActivePercent(previous_usage);
