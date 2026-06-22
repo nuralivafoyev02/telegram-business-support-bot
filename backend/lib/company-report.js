@@ -1092,6 +1092,83 @@ function aggregateModuleUsage(rows = []) {
   };
 }
 
+function resolveQueryDateRange(query = {}) {
+  const period = String(query.period || query.periodKey || 'today').trim().toLowerCase();
+  const reportDate = normalizeReportDateKey(query.report_date || query.date || '');
+  const startDate = normalizeReportDateKey(query.start_date || query.startDate || '');
+  const endDate = normalizeReportDateKey(query.end_date || query.endDate || '');
+
+  if (reportDate) {
+    return { period, mode: 'single', start: reportDate, end: reportDate };
+  }
+  if (startDate && endDate) {
+    const start = startDate <= endDate ? startDate : endDate;
+    const end = startDate <= endDate ? endDate : startDate;
+    return {
+      period: 'custom',
+      mode: start === end ? 'single' : 'range',
+      start,
+      end
+    };
+  }
+  const fixed = periodDateRange(period);
+  if (!fixed) {
+    const end = tashkentDateKey();
+    const start = shiftDateKey(end, -29);
+    return { period, mode: 'range', start, end };
+  }
+  return {
+    period,
+    mode: fixed.dates.length === 1 ? 'single' : 'range',
+    start: fixed.start,
+    end: fixed.end
+  };
+}
+
+function aggregateCompaniesFromDailyRows(list = []) {
+  const grouped = new Map();
+  list.forEach(row => {
+    const key = String(row.company_id);
+    if (!grouped.has(key)) {
+      grouped.set(key, {
+        company_id: row.company_id,
+        company_name: row.company_name || '',
+        rows: []
+      });
+    }
+    grouped.get(key).rows.push(row);
+  });
+  return [...grouped.values()].map(group => {
+    const aggregated = aggregateModuleUsage(group.rows);
+    const latest = group.rows.sort((a, b) => String(b.report_date).localeCompare(String(a.report_date)))[0];
+    return {
+      company_id: group.company_id,
+      company_name: group.company_name,
+      report_date: latest?.report_date || null,
+      ...aggregated
+    };
+  });
+}
+
+async function loadCompanyModulePeriodFromDb(tenantId, range = {}) {
+  const start = normalizeReportDateKey(range.start);
+  const end = normalizeReportDateKey(range.end);
+  if (!start || !end) return { list: [], dates: [] };
+
+  if (range.mode === 'single') {
+    return loadCompanyModuleSnapshotForDate(tenantId, start);
+  }
+
+  let list = dailyRowsToCompanyList(await loadDailyReportRowsForDateRange(tenantId, start, end));
+  let dates = datesFromDailyRows(list);
+  if (!list.length) {
+    const settingsFallback = await historyFallbackForDateRange(tenantId, start, end);
+    list = settingsFallback.list;
+    dates = settingsFallback.dates;
+  }
+  return { list, dates };
+}
+
 function finalizeCompanyModuleReportsResponse(payload = {}, includeDaily = false) {
   if (includeDaily) return payload;
   const next = { ...payload };
@@ -1101,127 +1178,29 @@ function finalizeCompanyModuleReportsResponse(payload = {}, includeDaily = false
 
 async function getCompanyModuleReports(query = {}) {
   const tenantId = resolveTenantId(query.tenantId);
-  const period = String(query.period || query.periodKey || 'today').trim().toLowerCase();
-  const reportDate = normalizeReportDateKey(query.report_date || query.date || '');
-  const startDate = normalizeReportDateKey(query.start_date || query.startDate || '');
-  const endDate = normalizeReportDateKey(query.end_date || query.endDate || '');
   const includeDaily = ['1', 'true', 'yes'].includes(String(
     query.include_daily || query.includeDaily || query.daily || ''
   ).trim().toLowerCase());
-  const customRange = startDate && endDate
-    ? { start: startDate <= endDate ? startDate : endDate, end: startDate <= endDate ? endDate : startDate }
-    : null;
-  const fixedDayRange = !reportDate && !customRange ? periodDateRange(period) : null;
+  const range = resolveQueryDateRange(query);
+  const period = range.period;
 
-  let dates = [];
-  let list = [];
-
-  if (reportDate) {
-    ({ list, dates } = await loadCompanyModuleSnapshotForDate(tenantId, reportDate));
-  } else if (customRange) {
-    if (customRange.start === customRange.end) {
-      ({ list, dates } = await loadCompanyModuleSnapshotForDate(tenantId, customRange.start));
-    } else {
-      ({ list, dates } = await loadCompanyModuleListForDateRange(tenantId, customRange.start, customRange.end, null));
-      if (!dates.length || !list.length) {
-        const settingsFallback = await historyFallbackForDateRange(tenantId, customRange.start, customRange.end);
-        if (!dates.length) dates = settingsFallback.dates;
-        if (!list.length) list = settingsFallback.list;
-      }
-    }
-  } else if (fixedDayRange) {
-    if (fixedDayRange.dates.length === 1) {
-      ({ list, dates } = await loadCompanyModuleSnapshotForDate(tenantId, fixedDayRange.start));
-    } else {
-      ({ list, dates } = await loadCompanyModuleListForDateRange(
-        tenantId,
-        fixedDayRange.start,
-        fixedDayRange.end,
-        null
-      ));
-      if (!dates.length || !list.length) {
-        const settingsFallback = await historyFallbackForDateRange(
-          tenantId,
-          fixedDayRange.start,
-          fixedDayRange.end
-        );
-        if (!dates.length) dates = settingsFallback.dates.length ? settingsFallback.dates : fixedDayRange.dates;
-        if (!list.length) list = settingsFallback.list;
-      }
-      if (!dates.length) dates = fixedDayRange.dates;
-    }
-  } else {
-    const settingsHistory = await getReportHistoryFromSettings({ tenantId });
-    dates = historyDatesForPeriod(period, settingsHistory);
-    list = companiesForHistoryDates(settingsHistory, dates);
-  }
-
-  if (!list.length) {
-    const cached = await companiesFromCacheForPeriod(period, tenantId, customRange || {});
-    if (cached.companies.length) {
-      list = cached.companies;
-      if (!dates.length) dates = cached.dates;
-    }
-  }
+  let { list, dates } = await loadCompanyModulePeriodFromDb(tenantId, range);
 
   let fetched_at = list.length
     ? [...list].map(row => row.fetched_at).filter(Boolean).sort((a, b) => String(b).localeCompare(String(a)))[0] || null
     : null;
-  if (!fetched_at) {
-    const cached = await getCachedCompanyReport({ tenantId });
-    fetched_at = cached?.fetched_at || null;
+
+  let companies = [];
+  if (range.mode === 'single') {
+    const targetDate = normalizeReportDateKey(range.start);
+    dates = [targetDate];
+    companies = list
+      .filter(row => normalizeReportDateKey(row.report_date) === targetDate)
+      .map(row => toPublicCompanyModuleRow(row));
+  } else {
+    dates = dates.length ? dates : datesFromDailyRows(list);
+    companies = aggregateCompaniesFromDailyRows(list);
   }
-
-  const customSingleDay = Boolean(
-    (customRange && customRange.start === customRange.end)
-    || fixedDayRange
-  );
-  const aggregatePeriods = ['all', 'custom', 'week', '7d', 'month', '30d', 'prev_week', 'prev_7d', 'prev_month', 'prev_30d', 'prev_all'];
-  const shouldAggregate =
-    (customRange && dates.length > 1)
-    || (aggregatePeriods.includes(period) && !(period === 'custom' && (customSingleDay || dates.length <= 1)));
-
-  if (shouldAggregate) {
-    const grouped = new Map();
-    list.forEach(row => {
-      const key = String(row.company_id);
-      if (!grouped.has(key)) {
-        grouped.set(key, {
-          company_id: row.company_id,
-          company_name: row.company_name || '',
-          rows: []
-        });
-      }
-      grouped.get(key).rows.push(row);
-    });
-    const companies = [...grouped.values()].map(group => {
-      const aggregated = aggregateModuleUsage(group.rows);
-      const latest = group.rows.sort((a, b) => String(b.report_date).localeCompare(String(a.report_date)))[0];
-      return {
-        company_id: group.company_id,
-        company_name: group.company_name,
-        report_date: latest?.report_date || null,
-        ...aggregated
-      };
-    });
-    return finalizeCompanyModuleReportsResponse({
-      tenant_id: tenantId,
-      period,
-      storage: COMPANY_MODULE_DAILY_TABLE,
-      companies,
-      daily_companies: serializeDailyCompanies(list),
-      report_dates: dates,
-      fetched_at
-    }, includeDaily);
-  }
-
-  const targetDate = customRange?.start === customRange?.end
-    ? normalizeReportDateKey(customRange.start)
-    : (fixedDayRange?.dates?.length === 1
-      ? normalizeReportDateKey(fixedDayRange.start)
-      : (reportDate || dates.at(-1) || null));
-  const companies = (targetDate ? list.filter(row => normalizeReportDateKey(row.report_date) === targetDate) : list)
-    .map(row => toPublicCompanyModuleRow(row));
 
   return finalizeCompanyModuleReportsResponse({
     tenant_id: tenantId,
@@ -1308,6 +1287,8 @@ module.exports = {
   parseModuleLastDateKey,
   moduleUsageForReportDate,
   reconcileCompanyModuleRow,
+  resolveQueryDateRange,
+  aggregateCompaniesFromDailyRows,
   slimCompanyReportResponse,
   periodDateRange,
   migrateBotSettingsHistoryToDaily,

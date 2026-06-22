@@ -5381,12 +5381,9 @@ const companyModuleReportPreviousByCompanyId = computed(() => {
   return map;
 });
 
-function companyModuleUsageForPeriod(row = {}, report = null, period = 'today', hasPeriodReports = false) {
+function companyModuleUsageForPeriod(row = {}, report = null) {
   if (report?.module_usage) return report.module_usage;
-  if (period === 'custom') return companyModuleUsageMap(row);
-  if (!hasPeriodReports && ['today', 'yesterday'].includes(period)) return companyModuleUsageMap(row);
-  if (hasPeriodReports || period !== 'custom') return emptyCompanyModuleUsageMap();
-  return companyModuleUsageMap(row);
+  return emptyCompanyModuleUsageMap();
 }
 
 const companyModuleBaseRows = computed(() => {
@@ -5399,7 +5396,7 @@ const companyModuleBaseRows = computed(() => {
   return filteredCompanyInfoRows.value.map(row => {
     const report = reportById.get(String(row.id));
     const previousReport = previousById.get(String(row.id));
-    const module_usage = companyModuleUsageForPeriod(row, report, period, hasPeriodReports);
+    const module_usage = companyModuleUsageForPeriod(row, report);
     const previous_usage = previousReport?.module_usage || emptyCompanyModuleUsageMap();
     const module_last_dates = report?.module_last_dates || row.module_last_dates || {};
     const module_active_count = companyModuleActiveCount(module_usage);
@@ -7418,7 +7415,10 @@ async function loadPeriodOpenTickets() {
 
 async function loadCompanyModuleReports(query = {}) {
   const data = await api.companyModuleReports(query);
-  companyModuleReports.value = data;
+  companyModuleReports.value = {
+    ...data,
+    period: query.period || companyModulePeriod.value || data.period || 'today'
+  };
   return data;
 }
 
@@ -7505,6 +7505,12 @@ async function handleCompanyModulePeriodChange(value) {
   companyModuleCustomPeriodForm.appliedStart = '';
   companyModuleCustomPeriodForm.appliedEnd = '';
   previousCompanyModulePeriod.value = value;
+  companyModuleReports.value = {
+    companies: [],
+    report_dates: [],
+    period: value,
+    fetched_at: null
+  };
   companyModulePeriod.value = value;
   await refreshCompanyModuleReports();
 }

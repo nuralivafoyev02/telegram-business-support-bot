@@ -7,6 +7,7 @@ const {
   aggregateModuleUsage,
   normalizeReportDateKey,
   periodDateRange,
+  resolveQueryDateRange,
   moduleUsageForReportDate,
   reconcileCompanyModuleRow
 } = require('../backend/lib/company-report');
@@ -127,6 +128,25 @@ const weekRange = periodDateRange('week');
 assert.ok(weekRange);
 assert.strictEqual(weekRange.dates.length, 7);
 assert.strictEqual(weekRange.end, todayRange.start);
+
+const weekQuery = resolveQueryDateRange({ period: 'week' });
+assert.strictEqual(weekQuery.mode, 'range');
+assert.strictEqual(weekQuery.start, weekRange.start);
+assert.strictEqual(weekQuery.end, weekRange.end);
+
+const yesterdayQuery = resolveQueryDateRange({ period: 'yesterday' });
+assert.strictEqual(yesterdayQuery.mode, 'single');
+assert.strictEqual(yesterdayQuery.start, yesterdayRange.start);
+assert.strictEqual(yesterdayQuery.end, yesterdayRange.start);
+
+const customSingle = resolveQueryDateRange({ start_date: '2026-06-20', end_date: '2026-06-20' });
+assert.strictEqual(customSingle.mode, 'single');
+assert.strictEqual(customSingle.start, '2026-06-20');
+
+const customRange = resolveQueryDateRange({ start_date: '2026-06-18', end_date: '2026-06-20' });
+assert.strictEqual(customRange.mode, 'range');
+assert.strictEqual(customRange.start, '2026-06-18');
+assert.strictEqual(customRange.end, '2026-06-20');
 assert.strictEqual(weekRange.dates[0], weekRange.start);
 assert.strictEqual(weekRange.dates.at(-1), weekRange.end);
 
