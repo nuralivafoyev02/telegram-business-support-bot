@@ -128,7 +128,7 @@ function normalizeModuleLastDateToken(value = '') {
 }
 
 function parseModuleLastDateKey(lastDate = '', referenceDate = '') {
-  const text = String(lastDate || '').trim();
+  const text = String(lastDate || '').trim().replace(/\u00a0/g, ' ');
   if (!text) return '';
   if (/^\d{4}-\d{2}-\d{2}/.test(text)) return normalizeReportDateKey(text);
 
@@ -145,10 +145,8 @@ function parseModuleLastDateKey(lastDate = '', referenceDate = '') {
     return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
   }
 
-  const named = text.match(/^(\d{1,2})\s+(.+)$/);
-  if (named) {
-    const day = Number(named[1]);
-    const monthToken = normalizeModuleLastDateToken(named[2]);
+  const parseNamedMonth = (day = 0, monthText = '') => {
+    const monthToken = normalizeModuleLastDateToken(monthText);
     let month = 0;
     for (const [key, value] of Object.entries(MODULE_LAST_DATE_MONTHS)) {
       if (monthToken.startsWith(key) || key.startsWith(monthToken.slice(0, Math.min(3, monthToken.length)))) {
@@ -158,7 +156,14 @@ function parseModuleLastDateKey(lastDate = '', referenceDate = '') {
     }
     if (!day || !month) return '';
     return `${refYear}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-  }
+  };
+
+  const named = text.match(/^(\d{1,2})\s+(.+)$/);
+  if (named) return parseNamedMonth(Number(named[1]), named[2]);
+
+  const compactNamed = text.match(/^(\d{1,2})([A-Za-zА-Яа-яЁёЇїІіЎўҒғҚқҲҳӨөҮү]+)$/u);
+  if (compactNamed) return parseNamedMonth(Number(compactNamed[1]), compactNamed[2]);
+
   return '';
 }
 
@@ -202,37 +207,27 @@ function hasMeaningfulModuleLastDates(moduleLastDates = {}) {
   return MODULE_KEYS.some(key => isMeaningfulModuleLastDate(moduleLastDates[key]));
 }
 
+function hasStoredModuleSnapshot(row = {}) {
+  const usage = objectValue(row.module_usage);
+  return MODULE_KEYS.some(key => typeof usage[key] === 'boolean');
+}
+
+function storedModuleActiveCount(usage = {}, storedCount = 0) {
+  const count = Number(storedCount || 0);
+  if (count > 0) return count;
+  return MODULE_KEYS.reduce((sum, key) => sum + (usage[key] ? 1 : 0), 0);
+}
+
 function resolveModuleUsageForDailyRow(row = {}) {
   const reportDate = normalizeReportDateKey(row.report_date);
   const module_last_dates = moduleLastDatesFromRow(row);
   const storedUsage = objectValue(row.module_usage);
-  const storedCount = Number(row.module_active_count || 0);
-  const storedActiveCount = storedCount > 0
-    ? storedCount
-    : MODULE_KEYS.reduce((sum, key) => sum + (storedUsage[key] ? 1 : 0), 0);
 
-  if (!reportDate) {
+  if (hasStoredModuleSnapshot(row)) {
     return {
       module_usage: storedUsage,
       module_last_dates,
-      module_active_count: storedActiveCount
-    };
-  }
-
-  if (hasMeaningfulModuleLastDates(module_last_dates)) {
-    const scoped = moduleUsageForReportDate(module_last_dates, reportDate);
-    return {
-      module_usage: scoped.module_usage,
-      module_last_dates,
-      module_active_count: scoped.module_active_count
-    };
-  }
-
-  if (storedActiveCount > 0) {
-    return {
-      module_usage: storedUsage,
-      module_last_dates,
-      module_active_count: storedActiveCount
+      module_active_count: storedModuleActiveCount(storedUsage, row.module_active_count)
     };
   }
 
@@ -345,13 +340,16 @@ function buildReportSummary(companies = []) {
 }
 
 function serializeDailyCompanies(rows = []) {
-  return rows.map(row => ({
-    company_id: row.company_id,
-    company_name: row.company_name || '',
-    report_date: row.report_date,
-    module_usage: row.module_usage || {},
-    module_active_count: Number(row.module_active_count || 0)
-  }));
+  return rows.map(row => {
+    const resolved = resolveModuleUsageForDailyRow(row);
+    return {
+      company_id: row.company_id,
+      company_name: row.company_name || '',
+      report_date: row.report_date,
+      module_usage: resolved.module_usage,
+      module_active_count: resolved.module_active_count
+    };
+  });
 }
 
 function emptyReportHistory(tenantId) {
@@ -848,13 +846,31 @@ async function historyFallbackForDateRange(tenantId, startDate = '', endDate = '
   return { list, dates };
 }
 
+function mergeDailyReportSources(dbRows = [], historyRows = []) {
+  const byKey = new Map();
+  historyRows.forEach(row => {
+    const normalized = normalizeDailyReportRow(row);
+    if (!normalized.company_id || !normalized.report_date) return;
+    byKey.set(`${normalized.company_id}:${normalized.report_date}`, normalized);
+  });
+  dailyRowsToCompanyList(dbRows).forEach(row => {
+    byKey.set(`${row.company_id}:${row.report_date}`, row);
+  });
+  return [...byKey.values()];
+}
+
 async function loadCompanyModuleSnapshotForDate(tenantId, reportDate = '') {
   const date = normalizeReportDateKey(reportDate);
   if (!date) return { list: [], dates: [] };
 
-  const list = dailyRowsToCompanyList(await loadDailyReportRowsForDateRange(tenantId, date, date));
-  const dates = list.length ? [date] : [];
-  return { list, dates };
+  const dbRows = await loadDailyReportRowsForDateRange(tenantId, date, date);
+  const settingsFallback = await historyFallbackForDateRange(tenantId, date, date);
+  const historyRows = settingsFallback.list
+    .filter(row => normalizeReportDateKey(row.report_date) === date)
+    .map(row => ({ ...row, report_date: date }));
+  const list = mergeDailyReportSources(dbRows, historyRows);
+
+  return { list, dates: [date] };
 }
 
 function historyDatesForRange(history = {}, startDate = '', endDate = '') {
@@ -1018,6 +1034,7 @@ async function syncCompanyReport(options = {}) {
 
     if (options.persist !== false) {
       const dailyCount = await saveCompanyReportDailyRows(result);
+      await saveReportHistoryDay(result).catch(() => null);
       await saveCompanyReportSyncRun({
         tenantId,
         reportDate,
@@ -1052,13 +1069,14 @@ async function syncCompanyReport(options = {}) {
 }
 
 function enrichCompaniesWithModuleReport(companies = [], reportCompanies = []) {
-  const byId = new Map(
-    reportCompanies
-      .filter(row => row.company_id || row.id)
-      .map(row => [String(row.company_id || row.id), row])
-  );
+  const byId = new Map();
+  reportCompanies.forEach(row => {
+    const keys = [row.company_id, row.id].map(value => String(value || '').trim()).filter(Boolean);
+    keys.forEach(key => byId.set(key, row));
+  });
   return companies.map(company => {
-    const report = byId.get(String(company.id));
+    const keys = [company.id, company.company_id].map(value => String(value || '').trim()).filter(Boolean);
+    const report = keys.map(key => byId.get(key)).find(Boolean);
     if (!report) return company;
     return {
       ...company,
@@ -1154,7 +1172,9 @@ async function loadCompanyModulePeriodFromDb(tenantId, range = {}) {
     return loadCompanyModuleSnapshotForDate(tenantId, start);
   }
 
-  const list = dailyRowsToCompanyList(await loadDailyReportRowsForDateRange(tenantId, start, end));
+  const dbRows = await loadDailyReportRowsForDateRange(tenantId, start, end);
+  const settingsFallback = await historyFallbackForDateRange(tenantId, start, end);
+  const list = mergeDailyReportSources(dbRows, settingsFallback.list);
   const dates = datesFromDailyRows(list);
   return { list, dates };
 }

@@ -8,6 +8,7 @@ const {
   normalizeReportDateKey,
   periodDateRange,
   resolveQueryDateRange,
+  parseModuleLastDateKey,
   moduleUsageForReportDate,
   resolveModuleUsageForDailyRow,
   reconcileCompanyModuleRow
@@ -130,8 +131,8 @@ const yesterdayMismatch = resolveModuleUsageForDailyRow({
     monitoring: '22 Июн'
   }
 });
-assert.strictEqual(yesterdayMismatch.module_active_count, 0);
-assert.strictEqual(yesterdayMismatch.module_usage.taminot, false);
+assert.strictEqual(yesterdayMismatch.module_active_count, 5);
+assert.strictEqual(yesterdayMismatch.module_usage.taminot, true);
 
 const dashOnly = resolveModuleUsageForDailyRow({
   report_date: '2026-06-22',
@@ -154,6 +155,31 @@ const dashOnly = resolveModuleUsageForDailyRow({
 assert.strictEqual(dashOnly.module_active_count, 3);
 assert.strictEqual(dashOnly.module_usage.taminot, true);
 assert.strictEqual(dashOnly.module_usage.kassa, false);
+
+const chinaDbJune20 = resolveModuleUsageForDailyRow({
+  report_date: '2026-06-20',
+  module_usage: {
+    taminot: false,
+    kassa: true,
+    omborxona: false,
+    qurilish_jarayoni: false,
+    monitoring: false
+  },
+  module_active_count: 1,
+  module_last_dates: {
+    taminot: '19 Июн',
+    kassa: '20 Июн',
+    omborxona: '19 Июн',
+    monitoring: '18 Июн',
+    qurilish_jarayoni: '05 Июн'
+  }
+});
+assert.strictEqual(chinaDbJune20.module_active_count, 1);
+assert.strictEqual(chinaDbJune20.module_usage.kassa, true);
+assert.strictEqual(chinaDbJune20.module_usage.taminot, false);
+
+assert.strictEqual(parseModuleLastDateKey('20 Июн', '2026-06-20'), '2026-06-20');
+assert.strictEqual(parseModuleLastDateKey('20Июн', '2026-06-20'), '2026-06-20');
 
 assert.strictEqual(normalizeReportDateKey('2026-06-15'), '2026-06-15');
 assert.strictEqual(normalizeReportDateKey('2026-06-15T00:00:00.000Z'), '2026-06-15');

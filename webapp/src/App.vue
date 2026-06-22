@@ -579,7 +579,7 @@
                           v-for="period in companyModulePeriodOptions"
                           :key="`module-period-${period.key}`"
                           :value="period.key"
-                          @mousedown="period.key === 'custom' ? handleCompanyModuleCustomOptionMouseDown() : null">
+                          @mousedown.prevent="period.key === 'custom' ? handleCompanyModuleCustomOptionMouseDown() : null">
                           {{ period.label }}
                         </option>
                       </select>
@@ -5362,12 +5362,34 @@ function moduleStatusTitle(row = {}, moduleKey = '') {
   return 'Ishlatilmagan';
 }
 
+function companyModuleReportKeys(row = {}) {
+  return [...new Set([
+    row.id,
+    row.company_id,
+    row.external_id,
+    row.uyqur_company_id
+  ].map(value => String(value || '').trim()).filter(Boolean))];
+}
+
+function companyModuleReportRowKeys(row = {}) {
+  return [...new Set([
+    row.company_id,
+    row.id
+  ].map(value => String(value || '').trim()).filter(Boolean))];
+}
+
+function findCompanyModuleReport(map, row = {}) {
+  for (const key of companyModuleReportKeys(row)) {
+    const report = map.get(key);
+    if (report) return report;
+  }
+  return null;
+}
+
 const companyModuleReportByCompanyId = computed(() => {
   const map = new Map();
   (companyModuleReports.value.companies || []).forEach(row => {
-    if (row?.company_id !== undefined && row?.company_id !== null) {
-      map.set(String(row.company_id), row);
-    }
+    companyModuleReportRowKeys(row).forEach(key => map.set(key, row));
   });
   return map;
 });
@@ -5375,9 +5397,7 @@ const companyModuleReportByCompanyId = computed(() => {
 const companyModuleReportPreviousByCompanyId = computed(() => {
   const map = new Map();
   (companyModuleReportsPrevious.value.companies || []).forEach(row => {
-    if (row?.company_id !== undefined && row?.company_id !== null) {
-      map.set(String(row.company_id), row);
-    }
+    companyModuleReportRowKeys(row).forEach(key => map.set(key, row));
   });
   return map;
 });
@@ -5393,8 +5413,8 @@ const companyModuleBaseRows = computed(() => {
   const hasPreviousReports = (companyModuleReportsPrevious.value?.report_dates || []).length > 0;
   const compareEnabled = companyModuleCompareEnabled.value;
   return filteredCompanyInfoRows.value.map(row => {
-    const report = reportById.get(String(row.id));
-    const previousReport = previousById.get(String(row.id));
+    const report = findCompanyModuleReport(reportById, row);
+    const previousReport = findCompanyModuleReport(previousById, row);
     const module_usage = companyModuleUsageForPeriod(row, report);
     const previous_usage = previousReport?.module_usage || emptyCompanyModuleUsageMap();
     const module_last_dates = report?.module_last_dates || {};
@@ -7492,7 +7512,9 @@ function openCompanyModuleCustomPeriodModal() {
 }
 
 function handleCompanyModuleCustomOptionMouseDown() {
-  if (companyModulePeriod.value !== 'custom') return;
+  previousCompanyModulePeriod.value = companyModulePeriod.value === 'custom'
+    ? previousCompanyModulePeriod.value
+    : companyModulePeriod.value;
   openCompanyModuleCustomPeriodModal();
 }
 
