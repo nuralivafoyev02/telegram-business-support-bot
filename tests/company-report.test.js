@@ -223,11 +223,36 @@ assert.strictEqual(weekRange.dates.at(-1), weekRange.end);
 const weekAggregate = aggregateModuleUsage([
   { report_date: '2026-06-19', module_last_dates: { taminot: '19 Июн', omborxona: '19 Июн' } },
   { report_date: '2026-06-20', module_last_dates: { kassa: '20 Июн' } }
-]);
+], '2026-06-19', '2026-06-20');
 assert.strictEqual(weekAggregate.module_active_count, 3);
 assert.strictEqual(weekAggregate.module_usage.taminot, true);
 assert.strictEqual(weekAggregate.module_usage.kassa, true);
 assert.strictEqual(weekAggregate.module_usage.omborxona, true);
 assert.strictEqual(weekAggregate.module_usage.monitoring, false);
+
+const chinaWeek = aggregateModuleUsage([
+  {
+    report_date: '2026-06-22',
+    module_usage: {
+      taminot: false,
+      kassa: false,
+      omborxona: false,
+      qurilish_jarayoni: false,
+      monitoring: false
+    },
+    module_last_dates: {
+      taminot: '19 Июн',
+      kassa: '20 Июн',
+      omborxona: '19 Июн',
+      monitoring: '18 Июн',
+      qurilish_jarayoni: '05 Июн'
+    }
+  }
+], '2026-06-16', '2026-06-22');
+assert.strictEqual(chinaWeek.module_usage.kassa, true);
+assert.strictEqual(chinaWeek.module_usage.taminot, true);
+assert.strictEqual(chinaWeek.module_usage.omborxona, true);
+assert.strictEqual(chinaWeek.module_usage.monitoring, true);
+assert.strictEqual(chinaWeek.module_usage.qurilish_jarayoni, false);
 
 console.log('company-report.test.js: ok');

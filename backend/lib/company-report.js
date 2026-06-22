@@ -1096,14 +1096,32 @@ function enrichCompaniesWithModuleReport(companies = [], reportCompanies = []) {
   });
 }
 
-function aggregateModuleUsage(rows = []) {
+function moduleLastDateInRange(lastDate = '', rangeStart = '', rangeEnd = '') {
+  const start = normalizeReportDateKey(rangeStart);
+  const end = normalizeReportDateKey(rangeEnd);
+  if (!start || !end) return false;
+  const rangeFrom = start <= end ? start : end;
+  const rangeTo = start <= end ? end : start;
+  const parsed = parseModuleLastDateKey(lastDate, rangeTo);
+  return Boolean(parsed && parsed >= rangeFrom && parsed <= rangeTo);
+}
+
+function aggregateModuleUsage(rows = [], rangeStart = '', rangeEnd = '') {
   const usage = Object.fromEntries(MODULE_KEYS.map(key => [key, false]));
   const lastDates = {};
+  const rangeStartKey = normalizeReportDateKey(rangeStart);
+  const rangeEndKey = normalizeReportDateKey(rangeEnd);
+  const useRangeDates = Boolean(rangeStartKey && rangeEndKey && rangeStartKey !== rangeEndKey);
+
   rows.forEach(row => {
     const resolved = resolveModuleUsageForDailyRow(row);
+    const moduleLastDates = resolved.module_last_dates;
     MODULE_KEYS.forEach(key => {
       if (resolved.module_usage[key]) usage[key] = true;
-      if (resolved.module_last_dates[key]) lastDates[key] = resolved.module_last_dates[key];
+      if (useRangeDates && moduleLastDateInRange(moduleLastDates[key], rangeStartKey, rangeEndKey)) {
+        usage[key] = true;
+      }
+      if (moduleLastDates[key]) lastDates[key] = moduleLastDates[key];
     });
   });
   return {
@@ -1146,7 +1164,7 @@ function resolveQueryDateRange(query = {}) {
   };
 }
 
-function aggregateCompaniesFromDailyRows(list = []) {
+function aggregateCompaniesFromDailyRows(list = [], rangeStart = '', rangeEnd = '') {
   const grouped = new Map();
   list.forEach(row => {
     const key = String(row.company_id);
@@ -1160,7 +1178,7 @@ function aggregateCompaniesFromDailyRows(list = []) {
     grouped.get(key).rows.push(row);
   });
   return [...grouped.values()].map(group => {
-    const aggregated = aggregateModuleUsage(group.rows);
+    const aggregated = aggregateModuleUsage(group.rows, rangeStart, rangeEnd);
     const latest = group.rows.sort((a, b) => String(b.report_date).localeCompare(String(a.report_date)))[0];
     return {
       company_id: group.company_id,
@@ -1217,7 +1235,7 @@ async function getCompanyModuleReports(query = {}) {
       .map(row => toPublicCompanyModuleRow(row));
   } else {
     dates = dates.length ? dates : datesFromDailyRows(list);
-    companies = aggregateCompaniesFromDailyRows(list);
+    companies = aggregateCompaniesFromDailyRows(list, range.start, range.end);
   }
 
   return finalizeCompanyModuleReportsResponse({
