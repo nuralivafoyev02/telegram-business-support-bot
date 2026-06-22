@@ -198,41 +198,62 @@ function moduleLastDatesFromRow(row = {}) {
   return Object.keys(fromActivity).length ? fromActivity : direct;
 }
 
-function reconcileCompanyModuleRow(row = {}) {
+function hasMeaningfulModuleLastDates(moduleLastDates = {}) {
+  return MODULE_KEYS.some(key => isMeaningfulModuleLastDate(moduleLastDates[key]));
+}
+
+function resolveModuleUsageForDailyRow(row = {}) {
   const reportDate = normalizeReportDateKey(row.report_date);
-  if (!reportDate) {
-    return {
-      company_id: row.company_id,
-      company_name: row.company_name || '',
-      report_date: row.report_date || null,
-      module_usage: objectValue(row.module_usage),
-      module_last_dates: objectValue(row.module_last_dates),
-      module_active_count: Number(row.module_active_count || 0)
-    };
-  }
   const module_last_dates = moduleLastDatesFromRow(row);
-  const scoped = moduleUsageForReportDate(module_last_dates, reportDate);
   const storedUsage = objectValue(row.module_usage);
   const storedCount = Number(row.module_active_count || 0);
-  const useStored = scoped.module_active_count === 0 && storedCount > 0
-    && MODULE_KEYS.some(key => storedUsage[key]);
-  if (useStored) {
+  const storedActiveCount = storedCount > 0
+    ? storedCount
+    : MODULE_KEYS.reduce((sum, key) => sum + (storedUsage[key] ? 1 : 0), 0);
+
+  if (!reportDate) {
     return {
-      company_id: row.company_id,
-      company_name: row.company_name || '',
-      report_date: reportDate,
-      module_last_dates,
       module_usage: storedUsage,
-      module_active_count: storedCount
+      module_last_dates,
+      module_active_count: storedActiveCount
     };
   }
+
+  if (hasMeaningfulModuleLastDates(module_last_dates)) {
+    const scoped = moduleUsageForReportDate(module_last_dates, reportDate);
+    return {
+      module_usage: scoped.module_usage,
+      module_last_dates,
+      module_active_count: scoped.module_active_count
+    };
+  }
+
+  if (storedActiveCount > 0) {
+    return {
+      module_usage: storedUsage,
+      module_last_dates,
+      module_active_count: storedActiveCount
+    };
+  }
+
+  const scoped = moduleUsageForReportDate(module_last_dates, reportDate);
+  return {
+    module_usage: scoped.module_usage,
+    module_last_dates,
+    module_active_count: scoped.module_active_count
+  };
+}
+
+function reconcileCompanyModuleRow(row = {}) {
+  const reportDate = normalizeReportDateKey(row.report_date);
+  const resolved = resolveModuleUsageForDailyRow(row);
   return {
     company_id: row.company_id,
     company_name: row.company_name || '',
-    report_date: reportDate,
-    module_last_dates,
-    module_usage: scoped.module_usage,
-    module_active_count: scoped.module_active_count
+    report_date: reportDate || row.report_date || null,
+    module_last_dates: resolved.module_last_dates,
+    module_usage: resolved.module_usage,
+    module_active_count: resolved.module_active_count
   };
 }
 
@@ -1053,12 +1074,10 @@ function aggregateModuleUsage(rows = []) {
   const usage = Object.fromEntries(MODULE_KEYS.map(key => [key, false]));
   const lastDates = {};
   rows.forEach(row => {
-    const reportDate = normalizeReportDateKey(row.report_date);
-    const moduleLastDates = moduleLastDatesFromRow(row);
-    const scoped = moduleUsageForReportDate(moduleLastDates, reportDate);
+    const resolved = resolveModuleUsageForDailyRow(row);
     MODULE_KEYS.forEach(key => {
-      if (scoped.module_usage[key]) usage[key] = true;
-      if (moduleLastDates[key]) lastDates[key] = moduleLastDates[key];
+      if (resolved.module_usage[key]) usage[key] = true;
+      if (resolved.module_last_dates[key]) lastDates[key] = resolved.module_last_dates[key];
     });
   });
   return {
@@ -1257,6 +1276,7 @@ module.exports = {
   normalizeReportDateKey,
   parseModuleLastDateKey,
   moduleUsageForReportDate,
+  resolveModuleUsageForDailyRow,
   reconcileCompanyModuleRow,
   resolveQueryDateRange,
   aggregateCompaniesFromDailyRows,

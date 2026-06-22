@@ -2885,6 +2885,7 @@ const mediaErrors = ref({});
 let mediaLoadToken = 0;
 let dashboardLoadToken = 0;
 let periodOpenTicketsLoadToken = 0;
+let companyModuleReportsLoadToken = 0;
 let employeeProfileLoadToken = 0;
 let employeeProfileChatToken = 0;
 const settingsRaw = ref({ settings: [], admins: [] });
@@ -7411,8 +7412,9 @@ async function loadPeriodOpenTickets() {
   }
 }
 
-async function loadCompanyModuleReports(query = {}) {
+async function loadCompanyModuleReports(query = {}, loadToken = companyModuleReportsLoadToken) {
   const data = await api.companyModuleReports(query);
+  if (loadToken !== companyModuleReportsLoadToken) return data;
   companyModuleReports.value = {
     ...data,
     period: query.period || companyModulePeriod.value || data.period || 'today'
@@ -7421,9 +7423,11 @@ async function loadCompanyModuleReports(query = {}) {
 }
 
 async function loadCompanyModuleReportsOptional(query = {}) {
+  const loadToken = ++companyModuleReportsLoadToken;
   try {
-    await loadCompanyModuleReports(query);
+    return await loadCompanyModuleReports(query, loadToken);
   } catch (error) {
+    if (loadToken !== companyModuleReportsLoadToken) return;
     companyModuleReports.value = {
       companies: [],
       report_dates: [],
@@ -7536,6 +7540,12 @@ async function applyCompanyModuleCustomPeriod() {
   companyModuleCustomPeriodForm.appliedStart = start;
   companyModuleCustomPeriodForm.appliedEnd = end;
   companyModulePeriod.value = 'custom';
+  companyModuleReports.value = {
+    companies: [],
+    report_dates: [],
+    period: 'custom',
+    fetched_at: null
+  };
   modal.value = '';
   startLoading('companyModuleCustomPeriod');
   try {

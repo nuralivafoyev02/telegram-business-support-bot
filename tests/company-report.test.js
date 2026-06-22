@@ -9,6 +9,7 @@ const {
   periodDateRange,
   resolveQueryDateRange,
   moduleUsageForReportDate,
+  resolveModuleUsageForDailyRow,
   reconcileCompanyModuleRow
 } = require('../backend/lib/company-report');
 
@@ -110,6 +111,49 @@ const landHouse = reconcileCompanyModuleRow({
 assert.strictEqual(landHouse.module_active_count, 3);
 assert.strictEqual(landHouse.module_usage.taminot, true);
 assert.strictEqual(landHouse.module_usage.kassa, false);
+
+const yesterdayMismatch = resolveModuleUsageForDailyRow({
+  report_date: '2026-06-21',
+  module_usage: {
+    taminot: true,
+    kassa: true,
+    omborxona: true,
+    qurilish_jarayoni: true,
+    monitoring: true
+  },
+  module_active_count: 5,
+  module_last_dates: {
+    taminot: '22 Июн',
+    kassa: '22 Июн',
+    omborxona: '22 Июн',
+    qurilish_jarayoni: '22 Июн',
+    monitoring: '22 Июн'
+  }
+});
+assert.strictEqual(yesterdayMismatch.module_active_count, 0);
+assert.strictEqual(yesterdayMismatch.module_usage.taminot, false);
+
+const dashOnly = resolveModuleUsageForDailyRow({
+  report_date: '2026-06-22',
+  module_usage: {
+    taminot: true,
+    kassa: false,
+    omborxona: true,
+    qurilish_jarayoni: false,
+    monitoring: true
+  },
+  module_active_count: 3,
+  module_last_dates: {
+    taminot: '22 Июн',
+    kassa: '-',
+    omborxona: '22 Июн',
+    qurilish_jarayoni: '-',
+    monitoring: '22 Июн'
+  }
+});
+assert.strictEqual(dashOnly.module_active_count, 3);
+assert.strictEqual(dashOnly.module_usage.taminot, true);
+assert.strictEqual(dashOnly.module_usage.kassa, false);
 
 assert.strictEqual(normalizeReportDateKey('2026-06-15'), '2026-06-15');
 assert.strictEqual(normalizeReportDateKey('2026-06-15T00:00:00.000Z'), '2026-06-15');
