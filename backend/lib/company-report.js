@@ -269,16 +269,61 @@ function resolveModuleUsageForTargetDate(row = {}, targetDate = '') {
   return resolveModuleUsageForDailyRow(row);
 }
 
+function normalizeEmployeeActivityEntry(row = {}) {
+  const source = objectValue(row);
+  return {
+    id: Number(source.id || 0) || null,
+    name: String(source.name || '').trim(),
+    action_count: Number(source.action_count || 0),
+    important_count: Number(source.important_count || 0),
+    last_activity_date: source.last_activity_date ? String(source.last_activity_date).trim() : ''
+  };
+}
+
+function extractCompanyEmployeeActivity(row = {}) {
+  const raw = objectValue(row.raw || row);
+  const data = objectValue(raw.data);
+  const activeEmployees = asArray(data.active_employees)
+    .map(normalizeEmployeeActivityEntry)
+    .filter(entry => entry.id || entry.name);
+  const inactiveEmployees = asArray(data.inactive_employees)
+    .map(normalizeEmployeeActivityEntry)
+    .filter(entry => entry.id || entry.name);
+  const totalActions = Number(data.total_actions);
+  const activityPeriod = String(data.activity_period || '').trim();
+  const support = objectValue(data.support);
+  const hasEmployeeData = activeEmployees.length
+    || inactiveEmployees.length
+    || (Number.isFinite(totalActions) && totalActions > 0)
+    || activityPeriod;
+  if (!hasEmployeeData) return null;
+
+  return {
+    total_actions: Number.isFinite(totalActions) ? totalActions : 0,
+    activity_period: activityPeriod,
+    active_employees: activeEmployees,
+    inactive_employees: inactiveEmployees,
+    active_employee_count: activeEmployees.filter(entry => entry.action_count > 0).length,
+    inactive_employee_count: inactiveEmployees.length,
+    support: {
+      username: String(support.username || '').trim(),
+      phone: String(support.phone || '').trim()
+    }
+  };
+}
+
 function reconcileCompanyModuleRow(row = {}) {
   const reportDate = normalizeReportDateKey(row.report_date);
   const resolved = resolveModuleUsageForDailyRow(row);
+  const employee_activity = extractCompanyEmployeeActivity(row);
   return {
     company_id: row.company_id,
     company_name: row.company_name || '',
     report_date: reportDate || row.report_date || null,
     module_last_dates: resolved.module_last_dates,
     module_usage: resolved.module_usage,
-    module_active_count: resolved.module_active_count
+    module_active_count: resolved.module_active_count,
+    ...(employee_activity ? { employee_activity } : {})
   };
 }
 
@@ -510,7 +555,7 @@ async function loadAllDailyReportRows(tenantId) {
   let offset = 0;
   while (true) {
     const batch = await supabase.select(COMPANY_MODULE_DAILY_TABLE, {
-      select: 'report_date,company_id,company_name,module_usage,module_last_dates,module_active_count,fetched_at',
+      select: 'report_date,company_id,company_name,module_usage,module_last_dates,module_active_count,fetched_at,raw',
       tenant_id: supabase.eq(id),
       order: ['report_date.desc', 'company_id.asc'],
       limit: String(pageSize),
@@ -612,7 +657,7 @@ async function loadDailyReportRowsForDateRange(tenantId, startDate = '', endDate
   let offset = 0;
   while (true) {
     const batch = await supabase.select(COMPANY_MODULE_DAILY_TABLE, {
-      select: 'report_date,company_id,company_name,module_usage,module_last_dates,module_active_count,fetched_at',
+      select: 'report_date,company_id,company_name,module_usage,module_last_dates,module_active_count,fetched_at,raw',
       tenant_id: supabase.eq(id),
       report_date: [`gte.${start}`, `lte.${end}`],
       order: ['report_date.desc', 'company_id.asc'],
@@ -641,6 +686,7 @@ async function saveCompanyReportDailyRows(result = {}) {
       module_usage: row.module_usage || {},
       module_last_dates: row.module_last_dates || {},
       module_active_count: Number(row.module_active_count || 0),
+      raw: row.raw || null,
       source_url: result.source || '',
       fetched_at: fetchedAt
     }));
@@ -1297,11 +1343,13 @@ function aggregateCompaniesFromDailyRows(list = [], rangeStart = '', rangeEnd = 
   return [...grouped.values()].map(group => {
     const aggregated = aggregateModuleUsage(group.rows, rangeStart, rangeEnd);
     const latest = group.rows.sort((a, b) => String(b.report_date).localeCompare(String(a.report_date)))[0];
+    const employee_activity = latest ? extractCompanyEmployeeActivity(latest) : null;
     return {
       company_id: group.company_id,
       company_name: group.company_name,
       report_date: latest?.report_date || null,
-      ...aggregated
+      ...aggregated,
+      ...(employee_activity ? { employee_activity } : {})
     };
   });
 }
@@ -1450,6 +1498,7 @@ module.exports = {
   buildChartDailyCompanies,
   resolveModuleUsageForChartDate,
   reconcileCompanyModuleRow,
+  extractCompanyEmployeeActivity,
   resolveQueryDateRange,
   aggregateCompaniesFromDailyRows,
   slimCompanyReportResponse,

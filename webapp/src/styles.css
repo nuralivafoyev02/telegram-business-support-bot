@@ -4024,6 +4024,116 @@ td,
   background: color-mix(in srgb, var(--primary) 4%, var(--surface));
 }
 
+.company-module-row-clickable {
+  cursor: pointer;
+}
+
+.company-module-row-clickable:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--primary) 55%, transparent);
+  outline-offset: -2px;
+}
+
+.company-module-employee-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.company-module-employee-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.company-module-employee-company {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.company-module-employee-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  margin-top: 6px;
+  color: var(--muted-strong);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.company-module-employee-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.company-module-employee-summary-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.company-module-employee-summary-icon {
+  width: 20px;
+  text-align: center;
+}
+
+.company-module-employee-section-title {
+  margin-bottom: 10px;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--muted-strong);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.company-module-employee-list {
+  display: grid;
+  gap: 8px;
+}
+
+.company-module-employee-card {
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.company-module-employee-card.inactive {
+  background: color-mix(in srgb, var(--surface) 92%, #ef4444 8%);
+}
+
+.company-module-employee-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.company-module-employee-card-head b {
+  font-size: 14px;
+}
+
+.company-module-employee-count,
+.company-module-employee-last {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted-strong);
+  white-space: nowrap;
+}
+
+.company-module-employee-note {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
 .company-module-filter-empty {
   padding: 20px 14px;
   color: var(--muted);

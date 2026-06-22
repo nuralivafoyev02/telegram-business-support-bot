@@ -661,7 +661,16 @@
                       </tr>
                     </thead>
                     <tbody>
-                      <tr v-for="(row, index) in companyModuleTableRows" :key="row.id || row.name || index">
+                      <tr
+                        v-for="(row, index) in companyModuleTableRows"
+                        :key="row.id || row.name || index"
+                        class="company-module-row-clickable"
+                        role="button"
+                        tabindex="0"
+                        :title="`${row.name || 'Kompaniya'} xodimlar faolligini ko‘rish`"
+                        @click="openCompanyModuleEmployeeDetail(row)"
+                        @keydown.enter.prevent="openCompanyModuleEmployeeDetail(row)"
+                        @keydown.space.prevent="openCompanyModuleEmployeeDetail(row)">
                         <td class="module-index-col">{{ index + 1 }}</td>
                         <td class="module-company-col">
                           <span class="company-identity company-module-identity">
@@ -1543,6 +1552,84 @@
             </button>
           </div>
         </form>
+      </Modal>
+    </Transition>
+
+    <Transition name="modal-fade">
+      <Modal
+        v-if="modal === 'companyModuleEmployeeActivity'"
+        :title="companyModuleEmployeeDetailTitle"
+        wide
+        @close="closeModal">
+        <div v-if="companyModuleEmployeeDetail" class="company-module-employee-detail">
+          <div class="company-module-employee-head">
+            <div>
+              <div class="company-module-employee-company">{{ companyModuleEmployeeDetail.name || 'Kompaniya' }}</div>
+              <div class="company-module-employee-meta">
+                <span v-if="companyModuleEmployeeDetail.report_date">Hisobot: {{ companyModuleEmployeeDetail.report_date }}</span>
+                <span v-if="companyModuleEmployeeActivityPeriod">{{ companyModuleEmployeeActivityPeriod }}</span>
+                <span v-if="companyModuleEmployeeSupportLabel">Mas’ul: {{ companyModuleEmployeeSupportLabel }}</span>
+              </div>
+            </div>
+          </div>
+
+          <div v-if="companyModuleEmployeeHasActivity" class="company-module-employee-summary">
+            <div class="company-module-employee-summary-item">
+              <span class="company-module-employee-summary-icon">📊</span>
+              <span>Jami amallar: <b>{{ fmtNumber(companyModuleEmployeeActivity.total_actions || 0) }} amal</b></span>
+            </div>
+            <div class="company-module-employee-summary-item">
+              <span class="company-module-employee-summary-icon">✅</span>
+              <span>Faol xodimlar <b>({{ fmtNumber(companyModuleEmployeeActiveCount) }})</b></span>
+            </div>
+            <div class="company-module-employee-summary-item">
+              <span class="company-module-employee-summary-icon">❌</span>
+              <span>Nofaol xodimlar <b>({{ fmtNumber(companyModuleEmployeeInactiveCount) }})</b></span>
+            </div>
+          </div>
+
+          <div v-if="companyModuleEmployeeActiveRows.length" class="company-module-employee-section">
+            <div class="company-module-employee-section-title">Faol xodimlar</div>
+            <div class="company-module-employee-list">
+              <article
+                v-for="employee in companyModuleEmployeeActiveRows"
+                :key="`active-employee-${employee.id || employee.name}`"
+                class="company-module-employee-card">
+                <div class="company-module-employee-card-head">
+                  <b>{{ employee.name || 'Xodim' }}</b>
+                  <span class="company-module-employee-count">{{ fmtNumber(employee.action_count || 0) }} amal</span>
+                </div>
+                <div v-if="employee.important_count" class="company-module-employee-note">
+                  Muhim amallar: {{ fmtNumber(employee.important_count) }}
+                </div>
+              </article>
+            </div>
+          </div>
+
+          <div v-if="companyModuleEmployeeInactiveRows.length" class="company-module-employee-section">
+            <div class="company-module-employee-section-title">Nofaol xodimlar</div>
+            <div class="company-module-employee-list">
+              <article
+                v-for="employee in companyModuleEmployeeInactiveRows"
+                :key="`inactive-employee-${employee.id || employee.name}`"
+                class="company-module-employee-card inactive">
+                <div class="company-module-employee-card-head">
+                  <b>{{ employee.name || 'Xodim' }}</b>
+                  <span v-if="employee.last_activity_date" class="company-module-employee-last">
+                    Oxirgi: {{ employee.last_activity_date }}
+                  </span>
+                </div>
+                <div v-if="employee.important_count" class="company-module-employee-note">
+                  Muhim amallar: {{ fmtNumber(employee.important_count) }}
+                </div>
+              </article>
+            </div>
+          </div>
+
+          <div v-else-if="!companyModuleEmployeeHasActivity" class="empty compact">
+            Bu kompaniya uchun xodimlar faolligi hali saqlanmagan. Yangi syncdan keyin ko‘rinadi.
+          </div>
+        </div>
       </Modal>
     </Transition>
 
@@ -2875,6 +2962,7 @@ const employeeGroupActivity = ref([]);
 const employeeGroupTicketVisibility = ref({});
 const employeeOpenRequests = ref([]);
 const companyGroupDetail = ref({ company: null, summary: {}, groups: [] });
+const companyModuleEmployeeDetail = ref(null);
 const companyGroupSelectedChatKey = ref('');
 const companyGroupTicketsOpen = ref(false);
 const employeeAvatarUrls = ref({});
@@ -5491,7 +5579,8 @@ const companyModuleBaseRows = computed(() => {
       module_percent_comparison: compareEnabled && hasPreviousReports
         ? compareValue(module_active_percent, previous_percent, { isPercentage: true })
         : null,
-      report_date: report?.report_date || null
+      report_date: report?.report_date || null,
+      employee_activity: report?.employee_activity || null
     };
   });
 });
@@ -5675,6 +5764,54 @@ const companyModuleTableRows = computed(() => sortCompanyModuleRows(
   companyModuleFilteredRows.value,
   companyModuleSort.value
 ));
+
+const companyModuleEmployeeActivity = computed(() => companyModuleEmployeeDetail.value?.employee_activity || null);
+
+const companyModuleEmployeeDetailTitle = computed(() => {
+  const row = companyModuleEmployeeDetail.value || {};
+  return `${row.name || row.company_name || 'Kompaniya'} · xodimlar faolligi`;
+});
+
+const companyModuleEmployeeHasActivity = computed(() => Boolean(
+  companyModuleEmployeeActivity.value
+  && (
+    Number(companyModuleEmployeeActivity.value.total_actions || 0) > 0
+    || (companyModuleEmployeeActivity.value.active_employees || []).length
+    || (companyModuleEmployeeActivity.value.inactive_employees || []).length
+  )
+));
+
+const companyModuleEmployeeActiveCount = computed(() => Number(
+  companyModuleEmployeeActivity.value?.active_employee_count
+  ?? (companyModuleEmployeeActivity.value?.active_employees || []).filter(employee => Number(employee.action_count || 0) > 0).length
+));
+
+const companyModuleEmployeeInactiveCount = computed(() => Number(
+  companyModuleEmployeeActivity.value?.inactive_employee_count
+  ?? (companyModuleEmployeeActivity.value?.inactive_employees || []).length
+));
+
+const companyModuleEmployeeActiveRows = computed(() => {
+  const rows = companyModuleEmployeeActivity.value?.active_employees || [];
+  return [...rows].sort((a, b) => Number(b.action_count || 0) - Number(a.action_count || 0));
+});
+
+const companyModuleEmployeeInactiveRows = computed(() => {
+  const rows = companyModuleEmployeeActivity.value?.inactive_employees || [];
+  return [...rows].sort((a, b) => String(a.last_activity_date || '').localeCompare(String(b.last_activity_date || '')));
+});
+
+const companyModuleEmployeeActivityPeriod = computed(() => {
+  const period = String(companyModuleEmployeeActivity.value?.activity_period || '').trim();
+  return period ? `Davr: ${period}` : '';
+});
+
+const companyModuleEmployeeSupportLabel = computed(() => {
+  const username = String(companyModuleEmployeeActivity.value?.support?.username || '').trim();
+  if (username) return username.startsWith('@') ? username : `@${username}`;
+  const phone = String(companyModuleEmployeeActivity.value?.support?.phone || '').trim();
+  return phone || '';
+});
 
 const companyInfoById = computed(() => {
   const map = new Map();
@@ -9638,6 +9775,11 @@ async function openSupportSummaryCard(action = 'requests') {
   }
 }
 
+function openCompanyModuleEmployeeDetail(row = {}) {
+  companyModuleEmployeeDetail.value = row;
+  modal.value = 'companyModuleEmployeeActivity';
+}
+
 function openCompanyTimelineDetail(row = {}) {
   setMetricDetail({
     title: row.name || 'Kompaniya tafsiloti',
@@ -9663,6 +9805,7 @@ function closeModal() {
   if (modal.value === 'chatDetail' || modal.value === 'metricDetail' || modal.value === 'employeeCompanies' || modal.value === 'companyGroupActivity') clearMediaUrls();
   if (modal.value === 'metricDetail') resetMetricChatDetail();
   if (modal.value === 'employeeCompanies') resetEmployeeProfileChat();
+  if (modal.value === 'companyModuleEmployeeActivity') companyModuleEmployeeDetail.value = null;
   modal.value = '';
   selectedTarget.value = null;
 }

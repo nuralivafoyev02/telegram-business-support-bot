@@ -14,7 +14,8 @@ const {
   resolveModuleUsageForDailyRow,
   resolveModuleUsageForTargetDate,
   buildChartDailyCompanies,
-  reconcileCompanyModuleRow
+  reconcileCompanyModuleRow,
+  extractCompanyEmployeeActivity
 } = require('../backend/lib/company-report');
 
 const sample = {
@@ -324,5 +325,39 @@ assert.strictEqual(chinaChartJune20.module_usage.taminot, true);
 const chinaChartJune23 = chartDaily.find(row => row.company_id === 999 && row.report_date === '2026-06-23');
 assert.ok(chinaChartJune23);
 assert.strictEqual(chinaChartJune23.module_usage.kassa, false);
+
+const landHouseEmployeeRaw = {
+  id: 65,
+  name: 'Land House',
+  data: {
+    total_actions: 31,
+    activity_period: '29 kun',
+    active_employees: [
+      { id: 776, name: 'Aslonov', action_count: 18, important_count: 0 },
+      { id: 783, name: 'Gulomov', action_count: 7, important_count: 11 },
+      { id: 772, name: 'Abalbaev', action_count: 6, important_count: 4 },
+      { id: 771, name: 'Xamrakulov', action_count: 0, important_count: 10 }
+    ],
+    inactive_employees: [
+      { id: 780, name: 'Mukimov', last_activity_date: '21 Iyun', important_count: 0 }
+    ],
+    support: { username: '@uyqur_mirshod', phone: '+998914143181' }
+  }
+};
+const landHouseEmployee = extractCompanyEmployeeActivity({ raw: landHouseEmployeeRaw });
+assert.strictEqual(landHouseEmployee.total_actions, 31);
+assert.strictEqual(landHouseEmployee.active_employee_count, 3);
+assert.strictEqual(landHouseEmployee.inactive_employee_count, 1);
+assert.strictEqual(landHouseEmployee.active_employees.length, 4);
+
+const landHousePublic = reconcileCompanyModuleRow({
+  company_id: 65,
+  company_name: 'Land House',
+  report_date: '2026-06-22',
+  module_last_dates: { taminot: '22 Iyun' },
+  raw: landHouseEmployeeRaw
+});
+assert.strictEqual(landHousePublic.employee_activity.total_actions, 31);
+assert.strictEqual(landHousePublic.employee_activity.support.username, '@uyqur_mirshod');
 
 console.log('company-report.test.js: ok');
