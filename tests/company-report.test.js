@@ -13,6 +13,7 @@ const {
   moduleLastDateWithinActiveWindow,
   resolveModuleUsageForDailyRow,
   resolveModuleUsageForTargetDate,
+  buildChartDailyCompanies,
   reconcileCompanyModuleRow
 } = require('../backend/lib/company-report');
 
@@ -301,5 +302,27 @@ const chinaCustomRange = aggregateModuleUsage([
 assert.strictEqual(chinaCustomRange.module_usage.kassa, true);
 assert.strictEqual(chinaCustomRange.module_usage.taminot, true);
 assert.strictEqual(chinaCustomRange.module_usage.qurilish_jarayoni, false);
+
+const chartDaily = buildChartDailyCompanies([
+  {
+    company_id: 999,
+    company_name: 'China House',
+    report_date: '2026-06-22',
+    module_last_dates: {
+      taminot: '19 Июн',
+      kassa: '20 Июн',
+      omborxona: '19 Июн',
+      monitoring: '18 Июн',
+      qurilish_jarayoni: '05 Июн'
+    }
+  }
+], '2026-06-20', '2026-06-23');
+const chinaChartJune20 = chartDaily.find(row => row.company_id === 999 && row.report_date === '2026-06-20');
+assert.ok(chinaChartJune20);
+assert.strictEqual(chinaChartJune20.module_usage.kassa, true);
+assert.strictEqual(chinaChartJune20.module_usage.taminot, true);
+const chinaChartJune23 = chartDaily.find(row => row.company_id === 999 && row.report_date === '2026-06-23');
+assert.ok(chinaChartJune23);
+assert.strictEqual(chinaChartJune23.module_usage.kassa, false);
 
 console.log('company-report.test.js: ok');

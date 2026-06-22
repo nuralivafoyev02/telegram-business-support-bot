@@ -369,7 +369,102 @@ function buildReportSummary(companies = []) {
   };
 }
 
-function serializeDailyCompanies(rows = []) {
+function pickCompanyDailyRowForChartDate(rows = [], targetDate = '') {
+  const target = normalizeReportDateKey(targetDate);
+  if (!target || !rows.length) return null;
+  const exact = rows.find(row => normalizeReportDateKey(row.report_date) === target);
+  if (exact) return exact;
+  const onOrAfter = rows
+    .filter(row => normalizeReportDateKey(row.report_date) >= target)
+    .sort((a, b) => String(a.report_date).localeCompare(String(b.report_date)));
+  if (onOrAfter.length) return onOrAfter[0];
+  return rows
+    .sort((a, b) => String(b.report_date).localeCompare(String(a.report_date)))[0] || null;
+}
+
+function resolveModuleUsageForChartDate(rows = [], targetDate = '') {
+  const target = normalizeReportDateKey(targetDate);
+  if (!target) {
+    return {
+      module_usage: Object.fromEntries(MODULE_KEYS.map(key => [key, false])),
+      module_active_count: 0
+    };
+  }
+  const source = pickCompanyDailyRowForChartDate(rows, target);
+  if (!source) {
+    return {
+      module_usage: Object.fromEntries(MODULE_KEYS.map(key => [key, false])),
+      module_active_count: 0
+    };
+  }
+  const module_last_dates = moduleLastDatesFromRow(source);
+  if (hasMeaningfulModuleLastDates(module_last_dates)) {
+    return moduleUsageForReportDate(module_last_dates, target);
+  }
+  if (hasStoredModuleSnapshot(source) && normalizeReportDateKey(source.report_date) === target) {
+    const storedUsage = objectValue(source.module_usage);
+    return {
+      module_usage: storedUsage,
+      module_active_count: storedModuleActiveCount(storedUsage, source.module_active_count)
+    };
+  }
+  return moduleUsageForReportDate(module_last_dates, target);
+}
+
+function dateKeysInclusive(startDate = '', endDate = '') {
+  const start = normalizeReportDateKey(startDate);
+  const end = normalizeReportDateKey(endDate);
+  if (!start || !end) return [];
+  const rangeStart = start <= end ? start : end;
+  const rangeEnd = start <= end ? end : start;
+  const dates = [];
+  let cursor = rangeStart;
+  while (cursor <= rangeEnd) {
+    dates.push(cursor);
+    if (cursor === rangeEnd) break;
+    cursor = shiftDateKey(cursor, 1);
+    if (dates.length > 400) break;
+  }
+  return dates;
+}
+
+function buildChartDailyCompanies(list = [], startDate = '', endDate = '') {
+  const dates = dateKeysInclusive(startDate, endDate);
+  if (!dates.length) return [];
+
+  const grouped = new Map();
+  list.forEach(row => {
+    const companyId = Number(row.company_id || 0);
+    if (!companyId) return;
+    const key = String(companyId);
+    if (!grouped.has(key)) grouped.set(key, []);
+    grouped.get(key).push(row);
+  });
+
+  const result = [];
+  dates.forEach(date => {
+    grouped.forEach((companyRows, companyId) => {
+      const source = pickCompanyDailyRowForChartDate(companyRows, date);
+      if (!source) return;
+      const resolved = resolveModuleUsageForChartDate(companyRows, date);
+      result.push({
+        company_id: Number(companyId),
+        company_name: source.company_name || '',
+        report_date: date,
+        module_usage: resolved.module_usage,
+        module_active_count: resolved.module_active_count
+      });
+    });
+  });
+  return result;
+}
+
+function serializeDailyCompanies(rows = [], range = {}) {
+  const start = normalizeReportDateKey(range.start);
+  const end = normalizeReportDateKey(range.end);
+  if (start && end) {
+    return buildChartDailyCompanies(rows, start, end);
+  }
   return rows.map(row => {
     const resolved = resolveModuleUsageForDailyRow(row);
     return {
@@ -1269,7 +1364,7 @@ async function getCompanyModuleReports(query = {}) {
     range_end: range.end,
     storage: COMPANY_MODULE_DAILY_TABLE,
     companies,
-    daily_companies: serializeDailyCompanies(list),
+    daily_companies: serializeDailyCompanies(list, range),
     report_dates: dates,
     fetched_at
   }, includeDaily);
@@ -1352,6 +1447,8 @@ module.exports = {
   moduleLastDateWithinActiveWindow,
   resolveModuleUsageForDailyRow,
   resolveModuleUsageForTargetDate,
+  buildChartDailyCompanies,
+  resolveModuleUsageForChartDate,
   reconcileCompanyModuleRow,
   resolveQueryDateRange,
   aggregateCompaniesFromDailyRows,

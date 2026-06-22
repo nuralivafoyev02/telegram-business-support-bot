@@ -4326,7 +4326,9 @@ function buildCompanyModuleChartYRange(metric = 'activity', rows = [], visibleKe
       max = Math.max(max, value);
     });
     if (showAverage) {
-      const value = companyModuleChartAverageForRow(row, metric, visibleKeys);
+      const value = metric === 'activity'
+        ? Number(row.avgActivity || 0)
+        : companyModuleChartAverageForRow(row, metric, visibleKeys);
       min = Math.min(min, value);
       max = Math.max(max, value);
     }
@@ -5323,6 +5325,21 @@ function companyModulePeriodQuery(period = 'today') {
   return { period: period || 'today', include_daily: 0 };
 }
 
+function companyModuleChartPeriodQuery(period = 'week') {
+  if (period === 'custom') {
+    if (!companyModuleChartCustomPeriodForm.appliedStart || !companyModuleChartCustomPeriodForm.appliedEnd) {
+      return { period: 'week', include_daily: 1 };
+    }
+    return {
+      period: 'custom',
+      start_date: companyModuleChartCustomPeriodForm.appliedStart,
+      end_date: companyModuleChartCustomPeriodForm.appliedEnd,
+      include_daily: 1
+    };
+  }
+  return { period: period || 'week', include_daily: 1 };
+}
+
 function companyModulePreviousPeriodKey(period = 'today') {
   return ({
     today: 'yesterday',
@@ -5353,6 +5370,9 @@ function companyModulePeriodOptionLabel(period = {}) {
   return period.label || 'Ixtiyoriy';
 }
 
+let companyModulePeriodSelectValueOnPointerDown = '';
+let companyModuleChartPeriodSelectValueOnPointerDown = '';
+
 function companyModuleChartPeriodOptionLabel(period = {}) {
   if (period.key === 'custom'
     && companyModuleChartCustomPeriodForm.appliedStart
@@ -5361,9 +5381,6 @@ function companyModuleChartPeriodOptionLabel(period = {}) {
   }
   return period.label || 'Ixtiyoriy';
 }
-
-let companyModulePeriodSelectValueOnPointerDown = '';
-let companyModuleChartPeriodSelectValueOnPointerDown = '';
 
 const companyModuleReportDatesLabel = computed(() => {
   const dates = [...(companyModuleReports.value?.report_dates || [])].filter(Boolean).sort();
@@ -5679,32 +5696,6 @@ function companyModuleRowForChart(company = {}, reportRow = {}) {
   };
 }
 
-function companyModuleChartSourceEndDate(period = 'today') {
-  if (period === 'yesterday') return addDaysToDateKey(tashkentDateKey(), -1);
-  if (period === 'day_before_yesterday') return addDaysToDateKey(tashkentDateKey(), -2);
-  if (period === 'custom') {
-    return companyModuleChartCustomPeriodForm.appliedEnd
-      || companyModuleChartCustomPeriodForm.appliedStart
-      || tashkentDateKey();
-  }
-  return tashkentDateKey();
-}
-
-function companyModuleChartPeriodQuery(period = 'week') {
-  if (period === 'custom') {
-    if (!companyModuleChartCustomPeriodForm.appliedStart || !companyModuleChartCustomPeriodForm.appliedEnd) {
-      return { period: 'week', include_daily: 1 };
-    }
-    return {
-      period: 'custom',
-      start_date: companyModuleChartCustomPeriodForm.appliedStart,
-      end_date: companyModuleChartCustomPeriodForm.appliedEnd,
-      include_daily: 1
-    };
-  }
-  return { period: period || 'week', include_daily: 1 };
-}
-
 function companyModuleChartExpectedDateKeys(period = 'week') {
   const today = tashkentDateKey();
   if (period === 'today') return [today];
@@ -5758,26 +5749,40 @@ function companyModuleChartDateKeys(dates = [], period = 'week') {
   return expected;
 }
 
+function findCompanyModuleDailyRow(map, company = {}) {
+  for (const key of companyModuleReportKeys(company)) {
+    const row = map.get(key);
+    if (row) return row;
+  }
+  return null;
+}
+
 function buildCompanyModuleChartDayRow(date, dailyRows, companyMap, filters, companyId = '') {
   const counts = Object.fromEntries(companyModuleKeys.map(key => [key, 0]));
   let totalCompanies = 0;
   let activitySum = 0;
   const selectedCompanyId = String(companyId || '').trim();
+  const dailyByCompanyId = new Map();
   dailyRows
     .filter(row => row.report_date === date)
     .forEach(reportRow => {
-      if (selectedCompanyId && String(reportRow.company_id) !== selectedCompanyId) return;
-      const company = companyMap.get(String(reportRow.company_id));
-      if (!company) return;
-      const merged = companyModuleRowForChart(company, reportRow);
-      const isSelectedCompany = selectedCompanyId && String(reportRow.company_id) === selectedCompanyId;
-      if (!isSelectedCompany && !matchesCompanyModuleFilter(merged, filters)) return;
-      totalCompanies += 1;
-      activitySum += companyModuleActivePercent(merged.module_usage);
-      companyModuleKeys.forEach(key => {
-        if (merged.module_usage?.[key]) counts[key] += 1;
-      });
+      companyModuleReportRowKeys(reportRow).forEach(key => dailyByCompanyId.set(key, reportRow));
     });
+
+  const candidates = selectedCompanyId
+    ? [...companyMap.values()].filter(company => companyModuleReportKeys(company).includes(selectedCompanyId))
+    : [...companyMap.values()];
+
+  candidates.forEach(company => {
+    const reportRow = findCompanyModuleDailyRow(dailyByCompanyId, company);
+    const merged = companyModuleRowForChart(company, reportRow || {});
+    if (!matchesCompanyModuleFilter(merged, filters)) return;
+    totalCompanies += 1;
+    activitySum += companyModuleActivePercent(merged.module_usage);
+    companyModuleKeys.forEach(key => {
+      if (merged.module_usage?.[key]) counts[key] += 1;
+    });
+  });
   const percents = Object.fromEntries(companyModuleKeys.map(key => [
     key,
     totalCompanies ? Math.round((counts[key] / totalCompanies) * 100) : 0
@@ -5906,6 +5911,11 @@ function companyModuleChartAverageForRow(row = {}, metric = 'activity', visibleK
   const values = visibleKeys.map(key => companyModuleChartMetricValue(row, key, metric));
   if (!values.length) return 0;
   return Math.round((values.reduce((sum, value) => sum + value, 0) / values.length) * 10) / 10;
+}
+
+function companyModuleChartAverageActivityForRow(row = {}, metric = 'activity', visibleKeys = []) {
+  if (metric === 'activity') return Number(row.avgActivity || 0);
+  return companyModuleChartAverageForRow(row, metric, visibleKeys);
 }
 
 const companyModuleChartRows = computed(() => {
@@ -6072,7 +6082,7 @@ const companyModuleChartAverageLine = computed(() => {
   const width = dims.right - dims.left;
   const step = rows.length > 1 ? width / (rows.length - 1) : 0;
   const points = rows.map((row, index) => {
-    const value = companyModuleChartAverageForRow(row, metric, visible);
+    const value = companyModuleChartAverageActivityForRow(row, metric, visible);
     const x = rows.length > 1 ? dims.left + step * index : dims.left + width / 2;
     const y = companyModuleChartPlotY(value, minimum, maximum, dims);
     return {
@@ -6113,7 +6123,7 @@ const companyModuleChartTooltip = computed(() => {
         label: 'O‘rtacha',
         color: '#111827',
         dual: true,
-        activityText: companyModuleChartValueText(companyModuleChartAverageForRow(row, 'activity', activeKeys), 'activity'),
+        activityText: companyModuleChartValueText(companyModuleChartAverageActivityForRow(row, 'activity', activeKeys), 'activity'),
         actionsText: companyModuleChartValueText(companyModuleChartAverageForRow(row, 'actions', activeKeys), 'actions')
       });
     } else {
@@ -6123,7 +6133,7 @@ const companyModuleChartTooltip = computed(() => {
         label: 'O‘rtacha',
         color: '#111827',
         dual: false,
-        valueText: companyModuleChartValueText(companyModuleChartAverageForRow(row, metric, activeKeys), metric)
+        valueText: companyModuleChartValueText(companyModuleChartAverageActivityForRow(row, metric, activeKeys), metric)
       });
     }
   }
@@ -7513,6 +7523,21 @@ async function loadCompanyModuleReportsPreviousOptional(query = {}) {
   }
 }
 
+async function refreshCompanyModuleReports() {
+  const period = companyModulePeriod.value;
+  await loadCompanyModuleReportsOptional(companyModulePeriodQuery(period));
+  if (!companyModuleCompareEnabled.value) {
+    companyModuleReportsPrevious.value = { companies: [], report_dates: [], period: '' };
+    return;
+  }
+  const previousPeriod = companyModulePreviousPeriodKey(period);
+  if (!previousPeriod) {
+    companyModuleReportsPrevious.value = { companies: [], report_dates: [], period: '' };
+    return;
+  }
+  await loadCompanyModuleReportsPreviousOptional({ period: previousPeriod, include_daily: 0 });
+}
+
 async function syncCompanyModuleChartSource() {
   const period = companyModuleChartPeriod.value;
   try {
@@ -7529,21 +7554,6 @@ async function syncCompanyModuleChartSource() {
 
 async function refreshCompanyModuleChartData() {
   await syncCompanyModuleChartSource();
-}
-
-async function refreshCompanyModuleReports() {
-  const period = companyModulePeriod.value;
-  await loadCompanyModuleReportsOptional(companyModulePeriodQuery(period));
-  if (!companyModuleCompareEnabled.value) {
-    companyModuleReportsPrevious.value = { companies: [], report_dates: [], period: '' };
-    return;
-  }
-  const previousPeriod = companyModulePreviousPeriodKey(period);
-  if (!previousPeriod) {
-    companyModuleReportsPrevious.value = { companies: [], report_dates: [], period: '' };
-    return;
-  }
-  await loadCompanyModuleReportsPreviousOptional({ period: previousPeriod, include_daily: 0 });
 }
 
 function openCompanyModuleCustomPeriodModal() {
@@ -7785,7 +7795,10 @@ async function loadCompanyActivity(options = {}) {
           showToast('Kompaniya modul hisoboti yangilanmadi');
         }
         if (synced) {
-          return refreshCompanyModuleReports();
+          return Promise.all([
+            refreshCompanyModuleReports(),
+            refreshCompanyModuleChartData()
+          ]);
         }
         return null;
       })
