@@ -131,8 +131,8 @@ const yesterdayMismatch = resolveModuleUsageForDailyRow({
     monitoring: '22 Июн'
   }
 });
-assert.strictEqual(yesterdayMismatch.module_active_count, 5);
-assert.strictEqual(yesterdayMismatch.module_usage.taminot, true);
+assert.strictEqual(yesterdayMismatch.module_active_count, 0);
+assert.strictEqual(yesterdayMismatch.module_usage.taminot, false);
 
 const dashOnly = resolveModuleUsageForDailyRow({
   report_date: '2026-06-22',

@@ -222,6 +222,15 @@ function resolveModuleUsageForDailyRow(row = {}) {
   const reportDate = normalizeReportDateKey(row.report_date);
   const module_last_dates = moduleLastDatesFromRow(row);
   const storedUsage = objectValue(row.module_usage);
+  const scoped = moduleUsageForReportDate(module_last_dates, reportDate);
+
+  if (hasMeaningfulModuleLastDates(module_last_dates)) {
+    return {
+      module_usage: scoped.module_usage,
+      module_last_dates,
+      module_active_count: scoped.module_active_count
+    };
+  }
 
   if (hasStoredModuleSnapshot(row)) {
     return {
@@ -231,7 +240,6 @@ function resolveModuleUsageForDailyRow(row = {}) {
     };
   }
 
-  const scoped = moduleUsageForReportDate(module_last_dates, reportDate);
   return {
     module_usage: scoped.module_usage,
     module_last_dates,
@@ -1215,6 +1223,10 @@ async function getCompanyModuleReports(query = {}) {
   return finalizeCompanyModuleReportsResponse({
     tenant_id: tenantId,
     period,
+    mode: range.mode,
+    target_date: range.mode === 'single' ? normalizeReportDateKey(range.start) : null,
+    range_start: range.start,
+    range_end: range.end,
     storage: COMPANY_MODULE_DAILY_TABLE,
     companies,
     daily_companies: serializeDailyCompanies(list),

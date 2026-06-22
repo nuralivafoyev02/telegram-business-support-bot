@@ -5402,9 +5402,22 @@ const companyModuleReportPreviousByCompanyId = computed(() => {
   return map;
 });
 
-function companyModuleUsageForPeriod(row = {}, report = null) {
-  if (report?.module_usage) return report.module_usage;
-  return emptyCompanyModuleUsageMap();
+function companyInfoRowWithoutModuleFields(row = {}) {
+  const next = { ...row };
+  delete next.module_usage;
+  delete next.module_last_dates;
+  delete next.module_active_count;
+  delete next.report_date;
+  return next;
+}
+
+function companyModuleUsageForPeriod(row = {}, report = null, expectedDates = []) {
+  if (!report?.module_usage) return emptyCompanyModuleUsageMap();
+  const reportDate = String(report.report_date || '').trim();
+  if (expectedDates.length === 1 && reportDate && reportDate !== expectedDates[0]) {
+    return emptyCompanyModuleUsageMap();
+  }
+  return report.module_usage;
 }
 
 const companyModuleBaseRows = computed(() => {
@@ -5412,17 +5425,18 @@ const companyModuleBaseRows = computed(() => {
   const previousById = companyModuleReportPreviousByCompanyId.value;
   const hasPreviousReports = (companyModuleReportsPrevious.value?.report_dates || []).length > 0;
   const compareEnabled = companyModuleCompareEnabled.value;
+  const expectedDates = [...(companyModuleReports.value?.report_dates || [])].filter(Boolean);
   return filteredCompanyInfoRows.value.map(row => {
     const report = findCompanyModuleReport(reportById, row);
     const previousReport = findCompanyModuleReport(previousById, row);
-    const module_usage = companyModuleUsageForPeriod(row, report);
+    const module_usage = companyModuleUsageForPeriod(row, report, expectedDates);
     const previous_usage = previousReport?.module_usage || emptyCompanyModuleUsageMap();
     const module_last_dates = report?.module_last_dates || {};
     const module_active_count = companyModuleActiveCount(module_usage);
     const module_active_percent = companyModuleActivePercent(module_usage);
     const previous_percent = companyModuleActivePercent(previous_usage);
     return {
-      ...row,
+      ...companyInfoRowWithoutModuleFields(row),
       module_usage,
       previous_usage,
       module_last_dates,
@@ -5432,7 +5446,7 @@ const companyModuleBaseRows = computed(() => {
       module_percent_comparison: compareEnabled && hasPreviousReports
         ? compareValue(module_active_percent, previous_percent, { isPercentage: true })
         : null,
-      report_date: report?.report_date || row.report_date || null
+      report_date: report?.report_date || null
     };
   });
 });
@@ -7435,9 +7449,11 @@ async function loadPeriodOpenTickets() {
 async function loadCompanyModuleReports(query = {}, loadToken = companyModuleReportsLoadToken) {
   const data = await api.companyModuleReports(query);
   if (loadToken !== companyModuleReportsLoadToken) return data;
+  const period = query.period || companyModulePeriod.value || data.period || 'today';
+  if (data.period && query.period && data.period !== query.period) return data;
   companyModuleReports.value = {
     ...data,
-    period: query.period || companyModulePeriod.value || data.period || 'today'
+    period
   };
   return data;
 }
