@@ -34,7 +34,8 @@ const {
   getCachedCompanyReport,
   enrichCompaniesWithModuleReport,
   getCompanyModuleReports,
-  migrateBotSettingsHistoryToDaily
+  migrateBotSettingsHistoryToDaily,
+  slimCompanyReportResponse
 } = require('../lib/company-report');
 const { notifyOperationalLog, notifyOperationalError } = require('../lib/log-notifier');
 const stats = require('../lib/stats');
@@ -4027,13 +4028,13 @@ async function getCompanyReport(query = {}) {
   const cachedOnly = ['1', 'true', 'yes'].includes(String(query.cached || query.cache || '').toLowerCase());
   if (cachedOnly) {
     const cached = await getCachedCompanyReport();
-    if (cached) return cached;
+    if (cached) return slimCompanyReportResponse(cached);
     const historical = await getCompanyModuleReports(query).catch(() => null);
     if (historical?.companies?.length) return historical;
     return { companies: [], report_dates: [], period: query.period || 'all' };
   }
   try {
-    return await syncCompanyReport();
+    return slimCompanyReportResponse(await syncCompanyReport());
   } catch (error) {
     await notifyOperationalError('company-report:sync', error, {
       source: 'admin',
@@ -4042,7 +4043,7 @@ async function getCompanyReport(query = {}) {
     const cached = await getCachedCompanyReport();
     if (cached) {
       return {
-        ...cached,
+        ...slimCompanyReportResponse(cached),
         stale: true,
         last_error: error.message
       };

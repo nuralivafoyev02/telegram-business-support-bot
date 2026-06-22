@@ -91,11 +91,17 @@ function extractReportRows(payload = {}) {
   return [];
 }
 
+function isMeaningfulModuleLastDate(value = '') {
+  const text = String(value || '').trim();
+  return Boolean(text && text !== '-');
+}
+
 function normalizeActivityModule(activity = {}, sourceKey = '') {
   const source = objectValue(activity[sourceKey]);
+  const lastDate = source.last_date ? String(source.last_date).trim() : '';
   return {
     active: Boolean(source.active),
-    last_date: source.last_date ? String(source.last_date) : null
+    last_date: isMeaningfulModuleLastDate(lastDate) ? lastDate : null
   };
 }
 
@@ -178,7 +184,7 @@ function moduleUsageForReportDate(moduleLastDates = {}, reportDate = '') {
 
 function moduleLastDatesFromRow(row = {}) {
   const direct = objectValue(row.module_last_dates);
-  if (MODULE_KEYS.some(key => direct[key])) return direct;
+  if (MODULE_KEYS.some(key => isMeaningfulModuleLastDate(direct[key]))) return direct;
 
   const raw = objectValue(row.raw);
   const activity = objectValue(objectValue(raw.data).activity);
@@ -194,9 +200,32 @@ function moduleLastDatesFromRow(row = {}) {
 
 function reconcileCompanyModuleRow(row = {}) {
   const reportDate = normalizeReportDateKey(row.report_date);
-  if (!reportDate) return row;
+  if (!reportDate) {
+    return {
+      company_id: row.company_id,
+      company_name: row.company_name || '',
+      report_date: row.report_date || null,
+      module_usage: objectValue(row.module_usage),
+      module_last_dates: objectValue(row.module_last_dates),
+      module_active_count: Number(row.module_active_count || 0)
+    };
+  }
   const module_last_dates = moduleLastDatesFromRow(row);
   const scoped = moduleUsageForReportDate(module_last_dates, reportDate);
+  const storedUsage = objectValue(row.module_usage);
+  const storedCount = Number(row.module_active_count || 0);
+  const useStored = scoped.module_active_count === 0 && storedCount > 0
+    && MODULE_KEYS.some(key => storedUsage[key]);
+  if (useStored) {
+    return {
+      company_id: row.company_id,
+      company_name: row.company_name || '',
+      report_date: reportDate,
+      module_last_dates,
+      module_usage: storedUsage,
+      module_active_count: storedCount
+    };
+  }
   return {
     company_id: row.company_id,
     company_name: row.company_name || '',
@@ -209,6 +238,32 @@ function reconcileCompanyModuleRow(row = {}) {
 
 function toPublicCompanyModuleRow(row = {}) {
   return reconcileCompanyModuleRow(row);
+}
+
+function slimCompanyReportResponse(result = {}) {
+  const reportDate = normalizeReportDateKey(result.report_date) || tashkentDateKey();
+  const companies = (Array.isArray(result.companies) ? result.companies : [])
+    .map(row => toPublicCompanyModuleRow({
+      company_id: row.company_id,
+      company_name: row.company_name || '',
+      report_date: row.report_date || reportDate,
+      module_usage: row.module_usage || {},
+      module_last_dates: row.module_last_dates || {},
+      module_active_count: row.module_active_count || 0
+    }));
+  return {
+    tenant_id: result.tenant_id,
+    report_date: reportDate,
+    companies,
+    summary: result.summary || buildReportSummary(companies),
+    fetched_at: result.fetched_at || null,
+    cached_at: result.cached_at || result.fetched_at || null,
+    source: result.source || '',
+    persisted: result.persisted,
+    stale: result.stale,
+    last_error: result.last_error,
+    storage: result.storage
+  };
 }
 
 function normalizeReportCompany(row = {}, reportDate = tashkentDateKey()) {
@@ -234,12 +289,22 @@ function normalizeReportCompany(row = {}, reportDate = tashkentDateKey()) {
 
 function reportSnapshot(result = {}) {
   const fetchedAt = result.fetched_at || new Date().toISOString();
+  const reportDate = result.report_date || tashkentDateKey();
+  const companies = (Array.isArray(result.companies) ? result.companies : [])
+    .map(row => toPublicCompanyModuleRow({
+      company_id: row.company_id,
+      company_name: row.company_name || '',
+      report_date: row.report_date || reportDate,
+      module_usage: row.module_usage || {},
+      module_last_dates: row.module_last_dates || {},
+      module_active_count: row.module_active_count || 0
+    }));
   return {
     tenant_id: resolveTenantId(result.tenant_id),
     cache_schema_version: COMPANY_REPORT_CACHE_SCHEMA_VERSION,
-    report_date: result.report_date || tashkentDateKey(),
-    companies: Array.isArray(result.companies) ? result.companies : [],
-    summary: result.summary || buildReportSummary(result.companies || []),
+    report_date: reportDate,
+    companies,
+    summary: result.summary || buildReportSummary(companies),
     fetched_at: fetchedAt,
     cached_at: new Date().toISOString(),
     source: result.source || ''
@@ -403,7 +468,7 @@ async function loadDailyReportRowsForDateRange(tenantId, startDate = '', endDate
   let offset = 0;
   while (true) {
     const batch = await supabase.select(COMPANY_MODULE_DAILY_TABLE, {
-      select: 'report_date,company_id,company_name,module_usage,module_last_dates,module_active_count,fetched_at,raw',
+      select: 'report_date,company_id,company_name,module_usage,module_last_dates,module_active_count,fetched_at',
       tenant_id: supabase.eq(id),
       report_date: [`gte.${start}`, `lte.${end}`],
       order: ['report_date.desc', 'company_id.asc'],
@@ -432,7 +497,6 @@ async function saveCompanyReportDailyRows(result = {}) {
       module_usage: row.module_usage || {},
       module_last_dates: row.module_last_dates || {},
       module_active_count: Number(row.module_active_count || 0),
-      raw: row.raw || null,
       source_url: result.source || '',
       fetched_at: fetchedAt
     }));
@@ -1193,6 +1257,7 @@ module.exports = {
   parseModuleLastDateKey,
   moduleUsageForReportDate,
   reconcileCompanyModuleRow,
+  slimCompanyReportResponse,
   periodDateRange,
   migrateBotSettingsHistoryToDaily,
   tashkentDateKey

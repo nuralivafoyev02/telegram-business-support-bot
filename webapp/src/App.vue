@@ -5380,6 +5380,14 @@ const companyModuleReportPreviousByCompanyId = computed(() => {
   return map;
 });
 
+function companyModuleUsageForPeriod(row = {}, report = null, period = 'today', hasPeriodReports = false) {
+  if (report?.module_usage) return report.module_usage;
+  if (period === 'custom') return companyModuleUsageMap(row);
+  if (!hasPeriodReports && ['today', 'yesterday'].includes(period)) return companyModuleUsageMap(row);
+  if (hasPeriodReports || period !== 'custom') return emptyCompanyModuleUsageMap();
+  return companyModuleUsageMap(row);
+}
+
 const companyModuleBaseRows = computed(() => {
   const reportById = companyModuleReportByCompanyId.value;
   const previousById = companyModuleReportPreviousByCompanyId.value;
@@ -5390,8 +5398,7 @@ const companyModuleBaseRows = computed(() => {
   return filteredCompanyInfoRows.value.map(row => {
     const report = reportById.get(String(row.id));
     const previousReport = previousById.get(String(row.id));
-    const module_usage = report?.module_usage
-      || (hasPeriodReports || period !== 'custom' ? emptyCompanyModuleUsageMap() : companyModuleUsageMap(row));
+    const module_usage = companyModuleUsageForPeriod(row, report, period, hasPeriodReports);
     const previous_usage = previousReport?.module_usage || emptyCompanyModuleUsageMap();
     const module_last_dates = report?.module_last_dates || row.module_last_dates || {};
     const module_active_count = companyModuleActiveCount(module_usage);

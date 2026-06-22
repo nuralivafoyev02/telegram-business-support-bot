@@ -10,7 +10,15 @@ function sendJson(res, status, payload, extraHeaders = {}) {
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   res.setHeader('Cache-Control', 'no-store');
   Object.entries(extraHeaders).forEach(([key, value]) => res.setHeader(key, value));
-  res.end(JSON.stringify(payload));
+  let body = '';
+  try {
+    body = JSON.stringify(payload);
+  } catch (error) {
+    console.error('[http:send-json]', error);
+    res.statusCode = 500;
+    body = JSON.stringify({ ok: false, error: 'Response serialize failed' });
+  }
+  res.end(body);
 }
 
 function readBody(req) {

@@ -87,6 +87,29 @@ assert.strictEqual(chinaFromRaw.module_active_count, 1);
 assert.strictEqual(chinaFromRaw.module_usage.kassa, true);
 assert.strictEqual(chinaFromRaw.module_last_dates.kassa, '20 Июн');
 
+const landHouse = reconcileCompanyModuleRow({
+  company_id: 65,
+  company_name: 'Land House',
+  report_date: '2026-06-22',
+  module_usage: {
+    taminot: true,
+    kassa: false,
+    omborxona: true,
+    qurilish_jarayoni: false,
+    monitoring: true
+  },
+  module_last_dates: {
+    taminot: '22 Июн',
+    kassa: '-',
+    omborxona: '22 Июн',
+    qurilish_jarayoni: '-',
+    monitoring: '22 Июн'
+  }
+});
+assert.strictEqual(landHouse.module_active_count, 3);
+assert.strictEqual(landHouse.module_usage.taminot, true);
+assert.strictEqual(landHouse.module_usage.kassa, false);
+
 assert.strictEqual(normalizeReportDateKey('2026-06-15'), '2026-06-15');
 assert.strictEqual(normalizeReportDateKey('2026-06-15T00:00:00.000Z'), '2026-06-15');
 assert.strictEqual(normalizeReportDateKey(''), '');
