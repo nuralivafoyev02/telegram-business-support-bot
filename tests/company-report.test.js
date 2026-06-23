@@ -16,6 +16,7 @@ const {
   buildChartDailyCompanies,
   reconcileCompanyModuleRow,
   extractCompanyEmployeeActivity,
+  resolveEmployeeActivityFromRow,
   aggregateEmployeeActivityForPeriod
 } = require('../backend/lib/company-report');
 
@@ -347,9 +348,10 @@ const landHouseEmployeeRaw = {
 };
 const landHouseEmployee = extractCompanyEmployeeActivity({ raw: landHouseEmployeeRaw });
 assert.strictEqual(landHouseEmployee.total_actions, 31);
-assert.strictEqual(landHouseEmployee.active_employee_count, 3);
+assert.strictEqual(landHouseEmployee.active_employee_count, 4);
 assert.strictEqual(landHouseEmployee.inactive_employee_count, 1);
 assert.strictEqual(landHouseEmployee.active_employees.length, 4);
+assert.strictEqual(landHouseEmployee.total_actions, 31);
 
 const landHousePublic = reconcileCompanyModuleRow({
   company_id: 65,
@@ -399,5 +401,40 @@ const singleDayEmployees = aggregateEmployeeActivityForPeriod(
 );
 assert.strictEqual(singleDayEmployees.total_actions, 5);
 assert.strictEqual(singleDayEmployees.aggregated, false);
+
+const underReportedTotal = extractCompanyEmployeeActivity({
+  raw: {
+    data: {
+      total_actions: 3,
+      active_employees: [
+        { id: 1, name: 'Ali', action_count: 37, important_count: 0 },
+        { id: 2, name: 'Vali', action_count: 18, important_count: 0 }
+      ],
+      inactive_employees: []
+    }
+  }
+});
+assert.strictEqual(underReportedTotal.total_actions, 55);
+assert.strictEqual(underReportedTotal.active_employee_count, 2);
+
+const storedEmployeeActivity = resolveEmployeeActivityFromRow({
+  report_date: '2026-06-19',
+  employee_activity: {
+    total_actions: 29,
+    active_employee_count: 10,
+    inactive_employee_count: 19,
+    active_employees: [{ id: 1, name: 'Ali', action_count: 29, important_count: 0 }],
+    inactive_employees: [{ id: 2, name: 'Vali', last_activity_date: '02 Iyun', important_count: 0 }],
+    support: { username: '@uyqur_mirshod' }
+  },
+  raw: {
+    data: {
+      total_actions: 3,
+      active_employees: [{ id: 9, name: 'Stale', action_count: 3, important_count: 0 }]
+    }
+  }
+});
+assert.strictEqual(storedEmployeeActivity.total_actions, 29);
+assert.strictEqual(storedEmployeeActivity.active_employee_count, 10);
 
 console.log('company-report.test.js: ok');

@@ -11,6 +11,7 @@ const COMPANY_REPORT_CACHE_SCHEMA_VERSION = 1;
 const COMPANY_REPORT_HISTORY_SCHEMA_VERSION = 1;
 const REPORT_HISTORY_MAX_DAYS = 0;
 const COMPANY_MODULE_DAILY_TABLE = 'company_module_daily_reports';
+const COMPANY_MODULE_DAILY_SELECT = 'report_date,company_id,company_name,module_usage,module_last_dates,module_active_count,fetched_at,raw,employee_activity';
 const COMPANY_MODULE_SYNC_RUNS_TABLE = 'company_module_sync_runs';
 const MODULE_KEYS = Object.freeze(['taminot', 'kassa', 'omborxona', 'qurilish_jarayoni', 'monitoring']);
 const MODULE_ACTIVE_GRACE_DAYS = 3;
@@ -280,8 +281,71 @@ function normalizeEmployeeActivityEntry(row = {}) {
   };
 }
 
+function sumEmployeeActionCount(employees = []) {
+  return employees.reduce((sum, entry) => sum + Number(entry.action_count || 0), 0);
+}
+
+function resolveEmployeeTotalActions(reportedTotal, activeEmployees = []) {
+  const summed = sumEmployeeActionCount(activeEmployees);
+  const apiTotal = Number(reportedTotal);
+  if (Number.isFinite(apiTotal) && apiTotal > 0) {
+    return Math.max(apiTotal, summed);
+  }
+  return summed;
+}
+
+function employeeActivitySource(row = {}) {
+  const direct = objectValue(row);
+  const raw = objectValue(direct.raw);
+  if (objectValue(raw.data).activity || asArray(raw.data?.active_employees).length) return raw;
+  if (objectValue(direct.data).activity || asArray(direct.data?.active_employees).length) return direct;
+  return raw.id || raw.name ? raw : direct;
+}
+
+function employeeActivityScore(row = {}) {
+  const raw = employeeActivitySource(row);
+  const data = objectValue(raw.data);
+  const activeEmployees = asArray(data.active_employees)
+    .map(normalizeEmployeeActivityEntry)
+    .filter(entry => entry.id || entry.name);
+  const inactiveCount = asArray(data.inactive_employees).length;
+  const total = resolveEmployeeTotalActions(data.total_actions, activeEmployees);
+  return total + (activeEmployees.length * 10) + inactiveCount;
+}
+
+function pickEmployeeRawData(current = {}, incoming = {}) {
+  const currentScore = employeeActivityScore(current);
+  const incomingScore = employeeActivityScore(incoming);
+  if (incomingScore > currentScore) return incoming.raw || current.raw || null;
+  if (currentScore > incomingScore) return current.raw || incoming.raw || null;
+  return incoming.raw || current.raw || null;
+}
+
+function mergeDailyReportRow(current = null, incoming = null) {
+  if (!current) return incoming;
+  if (!incoming) return current;
+  const useIncoming = String(incoming.fetched_at || '').localeCompare(String(current.fetched_at || '')) >= 0;
+  const primary = useIncoming ? incoming : current;
+  return {
+    ...primary,
+    company_id: incoming.company_id || current.company_id,
+    company_name: incoming.company_name || current.company_name,
+    report_date: incoming.report_date || current.report_date,
+    module_usage: Object.keys(incoming.module_usage || {}).length ? incoming.module_usage : current.module_usage,
+    module_last_dates: Object.keys(incoming.module_last_dates || {}).length
+      ? incoming.module_last_dates
+      : current.module_last_dates,
+    module_active_count: Number.isFinite(Number(incoming.module_active_count))
+      ? Number(incoming.module_active_count)
+      : Number(current.module_active_count || 0),
+    fetched_at: primary.fetched_at || incoming.fetched_at || current.fetched_at || null,
+    raw: pickEmployeeRawData(current, incoming),
+    employee_activity: pickEmployeeActivityData(current, incoming)
+  };
+}
+
 function extractCompanyEmployeeActivity(row = {}) {
-  const raw = objectValue(row.raw || row);
+  const raw = employeeActivitySource(row);
   const data = objectValue(raw.data);
   const activeEmployees = asArray(data.active_employees)
     .map(normalizeEmployeeActivityEntry)
@@ -289,21 +353,22 @@ function extractCompanyEmployeeActivity(row = {}) {
   const inactiveEmployees = asArray(data.inactive_employees)
     .map(normalizeEmployeeActivityEntry)
     .filter(entry => entry.id || entry.name);
-  const totalActions = Number(data.total_actions);
   const activityPeriod = String(data.activity_period || '').trim();
   const support = objectValue(data.support);
   const hasEmployeeData = activeEmployees.length
     || inactiveEmployees.length
-    || (Number.isFinite(totalActions) && totalActions > 0)
+    || sumEmployeeActionCount(activeEmployees) > 0
     || activityPeriod;
   if (!hasEmployeeData) return null;
 
+  const total_actions = resolveEmployeeTotalActions(data.total_actions, activeEmployees);
+
   return {
-    total_actions: Number.isFinite(totalActions) ? totalActions : 0,
+    total_actions,
     activity_period: activityPeriod,
     active_employees: activeEmployees,
     inactive_employees: inactiveEmployees,
-    active_employee_count: activeEmployees.filter(entry => entry.action_count > 0).length,
+    active_employee_count: activeEmployees.length,
     inactive_employee_count: inactiveEmployees.length,
     support: {
       username: String(support.username || '').trim(),
@@ -361,7 +426,7 @@ function aggregateEmployeeActivityForPeriod(rows = [], rangeStart = '', rangeEnd
   if (isSingleDay) {
     const target = rangeTo || rangeFrom;
     const exact = scoped.find(row => normalizeReportDateKey(row.report_date) === target) || scoped[scoped.length - 1];
-    const activity = extractCompanyEmployeeActivity(exact);
+    const activity = resolveEmployeeActivityFromRow(exact);
     if (!activity) return null;
     return {
       ...activity,
@@ -373,7 +438,7 @@ function aggregateEmployeeActivityForPeriod(rows = [], rangeStart = '', rangeEnd
   let totalActions = 0;
   const activeEntries = [];
   scoped.forEach(row => {
-    const activity = extractCompanyEmployeeActivity(row);
+    const activity = resolveEmployeeActivityFromRow(row);
     if (!activity) return;
     totalActions += Number(activity.total_actions || 0);
     activeEntries.push(...activity.active_employees);
@@ -382,7 +447,7 @@ function aggregateEmployeeActivityForPeriod(rows = [], rangeStart = '', rangeEnd
   const mergedActive = mergeEmployeeActivityEntries(activeEntries)
     .sort((a, b) => Number(b.action_count || 0) - Number(a.action_count || 0));
   const endRow = scoped.find(row => normalizeReportDateKey(row.report_date) === rangeTo) || scoped[scoped.length - 1];
-  const endActivity = extractCompanyEmployeeActivity(endRow);
+  const endActivity = resolveEmployeeActivityFromRow(endRow);
   const activeKeys = new Set(
     mergedActive
       .filter(entry => Number(entry.action_count || 0) > 0)
@@ -407,10 +472,63 @@ function aggregateEmployeeActivityForPeriod(rows = [], rangeStart = '', rangeEnd
   };
 }
 
+function hasStoredEmployeeActivity(value = {}) {
+  const stored = objectValue(value);
+  return Boolean(
+    asArray(stored.active_employees).length
+    || asArray(stored.inactive_employees).length
+    || Number(stored.total_actions || 0) > 0
+  );
+}
+
+function normalizeStoredEmployeeActivity(stored = {}) {
+  const source = objectValue(stored);
+  const activeEmployees = asArray(source.active_employees)
+    .map(normalizeEmployeeActivityEntry)
+    .filter(entry => entry.id || entry.name);
+  const inactiveEmployees = asArray(source.inactive_employees)
+    .map(normalizeEmployeeActivityEntry)
+    .filter(entry => entry.id || entry.name);
+  return {
+    total_actions: Number(source.total_actions || 0),
+    activity_period: String(source.activity_period || '').trim(),
+    active_employees: activeEmployees,
+    inactive_employees: inactiveEmployees,
+    active_employee_count: Number(source.active_employee_count ?? activeEmployees.length),
+    inactive_employee_count: Number(source.inactive_employee_count ?? inactiveEmployees.length),
+    support: {
+      username: String(objectValue(source.support).username || '').trim(),
+      phone: String(objectValue(source.support).phone || '').trim()
+    },
+    aggregated: Boolean(source.aggregated),
+    report_date: normalizeReportDateKey(source.report_date) || null
+  };
+}
+
+function resolveEmployeeActivityFromRow(row = {}) {
+  if (hasStoredEmployeeActivity(row.employee_activity)) {
+    return normalizeStoredEmployeeActivity(row.employee_activity);
+  }
+  return extractCompanyEmployeeActivity(row);
+}
+
+function pickEmployeeActivityData(current = {}, incoming = {}) {
+  const currentActivity = resolveEmployeeActivityFromRow(current);
+  const incomingActivity = resolveEmployeeActivityFromRow(incoming);
+  const score = activity => Number(activity?.total_actions || 0)
+    + (asArray(activity?.active_employees).length * 10)
+    + asArray(activity?.inactive_employees).length;
+  const currentScore = currentActivity ? score(currentActivity) : employeeActivityScore(current);
+  const incomingScore = incomingActivity ? score(incomingActivity) : employeeActivityScore(incoming);
+  if (incomingScore > currentScore) return incomingActivity;
+  if (currentScore > incomingScore) return currentActivity;
+  return incomingActivity || currentActivity || null;
+}
+
 function reconcileCompanyModuleRow(row = {}) {
   const reportDate = normalizeReportDateKey(row.report_date);
   const resolved = resolveModuleUsageForDailyRow(row);
-  const employee_activity = extractCompanyEmployeeActivity(row);
+  const employee_activity = resolveEmployeeActivityFromRow(row);
   return {
     company_id: row.company_id,
     company_name: row.company_name || '',
@@ -650,7 +768,7 @@ async function loadAllDailyReportRows(tenantId) {
   let offset = 0;
   while (true) {
     const batch = await supabase.select(COMPANY_MODULE_DAILY_TABLE, {
-      select: 'report_date,company_id,company_name,module_usage,module_last_dates,module_active_count,fetched_at,raw',
+      select: COMPANY_MODULE_DAILY_SELECT,
       tenant_id: supabase.eq(id),
       order: ['report_date.desc', 'company_id.asc'],
       limit: String(pageSize),
@@ -679,7 +797,8 @@ function normalizeDailyReportRow(row = {}) {
     module_last_dates: objectValue(row.module_last_dates),
     module_active_count: Number(row.module_active_count || 0),
     fetched_at: row.fetched_at || null,
-    raw: row.raw || null
+    raw: row.raw || null,
+    employee_activity: row.employee_activity || null
   };
 }
 
@@ -693,7 +812,7 @@ function mergeCompanyDailyRows(existing = [], incoming = [], reportDate = '', fe
   incoming.forEach(row => {
     const companyId = Number(row.company_id || 0);
     if (!companyId) return;
-    const next = {
+    const next = normalizeDailyReportRow({
       company_id: companyId,
       company_name: row.company_name || '',
       report_date: date,
@@ -701,12 +820,11 @@ function mergeCompanyDailyRows(existing = [], incoming = [], reportDate = '', fe
       module_last_dates: row.module_last_dates || {},
       module_active_count: Number(row.module_active_count || 0),
       fetched_at: row.fetched_at || fetchedAt || null,
-      raw: row.raw || null
-    };
+      raw: row.raw || null,
+      employee_activity: row.employee_activity || extractCompanyEmployeeActivity(row) || null
+    });
     const current = byId.get(String(companyId));
-    if (!current || String(next.fetched_at || '').localeCompare(String(current.fetched_at || '')) > 0) {
-      byId.set(String(companyId), next);
-    }
+    byId.set(String(companyId), mergeDailyReportRow(current, next));
   });
   return [...byId.values()];
 }
@@ -726,12 +844,11 @@ function dailyRowsToCompanyList(rows = []) {
       module_last_dates: row.module_last_dates || {},
       module_active_count: Number(row.module_active_count || 0),
       fetched_at: row.fetched_at || null,
-      raw: row.raw || null
+      raw: row.raw || null,
+      employee_activity: row.employee_activity || null
     };
     const current = byKey.get(key);
-    if (!current || String(next.fetched_at || '').localeCompare(String(current.fetched_at || '')) > 0) {
-      byKey.set(key, next);
-    }
+    byKey.set(key, mergeDailyReportRow(current, next));
   });
   return [...byKey.values()];
 }
@@ -752,7 +869,7 @@ async function loadDailyReportRowsForDateRange(tenantId, startDate = '', endDate
   let offset = 0;
   while (true) {
     const batch = await supabase.select(COMPANY_MODULE_DAILY_TABLE, {
-      select: 'report_date,company_id,company_name,module_usage,module_last_dates,module_active_count,fetched_at,raw',
+      select: COMPANY_MODULE_DAILY_SELECT,
       tenant_id: supabase.eq(id),
       report_date: [`gte.${start}`, `lte.${end}`],
       order: ['report_date.desc', 'company_id.asc'],
@@ -782,6 +899,7 @@ async function saveCompanyReportDailyRows(result = {}) {
       module_last_dates: row.module_last_dates || {},
       module_active_count: Number(row.module_active_count || 0),
       raw: row.raw || null,
+      employee_activity: row.employee_activity || extractCompanyEmployeeActivity(row) || null,
       source_url: result.source || '',
       fetched_at: fetchedAt
     }));
@@ -851,7 +969,9 @@ async function getReportHistoryFromDaily(options = {}) {
       report_date: normalized.report_date,
       module_usage: normalized.module_usage,
       module_last_dates: normalized.module_last_dates,
-      module_active_count: normalized.module_active_count
+      module_active_count: normalized.module_active_count,
+      raw: normalized.raw || null,
+      employee_activity: normalized.employee_activity || resolveEmployeeActivityFromRow(normalized) || null
     });
   });
   Object.values(days).forEach(day => {
@@ -1117,10 +1237,12 @@ function mergeDailyReportSources(dbRows = [], historyRows = []) {
   historyRows.forEach(row => {
     const normalized = normalizeDailyReportRow(row);
     if (!normalized.company_id || !normalized.report_date) return;
-    byKey.set(`${normalized.company_id}:${normalized.report_date}`, normalized);
+    const key = `${normalized.company_id}:${normalized.report_date}`;
+    byKey.set(key, mergeDailyReportRow(byKey.get(key), normalized));
   });
   dailyRowsToCompanyList(dbRows).forEach(row => {
-    byKey.set(`${row.company_id}:${row.report_date}`, row);
+    const key = `${row.company_id}:${row.report_date}`;
+    byKey.set(key, mergeDailyReportRow(byKey.get(key), row));
   });
   return [...byKey.values()];
 }
@@ -1597,6 +1719,7 @@ module.exports = {
   resolveModuleUsageForChartDate,
   reconcileCompanyModuleRow,
   extractCompanyEmployeeActivity,
+  resolveEmployeeActivityFromRow,
   aggregateEmployeeActivityForPeriod,
   resolveQueryDateRange,
   aggregateCompaniesFromDailyRows,
