@@ -474,9 +474,9 @@ async function createSupportRequest({ message, sourceType, companyId = null, ski
   const from = message.from || {};
   const chat = message.chat || {};
   const text = messageDisplayText(message);
-  const createdAt = messageDateIso(message);
   const openSource = String(ticketMeta.openSource || ticketMeta.open_source || '').trim();
   const reactionOpen = openSource === 'reaction' || skipMerge === true;
+  const createdAt = reactionOpen ? nowIso() : messageDateIso(message);
 
   if (chat.id && message.message_id) {
     const existingByMessage = await findRequestByInitialMessage(chat.id, message.message_id);
@@ -554,7 +554,8 @@ async function reopenSupportRequest({ request, message, optionalRow = {} } = {})
   const chat = message.chat || {};
   const from = message.from || {};
   const text = messageDisplayText(message);
-  const reopenedAt = messageDateIso(message);
+  const reactionOpen = String(optionalRow.open_source || '').trim() === 'reaction';
+  const reopenedAt = reactionOpen ? nowIso() : messageDateIso(message);
   const patch = {
     status: 'open',
     closed_at: null,
@@ -562,6 +563,7 @@ async function reopenSupportRequest({ request, message, optionalRow = {} } = {})
     closed_by_tg_id: null,
     closed_by_name: null,
     done_message_id: null,
+    ...(reactionOpen ? { created_at: reopenedAt } : {}),
     initial_text: text || request.initial_text || '',
     ...optionalRow
   };
