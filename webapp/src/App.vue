@@ -1242,22 +1242,25 @@
                   <form class="form settings-form integration-form" @submit.prevent="saveIntegration">
                     <label class="label">Xizmat turi
                       <select v-model="integrationForm.provider" class="select">
-                        <option value="openai_compatible">OpenAI formatiga mos</option>
+                        <option value="openai_compatible">OpenAI formatiga mos (LLM)</option>
                       </select>
                     </label>
-                    <label class="label">Model nomi
-                      <input v-model.trim="integrationForm.label" class="input" placeholder="Uyqur AI" />
-                    </label>
-                    <label class="label">Asosiy manzil
+                    <label class="label">Endpoint
                       <input v-model.trim="integrationForm.base_url" class="input"
-                        placeholder="https://api.openai.com/v1" />
+                        placeholder="https://llm.example.com/v1" />
                     </label>
-                    <label class="label">Model
-                      <input v-model.trim="integrationForm.model" class="input" placeholder="gpt-4o-mini" />
+                    <label class="label">Team
+                      <input v-model.trim="integrationForm.team" class="input" placeholder="team-id" />
                     </label>
-                    <label class="label">API kalit
+                    <label class="label">Key alias
+                      <input v-model.trim="integrationForm.key_alias" class="input" placeholder="support-bot-key" />
+                    </label>
+                    <label class="label">Secret
                       <input v-model="integrationForm.api_key" class="input" type="password" autocomplete="new-password"
-                        :placeholder="integrationForm.has_api_key ? 'Saqlangan kalitni almashtirish' : 'sk-...'" />
+                        :placeholder="integrationForm.has_api_key ? 'Saqlangan secretni almashtirish' : 'sk-...'" />
+                    </label>
+                    <label class="label">Model (LLM)
+                      <input v-model.trim="integrationForm.model" class="input" placeholder="gpt-4o-mini" />
                     </label>
                     <label class="label">Holat
                       <select v-model="integrationForm.enabled" class="select">
@@ -1265,6 +1268,11 @@
                         <option :value="false">O‘chirilgan</option>
                       </select>
                     </label>
+                    <p class="card-note wide">
+                      So‘rovlar <code>{endpoint}/chat/completions</code> ga ketadi. Autentifikatsiya uchun faqat
+                      <code>Authorization: Bearer {secret}</code> ishlatiladi. Team va key alias saqlanadi, lekin har
+                      bir LLM so‘rovida yuborilmaydi.
+                    </p>
                     <label class="label wide">Tizim ko‘rsatmasi
                       <textarea v-model="integrationForm.system_prompt" class="textarea tall"></textarea>
                     </label>
@@ -3055,6 +3063,8 @@ const integrationForm = reactive({
   enabled: true,
   provider: 'openai_compatible',
   label: 'Uyqur AI',
+  team: '',
+  key_alias: '',
   base_url: 'https://api.openai.com/v1',
   model: '',
   api_key: '',
@@ -3101,6 +3111,8 @@ function aiConnectionSignature(source = {}) {
   return [
     source.enabled !== false,
     source.provider || 'openai_compatible',
+    source.team || '',
+    source.key_alias || '',
     source.base_url || '',
     source.model || '',
     Boolean(source.has_api_key)
@@ -3132,7 +3144,7 @@ const aiIntegrationReady = computed(() => !!(
 ));
 const aiIntegrationHasError = computed(() => ['error', 'failed'].includes(integrationForm.last_check_status));
 const aiModelOptionLabel = computed(() => aiIntegrationReady.value
-  ? `${integrationForm.label || integrationForm.model} modeli`
+  ? `${integrationForm.key_alias || integrationForm.label || integrationForm.model} modeli`
   : 'AI modeli tekshirilmagan');
 const aiIntegrationStatus = computed(() => {
   if (!integrationForm.enabled) return 'O‘chiq';
@@ -8007,7 +8019,9 @@ async function loadSettings() {
   Object.assign(integrationForm, {
     enabled: integration?.enabled !== false,
     provider: integration?.provider || 'openai_compatible',
-    label: integration?.label || integration?.model || 'Uyqur AI',
+    label: integration?.label || integration?.key_alias || integration?.model || 'Uyqur AI',
+    team: integration?.team || '',
+    key_alias: integration?.key_alias || '',
     base_url: integration?.base_url || 'https://api.openai.com/v1',
     model: integration?.model || '',
     api_key: '',
@@ -10388,7 +10402,7 @@ async function saveSettings() {
             enabled: settingsForm.ai_mode !== 'false',
             provider: useModel ? integrationForm.provider : null,
             model: useModel ? integrationForm.model : null,
-            model_label: useModel ? (integrationForm.label || integrationForm.model) : null
+            model_label: useModel ? (integrationForm.key_alias || integrationForm.label || integrationForm.model) : null
           }
         },
         { key: 'auto_reply', value: { enabled: settingsForm.auto_reply === 'true' } },
@@ -10434,7 +10448,9 @@ async function saveIntegration() {
           value: {
             enabled: integrationForm.enabled,
             provider: integrationForm.provider,
-            label: integrationForm.label,
+            label: integrationForm.key_alias || integrationForm.model || integrationForm.label || 'Uyqur AI',
+            team: integrationForm.team,
+            key_alias: integrationForm.key_alias,
             base_url: integrationForm.base_url,
             model: integrationForm.model,
             api_key: integrationForm.api_key,
@@ -10450,7 +10466,9 @@ async function saveIntegration() {
       Object.assign(integrationForm, {
         enabled: saved.enabled !== false,
         provider: saved.provider || 'openai_compatible',
-        label: saved.label || saved.model || 'Uyqur AI',
+        label: saved.label || saved.key_alias || saved.model || 'Uyqur AI',
+        team: saved.team || '',
+        key_alias: saved.key_alias || '',
         base_url: saved.base_url || 'https://api.openai.com/v1',
         model: saved.model || '',
         has_api_key: !!saved.has_api_key,

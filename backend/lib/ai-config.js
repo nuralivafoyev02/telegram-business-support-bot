@@ -15,6 +15,8 @@ const DEFAULT_AI_INTEGRATION = Object.freeze({
   enabled: true,
   provider: 'openai_compatible',
   label: '',
+  team: '',
+  key_alias: '',
   base_url: 'https://api.openai.com/v1',
   model: '',
   api_key: '',
@@ -40,11 +42,15 @@ function normalizeAiIntegration(value = {}) {
   const source = value && typeof value === 'object' ? value : {};
   const apiKey = cleanString(source.api_key || source.apiKey);
   const model = cleanString(source.model);
-  const label = cleanString(source.label || source.model_label || source.modelLabel || model);
+  const team = cleanString(source.team || source.team_id || source.teamId);
+  const keyAlias = cleanString(source.key_alias || source.keyalias || source.keyAlias);
+  const label = cleanString(source.label || source.model_label || source.modelLabel || keyAlias || model);
   return {
     enabled: source.enabled !== false,
     provider: cleanString(source.provider || DEFAULT_AI_INTEGRATION.provider),
     label,
+    team,
+    key_alias: keyAlias,
     base_url: normalizeBaseUrl(source.base_url || source.baseUrl),
     model,
     api_key: apiKey,
@@ -91,7 +97,7 @@ function sanitizeAiIntegration(value = {}) {
 
 function aiIntegrationSignature(value = {}) {
   const config = normalizeAiIntegration(value);
-  return [config.enabled, config.provider, config.label, config.base_url, config.model].join('|');
+  return [config.enabled, config.provider, config.label, config.team, config.key_alias, config.base_url, config.model].join('|');
 }
 
 module.exports = {
