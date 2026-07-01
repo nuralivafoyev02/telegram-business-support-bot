@@ -779,14 +779,14 @@ async function handleEyeReaction(reaction = {}, settings = {}, options = {}) {
     const employee = await resolveReactionEmployee(reaction);
     actorAccess = canUseGroupReaction(reaction, employee);
     if (!actorAccess.ok) {
-      console.warn('[bot:eye-reaction]', {
-        skipped: 'not_employee',
+      console.info('[bot:eye-reaction]', {
+        fallback: 'allow_non_employee',
         actor_id: actor.id || null,
         actor_username: actor.username || null,
         actor_name: tgUserName(actor) || null,
         chat_id: chat.id
       });
-      return { ok: false, skipped: 'not_employee' };
+      actorAccess = { ok: true, employee: null, non_employee: true };
     }
   }
 
