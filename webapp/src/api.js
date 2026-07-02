@@ -138,6 +138,7 @@ export const api = {
   updateClickupTask: payload => request('clickupTask', { method: 'POST', body: payload }).then(r => r.data),
   extractAiKnowledge: payload => request('aiKnowledgeExtract', { method: 'POST', body: payload }).then(r => r.data),
   saveAdminProfile: payload => request('adminProfile', { method: 'POST', body: payload }).then(r => r.data),
+  saveCompany: payload => request('company', { method: 'POST', body: payload }).then(r => r.data),
   sendMainStats: payload => request('sendMainStats', { method: 'POST', body: payload || {} }).then(r => r.data),
   sendGroupAuditStats: payload => request('sendGroupAuditStats', { method: 'POST', body: payload || {} }).then(r => r.data),
   testLogNotification: payload => request('testLogNotification', { method: 'POST', body: payload || {} }).then(r => r.data),

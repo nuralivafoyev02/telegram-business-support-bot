@@ -1021,7 +1021,12 @@
           </template>
 
           <template v-if="activeTab === 'companies'">
-            <Toolbar v-model="search" />
+            <div class="toolbar">
+              <SearchField v-model="search" />
+              <div class="toolbar-actions">
+                <button class="btn primary" @click="openCompany()">+ Kompaniya</button>
+              </div>
+            </div>
             <section class="card">
               <div class="card-header">
                 <div>
@@ -1739,6 +1744,34 @@
               @click.stop="openRequestReply(row)">Javob</button>
           </template>
         </DataTable>
+      </Modal>
+    </Transition>
+
+    <Transition name="modal-fade">
+      <Modal v-if="modal === 'company'" :title="companyForm.id ? 'Kompaniyani tahrirlash' : 'Kompaniya qo‘shish'" @close="closeModal">
+        <form class="form" @submit.prevent="saveCompany">
+          <label class="label">Kompaniya nomi
+            <input v-model.trim="companyForm.name" class="input" placeholder="Misol: Uyqur MChJ" required />
+          </label>
+          <label class="label">Yuridik nomi (ixtiyoriy)
+            <input v-model.trim="companyForm.legal_name" class="input" />
+          </label>
+          <label class="label">Telefon (ixtiyoriy)
+            <input v-model.trim="companyForm.phone" class="input" />
+          </label>
+          <label class="label">Qo'shimcha eslatmalar (ixtiyoriy)
+            <textarea v-model.trim="companyForm.notes" class="input" rows="3"></textarea>
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" v-model="companyForm.is_active" /> Faol kompaniya
+          </label>
+          <div class="actions">
+            <button class="btn primary" :disabled="loadingAction === 'saveCompany'">
+              {{ loadingAction === 'saveCompany' ? 'Saqlanmoqda...' : 'Saqlash' }}
+            </button>
+            <button class="btn" type="button" @click="closeModal" :disabled="loadingAction === 'saveCompany'">Bekor qilish</button>
+          </div>
+        </form>
       </Modal>
     </Transition>
 
@@ -8820,6 +8853,36 @@ async function openEmployeeCompanies(row = {}) {
     if (loadToken === employeeProfileLoadToken) showToast(error.message);
   } finally {
     if (loadToken === employeeProfileLoadToken) stopLoading('employeeActivity');
+  }
+}
+
+const companyForm = reactive({ id: '', name: '', legal_name: '', phone: '', notes: '', is_active: true });
+
+function openCompany(row = {}) {
+  companyForm.id = row.id || '';
+  companyForm.name = row.name || '';
+  companyForm.legal_name = row.legal_name || '';
+  companyForm.phone = row.phone || '';
+  companyForm.notes = row.notes || '';
+  companyForm.is_active = row.is_active !== false;
+  modal.value = 'company';
+}
+
+async function saveCompany() {
+  if (!companyForm.name) {
+    showToast('Kompaniya nomini kiriting');
+    return;
+  }
+  startLoading('saveCompany');
+  try {
+    await api.saveCompany({ ...companyForm });
+    showToast('Kompaniya saqlandi');
+    await loadCompanyInfoOptional();
+    modal.value = '';
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    stopLoading('saveCompany');
   }
 }
 
