@@ -3991,28 +3991,62 @@ async function attachModuleReportToCompanyInfo(result = {}) {
   };
 }
 
+async function appendLocalCompaniesToInfo(info = {}) {
+  const localCompanies = await supabase.select('companies', { select: 'id,name,legal_name,phone,notes,is_active,created_at', limit: '2000' }).catch(() => []);
+  if (!localCompanies.length) return info;
+  
+  const existingIds = new Set((info.companies || []).map(c => String(c.id)));
+  const existingNames = new Set((info.companies || []).map(c => String(c.name).trim().toLowerCase()));
+  
+  const additional = localCompanies.filter(c => !existingIds.has(String(c.id)) && !existingNames.has(String(c.name).trim().toLowerCase())).map(c => ({
+    id: c.id,
+    name: c.name,
+    legal_name: c.legal_name,
+    phone: c.phone,
+    notes: c.notes,
+    is_active: c.is_active,
+    status: c.is_active ? 'active' : 'inactive',
+    created_at: c.created_at,
+    is_local: true
+  }));
+  
+  if (!additional.length) return info;
+  return {
+    ...info,
+    companies: [...(info.companies || []), ...additional]
+  };
+}
+
 async function getCompanyInfo(query = {}) {
   const tenantId = normalizeTenantId(getCurrentTenantId());
   const cachedOnly = ['1', 'true', 'yes'].includes(String(query.cached || query.cache || '').toLowerCase());
   if (tenantId !== DEFAULT_TENANT_ID) {
-    const cached = await attachModuleReportToCompanyInfo(await getCachedCompanyInfo() || emptyCompanyInfoResult(tenantId));
+    let cached = await getCachedCompanyInfo() || emptyCompanyInfoResult(tenantId);
+    cached = await appendLocalCompaniesToInfo(cached);
+    cached = await attachModuleReportToCompanyInfo(cached);
     if (cached?.companies?.length) return cached;
     if (cachedOnly) return cached;
   } else if (cachedOnly) {
-    const cached = await attachModuleReportToCompanyInfo(await getCachedCompanyInfo());
-    if (cached) return cached;
+    let cached = await getCachedCompanyInfo();
+    if (cached) {
+      cached = await appendLocalCompaniesToInfo(cached);
+      return await attachModuleReportToCompanyInfo(cached);
+    }
   }
 
   try {
-    const result = await syncCompanyInfo();
-    return attachModuleReportToCompanyInfo(result);
+    let result = await syncCompanyInfo();
+    result = await appendLocalCompaniesToInfo(result);
+    return await attachModuleReportToCompanyInfo(result);
   } catch (error) {
     await notifyOperationalError('company-info:sync', error, {
       source: 'admin',
       action: 'companyInfo'
     }).catch(logError => console.error('[admin:company-info:notify-error]', logError));
-    const cached = await attachModuleReportToCompanyInfo(await getCachedCompanyInfo());
+    let cached = await getCachedCompanyInfo();
     if (cached) {
+      cached = await appendLocalCompaniesToInfo(cached);
+      cached = await attachModuleReportToCompanyInfo(cached);
       return {
         ...cached,
         stale: true,

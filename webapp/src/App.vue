@@ -7938,53 +7938,7 @@ async function applyCompanyModuleChartCustomPeriod() {
 }
 
 async function loadCompanyInfo(query = {}) {
-  const [data, localData] = await Promise.all([
-    api.companyInfo(query),
-    api.companies().catch(() => ({ companies: [] }))
-  ]);
-  
-  if (localData && Array.isArray(localData)) {
-    const existingIds = new Set((data.companies || []).map(c => String(c.id)));
-    const existingNames = new Set((data.companies || []).map(c => String(c.name).trim().toLowerCase()));
-    
-    const additional = localData
-      .filter(c => !existingIds.has(String(c.id)) && !existingNames.has(String(c.name).trim().toLowerCase()))
-      .map(c => ({
-        id: c.id,
-        name: c.name,
-        legal_name: c.legal_name,
-        phone: c.phone,
-        notes: c.notes,
-        status: c.is_active ? 'active' : 'inactive',
-        created_at: c.created_at,
-        is_local: true
-      }));
-      
-    if (additional.length) {
-      data.companies = [...(data.companies || []), ...additional];
-    }
-  } else if (localData && Array.isArray(localData.companies)) {
-    const existingIds = new Set((data.companies || []).map(c => String(c.id)));
-    const existingNames = new Set((data.companies || []).map(c => String(c.name).trim().toLowerCase()));
-    
-    const additional = localData.companies
-      .filter(c => !existingIds.has(String(c.id)) && !existingNames.has(String(c.name).trim().toLowerCase()))
-      .map(c => ({
-        id: c.id,
-        name: c.name,
-        legal_name: c.legal_name,
-        phone: c.phone,
-        notes: c.notes,
-        status: c.is_active ? 'active' : 'inactive',
-        created_at: c.created_at,
-        is_local: true
-      }));
-      
-    if (additional.length) {
-      data.companies = [...(data.companies || []), ...additional];
-    }
-  }
-
+  const data = await api.companyInfo(query);
   companyInfo.value = data;
   return data;
 }
