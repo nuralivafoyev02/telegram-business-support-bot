@@ -1033,8 +1033,7 @@
                   <div class="card-title">Kompaniyalar</div>
                 </div>
               </div>
-              <DataTable :columns="companyColumns" :rows="filteredCompanies" empty="Kompaniya topilmadi"
-                :on-cell-action="handleTableCellAction" />
+              <DataTable :columns="companyColumns" :rows="filteredCompanies" empty="Kompaniya topilmadi" />
             </section>
           </template>
 
@@ -1770,14 +1769,6 @@
           </label>
           <label class="label">Qo'shimcha eslatmalar (ixtiyoriy)
             <textarea v-model.trim="companyForm.notes" class="input" rows="3"></textarea>
-          </label>
-          <label class="label">Telegram guruhi (ixtiyoriy)
-            <select v-model="companyForm.chat_id" class="select">
-              <option value="">Guruh biriktirilmagan</option>
-              <option v-for="group in companyFormGroupOptions" :key="group.chat_id" :value="group.chat_id">
-                {{ group.label }}{{ group.company_name ? ` · hozir: ${group.company_name}` : '' }}
-              </option>
-            </select>
           </label>
           <label class="checkbox-label">
             <input type="checkbox" v-model="companyForm.is_active" /> Faol kompaniya
@@ -7020,7 +7011,7 @@ const groupColumns = [
 ];
 
 const companyColumns = [
-  { key: 'name', label: 'Kompaniya', action: 'companyEdit' },
+  { key: 'name', label: 'Kompaniya' },
   { key: 'brand', label: 'Brend', format: v => v || '—' },
   { key: 'business_status', label: 'Biznes holati', format: businessStatusLabel },
   { key: 'director', label: 'Direktor', format: v => v || '—' },
@@ -8442,10 +8433,6 @@ function handleTableCellAction({ action, row }) {
     openAssignCompany(row);
     return;
   }
-  if (action === 'companyEdit') {
-    openCompany(row);
-    return;
-  }
   if (action === 'companyGroups') {
     openCompanyGroupActivity(row);
     return;
@@ -8881,32 +8868,16 @@ async function openEmployeeCompanies(row = {}) {
   }
 }
 
-const companyForm = reactive({ id: '', name: '', legal_name: '', phone: '', notes: '', is_active: true, chat_id: '' });
-const companyFormGroupOptions = computed(() => [...groups.value]
-  .filter(group => group.chat_id)
-  .map(group => ({
-    chat_id: String(group.chat_id),
-    label: group.title || group.username || String(group.chat_id),
-    company_name: group.company_name || ''
-  }))
-  .sort((a, b) => a.label.localeCompare(b.label)));
+const companyForm = reactive({ id: '', name: '', legal_name: '', phone: '', notes: '', is_active: true });
 
-async function openCompany(row = {}) {
+function openCompany(row = {}) {
   companyForm.id = row.id || '';
   companyForm.name = row.name || '';
   companyForm.legal_name = row.legal_name || '';
   companyForm.phone = row.phone || '';
   companyForm.notes = row.notes || '';
   companyForm.is_active = row.is_active !== false;
-  companyForm.chat_id = row.groups?.[0]?.chat_id ? String(row.groups[0].chat_id) : '';
   modal.value = 'company';
-  if (!groups.value.length) {
-    try {
-      groups.value = await api.groups();
-    } catch (error) {
-      showToast(error.message);
-    }
-  }
 }
 
 async function saveCompany() {
@@ -8916,15 +8887,7 @@ async function saveCompany() {
   }
   startLoading('saveCompany');
   try {
-    const company = await api.saveCompany({ ...companyForm });
-    if (companyForm.chat_id && company?.id) {
-      try {
-        await api.assignChatCompany({ chat_id: companyForm.chat_id, company_id: company.id });
-        groups.value = await api.groups();
-      } catch (error) {
-        showToast(error.message);
-      }
-    }
+    await api.saveCompany({ ...companyForm });
     showToast('Kompaniya saqlandi');
     await loadCompanyInfoOptional();
     modal.value = '';
@@ -10345,6 +10308,7 @@ const webhookStatusText = computed(() => {
   const notes = info.diagnostics?.notes || [];
   const autoSync = telegramAutoSync.value;
   return [
+    `Ulangan bot: ${info.bot ? `@${info.bot.username || '—'} (${info.bot.first_name || ''}, id: ${info.bot.id})` : (info.bot_error ? `aniqlanmadi (${info.bot_error})` : '—')}`,
     `Manzil: ${info.url || '—'}`,
     `Kutilayotgan yangilanishlar: ${info.pending_update_count ?? 0}`,
     `Ruxsat etilgan yangilanishlar: ${(info.allowed_updates || []).join(', ') || '—'}`,

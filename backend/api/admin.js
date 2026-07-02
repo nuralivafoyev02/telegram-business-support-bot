@@ -10,7 +10,7 @@ const TELEGRAM_FILE_PROXY_MAX_BYTES = 20 * 1024 * 1024;
 const { allowCors, sendJson, readBody, getQuery } = require('../lib/http');
 const { login, requireAdmin, hashPassword } = require('../lib/auth');
 const { DEFAULT_TENANT_ID, runWithTenant, normalizeTenantId, getCurrentTenantId, shouldAttachTenantQuery } = require('../lib/tenant');
-const { sendMessage, sendBusinessMessage, getWebhookInfo, setWebhook, deleteWebhook, getUpdates, getFile, getFileWithToken, getUserProfilePhotos, downloadFile, downloadFileWithToken, resolveBotToken, tgUserName, escapeHtml } = require('../lib/telegram');
+const { sendMessage, sendBusinessMessage, getWebhookInfo, setWebhook, deleteWebhook, getUpdates, getMe, getFile, getFileWithToken, getUserProfilePhotos, downloadFile, downloadFileWithToken, resolveBotToken, tgUserName, escapeHtml } = require('../lib/telegram');
 const { optionalEnv } = require('../lib/env');
 const { normalizeSettings, clearBotSettingsCache } = require('../lib/bot-settings');
 const { normalizeAiIntegration, mergeAiIntegration, sanitizeAiIntegration, isAiIntegrationReady, isAiIntegrationConfigured, aiIntegrationSignature } = require('../lib/ai-config');
@@ -5289,7 +5289,15 @@ async function sendTelegramProfilePhoto(query, res) {
 }
 
 async function getTelegramWebhookStatus() {
-  return sanitizeWebhookInfo(await getWebhookInfo());
+  const [info, me] = await Promise.all([
+    getWebhookInfo(),
+    getMe().catch(error => ({ error: error.message }))
+  ]);
+  return {
+    ...sanitizeWebhookInfo(info),
+    bot: me && !me.error ? { id: me.id, username: me.username, first_name: me.first_name } : null,
+    bot_error: me && me.error ? me.error : null
+  };
 }
 
 async function connectTelegramWebhook(body = {}) {
