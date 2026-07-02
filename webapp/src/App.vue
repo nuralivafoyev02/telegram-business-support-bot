@@ -1033,7 +1033,8 @@
                   <div class="card-title">Kompaniyalar</div>
                 </div>
               </div>
-              <DataTable :columns="companyColumns" :rows="filteredCompanies" empty="Kompaniya topilmadi" />
+              <DataTable :columns="companyColumns" :rows="filteredCompanies" empty="Kompaniya topilmadi"
+                :on-cell-action="handleTableCellAction" />
             </section>
           </template>
 
@@ -7019,7 +7020,7 @@ const groupColumns = [
 ];
 
 const companyColumns = [
-  { key: 'name', label: 'Kompaniya' },
+  { key: 'name', label: 'Kompaniya', action: 'companyEdit' },
   { key: 'brand', label: 'Brend', format: v => v || '—' },
   { key: 'business_status', label: 'Biznes holati', format: businessStatusLabel },
   { key: 'director', label: 'Direktor', format: v => v || '—' },
@@ -8439,6 +8440,10 @@ function handleTableCellAction({ action, row }) {
   }
   if (action === 'companyAssign') {
     openAssignCompany(row);
+    return;
+  }
+  if (action === 'companyEdit') {
+    openCompany(row);
     return;
   }
   if (action === 'companyGroups') {
