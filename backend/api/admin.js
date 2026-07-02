@@ -4297,12 +4297,24 @@ function companyMatchesScopeKey(company = {}, scopeKey = '') {
   return scopeKey.startsWith('name:') && companyName && scopeKey === `name:${companyName}`;
 }
 
-function assignedCompaniesForEmployee(employee = {}, companyInfoCompanies = []) {
-  return companyInfoCompanies.filter(company => findEmployeeForCompanySupport(company, buildEmployeeMaps([employee])));
+function assignedCompaniesForEmployee(employee = {}, companyInfoCompanies = [], companyMembers = []) {
+  const employeeId = String(employee.id || '').trim();
+  const memberCompanyIds = new Set(
+    (Array.isArray(companyMembers) ? companyMembers : [])
+      .filter(member => member.is_active !== false && employeeId && String(member.employee_id || '').trim() === employeeId)
+      .map(member => String(member.company_id || '').trim())
+      .filter(Boolean)
+  );
+  const employeeMaps = buildEmployeeMaps([employee]);
+  return companyInfoCompanies.filter(company => {
+    const companyId = companyDirectoryId(company);
+    if (companyId && memberCompanyIds.has(companyId)) return true;
+    return !!findEmployeeForCompanySupport(company, employeeMaps);
+  });
 }
 
-function resolvePeriodCompaniesForEmployee({ employee, periodKey, periodCompanyKeys, companyInfoCompanies = [] }) {
-  const assigned = assignedCompaniesForEmployee(employee, companyInfoCompanies);
+function resolvePeriodCompaniesForEmployee({ employee, periodKey, periodCompanyKeys, companyInfoCompanies = [], companyMembers = [] }) {
+  const assigned = assignedCompaniesForEmployee(employee, companyInfoCompanies, companyMembers);
   if (!periodKey || periodKey === 'all') return assigned;
   if (!periodCompanyKeys.size) return [];
   return assigned.filter(company => [...periodCompanyKeys].some(key => companyMatchesScopeKey(company, key)));
@@ -4478,9 +4490,13 @@ async function getEmployeeActivity(query = {}) {
   });
   const employeeMaps = buildEmployeeMaps(allEmployees.length ? allEmployees : [enrichedEmployee]);
   const businessConnectionEmployee = await loadBusinessConnectionEmployeeMap(requests, allChatMessages, allEmployees.length ? allEmployees : [enrichedEmployee]);
-  const companyInfoCache = await getCachedCompanyInfo().catch(() => null);
-  const companyInfoCompanies = resolveCachedCompanyInfoCompanies(companyInfoCache);
-  const enrichedActivityChats = enrichChatsWithCompanyAssignments(chats, companyInfoCompanies, []);
+  const [companyInfoCache, localCompanies, companyMembers] = await Promise.all([
+    getCachedCompanyInfo().catch(() => null),
+    supabase.select('companies', { select: 'id,name,legal_name,phone,notes,is_active,created_at', limit: '2000' }).catch(() => []),
+    supabase.select('company_members', { select: 'company_id,employee_id,member_type,is_active', limit: '5000' }).catch(() => [])
+  ]);
+  const companyInfoCompanies = mergeCompanyDirectoryRows(localCompanies, resolveCachedCompanyInfoCompanies(companyInfoCache));
+  const enrichedActivityChats = enrichChatsWithCompanyAssignments(chats, companyInfoCompanies, localCompanies);
   const activityChatMap = new Map(enrichedActivityChats.map(chat => [telegramIdKey(chat.chat_id), chat]));
   const supportMaps = buildOpenRequestSupportMaps({
     companyInfoCompanies,
@@ -4752,12 +4768,13 @@ async function getEmployeeActivity(query = {}) {
     const key = companyScopeKeyForRequest(request, chat);
     if (key) periodCompanyKeys.add(key);
   });
-  const assignedCompanies = assignedCompaniesForEmployee(enrichedEmployee, companyInfoCompanies);
+  const assignedCompanies = assignedCompaniesForEmployee(enrichedEmployee, companyInfoCompanies, companyMembers);
   const periodCompanies = resolvePeriodCompaniesForEmployee({
     employee: enrichedEmployee,
     periodKey,
     periodCompanyKeys,
-    companyInfoCompanies
+    companyInfoCompanies,
+    companyMembers
   });
 
   return {

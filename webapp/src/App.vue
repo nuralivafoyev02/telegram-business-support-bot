@@ -5197,7 +5197,7 @@ const companyInfoRows = computed(() => attachCompanyInfoGroups(
 ));
 const visibleCompanyInfoRows = computed(() => companyInfoRows.value.filter(hasCompanySupport));
 const filteredCompanyInfoRows = computed(() => visibleCompanyInfoRows.value.filter(includesSearch));
-const filteredCompanies = computed(() => filteredCompanyInfoRows.value);
+const filteredCompanies = computed(() => companyInfoRows.value.filter(includesSearch));
 function companyAssignKey(row = {}) {
   return String(row.id || row.name || row.phone || '').trim();
 }
