@@ -4098,7 +4098,7 @@ async function migrateCompanyReportHistory(query = {}) {
 }
 
 async function listEmployees(query) {
-  const [employees, requests, chats, messages] = await Promise.all([
+  const [employees, requests, chats, messages, companyMembers] = await Promise.all([
     supabase.select('employees', {
       select: 'id,tg_user_id,full_name,username,phone,role,clickup_user_id,is_active,last_activity_at,created_at',
       order: supabase.order(query.orderBy || 'created_at', false),
@@ -4116,6 +4116,11 @@ async function listEmployees(query) {
     supabase.select('messages', {
       select: 'id,tg_message_id,chat_id,from_tg_user_id,from_name,from_username,employee_id,business_connection_id,source_type,classification,text,raw,created_at',
       order: supabase.order('created_at', false),
+      limit: '5000'
+    }).catch(() => []),
+    supabase.select('company_members', {
+      select: 'employee_id,company_id',
+      is_active: 'eq.true',
       limit: '5000'
     }).catch(() => [])
   ]);
@@ -4233,6 +4238,7 @@ async function listEmployees(query) {
       .sort((a, b) => (b.message_count + b.closed_count + b.open_count) - (a.message_count + a.closed_count + a.open_count));
     return {
       ...employee,
+      company_id: companyMembers.find(m => String(m.employee_id) === String(employee.id))?.company_id || null,
       telegram_is_premium: premiumByTgId.get(telegramIdKey(employee.tg_user_id)) === true,
       received_requests: related.length,
       closed_requests: closed.length,
@@ -5800,12 +5806,46 @@ async function upsertEmployee(body) {
 
   if (body.id) {
     const rows = await supabase.patch('employees', { id: supabase.eq(body.id) }, values);
-    return rows[0];
+    const employee = rows[0];
+
+    if (employee && body.company_id !== undefined) {
+      if (body.company_id) {
+        const memberType = body.role === 'manager' || body.role === 'company_manager' ? 'manager' : 'employee';
+        await supabase.remove('company_members', { employee_id: supabase.eq(employee.id) }).catch(() => null);
+        await supabase.insert('company_members', [{
+          company_id: body.company_id,
+          employee_id: employee.id,
+          tg_user_id: employee.tg_user_id,
+          member_type: memberType,
+          is_active: true
+        }]).catch(() => null);
+      } else {
+        await supabase.remove('company_members', { employee_id: supabase.eq(employee.id) }).catch(() => null);
+      }
+    }
+    return employee;
   }
 
   const options = tgUserId ? { upsert: true, onConflict: 'tg_user_id' } : {};
   const rows = await supabase.insert('employees', [values], options);
-  return rows[0];
+  const employee = rows[0];
+
+  if (employee && body.company_id !== undefined) {
+    if (body.company_id) {
+      const memberType = body.role === 'manager' || body.role === 'company_manager' ? 'manager' : 'employee';
+      await supabase.insert('company_members', [{
+        company_id: body.company_id,
+        employee_id: employee.id,
+        tg_user_id: employee.tg_user_id,
+        member_type: memberType,
+        is_active: true
+      }], { upsert: true, onConflict: 'company_id,employee_id' }).catch(() => null);
+    } else {
+      await supabase.remove('company_members', { employee_id: supabase.eq(employee.id) }).catch(() => null);
+    }
+  }
+
+  return employee;
 }
 
 async function deleteEmployee(body = {}) {

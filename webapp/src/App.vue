@@ -1672,6 +1672,14 @@
               <option value="admin">Bot admin</option>
             </select>
           </label>
+          <label class="label">Kompaniya
+            <select v-model="employeeForm.company_id" class="select">
+              <option value="">Biriktirilmagan</option>
+              <option v-for="company in assignCompanyOptions" :key="company.assign_key" :value="company.assign_key">
+                {{ companyAssignLabel(company) }}
+              </option>
+            </select>
+          </label>
           <label class="label">Holat
             <select v-model="employeeForm.is_active" class="select">
               <option :value="true">Faol</option>
@@ -3090,7 +3098,7 @@ const broadcastForm = reactive({ target_type: 'groups', title: 'Yangilik', text:
 const customPeriodForm = reactive({ start: '', end: '', appliedStart: '', appliedEnd: '' });
 const customPeriodError = ref('');
 const companyAssignForm = reactive({ companyKey: '', search: '' });
-const employeeForm = reactive({ id: '', tg_user_id: '', full_name: '', username: '', phone: '', role: 'support', clickup_user_id: '', is_active: true });
+const employeeForm = reactive({ id: '', tg_user_id: '', full_name: '', username: '', phone: '', role: 'support', clickup_user_id: '', is_active: true, company_id: '' });
 const adminForm = reactive({ username: 'admin', full_name: 'Tizim admini', new_password: '' });
 const integrationForm = reactive({
   enabled: true,
@@ -8490,7 +8498,8 @@ function openEmployee(row = null) {
     phone: row?.phone || '',
     role: row?.role || 'support',
     clickup_user_id: row?.clickup_user_id || '',
-    is_active: row?.is_active ?? true
+    is_active: row?.is_active ?? true,
+    company_id: row?.company_id || ''
   });
   modal.value = 'employee';
 }
