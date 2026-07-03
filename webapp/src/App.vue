@@ -36,19 +36,8 @@
         <img class="logo" :src="uyqurLogoUrl" alt="Uyqur" width="42" height="42" />
         <div>
           <div class="brand-title">Uyqur Yordam</div>
-          <h4
-          href="content-creator" 
-          style="
-            font-size: 10px !important;
-            opacity: 0 !important;
-            transition: all 0.2s ease !important;
-            color: var(--muted) !important;
-          .content-creator:hover {
-            opacity: 1 !important;
-          }">
-            Made by: <a href="https://t.me/uyqur_nurali" target="_blank" style="color: var(--brand-blue) !important;
-            text-decoration: underline !important;
-            letter-spacing: 0.5px !important; ">Nurali Vafoyev</a>
+          <h4 href="content-creator">
+            Made by: <a href="https://t.me/uyqur_nurali" target="_blank">Nurali Vafoyev</a>
           </h4>
         </div>
       </div>
