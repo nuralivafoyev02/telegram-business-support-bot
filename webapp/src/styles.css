@@ -156,7 +156,7 @@ button:disabled {
   color: var(--brand-blue) !important;
   text-decoration: underline !important;
 }
-.brand-wrapper:hover + .dashboard-creator{
+.dashboard-creator:hover {
   opacity: 1 !important;
   transform: translateY(15px);
 }
