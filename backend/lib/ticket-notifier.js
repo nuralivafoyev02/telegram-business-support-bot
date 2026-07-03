@@ -254,6 +254,20 @@ async function loadCompanyContext(companyId, companyInfo = null, nameHint = '') 
     }
   }
 
+  const resolvedCompanyId = company?.id || companyId;
+  if (!supportEmployee && resolvedCompanyId) {
+    const members = await supabase.select('company_members', {
+      select: 'employee_id,member_type',
+      company_id: supabase.eq(resolvedCompanyId),
+      is_active: 'eq.true',
+      limit: '20'
+    }).catch(() => []);
+    const preferred = members.find(m => m.member_type === 'manager' || m.member_type === 'owner') || members[0];
+    if (preferred?.employee_id) {
+      supportEmployee = await loadEmployeeById(preferred.employee_id);
+    }
+  }
+
   return {
     name: company?.name || externalName || 'Biriktirilmagan',
     supportEmployee
@@ -425,7 +439,6 @@ async function buildNotificationText({ request, chat, company, openedByEmployee,
     `🏢 <b>Kompaniya:</b> ${escapeHtml(company.name || 'Biriktirilmagan')}`,
     `👤 <b>Kompaniya mas'uli:</b> ${escapeHtml(employeeLabel(company.supportEmployee, '—'))}`,
     `👥 <b>Mijoz:</b> ${escapeHtml(request.customer_name || request.customer_username || '—')}`,
-    `📩 <b>Murojaat:</b> ${escapeHtml(truncateText(request.initial_text))}`,
     isClosed && closedByName ? `💬 <b>Javob berdi:</b> ${escapeHtml(closedByName)}` : null,
     link ? `🔗 <a href="${escapeHtml(link)}">Xabarni Telegramda ochish</a>` : null,
     assignedEmployee ? `✅ <b>Mas'ul (ishlayapti):</b> ${escapeHtml(assigned)}` : null
