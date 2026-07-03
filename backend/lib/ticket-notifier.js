@@ -415,33 +415,25 @@ function closedStatusLabel(request = {}, options = {}) {
 }
 
 async function buildNotificationText({ request, chat, company, openedByEmployee, assignedEmployee, options = {} }) {
-  const companySupport = employeeLabel(company.supportEmployee, '—');
-  const markedBy = employeeLabel(openedByEmployee, '—');
   const assigned = employeeLabel(assignedEmployee, '—');
   const link = telegramMessageLink(chat, request.initial_message_id);
   const statusLabel = closedStatusLabel(request, options);
   const closedByName = String(options.closedByName || request.closed_by_name || '').trim();
-  const solutionText = String(options.solutionText || '').trim();
+  const isClosed = request.status === 'closed' && isAnsweredCloseSource(options.closeSource);
   const lines = [
     `<b>${statusLabel}</b>`,
     '',
     `🏢 <b>Kompaniya:</b> ${escapeHtml(company.name || 'Biriktirilmagan')}`,
-    `👤 <b>Kompaniya mas'uli:</b> ${escapeHtml(companySupport)}`,
-    openedByEmployee ? `👁 <b>Belgilagan:</b> ${escapeHtml(markedBy)}` : null,
-    assignedEmployee && assignedEmployee.id !== openedByEmployee?.id
-      ? `✅ <b>Mas'ul (ishlayapti):</b> ${escapeHtml(assigned)}`
-      : null,
-    request.status === 'closed' && isAnsweredCloseSource(options.closeSource) && closedByName
-      ? `💬 <b>Javob berdi:</b> ${escapeHtml(closedByName)}`
-      : null,
-    request.status === 'closed' && isAnsweredCloseSource(options.closeSource) && solutionText
-      ? `📝 <b>Javob:</b> ${escapeHtml(truncateText(solutionText))}`
-      : null,
+    company.supportEmployee ? `👤 <b>Kompaniya mas'uli:</b> ${escapeHtml(employeeLabel(company.supportEmployee, '—'))}` : null,
+    `👥 <b>Mijoz:</b> ${escapeHtml(request.customer_name || request.customer_username || '—')}`,
+    '',
     `📩 <b>Murojaat:</b> ${escapeHtml(truncateText(request.initial_text))}`,
+    isClosed && closedByName ? `💬 <b>Javob berdi:</b> ${escapeHtml(closedByName)}` : null,
     link ? `🔗 <a href="${escapeHtml(link)}">Xabarni Telegramda ochish</a>` : null,
+    '',
     `📌 <b>Manba:</b> ${escapeHtml(openSourceLabel(request.open_source))}`,
-    `👥 <b>Mijoz:</b> ${escapeHtml(request.customer_name || request.customer_username || '—')}`
-  ].filter(Boolean);
+    assignedEmployee ? `✅ <b>Mas'ul (ishlayapti):</b> ${escapeHtml(assigned)}` : null
+  ].filter(line => line !== null);
   return lines.join('\n');
 }
 

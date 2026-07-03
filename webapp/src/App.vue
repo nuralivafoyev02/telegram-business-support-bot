@@ -1033,7 +1033,8 @@
                   <div class="card-title">Kompaniyalar</div>
                 </div>
               </div>
-              <DataTable :columns="companyColumns" :rows="filteredCompanies" empty="Kompaniya topilmadi" />
+              <DataTable :columns="companyColumns" :rows="filteredCompanies" empty="Kompaniya topilmadi"
+                :on-cell-action="handleTableCellAction" />
             </section>
           </template>
 
@@ -1769,6 +1770,14 @@
           </label>
           <label class="label">Qo'shimcha eslatmalar (ixtiyoriy)
             <textarea v-model.trim="companyForm.notes" class="input" rows="3"></textarea>
+          </label>
+          <label class="label">Telegram guruhi (ixtiyoriy)
+            <select v-model="companyForm.chat_id" class="select">
+              <option value="">Guruh biriktirilmagan</option>
+              <option v-for="group in companyFormGroupOptions" :key="group.chat_id" :value="group.chat_id">
+                {{ group.label }}{{ group.company_name ? ` · hozir: ${group.company_name}` : '' }}
+              </option>
+            </select>
           </label>
           <label class="checkbox-label">
             <input type="checkbox" v-model="companyForm.is_active" /> Faol kompaniya
@@ -7011,7 +7020,7 @@ const groupColumns = [
 ];
 
 const companyColumns = [
-  { key: 'name', label: 'Kompaniya' },
+  { key: 'name', label: 'Kompaniya', action: 'companyEdit' },
   { key: 'brand', label: 'Brend', format: v => v || '—' },
   { key: 'business_status', label: 'Biznes holati', format: businessStatusLabel },
   { key: 'director', label: 'Direktor', format: v => v || '—' },
@@ -8269,6 +8278,7 @@ async function submitLogin() {
     const data = await api.login(loginForm.username, loginForm.password);
     loginStatus.value = 'Muvaffaqiyatli. Panel yuklanmoqda...';
     loginStatusType.value = 'success';
+    resetTenantScopedState();
     token.value = data.token;
     showToast(data.fallback ? 'Kirdingiz. DB admin yarating yoki parolni o‘zgartiring.' : 'Xush kelibsiz!');
     loadSettings().catch(error => showToast(error.message));
@@ -8285,11 +8295,25 @@ async function submitLogin() {
   }
 }
 
+function resetTenantScopedState() {
+  dashboard.summary = {};
+  dashboard.employeeStats = [];
+  dashboard.chatStats = [];
+  dashboard.openRequests = [];
+  dashboard.analytics = {};
+  groups.value = [];
+  privates.value = [];
+  employees.value = [];
+  clickupTasks.value = [];
+  companyInfo.value = { summary: {}, companies: [], fetched_at: '', source: '' };
+}
+
 function logout() {
   actionMenuOpen.value = false;
   stopTelegramAutoSync();
   setToken('');
   token.value = '';
+  resetTenantScopedState();
 }
 
 function openSend(row) {
@@ -8431,6 +8455,10 @@ function handleTableCellAction({ action, row }) {
   }
   if (action === 'companyAssign') {
     openAssignCompany(row);
+    return;
+  }
+  if (action === 'companyEdit') {
+    openCompany(row);
     return;
   }
   if (action === 'companyGroups') {
