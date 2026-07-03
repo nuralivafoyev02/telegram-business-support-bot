@@ -150,15 +150,16 @@ button:disabled {
   text-align: center;
   transition: all 0.2s ease !important;
   color: var(--muted) !important;
-  transform: translateY(10px);
+  transform: translateY(0px);
 }
 .dashboard-creator a{
   color: var(--brand-blue) !important;
   text-decoration: underline !important;
 }
-.dashboard-creator:hover {
+.brand-title:hover .dashboard-creator{
   opacity: 1 !important;
-  transform: translateY(0px);
+  transform: translateY(15px);
+  background-color: var(--chat-in-bg);
 }
 /* ============================ */
 .nav-bottom {
