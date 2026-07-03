@@ -76,10 +76,9 @@ button:disabled {
   border: 1px solid rgba(165, 205, 255, .14);
   border-radius: 8px;
   background: linear-gradient(180deg, rgba(255, 255, 255, .06), rgba(255, 255, 255, .025));
-  overflow: hidden;
 }
 
-.brand::before {
+/* .brand::before {
   content: "";
   position: absolute;
   inset: -50%;
@@ -98,13 +97,13 @@ button:disabled {
 .brand>* {
   position: relative;
   z-index: 1;
-}
+} */
 
-@keyframes brandBorder {
+/* @keyframes brandBorder {
   to {
     transform: rotate(360deg);
   }
-}
+} */
 
 @media (prefers-reduced-motion: reduce) {
   .brand::before {
@@ -158,9 +157,9 @@ button:disabled {
   color: var(--brand-blue) !important;
   text-decoration: underline !important;
 }
-.dashboard-creator:hover {
+.brand-wrapper:hover > .dashboard-creator {
   opacity: 1 !important;
-  transform: translateY(15px);
+  transform: translateY(15px) !important;
 }
 /* ============================ */
 .nav-bottom {
