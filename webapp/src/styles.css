@@ -67,24 +67,6 @@ button:disabled {
   flex-direction: column;
   gap: 18px;
 }
-/* ============================ */
-.content-creator {
-  display: flex;
-  position: absolute;
-  bottom: 0;
-  font-size: 10px !important;
-  opacity: 0 !important;
-  transition: all 0.2s ease !important;
-  color: var(--muted) !important;
-}
-.content-creator a{
-  color: var(--brand-blue) !important;
-  text-decoration: underline !important;
-}
-.content-creator:hover {
-  opacity: 1 !important;
-}
-/* ============================ */
 .brand {
   position: relative;
   display: flex;
@@ -154,7 +136,24 @@ button:disabled {
   display: grid;
   gap: 5px;
 }
-
+/* ============================ */
+.content-creator {
+  display: flex;
+  position: absolute;
+  bottom: 0;
+  font-size: 10px !important;
+  opacity: 0 !important;
+  transition: all 0.2s ease !important;
+  color: var(--muted) !important;
+}
+.content-creator a{
+  color: var(--brand-blue) !important;
+  text-decoration: underline !important;
+}
+.content-creator:hover {
+  opacity: 1 !important;
+}
+/* ============================ */
 .nav-bottom {
   margin-top: auto;
 }
