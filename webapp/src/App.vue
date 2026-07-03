@@ -36,9 +36,9 @@
         <img class="logo" :src="uyqurLogoUrl" alt="Uyqur" width="42" height="42" />
         <div>
           <div class="brand-title">Uyqur Yordam</div>
-          <div href="content-creator">
-            Made by: <a href="https://t.me/uyqur_nurali" blank_>Nurali Vafoyev</a>
-          </div>
+          <h4 href="content-creator">
+            Made by: <a href="https://t.me/uyqur_nurali" target="_blank">Nurali Vafoyev</a>
+          </h4>
         </div>
       </div>
 
