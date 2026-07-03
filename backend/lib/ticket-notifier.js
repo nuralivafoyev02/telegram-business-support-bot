@@ -422,16 +422,12 @@ async function buildNotificationText({ request, chat, company, openedByEmployee,
   const isClosed = request.status === 'closed' && isAnsweredCloseSource(options.closeSource);
   const lines = [
     `<b>${statusLabel}</b>`,
-    '',
     `🏢 <b>Kompaniya:</b> ${escapeHtml(company.name || 'Biriktirilmagan')}`,
-    company.supportEmployee ? `👤 <b>Kompaniya mas'uli:</b> ${escapeHtml(employeeLabel(company.supportEmployee, '—'))}` : null,
+    `👤 <b>Kompaniya mas'uli:</b> ${escapeHtml(employeeLabel(company.supportEmployee, '—'))}`,
     `👥 <b>Mijoz:</b> ${escapeHtml(request.customer_name || request.customer_username || '—')}`,
-    '',
     `📩 <b>Murojaat:</b> ${escapeHtml(truncateText(request.initial_text))}`,
     isClosed && closedByName ? `💬 <b>Javob berdi:</b> ${escapeHtml(closedByName)}` : null,
     link ? `🔗 <a href="${escapeHtml(link)}">Xabarni Telegramda ochish</a>` : null,
-    '',
-    `📌 <b>Manba:</b> ${escapeHtml(openSourceLabel(request.open_source))}`,
     assignedEmployee ? `✅ <b>Mas'ul (ishlayapti):</b> ${escapeHtml(assigned)}` : null
   ].filter(line => line !== null);
   return lines.join('\n');
