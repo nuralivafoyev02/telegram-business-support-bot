@@ -34,7 +34,7 @@
     <aside class="sidebar">
       <div class="brand">
         <img class="logo" :src="uyqurLogoUrl" alt="Uyqur" width="42" height="42" />
-        <div>
+        <div class="brand-wrapper">
           <div class="brand-title">Uyqur Yordam</div>
           <strong class="dashboard-creator">
             Made by: <a href="https://t.me/uyqur_nurali" target="_blank">Nurali Vafoyev</a>
@@ -359,12 +359,12 @@
                     <strong style="display: flex; gap: 10px; font-size: 14px;">
                       <span class="total-text" style="color: var(--text);" title="Jami ticketlar">{{
                         fmtNumber(row.total_requests)
-                        }}</span>
+                      }}</span>
                       <span class="closed-text" style="color: #00d26a;" title="Javob berilgan">{{
                         fmtNumber(row.closed_requests)
-                        }}</span>
+                      }}</span>
                       <span class="open-text" style="color: #f73164;" title="Ochiq">{{ fmtNumber(row.open_requests)
-                        }}</span>
+                      }}</span>
                     </strong>
                   </article>
                 </div>
@@ -460,7 +460,7 @@
                       </div>
                       <div class="timeline-status">
                         <span class="status-pill mini" :class="expiryStatusClass(row)">{{ expiryStatusLabel(row)
-                          }}</span>
+                        }}</span>
                         <small>{{ businessStatusLabel(row.business_status) }}</small>
                       </div>
                     </article>
@@ -620,7 +620,7 @@
                       <span class="company-module-summary-label">{{ column.label }}</span>
                       <div class="company-module-summary-metrics">
                         <b class="company-module-summary-value">{{ companyModuleTableSummary.modulePercents[column.key]
-                          }}%</b>
+                        }}%</b>
                         <span
                           v-if="companyModuleCompareEnabled && companyModuleTableSummary.moduleComparisons[column.key]"
                           class="trend-label module-trend-label company-module-summary-delta"
@@ -633,7 +633,7 @@
                   <div v-if="companyModuleTableSummary.supportStaff.length" class="company-module-summary-support">
                     <span class="company-module-summary-support-label">Mas’ul xodimlar</span>
                     <b class="company-module-summary-support-value">{{ companyModuleTableSummary.supportStaff.join(', ')
-                      }}</b>
+                    }}</b>
                   </div>
                 </div>
                 <div class="company-module-table-wrap">
@@ -2015,12 +2015,12 @@
             <div>
               <span>Xabarlar</span>
               <b>{{ fmtNumber(companyGroupDetail.company?.total_messages || companyGroupDetail.summary?.total_messages)
-                }}</b>
+              }}</b>
             </div>
             <div>
               <span>Ticketlar</span>
               <b>{{ fmtNumber(companyGroupDetail.company?.total_requests || companyGroupDetail.summary?.total_requests)
-                }}</b>
+              }}</b>
             </div>
             <div>
               <span>Yopilgan</span>
@@ -2030,7 +2030,7 @@
             <div>
               <span>Ochiq</span>
               <b>{{ fmtNumber(companyGroupDetail.company?.open_requests || companyGroupDetail.summary?.open_requests)
-                }}</b>
+              }}</b>
             </div>
           </section>
 
@@ -2285,12 +2285,12 @@
                   @click="employeeManagerDetailsOpen = !employeeManagerDetailsOpen">
                   <span class="employee-manager-heading-icon" aria-hidden="true">{{ employeeManagerDetailsOpen ? '▾' :
                     '▸'
-                    }}</span>
+                  }}</span>
                   <span>{{ employeeProfile.employee?.full_name || employeeProfile.employee?.username || 'Xodim'
-                    }}</span>
+                  }}</span>
                 </button>
                 <template v-else>{{ employeeProfile.employee?.full_name || employeeProfile.employee?.username || 'Xodim'
-                  }}</template>
+                }}</template>
               </h2>
               <p>Support yozishmalari</p>
               <span>Davr: {{ selectedPeriodLabel }}</span>
@@ -2337,7 +2337,7 @@
             <div class="employee-profile-pills">
               <span class="profile-pill">🛡️ SLA <b>{{ fmtPercent(employeeProfile.summary?.sla) }}</b></span>
               <span class="profile-pill">✅ Yopish foizi <b>{{ fmtPercent(employeeProfile.summary?.close_rate)
-                  }}</b></span>
+              }}</b></span>
               <span class="profile-pill">⭐ Reyting <b>#{{ employeeProfile.rank || '—' }}</b></span>
             </div>
           </header>
@@ -2426,7 +2426,7 @@
 
                   <div v-if="employeeProfileChatLoading" class="metric-chat-state">Chat yuklanmoqda...</div>
                   <div v-else-if="employeeProfileChatError" class="metric-chat-state error">{{ employeeProfileChatError
-                    }}
+                  }}
                   </div>
                   <div v-else-if="employeeProfileConversation.length" ref="employeeProfileThreadRef"
                     class="telegram-thread employee-profile-thread">

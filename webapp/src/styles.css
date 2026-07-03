@@ -120,6 +120,9 @@ button:disabled {
   object-fit: cover;
   flex-shrink: 0;
 }
+.brand-wrapper{
+  position: relative;
+}
 
 .brand-title {
   font-weight: 800;
@@ -138,11 +141,13 @@ button:disabled {
 }
 /* ============================ */
 .dashboard-creator {
-  display: flex;
   position: absolute;
-  bottom: 0;
-  font-size: 10px !important;
+  bottom: -3px;
+  left: 0;
+  font-size: 11px !important;
   opacity: 0 !important;
+  width: 100%;
+  text-align: center;
   transition: all 0.2s ease !important;
   color: var(--muted) !important;
 }
