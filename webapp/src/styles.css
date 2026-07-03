@@ -67,7 +67,22 @@ button:disabled {
   flex-direction: column;
   gap: 18px;
 }
-
+/* ============================ */
+.content-creator {
+  font-size: 10px !important;
+  opacity: 0 !important;
+  transition: all 0.2s ease !important;
+  color: var(--muted) !important;
+}
+.content-creator a{
+  color: var(--brand-blue) !important;
+  text-decoration: underline !important;
+  letter-spacing: 0.5px !important; 
+}
+.content-creator:hover {
+  opacity: 1 !important;
+}
+/* ============================ */
 .brand {
   position: relative;
   display: flex;
@@ -6689,20 +6704,3 @@ input:checked + .slider:before {
 .manager-metric b {
   font-weight: 700;
 }
-/* ============================ */
-.content-creator {
-  font-size: 10px;
-  opacity: 0;
-  transition: all 0.2s ease;
-  color: var(--muted);
-}
-.content-creator a{
-  color: var(--brand-blue);
-  text-decoration: underline;
-  letter-spacing: 0.5px;
-}
-
-.content-creator:hover {
-  opacity: 1;
-}
-/* ============================ */
