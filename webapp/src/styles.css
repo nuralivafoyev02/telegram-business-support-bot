@@ -156,10 +156,9 @@ button:disabled {
   color: var(--brand-blue) !important;
   text-decoration: underline !important;
 }
-.brand-wrapper:hover .dashboard-creator{
+.brand-wrapper:hover + .dashboard-creator{
   opacity: 1 !important;
   transform: translateY(15px);
-  background-color: var(--chat-in-bg);
 }
 /* ============================ */
 .nav-bottom {
