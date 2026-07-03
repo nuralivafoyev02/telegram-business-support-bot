@@ -137,7 +137,7 @@ button:disabled {
   gap: 5px;
 }
 /* ============================ */
-.content-creator {
+.dashboard-creator {
   display: flex;
   position: absolute;
   bottom: 0;
@@ -146,11 +146,11 @@ button:disabled {
   transition: all 0.2s ease !important;
   color: var(--muted) !important;
 }
-.content-creator a{
+.dashboard-creator a{
   color: var(--brand-blue) !important;
   text-decoration: underline !important;
 }
-.content-creator:hover {
+.dashboard-creator:hover {
   opacity: 1 !important;
 }
 /* ============================ */
