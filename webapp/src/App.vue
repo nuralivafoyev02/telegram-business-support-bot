@@ -34,8 +34,11 @@
     <aside class="sidebar">
       <div class="brand">
         <img class="logo" :src="uyqurLogoUrl" alt="Uyqur" width="42" height="42" />
-        <div>
+        <div class="brand-wrapper">
           <div class="brand-title">Uyqur Yordam</div>
+          <strong class="dashboard-creator">
+            Made by: <a href="https://t.me/uyqur_nurali" target="_blank">Nurali Vafoyev</a>
+          </strong>
         </div>
       </div>
 
@@ -354,9 +357,14 @@
                       <span class="company-ticket-fill open" :style="companyTicketOpenStyle(row)"></span>
                     </div>
                     <strong style="display: flex; gap: 10px; font-size: 14px;">
-                      <span class="total-text" style="color: var(--text);" title="Jami ticketlar">{{ fmtNumber(row.total_requests) }}</span>
-                      <span class="closed-text" style="color: #00d26a;" title="Javob berilgan">{{ fmtNumber(row.closed_requests) }}</span>
-                      <span class="open-text" style="color: #f73164;" title="Ochiq">{{ fmtNumber(row.open_requests) }}</span>
+                      <span class="total-text" style="color: var(--text);" title="Jami ticketlar">{{
+                        fmtNumber(row.total_requests)
+                      }}</span>
+                      <span class="closed-text" style="color: #00d26a;" title="Javob berilgan">{{
+                        fmtNumber(row.closed_requests)
+                      }}</span>
+                      <span class="open-text" style="color: #f73164;" title="Ochiq">{{ fmtNumber(row.open_requests)
+                      }}</span>
                     </strong>
                   </article>
                 </div>
@@ -518,26 +526,21 @@
                     <div class="card-title">Bo‘limlar foydalanish statistikasi</div>
                   </div>
                   <div class="company-module-table-controls">
-                    <div class="company-module-filter company-module-filter-wide company-module-filter-menu-wrap" ref="companyModuleFilterMenuRef">
+                    <div class="company-module-filter company-module-filter-wide company-module-filter-menu-wrap"
+                      ref="companyModuleFilterMenuRef">
                       <span>Filter</span>
                       <div class="company-module-filter-picker">
-                        <button
-                          type="button"
-                          class="company-module-filter-trigger select mini-select"
+                        <button type="button" class="company-module-filter-trigger select mini-select"
                           @click.stop="toggleCompanyModuleFilterMenu">
                           <span class="company-module-filter-trigger-label">{{ companyModuleFilterButtonLabel }}</span>
                           <span class="company-module-filter-trigger-caret">▾</span>
                         </button>
                         <Transition name="fade">
-                          <div
-                            v-if="companyModuleFilterMenuOpen"
-                            class="company-module-filter-menu actions-dropdown"
+                          <div v-if="companyModuleFilterMenuOpen" class="company-module-filter-menu actions-dropdown"
                             @click.stop>
                             <template v-if="!companyModuleFilterMenuGroup">
-                              <button
-                                v-for="group in companyModuleControlGroups"
-                                :key="`module-filter-menu-${group.key}`"
-                                type="button"
+                              <button v-for="group in companyModuleControlGroups"
+                                :key="`module-filter-menu-${group.key}`" type="button"
                                 class="company-module-filter-menu-group"
                                 @click="group.key === 'show' ? selectCompanyModuleControlOption(group, group.options[0]) : openCompanyModuleFilterGroup(group.key)">
                                 <span>{{ group.label }}</span>
@@ -545,23 +548,18 @@
                               </button>
                             </template>
                             <template v-else-if="companyModuleFilterActiveGroup">
-                              <button
-                                type="button"
-                                class="company-module-filter-back"
+                              <button type="button" class="company-module-filter-back"
                                 @click="companyModuleFilterMenuGroup = ''">
                                 <span class="company-module-filter-menu-arrow">‹</span>
                                 <span>{{ companyModuleFilterActiveGroup.label }}</span>
                               </button>
-                              <button
-                                v-for="option in companyModuleFilterActiveGroup.options"
+                              <button v-for="option in companyModuleFilterActiveGroup.options"
                                 :key="`module-filter-option-${companyModuleFilterActiveGroup.key}-${option.key}`"
-                                type="button"
-                                class="company-module-filter-option"
+                                type="button" class="company-module-filter-option"
                                 :class="{ active: isCompanyModuleControlOptionActive(companyModuleFilterActiveGroup, option) }"
                                 @click="selectCompanyModuleControlOption(companyModuleFilterActiveGroup, option)">
                                 <span>{{ option.label }}</span>
-                                <span
-                                  v-if="isCompanyModuleControlOptionActive(companyModuleFilterActiveGroup, option)"
+                                <span v-if="isCompanyModuleControlOptionActive(companyModuleFilterActiveGroup, option)"
                                   class="company-module-filter-check">✓</span>
                               </button>
                             </template>
@@ -571,25 +569,18 @@
                     </div>
                     <label class="company-module-filter">
                       <span>Davr</span>
-                      <select
-                        :value="companyModulePeriod"
-                        class="select mini-select"
+                      <select :value="companyModulePeriod" class="select mini-select"
                         @change="handleCompanyModulePeriodChange($event.target.value)"
                         @mousedown="handleCompanyModulePeriodSelectPointerDown"
                         @mouseup="handleCompanyModulePeriodSelectPointerUp">
-                        <option
-                          v-for="period in companyModulePeriodOptions"
-                          :key="`module-period-${period.key}`"
+                        <option v-for="period in companyModulePeriodOptions" :key="`module-period-${period.key}`"
                           :value="period.key">
                           {{ companyModulePeriodOptionLabel(period) }}
                         </option>
                       </select>
                     </label>
                     <div class="card-header-actions company-module-menu" ref="moduleCompareMenuRef">
-                      <button
-                        type="button"
-                        class="btn-icon mini-icon"
-                        title="Sozlamalar"
+                      <button type="button" class="btn-icon mini-icon" title="Sozlamalar"
                         @click="moduleCompareMenuOpen = !moduleCompareMenuOpen">
                         <span>⋯</span>
                       </button>
@@ -617,21 +608,19 @@
                       <span class="company-module-summary-label">O'rtacha faollik</span>
                       <div class="company-module-summary-metrics">
                         <b class="company-module-summary-value">{{ companyModuleTableSummary.avgPercent }}%</b>
-                        <span
-                          v-if="companyModuleCompareEnabled && companyModuleTableSummary.usedComparison"
+                        <span v-if="companyModuleCompareEnabled && companyModuleTableSummary.usedComparison"
                           class="trend-label module-trend-label company-module-summary-delta"
                           :class="companyModuleTableSummary.usedComparison.tone">
                           {{ companyModuleTableSummary.usedComparison.percentText }}
                         </span>
                       </div>
                     </div>
-                    <div
-                      v-for="column in companyModuleColumns"
-                      :key="`module-summary-${column.key}`"
+                    <div v-for="column in companyModuleColumns" :key="`module-summary-${column.key}`"
                       class="company-module-summary-cell">
                       <span class="company-module-summary-label">{{ column.label }}</span>
                       <div class="company-module-summary-metrics">
-                        <b class="company-module-summary-value">{{ companyModuleTableSummary.modulePercents[column.key] }}%</b>
+                        <b class="company-module-summary-value">{{ companyModuleTableSummary.modulePercents[column.key]
+                        }}%</b>
                         <span
                           v-if="companyModuleCompareEnabled && companyModuleTableSummary.moduleComparisons[column.key]"
                           class="trend-label module-trend-label company-module-summary-delta"
@@ -641,11 +630,10 @@
                       </div>
                     </div>
                   </div>
-                  <div
-                    v-if="companyModuleTableSummary.supportStaff.length"
-                    class="company-module-summary-support">
+                  <div v-if="companyModuleTableSummary.supportStaff.length" class="company-module-summary-support">
                     <span class="company-module-summary-support-label">Mas’ul xodimlar</span>
-                    <b class="company-module-summary-support-value">{{ companyModuleTableSummary.supportStaff.join(', ') }}</b>
+                    <b class="company-module-summary-support-value">{{ companyModuleTableSummary.supportStaff.join(', ')
+                    }}</b>
                   </div>
                 </div>
                 <div class="company-module-table-wrap">
@@ -657,16 +645,13 @@
                         <th class="module-business-col">Biznes holati</th>
                         <th class="module-support-col">Mas’ul xodim</th>
                         <th class="module-count-col">O'rtacha faollik</th>
-                        <th v-for="column in companyModuleColumns" :key="`module-head-${column.key}`">{{ column.label }}</th>
+                        <th v-for="column in companyModuleColumns" :key="`module-head-${column.key}`">{{ column.label }}
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
-                      <tr
-                        v-for="(row, index) in companyModuleTableRows"
-                        :key="row.id || row.name || index"
-                        class="company-module-row-clickable"
-                        role="button"
-                        tabindex="0"
+                      <tr v-for="(row, index) in companyModuleTableRows" :key="row.id || row.name || index"
+                        class="company-module-row-clickable" role="button" tabindex="0"
                         :title="`${row.name || 'Kompaniya'} xodimlar faolligini ko‘rish`"
                         @click="openCompanyModuleEmployeeDetail(row)"
                         @keydown.enter.prevent="openCompanyModuleEmployeeDetail(row)"
@@ -694,10 +679,8 @@
                               :title="`${row.module_active_count} / ${companyModuleKeys.length}`">
                               {{ row.module_active_percent }}%
                             </span>
-                            <span
-                              v-if="companyModuleCompareEnabled && row.module_percent_comparison"
-                              class="trend-label module-trend-label"
-                              :class="row.module_percent_comparison.tone"
+                            <span v-if="companyModuleCompareEnabled && row.module_percent_comparison"
+                              class="trend-label module-trend-label" :class="row.module_percent_comparison.tone"
                               :title="companyModuleCompareAgainstLabel">
                               {{ row.module_percent_comparison.percentText }}
                             </span>
@@ -705,9 +688,7 @@
                         </td>
                         <td v-for="column in companyModuleColumns" :key="`${row.id || row.name}-${column.key}`"
                           class="module-status-cell">
-                          <span
-                            v-if="moduleUsageDeltaMark(row, column.key)"
-                            class="module-status-delta"
+                          <span v-if="moduleUsageDeltaMark(row, column.key)" class="module-status-delta"
                             :class="moduleUsageDeltaMark(row, column.key) === '+' ? 'plus' : 'minus'"
                             :title="companyModuleCompareAgainstLabel">
                             {{ moduleUsageDeltaMark(row, column.key) }}
@@ -731,47 +712,38 @@
                 </div>
               </section>
 
-              <section v-if="companyModuleChartRows.length" class="card chart-card line-chart-card company-module-chart-card">
+              <section v-if="companyModuleChartRows.length"
+                class="card chart-card line-chart-card company-module-chart-card">
                 <div class="card-header chart-card-head company-module-chart-head">
                   <div>
                     <div class="card-title">Bo‘limlar dinamikasi</div>
                   </div>
                   <div class="company-module-chart-controls">
-                    <div
-                      class="company-module-filter company-module-filter-wide company-module-filter-menu-wrap"
+                    <div class="company-module-filter company-module-filter-wide company-module-filter-menu-wrap"
                       ref="companyModuleChartCompanyMenuRef">
                       <span>Kompaniyalar</span>
                       <div class="company-module-filter-picker">
-                        <button
-                          type="button"
-                          class="company-module-filter-trigger select mini-select"
+                        <button type="button" class="company-module-filter-trigger select mini-select"
                           @click.stop="toggleCompanyModuleChartCompanyMenu">
                           <span class="company-module-filter-trigger-label">{{ companyModuleChartCompanyLabel }}</span>
                           <span class="company-module-filter-trigger-caret">▾</span>
                         </button>
                         <Transition name="fade">
-                          <div
-                            v-if="companyModuleChartCompanyMenuOpen"
-                            class="company-module-filter-menu actions-dropdown"
-                            @click.stop>
-                            <button
-                              type="button"
-                              class="company-module-filter-option"
+                          <div v-if="companyModuleChartCompanyMenuOpen"
+                            class="company-module-filter-menu actions-dropdown" @click.stop>
+                            <button type="button" class="company-module-filter-option"
                               :class="{ active: !companyModuleChartCompanyId }"
                               @click="selectCompanyModuleChartCompany('')">
                               <span>Hammasi</span>
                               <span v-if="!companyModuleChartCompanyId" class="company-module-filter-check">✓</span>
                             </button>
-                            <button
-                              v-for="company in companyModuleChartCompanyOptions"
-                              :key="`module-chart-company-${company.id}`"
-                              type="button"
+                            <button v-for="company in companyModuleChartCompanyOptions"
+                              :key="`module-chart-company-${company.id}`" type="button"
                               class="company-module-filter-option"
                               :class="{ active: companyModuleChartCompanyId === company.id }"
                               @click="selectCompanyModuleChartCompany(company.id)">
                               <span>{{ company.name }}</span>
-                              <span
-                                v-if="companyModuleChartCompanyId === company.id"
+                              <span v-if="companyModuleChartCompanyId === company.id"
                                 class="company-module-filter-check">✓</span>
                             </button>
                           </div>
@@ -779,11 +751,8 @@
                       </div>
                     </div>
                     <div class="company-module-chart-metric-tabs">
-                      <button
-                        v-for="option in companyModuleChartMetricOptions"
-                        :key="`module-chart-metric-${option.key}`"
-                        type="button"
-                        class="company-module-chart-metric-btn"
+                      <button v-for="option in companyModuleChartMetricOptions"
+                        :key="`module-chart-metric-${option.key}`" type="button" class="company-module-chart-metric-btn"
                         :class="{ active: companyModuleChartMetricKeys.includes(option.key) }"
                         @click="toggleCompanyModuleChartMetric(option.key)">
                         {{ option.label }}
@@ -791,15 +760,11 @@
                     </div>
                     <label class="company-module-filter">
                       <span>Davr</span>
-                      <select
-                        :value="companyModuleChartPeriod"
-                        class="select mini-select"
+                      <select :value="companyModuleChartPeriod" class="select mini-select"
                         @change="handleCompanyModuleChartPeriodChange($event.target.value)"
                         @mousedown="handleCompanyModuleChartPeriodSelectPointerDown"
                         @mouseup="handleCompanyModuleChartPeriodSelectPointerUp">
-                        <option
-                          v-for="period in companyModulePeriodOptions"
-                          :key="`module-chart-period-${period.key}`"
+                        <option v-for="period in companyModulePeriodOptions" :key="`module-chart-period-${period.key}`"
                           :value="period.key">
                           {{ companyModuleChartPeriodOptionLabel(period) }}
                         </option>
@@ -807,118 +772,68 @@
                     </label>
                   </div>
                 </div>
-                <div
-                  class="company-module-chart-shell"
-                  ref="companyModuleChartRef"
+                <div class="company-module-chart-shell" ref="companyModuleChartRef"
                   @mouseleave="companyModuleChartHoverIndex = -1">
                   <div class="company-module-chart-legend top">
-                    <button
-                      v-for="line in companyModuleChartLines"
-                      :key="`module-chart-legend-${line.key}`"
-                      type="button"
-                      class="company-module-chart-legend-item"
+                    <button v-for="line in companyModuleChartLines" :key="`module-chart-legend-${line.key}`"
+                      type="button" class="company-module-chart-legend-item"
                       :class="{ inactive: !companyModuleChartVisibleModules.includes(line.key) }"
                       @click="toggleCompanyModuleChartModule(line.key)">
                       <i :style="{ borderColor: line.color }"></i>{{ line.label }}
                     </button>
-                    <button
-                      type="button"
-                      class="company-module-chart-legend-item average"
+                    <button type="button" class="company-module-chart-legend-item average"
                       :class="{ inactive: !companyModuleChartShowAverage }"
                       @click="companyModuleChartShowAverage = !companyModuleChartShowAverage">
                       <i></i>O‘rtacha
                     </button>
                   </div>
                   <div class="trend-chart company-module-trend-chart">
-                    <svg
-                      :viewBox="`0 0 ${COMPANY_MODULE_CHART_VIEW.width} ${COMPANY_MODULE_CHART_VIEW.height}`"
-                      role="img"
-                      :aria-label="companyModuleChartAriaLabel"
-                      @mousemove="onCompanyModuleChartMove"
-                      @touchstart.passive="onCompanyModuleChartTouch"
-                      @touchmove.passive="onCompanyModuleChartTouch">
-                      <text class="company-module-chart-axis-title" x="14" :y="companyModuleChartAxisTitleY" :transform="`rotate(-90 14 ${companyModuleChartAxisTitleY})`">{{ companyModuleChartAxisLabel }}</text>
+                    <svg :viewBox="`0 0 ${COMPANY_MODULE_CHART_VIEW.width} ${COMPANY_MODULE_CHART_VIEW.height}`"
+                      role="img" :aria-label="companyModuleChartAriaLabel" @mousemove="onCompanyModuleChartMove"
+                      @touchstart.passive="onCompanyModuleChartTouch" @touchmove.passive="onCompanyModuleChartTouch">
+                      <text class="company-module-chart-axis-title" x="14" :y="companyModuleChartAxisTitleY"
+                        :transform="`rotate(-90 14 ${companyModuleChartAxisTitleY})`">{{ companyModuleChartAxisLabel
+                        }}</text>
                       <g class="trend-grid">
-                        <line
-                          v-for="tick in companyModuleChartYTicks"
-                          :key="`module-chart-y-${tick.value}`"
-                          :x1="COMPANY_MODULE_CHART_DIMS.left"
-                          :x2="COMPANY_MODULE_CHART_DIMS.right"
-                          :y1="tick.y"
+                        <line v-for="tick in companyModuleChartYTicks" :key="`module-chart-y-${tick.value}`"
+                          :x1="COMPANY_MODULE_CHART_DIMS.left" :x2="COMPANY_MODULE_CHART_DIMS.right" :y1="tick.y"
                           :y2="tick.y" />
                       </g>
                       <g class="trend-axis company-module-chart-axis">
-                        <text
-                          v-for="tick in companyModuleChartYTicks"
-                          :key="`module-chart-y-label-${tick.value}`"
-                          x="52"
-                          :y="tick.y + 4"
-                          text-anchor="end">{{ tick.value }}</text>
+                        <text v-for="tick in companyModuleChartYTicks" :key="`module-chart-y-label-${tick.value}`"
+                          x="52" :y="tick.y + 4" text-anchor="end">{{ tick.value }}</text>
                       </g>
-                      <line
-                        v-if="companyModuleChartTooltip"
-                        class="company-module-chart-guide"
-                        :x1="companyModuleChartTooltip.x"
-                        :x2="companyModuleChartTooltip.x"
-                        :y1="COMPANY_MODULE_CHART_DIMS.top"
-                        :y2="COMPANY_MODULE_CHART_DIMS.bottom" />
-                      <g v-for="line in companyModuleChartVisibleLines" :key="`module-chart-line-${line.key}`" class="company-module-chart-module-line">
-                        <path
-                          v-if="line.points.length > 1 && line.path"
-                          :d="line.path"
-                          fill="none"
-                          :stroke="line.color"
-                          stroke-width="2.5"
-                          stroke-linecap="round"
-                          stroke-linejoin="round"
-                          stroke-dasharray="8 6" />
-                        <circle
-                          v-for="(point, pointIndex) in line.points"
-                          :key="`module-chart-dot-${line.key}-${pointIndex}`"
-                          class="company-module-chart-dot"
-                          :class="{ active: companyModuleChartHoverIndex === pointIndex }"
-                          :cx="point.x"
-                          :cy="point.y"
-                          :r="companyModuleChartHoverIndex === pointIndex ? 6 : 5"
-                          fill="#fff"
-                          :stroke="line.color"
+                      <line v-if="companyModuleChartTooltip" class="company-module-chart-guide"
+                        :x1="companyModuleChartTooltip.x" :x2="companyModuleChartTooltip.x"
+                        :y1="COMPANY_MODULE_CHART_DIMS.top" :y2="COMPANY_MODULE_CHART_DIMS.bottom" />
+                      <g v-for="line in companyModuleChartVisibleLines" :key="`module-chart-line-${line.key}`"
+                        class="company-module-chart-module-line">
+                        <path v-if="line.points.length > 1 && line.path" :d="line.path" fill="none" :stroke="line.color"
+                          stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="8 6" />
+                        <circle v-for="(point, pointIndex) in line.points"
+                          :key="`module-chart-dot-${line.key}-${pointIndex}`" class="company-module-chart-dot"
+                          :class="{ active: companyModuleChartHoverIndex === pointIndex }" :cx="point.x" :cy="point.y"
+                          :r="companyModuleChartHoverIndex === pointIndex ? 6 : 5" fill="#fff" :stroke="line.color"
                           :stroke-width="companyModuleChartHoverIndex === pointIndex ? 3 : 2.5" />
                       </g>
-                      <g v-if="companyModuleChartShowAverage && companyModuleChartAverageLine.points.length > 1" class="company-module-chart-average-line">
-                        <path
-                          :d="companyModuleChartAverageLine.path"
-                          fill="none"
-                          stroke="#111827"
-                          stroke-width="4"
-                          stroke-linecap="round"
-                          stroke-linejoin="round" />
-                        <circle
-                          v-for="(point, pointIndex) in companyModuleChartAverageLine.points"
-                          :key="`module-chart-avg-dot-${pointIndex}`"
-                          :cx="point.x"
-                          :cy="point.y"
-                          r="5"
-                          fill="#111827"
-                          stroke="#111827"
-                          stroke-width="2" />
+                      <g v-if="companyModuleChartShowAverage && companyModuleChartAverageLine.points.length > 1"
+                        class="company-module-chart-average-line">
+                        <path :d="companyModuleChartAverageLine.path" fill="none" stroke="#111827" stroke-width="4"
+                          stroke-linecap="round" stroke-linejoin="round" />
+                        <circle v-for="(point, pointIndex) in companyModuleChartAverageLine.points"
+                          :key="`module-chart-avg-dot-${pointIndex}`" :cx="point.x" :cy="point.y" r="5" fill="#111827"
+                          stroke="#111827" stroke-width="2" />
                       </g>
                       <g class="trend-axis company-module-chart-axis">
-                        <text
-                          v-for="tick in companyModuleChartXTicks"
-                          :key="`module-chart-x-${tick.date_key}`"
-                          :x="tick.x"
-                          :y="COMPANY_MODULE_CHART_DIMS.bottom + 16"
-                          text-anchor="middle">{{ tick.label }}</text>
+                        <text v-for="tick in companyModuleChartXTicks" :key="`module-chart-x-${tick.date_key}`"
+                          :x="tick.x" :y="COMPANY_MODULE_CHART_DIMS.bottom + 16" text-anchor="middle">{{ tick.label
+                          }}</text>
                       </g>
                     </svg>
-                    <div
-                      v-if="companyModuleChartTooltip"
-                      class="company-module-chart-tooltip"
+                    <div v-if="companyModuleChartTooltip" class="company-module-chart-tooltip"
                       :style="companyModuleChartTooltipStyle">
                       <b>{{ companyModuleChartTooltip.label }}</b>
-                      <div
-                        v-for="item in companyModuleChartTooltip.items"
-                        :key="`module-chart-tip-${item.key}`"
+                      <div v-for="item in companyModuleChartTooltip.items" :key="`module-chart-tip-${item.key}`"
                         class="company-module-chart-tooltip-row">
                         <span :style="{ color: item.color }">{{ item.label }}</span>
                         <strong v-if="item.dual" class="company-module-chart-tooltip-pair">
@@ -1103,7 +1018,8 @@
                 <template #actions="{ row }">
                   <button class="btn small" :disabled="loadingAction === 'clickupTask' || !row.clickup_task_id"
                     @click="syncClickUpTask(row)">Sync</button>
-                  <button class="btn small danger" :disabled="loadingAction === 'clickupTask' || row.status === 'closed'"
+                  <button class="btn small danger"
+                    :disabled="loadingAction === 'clickupTask' || row.status === 'closed'"
                     @click="closeClickUpTask(row)">Yopish</button>
                 </template>
               </DataTable>
@@ -1166,7 +1082,9 @@
                     <input v-model.trim="settingsForm.ticket_topic_id" class="input" placeholder="12345" />
                   </label>
                   <p v-if="settingsForm.ticket_notifications === 'true'" class="card-note wide">
-                    Yangi ticket ochilganda shu guruhga xabar ketadi. Topic ID kiritilsa xabar aynan shu topic ichiga yuboriladi. Shaxsiy chat ticketlari faqat mijoz va support ikkalasi bir quruvchi guruhda bo‘lsa ochiladi. «Boshqa hodimga» da faqat support xodimlar (kompaniya mas’uli va menejerlar yo‘q).
+                    Yangi ticket ochilganda shu guruhga xabar ketadi. Topic ID kiritilsa xabar aynan shu topic ichiga
+                    yuboriladi. Shaxsiy chat ticketlari faqat mijoz va support ikkalasi bir quruvchi guruhda bo‘lsa
+                    ochiladi. «Boshqa hodimga» da faqat support xodimlar (kompaniya mas’uli va menejerlar yo‘q).
                   </p>
                   <label class="label">Guruh xabari saqlansa
                     <select v-model="settingsForm.group_message_audit" class="select">
@@ -1275,7 +1193,8 @@
                     <div>
                       <div class="card-title">ClickUp integratsiya</div>
                     </div>
-                    <span class="status-pill" :class="{ ready: clickUpIntegrationReady, error: clickUpIntegrationHasError }">
+                    <span class="status-pill"
+                      :class="{ ready: clickUpIntegrationReady, error: clickUpIntegrationHasError }">
                       {{ clickUpIntegrationStatus }}
                     </span>
                   </div>
@@ -1375,7 +1294,8 @@
 
                       <div class="log-channel-add">
                         <input v-model.trim="logSourceDraft.label" class="input" placeholder="Kanal nomi" />
-                        <input v-model.trim="logSourceDraft.chat_id" class="input" placeholder="Kanal raqami: -100..." />
+                        <input v-model.trim="logSourceDraft.chat_id" class="input"
+                          placeholder="Kanal raqami: -100..." />
                         <select v-model="logSourceDraft.source" class="select">
                           <option value="backend">Backend</option>
                           <option value="web">Veb</option>
@@ -1511,7 +1431,8 @@
     </Transition>
 
     <Transition name="modal-fade">
-      <Modal v-if="modal === 'companyModuleCustomPeriod'" title="Ixtiyoriy davr" @close="cancelCompanyModuleCustomPeriod">
+      <Modal v-if="modal === 'companyModuleCustomPeriod'" title="Ixtiyoriy davr"
+        @close="cancelCompanyModuleCustomPeriod">
         <form class="form two custom-period-form" @submit.prevent="applyCompanyModuleCustomPeriod">
           <label class="label">Boshlanish sanasi
             <input v-model="companyModuleCustomPeriodForm.start" class="input" type="date" required />
@@ -1531,7 +1452,8 @@
     </Transition>
 
     <Transition name="modal-fade">
-      <Modal v-if="modal === 'companyModuleChartCustomPeriod'" title="Grafik davri" @close="cancelCompanyModuleChartCustomPeriod">
+      <Modal v-if="modal === 'companyModuleChartCustomPeriod'" title="Grafik davri"
+        @close="cancelCompanyModuleChartCustomPeriod">
         <form class="form two custom-period-form" @submit.prevent="applyCompanyModuleChartCustomPeriod">
           <label class="label">Boshlanish sanasi
             <input v-model="companyModuleChartCustomPeriodForm.start" class="input" type="date" required />
@@ -1551,10 +1473,7 @@
     </Transition>
 
     <Transition name="modal-fade">
-      <Modal
-        v-if="modal === 'companyModuleEmployeeActivity'"
-        :title="companyModuleEmployeeDetailTitle"
-        wide
+      <Modal v-if="modal === 'companyModuleEmployeeActivity'" :title="companyModuleEmployeeDetailTitle" wide
         @close="closeModal">
         <div v-if="companyModuleEmployeeDetail" class="company-module-employee-detail">
           <div class="company-module-employee-head">
@@ -1586,10 +1505,8 @@
           <div v-if="companyModuleEmployeeActiveRows.length" class="company-module-employee-section">
             <div class="company-module-employee-section-title">Faol xodimlar</div>
             <div class="company-module-employee-list">
-              <article
-                v-for="employee in companyModuleEmployeeActiveRows"
-                :key="`active-employee-${employee.id || employee.name}`"
-                class="company-module-employee-card">
+              <article v-for="employee in companyModuleEmployeeActiveRows"
+                :key="`active-employee-${employee.id || employee.name}`" class="company-module-employee-card">
                 <div class="company-module-employee-card-head">
                   <b>{{ employee.name || 'Xodim' }}</b>
                   <span class="company-module-employee-count">{{ fmtNumber(employee.action_count || 0) }} amal</span>
@@ -1604,8 +1521,7 @@
           <div v-if="companyModuleEmployeeInactiveRows.length" class="company-module-employee-section">
             <div class="company-module-employee-section-title">Nofaol xodimlar</div>
             <div class="company-module-employee-list">
-              <article
-                v-for="employee in companyModuleEmployeeInactiveRows"
+              <article v-for="employee in companyModuleEmployeeInactiveRows"
                 :key="`inactive-employee-${employee.id || employee.name}`"
                 class="company-module-employee-card inactive">
                 <div class="company-module-employee-card-head">
@@ -1738,7 +1654,8 @@
     </Transition>
 
     <Transition name="modal-fade">
-      <Modal v-if="modal === 'company'" :title="companyForm.id ? 'Kompaniyani tahrirlash' : 'Kompaniya qo‘shish'" @close="closeModal">
+      <Modal v-if="modal === 'company'" :title="companyForm.id ? 'Kompaniyani tahrirlash' : 'Kompaniya qo‘shish'"
+        @close="closeModal">
         <form class="form" @submit.prevent="saveCompany">
           <label class="label">Kompaniya nomi
             <input v-model.trim="companyForm.name" class="input" placeholder="Misol: Uyqur MChJ" required />
@@ -1767,7 +1684,8 @@
             <button class="btn primary" :disabled="loadingAction === 'saveCompany'">
               {{ loadingAction === 'saveCompany' ? 'Saqlanmoqda...' : 'Saqlash' }}
             </button>
-            <button class="btn" type="button" @click="closeModal" :disabled="loadingAction === 'saveCompany'">Bekor qilish</button>
+            <button class="btn" type="button" @click="closeModal" :disabled="loadingAction === 'saveCompany'">Bekor
+              qilish</button>
           </div>
         </form>
       </Modal>
@@ -1815,7 +1733,8 @@
             <button :class="{ active: ticketList.source === 'group' }" @click="ticketList.source = 'group'">
               Guruh <span>{{ fmtNumber(ticketListCounts.group) }}</span>
             </button>
-            <button :class="{ active: ticketList.source === 'private' }" @click="ticketList.source = 'private'">Shaxsiy</button>
+            <button :class="{ active: ticketList.source === 'private' }"
+              @click="ticketList.source = 'private'">Shaxsiy</button>
           </div>
           <div class="ticket-filter-tabs">
             <button type="button" :class="{ active: ticketList.active === 'all' }" @click="ticketList.active = 'all'">
@@ -1867,9 +1786,12 @@
             <div class="metric-detail-body" :class="{ 'with-chat': metricDetail.chatPane }">
               <div class="metric-detail-main">
                 <div v-if="metricDetail.showSourceTabs" class="ticket-filter-tabs source-tabs compact-tabs">
-                  <button :class="{ active: metricDetail.source === 'all' }" @click="metricDetail.source = 'all'">Umumiy</button>
-                  <button :class="{ active: metricDetail.source === 'group' }" @click="metricDetail.source = 'group'">Guruh</button>
-                  <button :class="{ active: metricDetail.source === 'private' }" @click="metricDetail.source = 'private'">Shaxsiy</button>
+                  <button :class="{ active: metricDetail.source === 'all' }"
+                    @click="metricDetail.source = 'all'">Umumiy</button>
+                  <button :class="{ active: metricDetail.source === 'group' }"
+                    @click="metricDetail.source = 'group'">Guruh</button>
+                  <button :class="{ active: metricDetail.source === 'private' }"
+                    @click="metricDetail.source = 'private'">Shaxsiy</button>
                 </div>
                 <DataTable :columns="metricDetail.columns" :rows="filteredMetricDetailRows" :empty="metricDetail.empty"
                   :on-cell-action="handleMetricDetailCellAction" :row-class="metricDetailRowClass"
@@ -1997,16 +1919,17 @@
                               <button v-else type="button" class="chat-media-placeholder chat-media-open"
                                 :title="mediaErrors[message.media.file_id] || undefined"
                                 @click="retryMediaLoad(message.media)">{{ mediaPlaceholder(message.media) }}</button>
-                              <button v-if="mediaUrl(message.media)" type="button" class="chat-media-link chat-media-open"
-                                @click="retryMediaLoad(message.media)">Qayta yuklash</button>
+                              <button v-if="mediaUrl(message.media)" type="button"
+                                class="chat-media-link chat-media-open" @click="retryMediaLoad(message.media)">Qayta
+                                yuklash</button>
                               <a v-if="mediaUrl(message.media)" class="chat-media-link" :href="mediaUrl(message.media)"
                                 :download="mediaDownloadName(message.media)" target="_blank"
                                 rel="noopener noreferrer">{{ mediaOpenLabel(message.media) }}</a>
                             </template>
                             <a v-else-if="isDocumentMedia(message.media) && mediaUrl(message.media)"
                               class="chat-media-file" :href="mediaUrl(message.media)"
-                              :download="mediaDownloadName(message.media)" target="_blank"
-                              rel="noopener noreferrer">{{ mediaPlaceholder(message.media) }}</a>
+                              :download="mediaDownloadName(message.media)" target="_blank" rel="noopener noreferrer">{{
+                                mediaPlaceholder(message.media) }}</a>
                             <div v-else class="chat-media-placeholder"
                               :class="{ sticker: message.media.kind === 'sticker' }">
                               {{ mediaPlaceholder(message.media) }}
@@ -2021,7 +1944,8 @@
                           <div v-if="chatMessageBodyText(message)" class="chat-message-text"
                             v-html="chatMessageHtml(message)"></div>
                           <div class="chat-bubble-footer">
-                            <span v-if="isClosedTicketMessage(message)" class="chat-ticket chat-ticket-closed">{{ messageStatusLabel(message) }}</span>
+                            <span v-if="isClosedTicketMessage(message)" class="chat-ticket chat-ticket-closed">{{
+                              messageStatusLabel(message) }}</span>
                             <span v-else-if="showMessageStatus(message)" class="badge"
                               :class="messageStatusBadgeClass(message)">{{ messageStatusLabel(message) }}</span>
                             <span v-if="showRequestBadge(message)" class="chat-ticket">So‘rov</span>
@@ -2042,9 +1966,12 @@
 
         <div v-else class="detail-stack">
           <div v-if="metricDetail.showSourceTabs" class="ticket-filter-tabs source-tabs">
-            <button :class="{ active: metricDetail.source === 'all' }" @click="metricDetail.source = 'all'">Umumiy</button>
-            <button :class="{ active: metricDetail.source === 'group' }" @click="metricDetail.source = 'group'">Guruh</button>
-            <button :class="{ active: metricDetail.source === 'private' }" @click="metricDetail.source = 'private'">Shaxsiy</button>
+            <button :class="{ active: metricDetail.source === 'all' }"
+              @click="metricDetail.source = 'all'">Umumiy</button>
+            <button :class="{ active: metricDetail.source === 'group' }"
+              @click="metricDetail.source = 'group'">Guruh</button>
+            <button :class="{ active: metricDetail.source === 'private' }"
+              @click="metricDetail.source = 'private'">Shaxsiy</button>
           </div>
           <div v-if="metricDetail.summary?.length" class="detail-summary metric-detail-summary">
             <div v-for="item in metricDetail.summary" :key="item.label">
@@ -2078,7 +2005,8 @@
             </div>
             <div>
               <span>Yopilgan</span>
-              <b class="success">{{ fmtNumber(companyGroupDetail.company?.closed_requests || companyGroupDetail.summary?.closed_requests) }}</b>
+              <b class="success">{{ fmtNumber(companyGroupDetail.company?.closed_requests ||
+                companyGroupDetail.summary?.closed_requests) }}</b>
             </div>
             <div>
               <span>Ochiq</span>
@@ -2105,7 +2033,10 @@
                     <b>{{ group.title || group.chat_id }}</b>
                     <small>{{ chatMessageText(group.conversation?.[0]) || group.requests?.[0]?.initial_text ||
                       'Yozishma tarixi' }}</small>
-                    <em>{{ fmtNumber(group.total_messages) }} xabar · Jami ticket: {{ fmtNumber(group.total_requests) }} · Javob berilgan: {{ fmtNumber(group.closed_requests) }} · Ochiq: {{ fmtNumber(group.open_requests) }}</em>
+                    <em>{{ fmtNumber(group.total_messages) }} xabar · Jami ticket: {{ fmtNumber(group.total_requests) }}
+                      ·
+                      Javob berilgan: {{ fmtNumber(group.closed_requests) }} · Ochiq: {{ fmtNumber(group.open_requests)
+                      }}</em>
                   </span>
                   <strong v-if="group.open_requests">{{ fmtNumber(group.open_requests) }}</strong>
                 </button>
@@ -2119,7 +2050,10 @@
                   <div class="employee-chat-pane-head">
                     <div>
                       <b>{{ selectedCompanyGroup.title || selectedCompanyGroup.chat_id }}</b>
-                      <span>{{ fmtNumber(selectedCompanyGroup.total_messages) }} xabar · Jami ticket: {{ fmtNumber(selectedCompanyGroup.total_requests) }} · Javob berilgan: {{ fmtNumber(selectedCompanyGroup.closed_requests) }} · Ochiq: {{ fmtNumber(selectedCompanyGroup.open_requests) }}</span>
+                      <span>{{ fmtNumber(selectedCompanyGroup.total_messages) }} xabar · Jami ticket: {{
+                        fmtNumber(selectedCompanyGroup.total_requests) }} · Javob berilgan: {{
+                          fmtNumber(selectedCompanyGroup.closed_requests) }} · Ochiq: {{
+                          fmtNumber(selectedCompanyGroup.open_requests) }}</span>
                     </div>
                     <button class="btn small" type="button" @click="loadChatDetail(selectedCompanyGroup)">
                       Chat tafsiloti
@@ -2205,16 +2139,17 @@
                               <button v-else type="button" class="chat-media-placeholder chat-media-open"
                                 :title="mediaErrors[message.media.file_id] || undefined"
                                 @click="retryMediaLoad(message.media)">{{ mediaPlaceholder(message.media) }}</button>
-                              <button v-if="mediaUrl(message.media)" type="button" class="chat-media-link chat-media-open"
-                                @click="retryMediaLoad(message.media)">Qayta yuklash</button>
+                              <button v-if="mediaUrl(message.media)" type="button"
+                                class="chat-media-link chat-media-open" @click="retryMediaLoad(message.media)">Qayta
+                                yuklash</button>
                               <a v-if="mediaUrl(message.media)" class="chat-media-link" :href="mediaUrl(message.media)"
                                 :download="mediaDownloadName(message.media)" target="_blank"
                                 rel="noopener noreferrer">{{ mediaOpenLabel(message.media) }}</a>
                             </template>
                             <a v-else-if="isDocumentMedia(message.media) && mediaUrl(message.media)"
                               class="chat-media-file" :href="mediaUrl(message.media)"
-                              :download="mediaDownloadName(message.media)" target="_blank"
-                              rel="noopener noreferrer">{{ mediaPlaceholder(message.media) }}</a>
+                              :download="mediaDownloadName(message.media)" target="_blank" rel="noopener noreferrer">{{
+                                mediaPlaceholder(message.media) }}</a>
                             <div v-else class="chat-media-placeholder"
                               :class="{ sticker: message.media.kind === 'sticker' }">
                               {{ mediaPlaceholder(message.media) }}
@@ -2229,7 +2164,8 @@
                           <div v-if="chatMessageBodyText(message)" class="chat-message-text"
                             v-html="chatMessageHtml(message)"></div>
                           <div class="chat-bubble-footer">
-                            <span v-if="isClosedTicketMessage(message)" class="chat-ticket chat-ticket-closed">{{ messageStatusLabel(message) }}</span>
+                            <span v-if="isClosedTicketMessage(message)" class="chat-ticket chat-ticket-closed">{{
+                              messageStatusLabel(message) }}</span>
                             <span v-else-if="showMessageStatus(message)" class="badge"
                               :class="messageStatusBadgeClass(message)">{{ messageStatusLabel(message) }}</span>
                             <span v-if="showRequestBadge(message)" class="chat-ticket">Ticket</span>
@@ -2325,23 +2261,23 @@
               <h2>
                 <button
                   v-if="employeeProfile.employee?.member_employees?.length || employeeProfile.member_stats?.length"
-                  type="button"
-                  class="employee-manager-heading-toggle"
-                  :class="{ open: employeeManagerDetailsOpen }"
+                  type="button" class="employee-manager-heading-toggle" :class="{ open: employeeManagerDetailsOpen }"
                   :title="employeeManagerDetailsOpen ? 'Menejer ma’lumotlarini yopish' : 'Menejer ma’lumotlarini ochish'"
-                  @click="employeeManagerDetailsOpen = !employeeManagerDetailsOpen"
-                >
-                  <span class="employee-manager-heading-icon" aria-hidden="true">{{ employeeManagerDetailsOpen ? '▾' : '▸' }}</span>
-                  <span>{{ employeeProfile.employee?.full_name || employeeProfile.employee?.username || 'Xodim' }}</span>
+                  @click="employeeManagerDetailsOpen = !employeeManagerDetailsOpen">
+                  <span class="employee-manager-heading-icon" aria-hidden="true">{{ employeeManagerDetailsOpen ? '▾' :
+                    '▸'
+                  }}</span>
+                  <span>{{ employeeProfile.employee?.full_name || employeeProfile.employee?.username || 'Xodim'
+                  }}</span>
                 </button>
-                <template v-else>{{ employeeProfile.employee?.full_name || employeeProfile.employee?.username || 'Xodim' }}</template>
+                <template v-else>{{ employeeProfile.employee?.full_name || employeeProfile.employee?.username || 'Xodim'
+                }}</template>
               </h2>
               <p>Support yozishmalari</p>
               <span>Davr: {{ selectedPeriodLabel }}</span>
               <div
                 v-if="(employeeProfile.employee?.member_employees?.length || employeeProfile.member_stats?.length) && employeeManagerDetailsOpen"
-                class="employee-manager-details"
-              >
+                class="employee-manager-details">
                 <div v-if="employeeProfile.employee?.member_employees?.length" class="employee-profile-members">
                   <small>Ichidagi menejerlar</small>
                   <div class="employee-profile-member-list">
@@ -2368,8 +2304,8 @@
                   <small>Ochiq</small>
                   <b>{{ fmtNumber(employeeProfile.summary?.open_requests) }}</b>
                 </span>
-                <button type="button" class="employee-profile-stat-card"
-                  :disabled="employeeProfileCompanyTotal <= 0" @click="openEmployeeCompanyList">
+                <button type="button" class="employee-profile-stat-card" :disabled="employeeProfileCompanyTotal <= 0"
+                  @click="openEmployeeCompanyList">
                   <small>Kompaniya</small>
                   <b>{{ fmtNumber(employeeProfileCompanyTotal) }}</b>
                 </button>
@@ -2507,16 +2443,17 @@
                               <button v-else type="button" class="chat-media-placeholder chat-media-open"
                                 :title="mediaErrors[message.media.file_id] || undefined"
                                 @click="retryMediaLoad(message.media)">{{ mediaPlaceholder(message.media) }}</button>
-                              <button v-if="mediaUrl(message.media)" type="button" class="chat-media-link chat-media-open"
-                                @click="retryMediaLoad(message.media)">Qayta yuklash</button>
+                              <button v-if="mediaUrl(message.media)" type="button"
+                                class="chat-media-link chat-media-open" @click="retryMediaLoad(message.media)">Qayta
+                                yuklash</button>
                               <a v-if="mediaUrl(message.media)" class="chat-media-link" :href="mediaUrl(message.media)"
                                 :download="mediaDownloadName(message.media)" target="_blank"
                                 rel="noopener noreferrer">{{ mediaOpenLabel(message.media) }}</a>
                             </template>
                             <a v-else-if="isDocumentMedia(message.media) && mediaUrl(message.media)"
                               class="chat-media-file" :href="mediaUrl(message.media)"
-                              :download="mediaDownloadName(message.media)" target="_blank"
-                              rel="noopener noreferrer">{{ mediaPlaceholder(message.media) }}</a>
+                              :download="mediaDownloadName(message.media)" target="_blank" rel="noopener noreferrer">{{
+                                mediaPlaceholder(message.media) }}</a>
                             <div v-else class="chat-media-placeholder"
                               :class="{ sticker: message.media.kind === 'sticker' }"
                               :title="mediaErrors[message.media.file_id] || undefined">
@@ -2532,7 +2469,8 @@
                           <div v-if="chatMessageBodyText(message)" class="chat-message-text"
                             v-html="chatMessageHtml(message)"></div>
                           <div class="chat-bubble-footer">
-                            <span v-if="isClosedTicketMessage(message)" class="chat-ticket chat-ticket-closed">{{ messageStatusLabel(message) }}</span>
+                            <span v-if="isClosedTicketMessage(message)" class="chat-ticket chat-ticket-closed">{{
+                              messageStatusLabel(message) }}</span>
                             <span v-else-if="showMessageStatus(message)" class="badge"
                               :class="messageStatusBadgeClass(message)">{{ messageStatusLabel(message) }}</span>
                             <span v-if="showRequestBadge(message)" class="chat-ticket">So‘rov</span>
@@ -2749,33 +2687,34 @@
                           mediaPlaceholder(message.media) }}</button>
                       <template v-else-if="isAudioMedia(message.media)">
                         <audio v-if="mediaAudioReady(message.media)" :key="mediaAudioKey(message.media)"
-                          class="chat-media-audio" controls preload="auto" playsinline
-                          :src="mediaUrl(message.media)" @error="onAudioPlaybackError(message.media)" />
+                          class="chat-media-audio" controls preload="auto" playsinline :src="mediaUrl(message.media)"
+                          @error="onAudioPlaybackError(message.media)" />
                         <button v-else type="button" class="chat-media-placeholder chat-media-open"
                           :title="mediaErrors[message.media.file_id] || undefined"
                           @click="retryMediaLoad(message.media)">{{ mediaPlaceholder(message.media) }}</button>
                         <button v-if="mediaUrl(message.media)" type="button" class="chat-media-link chat-media-open"
                           @click="retryMediaLoad(message.media)">Qayta yuklash</button>
                         <a v-if="mediaUrl(message.media)" class="chat-media-link" :href="mediaUrl(message.media)"
-                          :download="mediaDownloadName(message.media)" target="_blank"
-                          rel="noopener noreferrer">{{ mediaOpenLabel(message.media) }}</a>
+                          :download="mediaDownloadName(message.media)" target="_blank" rel="noopener noreferrer">{{
+                            mediaOpenLabel(message.media) }}</a>
                       </template>
                       <a v-else-if="isDocumentMedia(message.media) && mediaUrl(message.media)" class="chat-media-file"
                         :href="mediaUrl(message.media)" :download="mediaDownloadName(message.media)" target="_blank"
                         rel="noopener noreferrer">{{ mediaPlaceholder(message.media) }}</a>
                       <div v-else class="chat-media-placeholder" :class="{ sticker: message.media.kind === 'sticker' }"
-                           :title="mediaErrors[message.media.file_id] || undefined">
+                        :title="mediaErrors[message.media.file_id] || undefined">
                         {{ mediaPlaceholder(message.media) }}
                       </div>
-                      <a v-if="showMediaOpenLink(message.media)" class="chat-media-link"
-                        :href="mediaUrl(message.media)" :download="mediaDownloadName(message.media)" target="_blank"
-                        rel="noopener noreferrer">{{ mediaOpenLabel(message.media) }}</a>
+                      <a v-if="showMediaOpenLink(message.media)" class="chat-media-link" :href="mediaUrl(message.media)"
+                        :download="mediaDownloadName(message.media)" target="_blank" rel="noopener noreferrer">{{
+                          mediaOpenLabel(message.media) }}</a>
                       <a v-if="showTelegramOpenLink(message)" class="chat-media-link"
                         :href="telegramMessageLink(message)" target="_blank" rel="noopener noreferrer">Telegramda
                         ochish</a>
                     </div>
                     <div v-if="chatMessageBodyText(message)" class="chat-message-text"
-                      v-html="chatMessageHtml(message)"></div>
+                      v-html="chatMessageHtml(message)">
+                    </div>
                     <div class="chat-bubble-footer">
                       <span v-if="isClosedTicketMessage(message)" class="chat-ticket chat-ticket-closed">Yopilgan</span>
                       <span v-else-if="showMessageStatus(message)" class="badge"
@@ -2791,7 +2730,8 @@
               <div v-if="chatDetailActiveRequest" class="chat-detail-reply-box">
                 <div class="card-note">Javob: {{ previewFirstWords(chatDetailActiveRequest.initial_text, 8) }}</div>
                 <form class="inline-reply-form" @submit.prevent="sendChatDetailRequestReply">
-                  <textarea v-model.trim="inlineReplyForm.text" class="textarea" placeholder="Javob yozing..."></textarea>
+                  <textarea v-model.trim="inlineReplyForm.text" class="textarea"
+                    placeholder="Javob yozing..."></textarea>
                   <div>
                     <button class="btn small" type="button" @click="cancelInlineReply">Bekor</button>
                     <button class="btn small primary" type="submit" :disabled="loadingAction === 'replyRequest'">
@@ -3756,77 +3696,77 @@ const supportPerformanceRows = computed(() => {
   const candidateRows = [...merged.values()]
     .filter(row => !isAdminLikeEmployee(row) && !isUnassignedRankingRow(row))
     .map((row, index) => {
-    const stat = employeeStatsMap.value.get(employeeLookupKey(row)) || row;
-    const candidate = { ...row, ...stat };
-    const rowKey = supportRowKey(candidate) || supportRowKey(row);
-    const employeeRef = employees.value.find(item => supportRowKey(item) === rowKey) || null;
-    const resolvedRole = row.role || stat.role || employeeRef?.role || '';
-    const lookupKeys = [...new Set([
-      ...employeePerformanceLookupKeys(candidate),
-      ...employeePerformanceLookupKeys(row),
-      ...employeePerformanceLookupKeys(stat)
-    ])];
-    const periodRow = resolvePerformanceStatsRow(periodStatsLookup, candidate)
-      || resolvePerformanceStatsRow(periodStatsLookup, row)
-      || resolvePerformanceStatsRow(periodStatsLookup, stat);
-    const openSummary = lookupKeys.map(key => openSummaryMap.get(key)).find(Boolean) || null;
-    lookupKeys.forEach(key => openSummaryMap.delete(key));
-    const assignedCompanyCount = companyInfoRows.value.filter(company => companyMatchesEmployee(company, candidate)).length;
+      const stat = employeeStatsMap.value.get(employeeLookupKey(row)) || row;
+      const candidate = { ...row, ...stat };
+      const rowKey = supportRowKey(candidate) || supportRowKey(row);
+      const employeeRef = employees.value.find(item => supportRowKey(item) === rowKey) || null;
+      const resolvedRole = row.role || stat.role || employeeRef?.role || '';
+      const lookupKeys = [...new Set([
+        ...employeePerformanceLookupKeys(candidate),
+        ...employeePerformanceLookupKeys(row),
+        ...employeePerformanceLookupKeys(stat)
+      ])];
+      const periodRow = resolvePerformanceStatsRow(periodStatsLookup, candidate)
+        || resolvePerformanceStatsRow(periodStatsLookup, row)
+        || resolvePerformanceStatsRow(periodStatsLookup, stat);
+      const openSummary = lookupKeys.map(key => openSummaryMap.get(key)).find(Boolean) || null;
+      lookupKeys.forEach(key => openSummaryMap.delete(key));
+      const assignedCompanyCount = companyInfoRows.value.filter(company => companyMatchesEmployee(company, candidate)).length;
 
-    const periodRowCounts = usePeriodTicketCounts ? periodTicketCounts.counts.get(rowKey) : null;
-    const closedFallback = periodRow ? Number(periodRow.closed_requests || 0) : 0;
-    const closedRaw = periodRowCounts
-      ? Number(periodRowCounts.closed || 0)
-      : resolvePeriodClosedCount(lookupKeys, closedFallback, periodClosedLookup);
-    const openRaw = periodRowCounts
-      ? Number(periodRowCounts.open || 0)
-      : (openSummary ? Number(openSummary.open_requests || 0) : 0);
-    const totalRaw = closedRaw + openRaw;
-    const slaRaw = totalRaw > 0 ? (closedRaw / totalRaw) * 100 : 100;
-    const avgRaw = periodRow ? Number(periodRow.avg_close_minutes || 0) : 0;
-    const handledChatsRaw = Math.max(
-      periodRow ? Number(periodRow.handled_chats || 0) : 0,
-      openSummary?.chat_keys?.size || 0
-    );
+      const periodRowCounts = usePeriodTicketCounts ? periodTicketCounts.counts.get(rowKey) : null;
+      const closedFallback = periodRow ? Number(periodRow.closed_requests || 0) : 0;
+      const closedRaw = periodRowCounts
+        ? Number(periodRowCounts.closed || 0)
+        : resolvePeriodClosedCount(lookupKeys, closedFallback, periodClosedLookup);
+      const openRaw = periodRowCounts
+        ? Number(periodRowCounts.open || 0)
+        : (openSummary ? Number(openSummary.open_requests || 0) : 0);
+      const totalRaw = closedRaw + openRaw;
+      const slaRaw = totalRaw > 0 ? (closedRaw / totalRaw) * 100 : 100;
+      const avgRaw = periodRow ? Number(periodRow.avg_close_minutes || 0) : 0;
+      const handledChatsRaw = Math.max(
+        periodRow ? Number(periodRow.handled_chats || 0) : 0,
+        openSummary?.chat_keys?.size || 0
+      );
 
-    const isManager = isManagerEmployee({ role: resolvedRole });
-    const closed = closedRaw;
-    const open = isManager ? 0 : openRaw;
-    const total = isManager ? closedRaw : totalRaw;
-    const sla = isManager ? (closedRaw > 0 ? 100 : 0) : slaRaw;
-    const avg = avgRaw;
-    const handledChats = handledChatsRaw;
+      const isManager = isManagerEmployee({ role: resolvedRole });
+      const closed = closedRaw;
+      const open = isManager ? 0 : openRaw;
+      const total = isManager ? closedRaw : totalRaw;
+      const sla = isManager ? (closedRaw > 0 ? 100 : 0) : slaRaw;
+      const avg = avgRaw;
+      const handledChats = handledChatsRaw;
 
-    const grade = performanceGrade(sla, avg);
-    return {
-      key: rowKey || `${row.full_name || 'employee'}-${index}`,
-      id: row.id || row.employee_id || stat.id || stat.employee_id || '',
-      employee_id: row.employee_id || row.id || stat.employee_id || stat.id || '',
-      tg_user_id: row.tg_user_id || stat.tg_user_id || '',
-      username: row.username || stat.username || '',
-      phone: row.phone || stat.phone || '',
-      role: resolvedRole,
-      full_name: row.full_name || stat.full_name || employeeRef?.full_name || 'Xodim',
-      telegram_is_premium: row.telegram_is_premium === true || stat.telegram_is_premium === true,
-      is_support_employee: isSupportEmployee({ role: resolvedRole }),
-      handled_chats: handledChats,
-      closed_requests: closed,
-      open_requests: open,
-      total_requests: total,
-      company_total: assignedCompanyCount,
-      assigned_company_count: assignedCompanyCount,
-      period_company_total: periodRow ? Number(periodRow.company_total || 0) : 0,
-      avg_close_minutes: avg,
-      close_rate: sla,
-      sla,
-      prev_closed_requests: periodRow ? Number(periodRow.prev_closed_requests || 0) : 0,
-      prev_open_requests: isManager ? 0 : (periodRow ? Number(periodRow.prev_open_requests || 0) : 0),
-      prev_company_total: periodRow ? Number(periodRow.prev_company_total || 0) : 0,
-      prev_avg_close_minutes: periodRow ? Number(periodRow.prev_avg_close_minutes || 0) : 0,
-      prev_close_rate: isManager ? (Number(periodRow?.prev_closed_requests || 0) > 0 ? 100 : 0) : (periodRow ? Number(periodRow.prev_close_rate || 0) : 0),
-      grade
-    };
-  });
+      const grade = performanceGrade(sla, avg);
+      return {
+        key: rowKey || `${row.full_name || 'employee'}-${index}`,
+        id: row.id || row.employee_id || stat.id || stat.employee_id || '',
+        employee_id: row.employee_id || row.id || stat.employee_id || stat.id || '',
+        tg_user_id: row.tg_user_id || stat.tg_user_id || '',
+        username: row.username || stat.username || '',
+        phone: row.phone || stat.phone || '',
+        role: resolvedRole,
+        full_name: row.full_name || stat.full_name || employeeRef?.full_name || 'Xodim',
+        telegram_is_premium: row.telegram_is_premium === true || stat.telegram_is_premium === true,
+        is_support_employee: isSupportEmployee({ role: resolvedRole }),
+        handled_chats: handledChats,
+        closed_requests: closed,
+        open_requests: open,
+        total_requests: total,
+        company_total: assignedCompanyCount,
+        assigned_company_count: assignedCompanyCount,
+        period_company_total: periodRow ? Number(periodRow.company_total || 0) : 0,
+        avg_close_minutes: avg,
+        close_rate: sla,
+        sla,
+        prev_closed_requests: periodRow ? Number(periodRow.prev_closed_requests || 0) : 0,
+        prev_open_requests: isManager ? 0 : (periodRow ? Number(periodRow.prev_open_requests || 0) : 0),
+        prev_company_total: periodRow ? Number(periodRow.prev_company_total || 0) : 0,
+        prev_avg_close_minutes: periodRow ? Number(periodRow.prev_avg_close_minutes || 0) : 0,
+        prev_close_rate: isManager ? (Number(periodRow?.prev_closed_requests || 0) > 0 ? 100 : 0) : (periodRow ? Number(periodRow.prev_close_rate || 0) : 0),
+        grade
+      };
+    });
 
   const rows = candidateRows
     .filter(row => shouldShowInSupportRanking(row) && knownEmployeeKeys.has(supportRowKey(row)));
@@ -6434,26 +6374,26 @@ const supportPortfolioChartMax = computed(() => Math.max(1, ...supportPortfolioR
 const topSupportCards = computed(() => supportPerformanceRows.value
   .filter(shouldShowInSupportRanking)
   .map((row, index) => {
-  const employee = resolveEmployeeForCompany(row);
-  const companies = visibleCompanyInfoRows.value.filter(company => companyMatchesEmployee(company, employee));
-  const companySummary = companyPortfolioSummary(companies);
-  return {
-    ...employee,
-    ...row,
-    rank: index + 1,
-    assigned_companies: companies,
-    company_summary: companySummary,
-    company_total: companies.length,
-    company_active: companySummary.active,
-    company_churn: companySummary.churn,
-    company_expiring_soon: companySummary.expiring_soon,
-    // Comparison metrics
-    closed_comparison: comparisonEnabled.value ? compareValue(row.closed_requests, row.prev_closed_requests, { unit: 'ta' }) : null,
-    open_comparison: comparisonEnabled.value ? compareValue(row.open_requests, row.prev_open_requests, { invert: true, unit: 'ta' }) : null,
-    sla_comparison: comparisonEnabled.value ? compareValue(row.sla, row.prev_close_rate, { isPercentage: true }) : null,
-    avg_comparison: comparisonEnabled.value ? compareValue(row.avg_close_minutes, row.prev_avg_close_minutes, { invert: true, unit: 'min' }) : null
-  };
-}));
+    const employee = resolveEmployeeForCompany(row);
+    const companies = visibleCompanyInfoRows.value.filter(company => companyMatchesEmployee(company, employee));
+    const companySummary = companyPortfolioSummary(companies);
+    return {
+      ...employee,
+      ...row,
+      rank: index + 1,
+      assigned_companies: companies,
+      company_summary: companySummary,
+      company_total: companies.length,
+      company_active: companySummary.active,
+      company_churn: companySummary.churn,
+      company_expiring_soon: companySummary.expiring_soon,
+      // Comparison metrics
+      closed_comparison: comparisonEnabled.value ? compareValue(row.closed_requests, row.prev_closed_requests, { unit: 'ta' }) : null,
+      open_comparison: comparisonEnabled.value ? compareValue(row.open_requests, row.prev_open_requests, { invert: true, unit: 'ta' }) : null,
+      sla_comparison: comparisonEnabled.value ? compareValue(row.sla, row.prev_close_rate, { isPercentage: true }) : null,
+      avg_comparison: comparisonEnabled.value ? compareValue(row.avg_close_minutes, row.prev_avg_close_minutes, { invert: true, unit: 'min' }) : null
+    };
+  }));
 
 const rankingClosedRequestsTotal = computed(() => topSupportCards.value.reduce(
   (sum, row) => sum + Number(row.closed_requests || 0),
