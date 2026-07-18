@@ -27,6 +27,7 @@ const COMPANY_INFO_FIELDS = Object.freeze([
   'subscription_start_date',
   'business_status',
   'is_real',
+  'mrr_amount',
   'status_histories'
 ]);
 const STATUS_HISTORY_FIELDS = Object.freeze(['id', 'old_status', 'new_status', 'company_id', 'changed_at']);
@@ -313,6 +314,7 @@ function normalizeCompany(row = {}) {
     subscription_start_date: row.subscription_start_date || '',
     business_status: row.business_status || '',
     is_real: Number(row.is_real || 0),
+    mrr_amount: Number(row.mrr_amount || 0),
     status_histories: statusHistories,
     latest_status_change: latestStatus,
     latest_status_change_at_iso: latestStatus ? parseUnixDate(latestStatus.changed_at) : ''

@@ -877,6 +877,75 @@
                   </template>
                 </DataTable>
               </section>
+
+              <section class="card chart-card">
+                <div class="card-header chart-card-head">
+                  <div>
+                    <div class="card-title">MRR taqsimoti</div>
+                  </div>
+                </div>
+                <div v-if="companyMrrChartRows.length" class="company-mrr-bars">
+                  <article v-for="row in companyMrrChartRows" :key="`mrr-bar-${row.id}`" class="company-mrr-row">
+                    <b>{{ row.name }}</b>
+                    <div class="company-mrr-track">
+                      <span class="company-mrr-fill" :style="{ width: row.bar_percent + '%' }"></span>
+                    </div>
+                    <strong>
+                      {{ fmtNumber(row.mrr_amount) }} mln so‘m
+                      <span class="company-mrr-score" :style="{ background: activityScoreColor(row.activity_score) }"
+                        :title="`Faollik balli: ${row.activity_score}/5`">{{ row.activity_score }}</span>
+                    </strong>
+                  </article>
+                </div>
+                <div v-else class="empty compact">MRR ma’lumoti topilmadi</div>
+              </section>
+
+              <section class="card chart-card">
+                <div class="card-header chart-card-head">
+                  <div>
+                    <div class="card-title">MRR vs Faollik</div>
+                  </div>
+                </div>
+                <div v-if="companyMrrScatterPoints.length" class="trend-chart company-mrr-scatter">
+                  <svg :viewBox="`0 0 ${COMPANY_MRR_SCATTER_VIEW.width} ${COMPANY_MRR_SCATTER_VIEW.height}`" role="img"
+                    aria-label="MRR va faollik balli nisbati">
+                    <rect class="company-mrr-scatter-risk" :x="COMPANY_MRR_SCATTER_DIMS.left"
+                      :y="COMPANY_MRR_SCATTER_DIMS.top" :width="companyMrrScatterThresholds.riskWidth"
+                      :height="companyMrrScatterThresholds.riskHeight" />
+                    <text class="company-mrr-scatter-risk-label" :x="COMPANY_MRR_SCATTER_DIMS.left + 8"
+                      :y="COMPANY_MRR_SCATTER_DIMS.top + 18">Yuqori MRR + past faollik (Risk zonasi)</text>
+                    <g class="trend-grid">
+                      <line v-for="tick in companyMrrScatterYTicks" :key="`mrr-y-grid-${tick.value}`"
+                        :x1="COMPANY_MRR_SCATTER_DIMS.left" :x2="COMPANY_MRR_SCATTER_DIMS.right" :y1="tick.y"
+                        :y2="tick.y" />
+                    </g>
+                    <line class="company-mrr-scatter-threshold" :x1="companyMrrScatterThresholds.x"
+                      :x2="companyMrrScatterThresholds.x" :y1="COMPANY_MRR_SCATTER_DIMS.top"
+                      :y2="COMPANY_MRR_SCATTER_DIMS.bottom" />
+                    <line class="company-mrr-scatter-threshold" :x1="COMPANY_MRR_SCATTER_DIMS.left"
+                      :x2="COMPANY_MRR_SCATTER_DIMS.right" :y1="companyMrrScatterThresholds.y"
+                      :y2="companyMrrScatterThresholds.y" />
+                    <g class="trend-axis">
+                      <text v-for="tick in companyMrrScatterYTicks" :key="`mrr-y-label-${tick.value}`" x="52"
+                        :y="tick.y + 4" text-anchor="end">{{ fmtNumber(tick.value) }}</text>
+                      <text v-for="tick in companyMrrScatterXTicks" :key="`mrr-x-label-${tick.value}`" :x="tick.x"
+                        :y="COMPANY_MRR_SCATTER_DIMS.bottom + 16" text-anchor="middle">{{ tick.value }}</text>
+                    </g>
+                    <circle v-for="point in companyMrrScatterPoints" :key="`mrr-point-${point.id}`" :cx="point.x"
+                      :cy="point.y" r="6" :fill="activityScoreColor(point.activity_score)" fill-opacity="0.85">
+                      <title>{{ point.name }} · {{ fmtNumber(point.mrr_amount) }} mln so‘m · Faollik {{
+                        point.activity_score }}/5</title>
+                    </circle>
+                  </svg>
+                </div>
+                <div v-else class="empty compact">MRR ma’lumoti topilmadi</div>
+                <div class="company-ticket-legend">
+                  <span><i class="legend-square" style="background: var(--danger);"></i>Past faollik (1-2)</span>
+                  <span><i class="legend-square" style="background: #f59e0b;"></i>O‘rtacha faollik (3)</span>
+                  <span><i class="legend-square" style="background: var(--success);"></i>Yuqori faollik (4-5)</span>
+                  <span>r = {{ fmtNumber(companyMrrCorrelation) }}</span>
+                </div>
+              </section>
             </div>
           </template>
 
@@ -5570,6 +5639,134 @@ const companyModuleBaseRows = computed(() => {
     };
   });
 });
+
+const COMPANY_MRR_CHART_LIMIT = 6;
+const COMPANY_MRR_SCATTER_VIEW = { width: 460, height: 260 };
+const COMPANY_MRR_SCATTER_DIMS = { left: 60, right: 430, top: 20, bottom: 210 };
+
+function faollikScoreFromPercent(percent = 0) {
+  const value = Number(percent) || 0;
+  if (value <= 0) return 1;
+  return Math.min(5, Math.max(1, Math.ceil(value / 20)));
+}
+
+function activityScoreColor(score = 1) {
+  if (score >= 4) return 'var(--success)';
+  if (score >= 3) return '#f59e0b';
+  return 'var(--danger)';
+}
+
+function pearsonCorrelation(pairs = []) {
+  const n = pairs.length;
+  if (n < 2) return 0;
+  const meanX = pairs.reduce((sum, [x]) => sum + x, 0) / n;
+  const meanY = pairs.reduce((sum, [, y]) => sum + y, 0) / n;
+  let numerator = 0;
+  let denomX = 0;
+  let denomY = 0;
+  pairs.forEach(([x, y]) => {
+    const dx = x - meanX;
+    const dy = y - meanY;
+    numerator += dx * dy;
+    denomX += dx * dx;
+    denomY += dy * dy;
+  });
+  const denom = Math.sqrt(denomX * denomY);
+  return denom ? numerator / denom : 0;
+}
+
+const companyMrrRows = computed(() => {
+  const percentById = new Map();
+  companyModuleBaseRows.value.forEach(row => {
+    const id = String(row.id || '').trim();
+    if (id) percentById.set(id, Number(row.module_active_percent || 0));
+  });
+  return filteredCompanyInfoRows.value
+    .map(row => {
+      const id = String(row.id || '').trim();
+      const percent = percentById.get(id) || 0;
+      return {
+        id,
+        name: row.name || 'Kompaniya',
+        mrr_amount: Number(row.mrr_amount || 0),
+        activity_percent: percent,
+        activity_score: faollikScoreFromPercent(percent)
+      };
+    })
+    .filter(row => row.mrr_amount > 0);
+});
+
+const companyMrrChartRows = computed(() => {
+  const rows = [...companyMrrRows.value].sort((a, b) => b.mrr_amount - a.mrr_amount).slice(0, COMPANY_MRR_CHART_LIMIT);
+  const max = Math.max(1, ...rows.map(row => row.mrr_amount));
+  return rows.map(row => ({ ...row, bar_percent: Math.round((row.mrr_amount / max) * 1000) / 10 }));
+});
+
+const companyMrrScatterMax = computed(() => Math.max(1, ...companyMrrRows.value.map(row => row.mrr_amount)));
+
+const companyMrrScatterPoints = computed(() => {
+  const dims = COMPANY_MRR_SCATTER_DIMS;
+  const width = dims.right - dims.left;
+  const height = dims.bottom - dims.top;
+  const max = companyMrrScatterMax.value;
+  return companyMrrRows.value.map(row => {
+    const xRatio = (row.activity_score - 1) / 4;
+    const yRatio = row.mrr_amount / max;
+    return {
+      ...row,
+      x: Math.round((dims.left + xRatio * width) * 10) / 10,
+      y: Math.round((dims.bottom - yRatio * height) * 10) / 10
+    };
+  });
+});
+
+const companyMrrScatterXTicks = computed(() => {
+  const dims = COMPANY_MRR_SCATTER_DIMS;
+  const width = dims.right - dims.left;
+  return [1, 2, 3, 4, 5].map(value => ({
+    value,
+    x: Math.round((dims.left + ((value - 1) / 4) * width) * 10) / 10
+  }));
+});
+
+const companyMrrScatterYTicks = computed(() => {
+  const dims = COMPANY_MRR_SCATTER_DIMS;
+  const height = dims.bottom - dims.top;
+  const max = companyMrrScatterMax.value;
+  const steps = 5;
+  return Array.from({ length: steps + 1 }, (_, index) => {
+    const value = Math.round((max / steps) * index);
+    return {
+      value,
+      y: Math.round((dims.bottom - (index / steps) * height) * 10) / 10
+    };
+  });
+});
+
+const companyMrrScatterThresholds = computed(() => {
+  const dims = COMPANY_MRR_SCATTER_DIMS;
+  const rows = companyMrrRows.value;
+  const sortedMrr = [...rows.map(row => row.mrr_amount)].sort((a, b) => a - b);
+  const medianMrr = sortedMrr.length
+    ? sortedMrr[Math.floor((sortedMrr.length - 1) / 2)]
+    : 0;
+  const max = companyMrrScatterMax.value;
+  const width = dims.right - dims.left;
+  const height = dims.bottom - dims.top;
+  const scoreThreshold = 3;
+  const x = Math.round((dims.left + ((scoreThreshold - 1) / 4) * width) * 10) / 10;
+  const y = Math.round((dims.bottom - (medianMrr / max) * height) * 10) / 10;
+  return {
+    x,
+    y,
+    riskWidth: Math.max(0, x - dims.left),
+    riskHeight: Math.max(0, y - dims.top)
+  };
+});
+
+const companyMrrCorrelation = computed(() => pearsonCorrelation(
+  companyMrrRows.value.map(row => [row.activity_score, row.mrr_amount])
+));
 
 const companyModuleSupportFilterOptions = computed(() => {
   const usernames = new Set();

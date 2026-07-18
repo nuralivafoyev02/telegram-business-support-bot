@@ -3895,6 +3895,83 @@ td,
   background: var(--danger);
 }
 
+.company-mrr-bars {
+  display: grid;
+  gap: 26px;
+  padding: 36px 30px 22px;
+}
+
+.company-mrr-row {
+  display: grid;
+  grid-template-columns: minmax(180px, .42fr) minmax(260px, 1fr) minmax(150px, auto);
+  align-items: center;
+  gap: 18px;
+}
+
+.company-mrr-row>b {
+  color: var(--text);
+  font-size: 17px;
+  font-weight: 900;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.company-mrr-track {
+  position: relative;
+  height: 22px;
+  border-radius: var(--radius);
+  background: var(--surface-muted);
+  overflow: hidden;
+}
+
+.company-mrr-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  border-radius: var(--radius);
+  background: var(--primary);
+}
+
+.company-mrr-row strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 15px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.company-mrr-score {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.company-mrr-scatter-risk {
+  fill: var(--danger);
+  fill-opacity: .08;
+}
+
+.company-mrr-scatter-risk-label {
+  fill: var(--danger);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.company-mrr-scatter-threshold {
+  stroke: var(--muted-strong);
+  stroke-width: 1;
+  stroke-dasharray: 6 6;
+}
+
 .company-module-table-card {
   overflow: hidden;
 }
