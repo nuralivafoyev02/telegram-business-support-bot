@@ -962,25 +962,6 @@
                   </template>
                 </DataTable>
               </section>
-
-              <section class="card alert-card">
-                <div class="card-header">
-                  <div>
-                    <div class="card-title">Obuna nazorati</div>
-                  </div>
-                </div>
-                <div class="alert-list">
-                  <article v-for="row in companyAlerts" :key="row.id" class="alert-item">
-                    <div class="alert-item-head">
-                      <b>{{ row.name }}</b>
-                      <span>{{ expiryAlertBadge(row) }}</span>
-                    </div>
-                    <p>{{ row.expired || 'Muddatsiz' }}</p>
-                    <small>Mas’ul: {{ companySupportLabel(row) }}</small>
-                  </article>
-                  <div v-if="!companyAlerts.length" class="empty compact">Obuna bo‘yicha xavfli holat yo‘q</div>
-                </div>
-              </section>
             </div>
           </template>
 
