@@ -883,6 +883,18 @@
                   <div>
                     <div class="card-title">MRR taqsimoti</div>
                   </div>
+                  <label class="company-module-filter">
+                    <span>Davr</span>
+                    <select :value="companyModulePeriod" class="select mini-select"
+                      @change="handleCompanyModulePeriodChange($event.target.value)"
+                      @mousedown="handleCompanyModulePeriodSelectPointerDown"
+                      @mouseup="handleCompanyModulePeriodSelectPointerUp">
+                      <option v-for="period in companyModulePeriodOptions" :key="`mrr-bar-period-${period.key}`"
+                        :value="period.key">
+                        {{ companyModulePeriodOptionLabel(period) }}
+                      </option>
+                    </select>
+                  </label>
                 </div>
                 <div v-if="companyMrrChartRows.length" class="company-mrr-bars">
                   <article v-for="row in companyMrrChartRows" :key="`mrr-bar-${row.id}`" class="company-mrr-row">
@@ -905,6 +917,18 @@
                   <div>
                     <div class="card-title">MRR vs Faollik</div>
                   </div>
+                  <label class="company-module-filter">
+                    <span>Davr</span>
+                    <select :value="companyModulePeriod" class="select mini-select"
+                      @change="handleCompanyModulePeriodChange($event.target.value)"
+                      @mousedown="handleCompanyModulePeriodSelectPointerDown"
+                      @mouseup="handleCompanyModulePeriodSelectPointerUp">
+                      <option v-for="period in companyModulePeriodOptions" :key="`mrr-scatter-period-${period.key}`"
+                        :value="period.key">
+                        {{ companyModulePeriodOptionLabel(period) }}
+                      </option>
+                    </select>
+                  </label>
                 </div>
                 <div v-if="companyMrrScatterPoints.length" class="trend-chart company-mrr-scatter">
                   <svg :viewBox="`0 0 ${COMPANY_MRR_SCATTER_VIEW.width} ${COMPANY_MRR_SCATTER_VIEW.height}`" role="img"
@@ -5640,7 +5664,6 @@ const companyModuleBaseRows = computed(() => {
   });
 });
 
-const COMPANY_MRR_CHART_LIMIT = 6;
 const COMPANY_MRR_SCATTER_VIEW = { width: 460, height: 260 };
 const COMPANY_MRR_SCATTER_DIMS = { left: 60, right: 430, top: 20, bottom: 210 };
 
@@ -5697,7 +5720,7 @@ const companyMrrRows = computed(() => {
 });
 
 const companyMrrChartRows = computed(() => {
-  const rows = [...companyMrrRows.value].sort((a, b) => b.mrr_amount - a.mrr_amount).slice(0, COMPANY_MRR_CHART_LIMIT);
+  const rows = [...companyMrrRows.value].sort((a, b) => b.mrr_amount - a.mrr_amount);
   const max = Math.max(1, ...rows.map(row => row.mrr_amount));
   return rows.map(row => ({ ...row, bar_percent: Math.round((row.mrr_amount / max) * 1000) / 10 }));
 });
@@ -5709,15 +5732,31 @@ const companyMrrScatterPoints = computed(() => {
   const width = dims.right - dims.left;
   const height = dims.bottom - dims.top;
   const max = companyMrrScatterMax.value;
-  return companyMrrRows.value.map(row => {
-    const xRatio = (row.activity_score - 1) / 4;
-    const yRatio = row.mrr_amount / max;
-    return {
-      ...row,
-      x: Math.round((dims.left + xRatio * width) * 10) / 10,
-      y: Math.round((dims.bottom - yRatio * height) * 10) / 10
-    };
+  const columnWidth = width / 4;
+  const jitterSpan = Math.min(34, columnWidth * 0.4);
+  const byScore = new Map();
+  companyMrrRows.value.forEach(row => {
+    if (!byScore.has(row.activity_score)) byScore.set(row.activity_score, []);
+    byScore.get(row.activity_score).push(row);
   });
+  const points = [];
+  byScore.forEach(rows => {
+    const sorted = [...rows].sort((a, b) => b.mrr_amount - a.mrr_amount);
+    const count = sorted.length;
+    sorted.forEach((row, index) => {
+      const xRatio = (row.activity_score - 1) / 4;
+      const baseX = dims.left + xRatio * width;
+      const offsetRatio = count > 1 ? (index / (count - 1)) - 0.5 : 0;
+      const yRatio = row.mrr_amount / max;
+      const x = Math.min(dims.right, Math.max(dims.left, baseX + offsetRatio * jitterSpan * 2));
+      points.push({
+        ...row,
+        x: Math.round(x * 10) / 10,
+        y: Math.round((dims.bottom - yRatio * height) * 10) / 10
+      });
+    });
+  });
+  return points;
 });
 
 const companyMrrScatterXTicks = computed(() => {
