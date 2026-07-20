@@ -36,6 +36,9 @@
         <img class="logo" :src="uyqurLogoUrl" alt="Uyqur" width="42" height="42" />
         <div class="brand-wrapper">
           <div class="brand-title">Uyqur Yordam</div>
+          <strong class="dashboard-creator">
+            Made by: <a href="https://t.me/uyqur_nurali" target="_blank">Nurali Vafoyev</a>
+          </strong>
         </div>
       </div>
 
@@ -356,12 +359,12 @@
                     <strong style="display: flex; gap: 10px; font-size: 14px;">
                       <span class="total-text" style="color: var(--text);" title="Jami ticketlar">{{
                         fmtNumber(row.total_requests)
-                      }}</span>
+                        }}</span>
                       <span class="closed-text" style="color: #00d26a;" title="Javob berilgan">{{
                         fmtNumber(row.closed_requests)
-                      }}</span>
+                        }}</span>
                       <span class="open-text" style="color: #f73164;" title="Ochiq">{{ fmtNumber(row.open_requests)
-                      }}</span>
+                        }}</span>
                     </strong>
                   </article>
                 </div>
@@ -457,7 +460,7 @@
                       </div>
                       <div class="timeline-status">
                         <span class="status-pill mini" :class="expiryStatusClass(row)">{{ expiryStatusLabel(row)
-                        }}</span>
+                          }}</span>
                         <small>{{ businessStatusLabel(row.business_status) }}</small>
                       </div>
                     </article>
@@ -617,7 +620,7 @@
                       <span class="company-module-summary-label">{{ column.label }}</span>
                       <div class="company-module-summary-metrics">
                         <b class="company-module-summary-value">{{ companyModuleTableSummary.modulePercents[column.key]
-                        }}%</b>
+                          }}%</b>
                         <span
                           v-if="companyModuleCompareEnabled && companyModuleTableSummary.moduleComparisons[column.key]"
                           class="trend-label module-trend-label company-module-summary-delta"
@@ -630,7 +633,7 @@
                   <div v-if="companyModuleTableSummary.supportStaff.length" class="company-module-summary-support">
                     <span class="company-module-summary-support-label">Mas’ul xodimlar</span>
                     <b class="company-module-summary-support-value">{{ companyModuleTableSummary.supportStaff.join(', ')
-                    }}</b>
+                      }}</b>
                   </div>
                 </div>
                 <div class="company-module-table-wrap">
@@ -931,32 +934,34 @@
                       <span>Kompaniya</span>
                       <select v-model="companyMrrScatterCompanyId" class="select mini-select">
                         <option value="">Hammasi</option>
-                        <option v-for="company in companyMrrScatterCompanyOptions" :key="`mrr-scatter-company-${company.id}`"
-                          :value="company.id">{{ company.name }}</option>
+                        <option v-for="company in companyMrrScatterCompanyOptions"
+                          :key="`mrr-scatter-company-${company.id}`" :value="company.id">{{ company.name }}</option>
                       </select>
                     </label>
                     <label class="company-module-filter">
                       <span>Biznes holati</span>
                       <select v-model="companyMrrScatterBusinessFilter" class="select mini-select">
                         <option value="all">Hammasi</option>
-                        <option v-for="status in companyMrrScatterBusinessOptions" :key="`mrr-scatter-business-${status}`"
-                          :value="status">{{ businessStatusLabel(status) }}</option>
+                        <option v-for="status in companyMrrScatterBusinessOptions"
+                          :key="`mrr-scatter-business-${status}`" :value="status">{{ businessStatusLabel(status) }}
+                        </option>
                       </select>
                     </label>
                     <label class="company-module-filter">
                       <span>Mas’ul xodim</span>
                       <select v-model="companyMrrScatterSupportFilter" class="select mini-select">
                         <option value="all">Hammasi</option>
-                        <option v-for="username in companyMrrScatterSupportOptions" :key="`mrr-scatter-support-${username}`"
-                          :value="username">{{ companyModuleSupportDisplayLabel(username) }}</option>
+                        <option v-for="username in companyMrrScatterSupportOptions"
+                          :key="`mrr-scatter-support-${username}`" :value="username">{{
+                          companyModuleSupportDisplayLabel(username) }}</option>
                       </select>
                     </label>
                     <label class="company-module-filter">
                       <span>Davr</span>
                       <select :value="companyMrrScatterPeriod" class="select mini-select"
                         @change="handleCompanyMrrScatterPeriodChange($event.target.value)">
-                        <option v-for="period in companyMrrScatterPeriodOptions" :key="`mrr-scatter-period-${period.key}`"
-                          :value="period.key">
+                        <option v-for="period in companyMrrScatterPeriodOptions"
+                          :key="`mrr-scatter-period-${period.key}`" :value="period.key">
                           {{ period.label }}
                         </option>
                       </select>
@@ -967,9 +972,10 @@
                   ref="companyMrrScatterChartRef">
                   <svg :viewBox="`0 0 ${COMPANY_MRR_SCATTER_VIEW.width} ${COMPANY_MRR_SCATTER_VIEW.height}`" role="img"
                     aria-label="MRR va faollik balli nisbati">
-                    <rect class="company-mrr-scatter-risk company-mrr-scatter-quadrant" :x="COMPANY_MRR_SCATTER_DIMS.left"
-                      :y="COMPANY_MRR_SCATTER_DIMS.top" :width="companyMrrScatterThresholds.riskWidth"
-                      :height="companyMrrScatterThresholds.riskHeight" @click="openCompanyMrrQuadrantDetail('risk')">
+                    <rect class="company-mrr-scatter-risk company-mrr-scatter-quadrant"
+                      :x="COMPANY_MRR_SCATTER_DIMS.left" :y="COMPANY_MRR_SCATTER_DIMS.top"
+                      :width="companyMrrScatterThresholds.riskWidth" :height="companyMrrScatterThresholds.riskHeight"
+                      @click="openCompanyMrrQuadrantDetail('risk')">
                       <title>Yuqori MRR + past faollik (Risk zonasi) — ro‘yxatni ko‘rish uchun bosing</title>
                     </rect>
                     <rect class="company-mrr-scatter-quadrant" :x="companyMrrScatterThresholds.x"
@@ -1013,7 +1019,8 @@
                     </g>
                     <g v-for="point in companyMrrScatterPoints" :key="`mrr-point-${point.id}`"
                       class="company-mrr-scatter-point" @mouseenter="hoverCompanyMrrScatterPoint(point)"
-                      @mouseleave="unhoverCompanyMrrScatterPoint(point)" @click.stop="selectCompanyMrrScatterPoint(point)">
+                      @mouseleave="unhoverCompanyMrrScatterPoint(point)"
+                      @click.stop="selectCompanyMrrScatterPoint(point)">
                       <circle :cx="point.x" :cy="point.y" r="3.5" :fill="activityScoreColor(point.activity_score)"
                         fill-opacity="0.9" />
                     </g>
@@ -1029,14 +1036,14 @@
                         class="company-mrr-scatter-tooltip-item" @click.stop="selectCompanyMrrScatterPoint(item)">
                         <b>{{ item.name }}</b>
                         <div class="company-module-chart-tooltip-row"><span>MRR</span><strong>{{
-                            fmtNumber(item.mrr_amount) }}</strong></div>
+                          fmtNumber(item.mrr_amount) }}</strong></div>
                         <div class="company-module-chart-tooltip-row"><span>Faollik</span><strong>{{
-                            item.activity_score }}/5</strong></div>
+                          item.activity_score }}/5</strong></div>
                         <div class="company-module-chart-tooltip-row"><span>Mas’ul xodim</span><strong>{{
-                            item.support_label || 'Biriktirilmagan' }}</strong></div>
+                          item.support_label || 'Biriktirilmagan' }}</strong></div>
                         <div class="company-module-chart-tooltip-row"><span>Faol modullar</span><strong>{{
-                            item.active_modules?.length ?
-                              item.active_modules.join(', ') : 'Yo‘q' }}</strong></div>
+                          item.active_modules?.length ?
+                            item.active_modules.join(', ') : 'Yo‘q' }}</strong></div>
                       </div>
                     </div>
                   </div>
@@ -2168,12 +2175,12 @@
             <div>
               <span>Xabarlar</span>
               <b>{{ fmtNumber(companyGroupDetail.company?.total_messages || companyGroupDetail.summary?.total_messages)
-              }}</b>
+                }}</b>
             </div>
             <div>
               <span>Ticketlar</span>
               <b>{{ fmtNumber(companyGroupDetail.company?.total_requests || companyGroupDetail.summary?.total_requests)
-              }}</b>
+                }}</b>
             </div>
             <div>
               <span>Yopilgan</span>
@@ -2183,7 +2190,7 @@
             <div>
               <span>Ochiq</span>
               <b>{{ fmtNumber(companyGroupDetail.company?.open_requests || companyGroupDetail.summary?.open_requests)
-              }}</b>
+                }}</b>
             </div>
           </section>
 
@@ -2438,12 +2445,12 @@
                   @click="employeeManagerDetailsOpen = !employeeManagerDetailsOpen">
                   <span class="employee-manager-heading-icon" aria-hidden="true">{{ employeeManagerDetailsOpen ? '▾' :
                     '▸'
-                  }}</span>
+                    }}</span>
                   <span>{{ employeeProfile.employee?.full_name || employeeProfile.employee?.username || 'Xodim'
-                  }}</span>
+                    }}</span>
                 </button>
                 <template v-else>{{ employeeProfile.employee?.full_name || employeeProfile.employee?.username || 'Xodim'
-                }}</template>
+                  }}</template>
               </h2>
               <p>Support yozishmalari</p>
               <span>Davr: {{ selectedPeriodLabel }}</span>
@@ -2490,7 +2497,7 @@
             <div class="employee-profile-pills">
               <span class="profile-pill">🛡️ SLA <b>{{ fmtPercent(employeeProfile.summary?.sla) }}</b></span>
               <span class="profile-pill">✅ Yopish foizi <b>{{ fmtPercent(employeeProfile.summary?.close_rate)
-              }}</b></span>
+                  }}</b></span>
               <span class="profile-pill">⭐ Reyting <b>#{{ employeeProfile.rank || '—' }}</b></span>
             </div>
           </header>
@@ -2579,7 +2586,7 @@
 
                   <div v-if="employeeProfileChatLoading" class="metric-chat-state">Chat yuklanmoqda...</div>
                   <div v-else-if="employeeProfileChatError" class="metric-chat-state error">{{ employeeProfileChatError
-                  }}
+                    }}
                   </div>
                   <div v-else-if="employeeProfileConversation.length" ref="employeeProfileThreadRef"
                     class="telegram-thread employee-profile-thread">
