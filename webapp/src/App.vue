@@ -5860,7 +5860,7 @@ const companyMrrChartRows = computed(() => {
 
 const companyMrrScatterPeriod = ref('today');
 const companyMrrScatterReports = ref({ companies: [], report_dates: [], period: 'today', fetched_at: null });
-const companyMrrScatterBusinessFilter = ref('all');
+const companyMrrScatterBusinessFilter = ref('ACTIVE');
 const companyMrrScatterSupportFilter = ref('all');
 const companyMrrScatterCompanyId = ref('');
 const companyMrrScatterPeriodOptions = companyModulePeriodOptions.filter(period => period.key !== 'custom');
@@ -5985,31 +5985,15 @@ const companyMrrScatterPoints = computed(() => {
   const width = dims.right - dims.left;
   const height = dims.bottom - dims.top;
   const max = companyMrrScatterMax.value;
-  const columnWidth = width / 5;
-  const jitterSpan = Math.min(34, columnWidth * 0.4);
-  const byScore = new Map();
-  companyMrrScatterRows.value.forEach(row => {
-    if (!byScore.has(row.activity_score)) byScore.set(row.activity_score, []);
-    byScore.get(row.activity_score).push(row);
+  return companyMrrScatterRows.value.map(row => {
+    const xRatio = row.activity_score / 5;
+    const yRatio = row.mrr_amount / max;
+    return {
+      ...row,
+      x: Math.round((dims.left + xRatio * width) * 10) / 10,
+      y: Math.round((dims.bottom - yRatio * height) * 10) / 10
+    };
   });
-  const points = [];
-  byScore.forEach(rows => {
-    const sorted = [...rows].sort((a, b) => b.mrr_amount - a.mrr_amount);
-    const count = sorted.length;
-    sorted.forEach((row, index) => {
-      const xRatio = row.activity_score / 5;
-      const baseX = dims.left + xRatio * width;
-      const offsetRatio = count > 1 ? (index / (count - 1)) - 0.5 : 0;
-      const yRatio = row.mrr_amount / max;
-      const x = Math.min(dims.right, Math.max(dims.left, baseX + offsetRatio * jitterSpan * 2));
-      points.push({
-        ...row,
-        x: Math.round(x * 10) / 10,
-        y: Math.round((dims.bottom - yRatio * height) * 10) / 10
-      });
-    });
-  });
-  return points;
 });
 
 const companyMrrScatterXTicks = computed(() => {
