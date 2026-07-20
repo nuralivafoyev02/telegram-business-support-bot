@@ -5704,7 +5704,8 @@ const companyMrrRows = computed(() => {
     const id = String(row.id || '').trim();
     if (id) percentById.set(id, Number(row.module_active_percent || 0));
   });
-  return filteredCompanyInfoRows.value
+  return companyInfoRows.value
+    .filter(includesSearch)
     .map(row => {
       const id = String(row.id || '').trim();
       const percent = percentById.get(id) || 0;
