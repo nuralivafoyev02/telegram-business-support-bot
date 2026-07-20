@@ -987,8 +987,7 @@
                     </g>
                     <circle v-for="point in companyMrrScatterPoints" :key="`mrr-point-${point.id}`" :cx="point.x"
                       :cy="point.y" r="6" :fill="activityScoreColor(point.activity_score)" fill-opacity="0.85">
-                      <title>{{ point.name }} · {{ fmtNumber(point.mrr_amount) }} · Faollik {{
-                        point.activity_score }}/5</title>
+                      <title>{{ companyMrrPointTooltip(point) }}</title>
                     </circle>
                   </svg>
                 </div>
@@ -5725,6 +5724,17 @@ function activityScoreColor(score = 0) {
   return 'var(--danger)';
 }
 
+function companyMrrPointTooltip(point = {}) {
+  const modules = point.active_modules?.length ? point.active_modules.join(', ') : 'Faol modul yo‘q';
+  return [
+    point.name,
+    `${fmtNumber(point.mrr_amount)}`,
+    `Faollik ${point.activity_score}/5`,
+    `Mas’ul: ${point.support_label || 'Biriktirilmagan'}`,
+    `Faol modullar: ${modules}`
+  ].join('\n');
+}
+
 function pearsonCorrelation(pairs = []) {
   const n = pairs.length;
   if (n < 2) return 0;
@@ -5757,12 +5767,16 @@ const companyMrrRows = computed(() => {
     .map(row => {
       const id = String(row.id || '').trim();
       const moduleRow = moduleDataById.get(id);
+      const usage = moduleRow?.module_usage || {};
+      const activeModules = companyModuleColumns.filter(column => usage[column.key]).map(column => column.label);
       return {
         id,
         name: row.name || 'Kompaniya',
         mrr_amount: Number(row.mrr_amount || 0),
         activity_percent: Number(moduleRow?.module_active_percent || 0),
-        activity_score: Number(moduleRow?.module_active_count || 0)
+        activity_score: Number(moduleRow?.module_active_count || 0),
+        support_label: companySupportLabel(row),
+        active_modules: activeModules
       };
     })
     .filter(row => row.mrr_amount > 0);
