@@ -3972,6 +3972,12 @@ td,
   stroke-dasharray: 6 6;
 }
 
+.company-mrr-scatter svg {
+  max-width: 620px;
+  min-width: 0;
+  margin: 0 auto;
+}
+
 .company-module-table-card {
   overflow: hidden;
 }
