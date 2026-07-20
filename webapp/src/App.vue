@@ -845,36 +845,6 @@
                 </div>
               </section>
 
-              <section class="card">
-                <div class="card-header">
-                  <div>
-                    <div class="card-title">Kompaniya aktivligi</div>
-                  </div>
-                </div>
-                <DataTable :columns="companyActivityColumns" :rows="filteredCompanyInfoRows"
-                  empty="Kompaniya ma’lumoti topilmadi" :page-size="12" :on-cell-action="handleTableCellAction">
-                  <template #companyIdentity="{ row }">
-                    <span class="company-identity">
-                      <img v-if="row.icon" :src="row.icon" alt="" />
-                      <span>
-                        <b>{{ row.name || 'Kompaniya' }}</b>
-                        <small>{{ row.brand || 'Brend kiritilmagan' }}</small>
-                      </span>
-                    </span>
-                  </template>
-                  <template #businessStatus="{ row }">
-                    <span class="status-pill mini" :class="businessStatusClass(row.business_status)">{{
-                      businessStatusLabel(row.business_status) }}</span>
-                  </template>
-                  <template #supportOwner="{ row }">
-                    <span class="support-owner">{{ companySupportLabel(row) }}</span>
-                  </template>
-                  <template #expiryStatus="{ row }">
-                    <span class="status-pill mini" :class="expiryStatusClass(row)">{{ expiryStatusLabel(row) }}</span>
-                  </template>
-                </DataTable>
-              </section>
-
               <section class="card chart-card">
                 <div class="card-header chart-card-head">
                   <div>
