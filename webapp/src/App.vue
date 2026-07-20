@@ -6122,7 +6122,14 @@ const companyMrrScatterSelectedPointId = ref('');
 
 function selectCompanyMrrScatterPoint(point = {}) {
   const id = String(point.id || '').trim();
-  companyMrrScatterSelectedPointId.value = companyMrrScatterSelectedPointId.value === id ? '' : id;
+  const wasSelected = companyMrrScatterSelectedPointId.value === id;
+  companyMrrScatterSelectedPointId.value = wasSelected ? '' : id;
+  if (!wasSelected && id) {
+    selectCompanyModuleChartCompany(id);
+    nextTick(() => {
+      companyModuleChartRef.value?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+  }
 }
 
 function closeCompanyMrrScatterTooltip() {
