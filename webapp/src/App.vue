@@ -1047,7 +1047,7 @@
                     <g v-for="point in companyMrrScatterPoints" :key="`mrr-point-${point.id}`"
                       class="company-mrr-scatter-point" @mouseenter="hoverCompanyMrrScatterPoint(point)"
                       @mouseleave="unhoverCompanyMrrScatterPoint(point)" @click.stop="selectCompanyMrrScatterPoint(point)">
-                      <circle :cx="point.x" :cy="point.y" r="2.5" :fill="activityScoreColor(point.activity_score)"
+                      <circle :cx="point.x" :cy="point.y" r="3.5" :fill="activityScoreColor(point.activity_score)"
                         fill-opacity="0.9" />
                     </g>
                   </svg>
