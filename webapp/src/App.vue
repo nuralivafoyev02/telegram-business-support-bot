@@ -4582,9 +4582,7 @@ function buildCompanyModuleChartYRange(metric = 'activity', rows = [], visibleKe
       max = Math.max(max, value);
     });
     if (showAverage) {
-      const value = metric === 'activity'
-        ? Number(row.avgActivity || 0)
-        : companyModuleChartAverageForRow(row, metric, visibleKeys);
+      const value = companyModuleChartAverageActivityForRow(row, metric, visibleKeys);
       min = Math.min(min, value);
       max = Math.max(max, value);
     }
@@ -6622,8 +6620,9 @@ function companyModuleChartAverageForRow(row = {}, metric = 'activity', visibleK
 }
 
 function companyModuleChartAverageActivityForRow(row = {}, metric = 'activity', visibleKeys = []) {
-  if (metric === 'activity') return Number(row.avgActivity || 0);
-  return companyModuleChartAverageForRow(row, metric, visibleKeys);
+  const keys = visibleKeys.length ? visibleKeys : companyModuleKeys;
+  if (metric === 'activity' && keys.length === companyModuleKeys.length) return Number(row.avgActivity || 0);
+  return companyModuleChartAverageForRow(row, metric, keys);
 }
 
 const companyModuleChartRows = computed(() => {
