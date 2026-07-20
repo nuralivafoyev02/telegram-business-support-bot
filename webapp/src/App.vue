@@ -4674,7 +4674,7 @@ function aggregateCompanyModuleChartMonths(rows = []) {
 }
 
 function finalizeCompanyModuleChartRows(rows = []) {
-  if (rows.length <= 14) return rows;
+  if (rows.length <= 31) return rows;
   const months = new Set(rows.map(row => companyModuleChartMonthKey(row.date_key)));
   if (months.size < 2) return rows;
   return aggregateCompanyModuleChartMonths(rows);
