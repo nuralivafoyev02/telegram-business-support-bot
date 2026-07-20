@@ -813,8 +813,8 @@
                         <circle v-for="(point, pointIndex) in line.points"
                           :key="`module-chart-dot-${line.key}-${pointIndex}`" class="company-module-chart-dot"
                           :class="{ active: companyModuleChartHoverIndex === pointIndex }" :cx="point.x" :cy="point.y"
-                          :r="companyModuleChartHoverIndex === pointIndex ? 4.5 : 3.5" fill="#fff" :stroke="line.color"
-                          :stroke-width="companyModuleChartHoverIndex === pointIndex ? 2.5 : 1.5" />
+                          :r="companyModuleChartHoverIndex === pointIndex ? 3.5 : 2.5" :fill="line.color"
+                          :stroke="line.color" :stroke-width="companyModuleChartHoverIndex === pointIndex ? 2 : 1" />
                       </g>
                       <g v-if="companyModuleChartShowAverage && companyModuleChartAverageLine.points.length > 1"
                         class="company-module-chart-average-line">
