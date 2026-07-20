@@ -6026,10 +6026,13 @@ const companyMrrScatterThresholds = computed(() => {
   const medianMrr = sortedMrr.length
     ? sortedMrr[Math.floor((sortedMrr.length - 1) / 2)]
     : 0;
+  const sortedScores = [...rows.map(row => row.activity_score)].sort((a, b) => a - b);
+  const scoreThreshold = sortedScores.length
+    ? sortedScores[Math.floor((sortedScores.length - 1) / 2)]
+    : 0;
   const max = companyMrrScatterMax.value;
   const width = dims.right - dims.left;
   const height = dims.bottom - dims.top;
-  const scoreThreshold = 3;
   const x = Math.round((dims.left + (scoreThreshold / 5) * width) * 10) / 10;
   const y = Math.round((dims.bottom - (medianMrr / max) * height) * 10) / 10;
   return {
