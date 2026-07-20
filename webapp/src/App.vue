@@ -6560,7 +6560,6 @@ function toggleCompanyModuleChartModule(key = '') {
   const keys = [...companyModuleChartVisibleModules.value];
   const index = keys.indexOf(key);
   if (index >= 0) {
-    if (keys.length === 1) return;
     keys.splice(index, 1);
   } else {
     keys.push(key);
