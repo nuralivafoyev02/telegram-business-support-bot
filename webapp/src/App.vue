@@ -809,20 +809,20 @@
                       <g v-for="line in companyModuleChartVisibleLines" :key="`module-chart-line-${line.key}`"
                         class="company-module-chart-module-line">
                         <path v-if="line.points.length > 1 && line.path" :d="line.path" fill="none" :stroke="line.color"
-                          stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="8 6" />
+                          stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="8 6" />
                         <circle v-for="(point, pointIndex) in line.points"
                           :key="`module-chart-dot-${line.key}-${pointIndex}`" class="company-module-chart-dot"
                           :class="{ active: companyModuleChartHoverIndex === pointIndex }" :cx="point.x" :cy="point.y"
-                          :r="companyModuleChartHoverIndex === pointIndex ? 6 : 5" fill="#fff" :stroke="line.color"
-                          :stroke-width="companyModuleChartHoverIndex === pointIndex ? 3 : 2.5" />
+                          :r="companyModuleChartHoverIndex === pointIndex ? 4.5 : 3.5" fill="#fff" :stroke="line.color"
+                          :stroke-width="companyModuleChartHoverIndex === pointIndex ? 2.5 : 1.5" />
                       </g>
                       <g v-if="companyModuleChartShowAverage && companyModuleChartAverageLine.points.length > 1"
                         class="company-module-chart-average-line">
-                        <path :d="companyModuleChartAverageLine.path" fill="none" stroke="#111827" stroke-width="4"
+                        <path :d="companyModuleChartAverageLine.path" fill="none" stroke="#111827" stroke-width="2.5"
                           stroke-linecap="round" stroke-linejoin="round" />
                         <circle v-for="(point, pointIndex) in companyModuleChartAverageLine.points"
-                          :key="`module-chart-avg-dot-${pointIndex}`" :cx="point.x" :cy="point.y" r="5" fill="#111827"
-                          stroke="#111827" stroke-width="2" />
+                          :key="`module-chart-avg-dot-${pointIndex}`" :cx="point.x" :cy="point.y" r="3.5" fill="#111827"
+                          stroke="#111827" stroke-width="1.5" />
                       </g>
                       <g class="trend-axis company-module-chart-axis">
                         <text v-for="tick in companyModuleChartXTicks" :key="`module-chart-x-${tick.date_key}`"
