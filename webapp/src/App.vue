@@ -4686,7 +4686,7 @@ function companyModuleChartDateLabel(dateKey = '', total = 0) {
   const [, month, day] = key.split('-').map(Number);
   const months = ['Yan', 'Fev', 'Mar', 'Apr', 'May', 'Iyn', 'Iyl', 'Avg', 'Sen', 'Okt', 'Noy', 'Dek'];
   if (!month) return key;
-  if (total > 20 || key.length === 7) return months[month - 1] || key;
+  if (key.length === 7) return months[month - 1] || key;
   return `${String(day || '').padStart(2, '0')}.${String(month).padStart(2, '0')}`;
 }
 
@@ -5400,10 +5400,10 @@ const companyModulePeriodOptions = [
 const companyModuleCustomPeriodForm = reactive({ start: '', end: '', appliedStart: '', appliedEnd: '' });
 const companyModuleCustomPeriodError = ref('');
 const previousCompanyModulePeriod = ref('today');
-const companyModuleChartPeriod = ref('week');
+const companyModuleChartPeriod = ref('month');
 const companyModuleChartCustomPeriodForm = reactive({ start: '', end: '', appliedStart: '', appliedEnd: '' });
 const companyModuleChartCustomPeriodError = ref('');
-const previousCompanyModuleChartPeriod = ref('week');
+const previousCompanyModuleChartPeriod = ref('month');
 const companyModuleChartMetricKeys = ref(['activity']);
 const companyModuleChartVisibleModules = ref([...companyModuleKeys]);
 const companyModuleChartShowAverage = ref(true);
