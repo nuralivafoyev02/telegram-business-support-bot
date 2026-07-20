@@ -6742,6 +6742,13 @@ const companyModuleChartXTicks = computed(() => {
   const width = dims.right - dims.left;
   const step = rows.length > 1 ? width / (rows.length - 1) : 0;
   const stride = rows.length > 12 ? Math.ceil(rows.length / 8) : 1;
+  const lastIndex = rows.length - 1;
+  const indices = new Set();
+  for (let i = 0; i < rows.length; i += stride) indices.add(i);
+  indices.add(lastIndex);
+  const sorted = [...indices].sort((a, b) => a - b);
+  const secondLast = sorted[sorted.length - 2];
+  if (secondLast !== undefined && lastIndex - secondLast < stride) indices.delete(secondLast);
   return rows
     .map((row, index) => ({
       date_key: row.date_key,
@@ -6749,7 +6756,7 @@ const companyModuleChartXTicks = computed(() => {
       x: rows.length > 1 ? dims.left + step * index : dims.left + width / 2,
       index
     }))
-    .filter((tick, _, list) => tick.index === 0 || tick.index === list.length - 1 || tick.index % stride === 0);
+    .filter(tick => indices.has(tick.index));
 });
 
 const companyModuleChartLines = computed(() => {
