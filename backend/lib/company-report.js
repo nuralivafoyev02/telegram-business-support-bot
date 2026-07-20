@@ -1258,6 +1258,23 @@ async function loadCompanyModuleSnapshotForDate(tenantId, reportDate = '') {
     .map(row => ({ ...row, report_date: date }));
   const list = mergeDailyReportSources(dbRows, historyRows);
 
+  const windowStart = shiftDateKey(date, -(MODULE_ACTIVE_GRACE_DAYS - 1));
+  if (windowStart < date) {
+    const seenCompanyIds = new Set(list.map(row => row.company_id));
+    const windowRows = await loadDailyReportRowsForDateRange(tenantId, windowStart, date);
+    const latestByCompany = new Map();
+    windowRows.forEach(row => {
+      if (!row.company_id || seenCompanyIds.has(row.company_id)) return;
+      const current = latestByCompany.get(row.company_id);
+      if (!current || String(row.report_date) > String(current.report_date)) {
+        latestByCompany.set(row.company_id, row);
+      }
+    });
+    latestByCompany.forEach(row => {
+      list.push({ ...row, report_date: date });
+    });
+  }
+
   return { list, dates: [date] };
 }
 
