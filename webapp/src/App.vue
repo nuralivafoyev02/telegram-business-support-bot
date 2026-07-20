@@ -5379,7 +5379,7 @@ const companyModuleChartCustomPeriodForm = reactive({ start: '', end: '', applie
 const companyModuleChartCustomPeriodError = ref('');
 const previousCompanyModuleChartPeriod = ref('month');
 const companyModuleChartMetricKeys = ref(['activity']);
-const companyModuleChartVisibleModules = ref([...companyModuleKeys]);
+const companyModuleChartVisibleModules = ref([]);
 const companyModuleChartShowAverage = ref(true);
 const companyModuleChartMetricOptions = [
   { key: 'activity', label: 'O‘rtacha faollik' },
