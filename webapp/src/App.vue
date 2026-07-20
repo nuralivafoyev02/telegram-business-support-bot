@@ -947,7 +947,7 @@
                     <strong>
                       {{ fmtNumber(row.mrr_amount) }}
                       <span class="company-mrr-score" :style="{ background: activityScoreColor(row.activity_score) }"
-                        :title="`Faollik balli: ${row.activity_score}/5`">{{ row.activity_score }}</span>
+                        :title="`Faollik balli: ${row.activity_score}/5`"></span>
                     </strong>
                   </article>
                 </div>
@@ -1047,10 +1047,8 @@
                     <g v-for="point in companyMrrScatterPoints" :key="`mrr-point-${point.id}`"
                       class="company-mrr-scatter-point" @mouseenter="hoverCompanyMrrScatterPoint(point)"
                       @mouseleave="unhoverCompanyMrrScatterPoint(point)" @click.stop="selectCompanyMrrScatterPoint(point)">
-                      <circle :cx="point.x" :cy="point.y" r="5" :fill="activityScoreColor(point.activity_score)"
+                      <circle :cx="point.x" :cy="point.y" r="2.5" :fill="activityScoreColor(point.activity_score)"
                         fill-opacity="0.9" />
-                      <text :x="point.x" :y="point.y" text-anchor="middle" dominant-baseline="central"
-                        class="company-mrr-scatter-point-label">{{ point.activity_score }}</text>
                     </g>
                   </svg>
                   <div v-if="companyMrrScatterTooltip" class="company-module-chart-tooltip"
@@ -5796,8 +5794,8 @@ const companyModuleBaseRows = computed(() => {
   });
 });
 
-const COMPANY_MRR_SCATTER_VIEW = { width: 460, height: 260 };
-const COMPANY_MRR_SCATTER_DIMS = { left: 60, right: 430, top: 20, bottom: 210 };
+const COMPANY_MRR_SCATTER_VIEW = { width: 620, height: 380 };
+const COMPANY_MRR_SCATTER_DIMS = { left: 70, right: 590, top: 20, bottom: 320 };
 
 function activityScoreColor(score = 0) {
   if (score >= 4) return 'var(--success)';
