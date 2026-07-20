@@ -980,8 +980,6 @@
                       <span>Mas’ul xodim</span>
                       <select v-model="companyMrrScatterSupportFilter" class="select mini-select">
                         <option value="all">Hammasi</option>
-                        <option value="assigned">Biriktirilgan</option>
-                        <option value="unassigned">Biriktirilmagan</option>
                         <option v-for="username in companyMrrScatterSupportOptions" :key="`mrr-scatter-support-${username}`"
                           :value="username">{{ companyModuleSupportDisplayLabel(username) }}</option>
                       </select>
@@ -1048,8 +1046,8 @@
                     </g>
                     <circle v-for="point in companyMrrScatterPoints" :key="`mrr-point-${point.id}`" :cx="point.x"
                       :cy="point.y" r="6" :fill="activityScoreColor(point.activity_score)" fill-opacity="0.85"
-                      class="company-mrr-scatter-point" @click.stop="selectCompanyMrrScatterPoint(point)">
-                      <title>{{ companyMrrPointTooltip(point) }}</title>
+                      class="company-mrr-scatter-point" @mouseenter="hoverCompanyMrrScatterPoint(point)"
+                      @mouseleave="unhoverCompanyMrrScatterPoint(point)" @click.stop="selectCompanyMrrScatterPoint(point)">
                     </circle>
                   </svg>
                   <div v-if="companyMrrScatterTooltip" class="company-module-chart-tooltip"
@@ -5804,17 +5802,6 @@ function activityScoreColor(score = 0) {
   return 'var(--danger)';
 }
 
-function companyMrrPointTooltip(point = {}) {
-  const modules = point.active_modules?.length ? point.active_modules.join(', ') : 'Faol modul yo‘q';
-  return [
-    point.name,
-    `${fmtNumber(point.mrr_amount)}`,
-    `Faollik ${point.activity_score}/5`,
-    `Mas’ul: ${point.support_label || 'Biriktirilmagan'}`,
-    `Faol modullar: ${modules}`
-  ].join('\n');
-}
-
 function pearsonCorrelation(pairs = []) {
   const n = pairs.length;
   if (n < 2) return 0;
@@ -6120,16 +6107,22 @@ function openCompanyMrrQuadrantDetail(quadrantKey = '') {
 const companyMrrScatterChartRef = ref(null);
 const companyMrrScatterSelectedPointId = ref('');
 
+function hoverCompanyMrrScatterPoint(point = {}) {
+  companyMrrScatterSelectedPointId.value = String(point.id || '').trim();
+}
+
+function unhoverCompanyMrrScatterPoint(point = {}) {
+  const id = String(point.id || '').trim();
+  if (companyMrrScatterSelectedPointId.value === id) companyMrrScatterSelectedPointId.value = '';
+}
+
 function selectCompanyMrrScatterPoint(point = {}) {
   const id = String(point.id || '').trim();
-  const wasSelected = companyMrrScatterSelectedPointId.value === id;
-  companyMrrScatterSelectedPointId.value = wasSelected ? '' : id;
-  if (!wasSelected && id) {
-    selectCompanyModuleChartCompany(id);
-    nextTick(() => {
-      companyModuleChartRef.value?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    });
-  }
+  if (!id) return;
+  selectCompanyModuleChartCompany(id);
+  nextTick(() => {
+    companyModuleChartRef.value?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  });
 }
 
 function closeCompanyMrrScatterTooltip() {
