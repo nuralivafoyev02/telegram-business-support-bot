@@ -994,7 +994,7 @@
                 </div>
                 <div v-else class="empty compact">MRR ma’lumoti topilmadi</div>
                 <div class="company-ticket-legend">
-                  <span><i class="legend-square" style="background: var(--danger);"></i>Past faollik (1-2)</span>
+                  <span><i class="legend-square" style="background: var(--danger);"></i>Past faollik (0-2)</span>
                   <span><i class="legend-square" style="background: #f59e0b;"></i>O‘rtacha faollik (3)</span>
                   <span><i class="legend-square" style="background: var(--success);"></i>Yuqori faollik (4-5)</span>
                   <span>r = {{ fmtNumber(companyMrrCorrelation) }}</span>
@@ -5719,13 +5719,7 @@ const companyModuleBaseRows = computed(() => {
 const COMPANY_MRR_SCATTER_VIEW = { width: 460, height: 260 };
 const COMPANY_MRR_SCATTER_DIMS = { left: 60, right: 430, top: 20, bottom: 210 };
 
-function faollikScoreFromPercent(percent = 0) {
-  const value = Number(percent) || 0;
-  if (value <= 0) return 1;
-  return Math.min(5, Math.max(1, Math.ceil(value / 20)));
-}
-
-function activityScoreColor(score = 1) {
+function activityScoreColor(score = 0) {
   if (score >= 4) return 'var(--success)';
   if (score >= 3) return '#f59e0b';
   return 'var(--danger)';
@@ -5762,13 +5756,13 @@ const companyMrrRows = computed(() => {
     .filter(row => matchesCompanyModuleFilter(moduleDataById.get(String(row.id || '').trim()) || row, filters))
     .map(row => {
       const id = String(row.id || '').trim();
-      const percent = Number(moduleDataById.get(id)?.module_active_percent || 0);
+      const moduleRow = moduleDataById.get(id);
       return {
         id,
         name: row.name || 'Kompaniya',
         mrr_amount: Number(row.mrr_amount || 0),
-        activity_percent: percent,
-        activity_score: faollikScoreFromPercent(percent)
+        activity_percent: Number(moduleRow?.module_active_percent || 0),
+        activity_score: Number(moduleRow?.module_active_count || 0)
       };
     })
     .filter(row => row.mrr_amount > 0);
@@ -5787,7 +5781,7 @@ const companyMrrScatterPoints = computed(() => {
   const width = dims.right - dims.left;
   const height = dims.bottom - dims.top;
   const max = companyMrrScatterMax.value;
-  const columnWidth = width / 4;
+  const columnWidth = width / 5;
   const jitterSpan = Math.min(34, columnWidth * 0.4);
   const byScore = new Map();
   companyMrrRows.value.forEach(row => {
@@ -5799,7 +5793,7 @@ const companyMrrScatterPoints = computed(() => {
     const sorted = [...rows].sort((a, b) => b.mrr_amount - a.mrr_amount);
     const count = sorted.length;
     sorted.forEach((row, index) => {
-      const xRatio = (row.activity_score - 1) / 4;
+      const xRatio = row.activity_score / 5;
       const baseX = dims.left + xRatio * width;
       const offsetRatio = count > 1 ? (index / (count - 1)) - 0.5 : 0;
       const yRatio = row.mrr_amount / max;
@@ -5817,9 +5811,9 @@ const companyMrrScatterPoints = computed(() => {
 const companyMrrScatterXTicks = computed(() => {
   const dims = COMPANY_MRR_SCATTER_DIMS;
   const width = dims.right - dims.left;
-  return [1, 2, 3, 4, 5].map(value => ({
+  return [0, 1, 2, 3, 4, 5].map(value => ({
     value,
-    x: Math.round((dims.left + ((value - 1) / 4) * width) * 10) / 10
+    x: Math.round((dims.left + (value / 5) * width) * 10) / 10
   }));
 });
 
@@ -5848,7 +5842,7 @@ const companyMrrScatterThresholds = computed(() => {
   const width = dims.right - dims.left;
   const height = dims.bottom - dims.top;
   const scoreThreshold = 3;
-  const x = Math.round((dims.left + ((scoreThreshold - 1) / 4) * width) * 10) / 10;
+  const x = Math.round((dims.left + (scoreThreshold / 5) * width) * 10) / 10;
   const y = Math.round((dims.bottom - (medianMrr / max) * height) * 10) / 10;
   return {
     x,
