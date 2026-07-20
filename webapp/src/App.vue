@@ -3003,7 +3003,6 @@ const SETTINGS_SECTION_KEYS = ['bot', 'integrations', 'telegram', 'admin'];
 const tabs = [
   { key: 'stats', label: 'Support performance', icon: '📊' },
   { key: 'productAnalytics', label: 'Product analytics', icon: '📈' },
-  { key: 'companyActivity', label: 'Company activity', icon: '🏢' },
   { key: 'groups', label: 'Bot ulangan guruhlar', icon: '👥' },
   { key: 'employees', label: 'Xodimlar', icon: '🧑‍💼' },
   { key: 'companies', label: 'Kompaniyalar', icon: '🏬' },
@@ -3012,7 +3011,7 @@ const tabs = [
   { key: 'knowledgeBase', label: 'Bilim bazasi', icon: '📚' },
   { key: 'settings', label: 'Sozlamalar', icon: '⚙️' }
 ];
-const mainTabKeys = ['stats', 'productAnalytics', 'companyActivity'];
+const mainTabKeys = ['stats', 'productAnalytics'];
 const otherTabKeys = ['groups', 'employees', 'companies', 'clickup', 'privates', 'knowledgeBase'];
 
 function isValidTab(key) {
