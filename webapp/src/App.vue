@@ -959,13 +959,74 @@
                   <div>
                     <div class="card-title">MRR vs Faollik</div>
                   </div>
+                  <div class="company-module-table-controls">
+                    <label class="company-module-filter">
+                      <span>Kompaniya</span>
+                      <select v-model="companyMrrScatterCompanyId" class="select mini-select">
+                        <option value="">Hammasi</option>
+                        <option v-for="company in companyMrrScatterCompanyOptions" :key="`mrr-scatter-company-${company.id}`"
+                          :value="company.id">{{ company.name }}</option>
+                      </select>
+                    </label>
+                    <label class="company-module-filter">
+                      <span>Biznes holati</span>
+                      <select v-model="companyMrrScatterBusinessFilter" class="select mini-select">
+                        <option value="all">Hammasi</option>
+                        <option v-for="status in companyMrrScatterBusinessOptions" :key="`mrr-scatter-business-${status}`"
+                          :value="status">{{ businessStatusLabel(status) }}</option>
+                      </select>
+                    </label>
+                    <label class="company-module-filter">
+                      <span>Mas’ul xodim</span>
+                      <select v-model="companyMrrScatterSupportFilter" class="select mini-select">
+                        <option value="all">Hammasi</option>
+                        <option value="assigned">Biriktirilgan</option>
+                        <option value="unassigned">Biriktirilmagan</option>
+                        <option v-for="username in companyMrrScatterSupportOptions" :key="`mrr-scatter-support-${username}`"
+                          :value="username">{{ companyModuleSupportDisplayLabel(username) }}</option>
+                      </select>
+                    </label>
+                    <label class="company-module-filter">
+                      <span>Davr</span>
+                      <select :value="companyMrrScatterPeriod" class="select mini-select"
+                        @change="handleCompanyMrrScatterPeriodChange($event.target.value)">
+                        <option v-for="period in companyMrrScatterPeriodOptions" :key="`mrr-scatter-period-${period.key}`"
+                          :value="period.key">
+                          {{ period.label }}
+                        </option>
+                      </select>
+                    </label>
+                  </div>
                 </div>
-                <div v-if="companyMrrScatterPoints.length" class="trend-chart company-mrr-scatter">
+                <div v-if="companyMrrScatterPoints.length" class="trend-chart company-mrr-scatter"
+                  ref="companyMrrScatterChartRef">
                   <svg :viewBox="`0 0 ${COMPANY_MRR_SCATTER_VIEW.width} ${COMPANY_MRR_SCATTER_VIEW.height}`" role="img"
                     aria-label="MRR va faollik balli nisbati">
-                    <rect class="company-mrr-scatter-risk" :x="COMPANY_MRR_SCATTER_DIMS.left"
+                    <rect class="company-mrr-scatter-risk company-mrr-scatter-quadrant" :x="COMPANY_MRR_SCATTER_DIMS.left"
                       :y="COMPANY_MRR_SCATTER_DIMS.top" :width="companyMrrScatterThresholds.riskWidth"
-                      :height="companyMrrScatterThresholds.riskHeight" />
+                      :height="companyMrrScatterThresholds.riskHeight" @click="openCompanyMrrQuadrantDetail('risk')">
+                      <title>Yuqori MRR + past faollik (Risk zonasi) — ro‘yxatni ko‘rish uchun bosing</title>
+                    </rect>
+                    <rect class="company-mrr-scatter-quadrant" :x="companyMrrScatterThresholds.x"
+                      :y="COMPANY_MRR_SCATTER_DIMS.top"
+                      :width="COMPANY_MRR_SCATTER_DIMS.right - companyMrrScatterThresholds.x"
+                      :height="companyMrrScatterThresholds.riskHeight" fill="transparent"
+                      @click="openCompanyMrrQuadrantDetail('topRight')">
+                      <title>Yuqori MRR + yuqori faollik — ro‘yxatni ko‘rish uchun bosing</title>
+                    </rect>
+                    <rect class="company-mrr-scatter-quadrant" :x="COMPANY_MRR_SCATTER_DIMS.left"
+                      :y="companyMrrScatterThresholds.y" :width="companyMrrScatterThresholds.riskWidth"
+                      :height="COMPANY_MRR_SCATTER_DIMS.bottom - companyMrrScatterThresholds.y" fill="transparent"
+                      @click="openCompanyMrrQuadrantDetail('bottomLeft')">
+                      <title>Past MRR + past faollik — ro‘yxatni ko‘rish uchun bosing</title>
+                    </rect>
+                    <rect class="company-mrr-scatter-quadrant" :x="companyMrrScatterThresholds.x"
+                      :y="companyMrrScatterThresholds.y"
+                      :width="COMPANY_MRR_SCATTER_DIMS.right - companyMrrScatterThresholds.x"
+                      :height="COMPANY_MRR_SCATTER_DIMS.bottom - companyMrrScatterThresholds.y" fill="transparent"
+                      @click="openCompanyMrrQuadrantDetail('bottomRight')">
+                      <title>Past MRR + yuqori faollik — ro‘yxatni ko‘rish uchun bosing</title>
+                    </rect>
                     <text class="company-mrr-scatter-risk-label" :x="COMPANY_MRR_SCATTER_DIMS.left + 8"
                       :y="COMPANY_MRR_SCATTER_DIMS.top + 18">Yuqori MRR + past faollik (Risk zonasi)</text>
                     <g class="trend-grid">
@@ -986,10 +1047,24 @@
                         :y="COMPANY_MRR_SCATTER_DIMS.bottom + 16" text-anchor="middle">{{ tick.value }}</text>
                     </g>
                     <circle v-for="point in companyMrrScatterPoints" :key="`mrr-point-${point.id}`" :cx="point.x"
-                      :cy="point.y" r="6" :fill="activityScoreColor(point.activity_score)" fill-opacity="0.85">
+                      :cy="point.y" r="6" :fill="activityScoreColor(point.activity_score)" fill-opacity="0.85"
+                      class="company-mrr-scatter-point" @click.stop="selectCompanyMrrScatterPoint(point)">
                       <title>{{ companyMrrPointTooltip(point) }}</title>
                     </circle>
                   </svg>
+                  <div v-if="companyMrrScatterTooltip" class="company-module-chart-tooltip"
+                    :style="companyMrrScatterTooltipStyle">
+                    <b>{{ companyMrrScatterTooltip.name }}</b>
+                    <div class="company-module-chart-tooltip-row"><span>MRR</span><strong>{{
+                        fmtNumber(companyMrrScatterTooltip.mrr_amount) }}</strong></div>
+                    <div class="company-module-chart-tooltip-row"><span>Faollik</span><strong>{{
+                        companyMrrScatterTooltip.activity_score }}/5</strong></div>
+                    <div class="company-module-chart-tooltip-row"><span>Mas’ul xodim</span><strong>{{
+                        companyMrrScatterTooltip.support_label || 'Biriktirilmagan' }}</strong></div>
+                    <div class="company-module-chart-tooltip-row"><span>Faol modullar</span><strong>{{
+                        companyMrrScatterTooltip.active_modules?.length ?
+                          companyMrrScatterTooltip.active_modules.join(', ') : 'Yo‘q' }}</strong></div>
+                  </div>
                 </div>
                 <div v-else class="empty compact">MRR ma’lumoti topilmadi</div>
                 <div class="company-ticket-legend">
@@ -4155,6 +4230,10 @@ function handleDocumentPointerDown(event) {
     const root = companyModuleChartCompanyMenuRef.value;
     if (!root || !root.contains(event.target)) closeCompanyModuleChartCompanyMenu();
   }
+  if (companyMrrScatterSelectedPointId.value) {
+    const root = companyMrrScatterChartRef.value;
+    if (!root || !root.contains(event.target)) closeCompanyMrrScatterTooltip();
+  }
 }
 
 function handleDocumentKeydown(event) {
@@ -4165,6 +4244,7 @@ function handleDocumentKeydown(event) {
     closeCompanyModuleFilterMenu();
     closeCompanyMrrFilterMenu();
     closeCompanyModuleChartCompanyMenu();
+    closeCompanyMrrScatterTooltip();
     hideFloatingTooltip();
     if (modal.value) closeModal();
   }
@@ -5788,7 +5868,127 @@ const companyMrrChartRows = computed(() => {
   return rows.map(row => ({ ...row, bar_percent: Math.round((row.mrr_amount / max) * 1000) / 10 }));
 });
 
-const companyMrrScatterMax = computed(() => Math.max(1, ...companyMrrRows.value.map(row => row.mrr_amount)));
+const companyMrrScatterPeriod = ref('today');
+const companyMrrScatterReports = ref({ companies: [], report_dates: [], period: 'today', fetched_at: null });
+const companyMrrScatterBusinessFilter = ref('all');
+const companyMrrScatterSupportFilter = ref('all');
+const companyMrrScatterCompanyId = ref('');
+const companyMrrScatterPeriodOptions = companyModulePeriodOptions.filter(period => period.key !== 'custom');
+
+async function loadCompanyMrrScatterReports() {
+  try {
+    const data = await api.companyModuleReports({ period: companyMrrScatterPeriod.value, include_daily: 0 });
+    companyMrrScatterReports.value = { ...data, period: companyMrrScatterPeriod.value };
+  } catch (error) {
+    companyMrrScatterReports.value = {
+      companies: [],
+      report_dates: [],
+      period: companyMrrScatterPeriod.value,
+      fetched_at: null
+    };
+    showToast(error.message);
+  }
+}
+
+async function handleCompanyMrrScatterPeriodChange(value) {
+  companyMrrScatterPeriod.value = value;
+  await loadCompanyMrrScatterReports();
+}
+
+const companyMrrScatterReportByCompanyId = computed(() => {
+  const map = new Map();
+  (companyMrrScatterReports.value.companies || []).forEach(row => {
+    companyModuleReportRowKeys(row).forEach(key => map.set(key, row));
+  });
+  return map;
+});
+
+const companyMrrScatterBaseRows = computed(() => {
+  const reportById = companyMrrScatterReportByCompanyId.value;
+  const moduleReportContext = {
+    expectedDates: [...(companyMrrScatterReports.value?.report_dates || [])].filter(Boolean),
+    mode: companyMrrScatterReports.value?.mode || '',
+    targetDate: companyMrrScatterReports.value?.target_date || ''
+  };
+  return companyInfoRows.value
+    .filter(row => Number(row.mrr_amount || 0) > 0)
+    .map(row => {
+      const report = findCompanyModuleReport(reportById, row);
+      const module_usage = companyModuleUsageForPeriod(row, report, moduleReportContext);
+      return {
+        ...row,
+        module_usage,
+        module_active_count: companyModuleActiveCount(module_usage),
+        module_active_percent: companyModuleActivePercent(module_usage)
+      };
+    });
+});
+
+const companyMrrScatterCompanyOptions = computed(() => [...companyMrrScatterBaseRows.value]
+  .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'uz'))
+  .map(row => ({ id: String(row.id || '').trim(), name: row.name || 'Kompaniya' }))
+  .filter(option => option.id));
+
+const companyMrrScatterBusinessOptions = computed(() => {
+  const values = new Set();
+  companyMrrScatterBaseRows.value.forEach(row => {
+    const value = String(row.business_status || '').toUpperCase().trim();
+    if (value) values.add(value);
+  });
+  return [...values].sort();
+});
+
+const companyMrrScatterSupportOptions = computed(() => {
+  const usernames = new Set();
+  companyMrrScatterBaseRows.value.forEach(row => {
+    const username = normalizeSupportUsername(row.uyqur_support_username);
+    if (username) usernames.add(username);
+  });
+  return [...usernames].sort((a, b) => companyModuleSupportDisplayLabel(a).localeCompare(companyModuleSupportDisplayLabel(b), 'uz'));
+});
+
+const companyMrrScatterRows = computed(() => {
+  const businessFilter = companyMrrScatterBusinessFilter.value;
+  const supportFilter = companyMrrScatterSupportFilter.value;
+  const companyId = companyMrrScatterCompanyId.value;
+  return companyMrrScatterBaseRows.value
+    .filter(includesSearch)
+    .filter(row => !companyId || String(row.id || '').trim() === companyId)
+    .filter(row => businessFilter === 'all' || String(row.business_status || '').toUpperCase().trim() === businessFilter)
+    .filter(row => {
+      const username = normalizeSupportUsername(row.uyqur_support_username);
+      if (supportFilter === 'all') return true;
+      if (supportFilter === 'assigned') return Boolean(username);
+      if (supportFilter === 'unassigned') return !username;
+      return username === supportFilter;
+    })
+    .map(row => {
+      const usage = row.module_usage || {};
+      const activeModules = companyModuleColumns.filter(column => usage[column.key]).map(column => column.label);
+      return {
+        id: String(row.id || '').trim(),
+        name: row.name || 'Kompaniya',
+        mrr_amount: Number(row.mrr_amount || 0),
+        activity_percent: Number(row.module_active_percent || 0),
+        activity_score: Number(row.module_active_count || 0),
+        support_label: companySupportLabel(row),
+        active_modules: activeModules
+      };
+    });
+});
+
+function niceAxisMax(value = 0) {
+  const raw = Math.max(1, Number(value) || 1);
+  const magnitude = Math.pow(10, Math.floor(Math.log10(raw)));
+  const normalized = raw / magnitude;
+  let niceNormalized = 10;
+  if (normalized <= 1) niceNormalized = 1;
+  else if (normalized <= 2) niceNormalized = 2;
+  else if (normalized <= 5) niceNormalized = 5;
+  return niceNormalized * magnitude;
+}
+
+const companyMrrScatterMax = computed(() => niceAxisMax(Math.max(1, ...companyMrrScatterRows.value.map(row => row.mrr_amount))));
 
 const companyMrrScatterPoints = computed(() => {
   const dims = COMPANY_MRR_SCATTER_DIMS;
@@ -5798,7 +5998,7 @@ const companyMrrScatterPoints = computed(() => {
   const columnWidth = width / 5;
   const jitterSpan = Math.min(34, columnWidth * 0.4);
   const byScore = new Map();
-  companyMrrRows.value.forEach(row => {
+  companyMrrScatterRows.value.forEach(row => {
     if (!byScore.has(row.activity_score)) byScore.set(row.activity_score, []);
     byScore.get(row.activity_score).push(row);
   });
@@ -5847,7 +6047,7 @@ const companyMrrScatterYTicks = computed(() => {
 
 const companyMrrScatterThresholds = computed(() => {
   const dims = COMPANY_MRR_SCATTER_DIMS;
-  const rows = companyMrrRows.value;
+  const rows = companyMrrScatterRows.value;
   const sortedMrr = [...rows.map(row => row.mrr_amount)].sort((a, b) => a - b);
   const medianMrr = sortedMrr.length
     ? sortedMrr[Math.floor((sortedMrr.length - 1) / 2)]
@@ -5862,13 +6062,94 @@ const companyMrrScatterThresholds = computed(() => {
     x,
     y,
     riskWidth: Math.max(0, x - dims.left),
-    riskHeight: Math.max(0, y - dims.top)
+    riskHeight: Math.max(0, y - dims.top),
+    medianMrr,
+    scoreThreshold
   };
 });
 
 const companyMrrCorrelation = computed(() => pearsonCorrelation(
-  companyMrrRows.value.map(row => [row.activity_score, row.mrr_amount])
+  companyMrrScatterRows.value.map(row => [row.activity_score, row.mrr_amount])
 ));
+
+const COMPANY_MRR_QUADRANT_TITLES = Object.freeze({
+  risk: 'Yuqori MRR + past faollik (Risk zonasi)',
+  topRight: 'Yuqori MRR + yuqori faollik',
+  bottomLeft: 'Past MRR + past faollik',
+  bottomRight: 'Past MRR + yuqori faollik'
+});
+
+const companyMrrQuadrantColumns = [
+  { key: 'name', label: 'Kompaniya' },
+  { key: 'mrr_amount', label: 'MRR', format: fmtNumber },
+  { key: 'activity_score', label: 'Faollik balli', format: v => `${v}/5` },
+  { key: 'support_label', label: 'Mas’ul xodim' },
+  { key: 'active_modules', label: 'Faol modullar', format: v => (v?.length ? v.join(', ') : 'Yo‘q') }
+];
+
+function companyMrrQuadrantRows(quadrantKey = '') {
+  const { medianMrr, scoreThreshold } = companyMrrScatterThresholds.value;
+  return companyMrrScatterRows.value.filter(row => {
+    const highActivity = row.activity_score >= scoreThreshold;
+    const highMrr = row.mrr_amount > medianMrr;
+    if (quadrantKey === 'risk') return !highActivity && highMrr;
+    if (quadrantKey === 'topRight') return highActivity && highMrr;
+    if (quadrantKey === 'bottomLeft') return !highActivity && !highMrr;
+    if (quadrantKey === 'bottomRight') return highActivity && !highMrr;
+    return false;
+  });
+}
+
+function openCompanyMrrQuadrantDetail(quadrantKey = '') {
+  closeCompanyMrrScatterTooltip();
+  const rows = companyMrrQuadrantRows(quadrantKey);
+  if (!rows.length) return showToast('Bu zonada kompaniya topilmadi');
+  setMetricDetail({
+    title: COMPANY_MRR_QUADRANT_TITLES[quadrantKey] || 'Kompaniyalar',
+    rows,
+    columns: companyMrrQuadrantColumns,
+    empty: 'Kompaniya topilmadi',
+    showSourceTabs: false,
+    summary: [
+      { label: 'Kompaniya', value: fmtNumber(rows.length) },
+      { label: 'Jami MRR', value: fmtNumber(rows.reduce((sum, row) => sum + row.mrr_amount, 0)) }
+    ]
+  });
+}
+
+const companyMrrScatterChartRef = ref(null);
+const companyMrrScatterSelectedPointId = ref('');
+
+function selectCompanyMrrScatterPoint(point = {}) {
+  const id = String(point.id || '').trim();
+  companyMrrScatterSelectedPointId.value = companyMrrScatterSelectedPointId.value === id ? '' : id;
+}
+
+function closeCompanyMrrScatterTooltip() {
+  companyMrrScatterSelectedPointId.value = '';
+}
+
+const companyMrrScatterTooltip = computed(() => {
+  const id = companyMrrScatterSelectedPointId.value;
+  if (!id) return null;
+  return companyMrrScatterPoints.value.find(point => String(point.id) === id) || null;
+});
+
+const companyMrrScatterTooltipStyle = computed(() => {
+  const tooltip = companyMrrScatterTooltip.value;
+  const root = companyMrrScatterChartRef.value;
+  if (!tooltip || !root) return {};
+  const svg = root.querySelector('svg');
+  if (!svg) return {};
+  const rect = svg.getBoundingClientRect();
+  const shellRect = root.getBoundingClientRect();
+  const ratio = rect.width / COMPANY_MRR_SCATTER_VIEW.width;
+  const left = (rect.left - shellRect.left) + tooltip.x * ratio;
+  const top = (rect.top - shellRect.top) + tooltip.y * ratio;
+  const clampedLeft = Math.max(12, Math.min(left, shellRect.width - 220));
+  const clampedTop = Math.max(12, top - 12);
+  return { left: `${clampedLeft}px`, top: `${clampedTop}px` };
+});
 
 const companyModuleSupportFilterOptions = computed(() => {
   const usernames = new Set();
@@ -8232,6 +8513,7 @@ async function loadCompanyActivity(options = {}) {
     loadCompanyInfo({ cached: true }),
     refreshCompanyModuleReports(),
     refreshCompanyModuleChartData(),
+    loadCompanyMrrScatterReports(),
     loadDashboard()
   ]);
   if (syncLive) {
@@ -8243,7 +8525,8 @@ async function loadCompanyActivity(options = {}) {
         if (synced) {
           return Promise.all([
             refreshCompanyModuleReports(),
-            refreshCompanyModuleChartData()
+            refreshCompanyModuleChartData(),
+            loadCompanyMrrScatterReports()
           ]);
         }
         return null;

@@ -3973,9 +3973,21 @@ td,
 }
 
 .company-mrr-scatter svg {
-  max-width: 620px;
+  max-width: 780px;
   min-width: 0;
   margin: 0 auto;
+}
+
+.company-mrr-scatter {
+  position: relative;
+}
+
+.company-mrr-scatter-quadrant {
+  cursor: pointer;
+}
+
+.company-mrr-scatter-point {
+  cursor: pointer;
 }
 
 .company-module-table-card {
