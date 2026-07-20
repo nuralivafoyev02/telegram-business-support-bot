@@ -6067,7 +6067,7 @@ const COMPANY_MRR_QUADRANT_TITLES = Object.freeze({
 });
 
 const companyMrrQuadrantColumns = [
-  { key: 'name', label: 'Kompaniya' },
+  { key: 'name', label: 'Kompaniya', action: 'selectMrrScatterCompany' },
   { key: 'mrr_amount', label: 'MRR', format: fmtNumber },
   { key: 'activity_score', label: 'Faollik balli', format: v => `${v}/5` },
   { key: 'support_label', label: 'Mas’ul xodim' },
@@ -8946,6 +8946,12 @@ function tableActionEmployeeRow(row = {}) {
 
 function handleTableCellAction({ action, row }) {
   if (!action) return;
+  if (action === 'selectMrrScatterCompany') {
+    if (!row?.id) return;
+    closeModal();
+    selectCompanyMrrScatterPoint(row);
+    return;
+  }
   if (action === 'telegram') {
     openTelegramChat(row);
     return;
