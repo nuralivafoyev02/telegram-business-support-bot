@@ -1044,11 +1044,14 @@
                       <text v-for="tick in companyMrrScatterXTicks" :key="`mrr-x-label-${tick.value}`" :x="tick.x"
                         :y="COMPANY_MRR_SCATTER_DIMS.bottom + 16" text-anchor="middle">{{ tick.value }}</text>
                     </g>
-                    <circle v-for="point in companyMrrScatterPoints" :key="`mrr-point-${point.id}`" :cx="point.x"
-                      :cy="point.y" r="6" :fill="activityScoreColor(point.activity_score)" fill-opacity="0.85"
+                    <g v-for="point in companyMrrScatterPoints" :key="`mrr-point-${point.id}`"
                       class="company-mrr-scatter-point" @mouseenter="hoverCompanyMrrScatterPoint(point)"
                       @mouseleave="unhoverCompanyMrrScatterPoint(point)" @click.stop="selectCompanyMrrScatterPoint(point)">
-                    </circle>
+                      <circle :cx="point.x" :cy="point.y" r="5" :fill="activityScoreColor(point.activity_score)"
+                        fill-opacity="0.9" />
+                      <text :x="point.x" :y="point.y" text-anchor="middle" dominant-baseline="central"
+                        class="company-mrr-scatter-point-label">{{ point.activity_score }}</text>
+                    </g>
                   </svg>
                   <div v-if="companyMrrScatterTooltip" class="company-module-chart-tooltip"
                     :style="companyMrrScatterTooltipStyle">
@@ -6084,7 +6087,7 @@ function companyMrrQuadrantRows(quadrantKey = '') {
     if (quadrantKey === 'bottomLeft') return !highActivity && !highMrr;
     if (quadrantKey === 'bottomRight') return highActivity && !highMrr;
     return false;
-  });
+  }).sort((a, b) => b.mrr_amount - a.mrr_amount);
 }
 
 function openCompanyMrrQuadrantDetail(quadrantKey = '') {

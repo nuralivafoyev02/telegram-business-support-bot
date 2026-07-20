@@ -3990,6 +3990,14 @@ td,
   cursor: pointer;
 }
 
+.company-mrr-scatter-point-label {
+  fill: #fff;
+  font-size: 7px;
+  font-weight: 800;
+  pointer-events: none;
+  user-select: none;
+}
+
 .company-module-table-card {
   overflow: hidden;
 }
