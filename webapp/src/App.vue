@@ -1051,18 +1051,27 @@
                         fill-opacity="0.9" />
                     </g>
                   </svg>
-                  <div v-if="companyMrrScatterTooltip" class="company-module-chart-tooltip"
-                    :style="companyMrrScatterTooltipStyle">
-                    <b>{{ companyMrrScatterTooltip.name }}</b>
-                    <div class="company-module-chart-tooltip-row"><span>MRR</span><strong>{{
-                        fmtNumber(companyMrrScatterTooltip.mrr_amount) }}</strong></div>
-                    <div class="company-module-chart-tooltip-row"><span>Faollik</span><strong>{{
-                        companyMrrScatterTooltip.activity_score }}/5</strong></div>
-                    <div class="company-module-chart-tooltip-row"><span>Mas’ul xodim</span><strong>{{
-                        companyMrrScatterTooltip.support_label || 'Biriktirilmagan' }}</strong></div>
-                    <div class="company-module-chart-tooltip-row"><span>Faol modullar</span><strong>{{
-                        companyMrrScatterTooltip.active_modules?.length ?
-                          companyMrrScatterTooltip.active_modules.join(', ') : 'Yo‘q' }}</strong></div>
+                  <div v-if="companyMrrScatterTooltip" class="company-module-chart-tooltip company-mrr-scatter-tooltip"
+                    :style="companyMrrScatterTooltipStyle" @mouseenter="holdCompanyMrrScatterTooltip"
+                    @mouseleave="releaseCompanyMrrScatterTooltip">
+                    <div v-if="companyMrrScatterTooltip.points.length > 1" class="company-mrr-scatter-tooltip-count">
+                      {{ companyMrrScatterTooltip.points.length }} ta kompaniya shu nuqtada
+                    </div>
+                    <div class="company-mrr-scatter-tooltip-list">
+                      <div v-for="item in companyMrrScatterTooltip.points" :key="`mrr-tooltip-item-${item.id}`"
+                        class="company-mrr-scatter-tooltip-item" @click.stop="selectCompanyMrrScatterPoint(item)">
+                        <b>{{ item.name }}</b>
+                        <div class="company-module-chart-tooltip-row"><span>MRR</span><strong>{{
+                            fmtNumber(item.mrr_amount) }}</strong></div>
+                        <div class="company-module-chart-tooltip-row"><span>Faollik</span><strong>{{
+                            item.activity_score }}/5</strong></div>
+                        <div class="company-module-chart-tooltip-row"><span>Mas’ul xodim</span><strong>{{
+                            item.support_label || 'Biriktirilmagan' }}</strong></div>
+                        <div class="company-module-chart-tooltip-row"><span>Faol modullar</span><strong>{{
+                            item.active_modules?.length ?
+                              item.active_modules.join(', ') : 'Yo‘q' }}</strong></div>
+                      </div>
+                    </div>
                   </div>
                 </div>
                 <div v-else class="empty compact">MRR ma’lumoti topilmadi</div>
@@ -6087,19 +6096,39 @@ function openCompanyMrrQuadrantDetail(quadrantKey = '') {
 
 const companyMrrScatterChartRef = ref(null);
 const companyMrrScatterSelectedPointId = ref('');
+let companyMrrScatterTooltipCloseTimer = null;
+
+function clearCompanyMrrScatterTooltipTimer() {
+  if (companyMrrScatterTooltipCloseTimer) {
+    clearTimeout(companyMrrScatterTooltipCloseTimer);
+    companyMrrScatterTooltipCloseTimer = null;
+  }
+}
 
 function hoverCompanyMrrScatterPoint(point = {}) {
+  clearCompanyMrrScatterTooltipTimer();
   companyMrrScatterSelectedPointId.value = String(point.id || '').trim();
 }
 
 function unhoverCompanyMrrScatterPoint(point = {}) {
-  const id = String(point.id || '').trim();
-  if (companyMrrScatterSelectedPointId.value === id) companyMrrScatterSelectedPointId.value = '';
+  clearCompanyMrrScatterTooltipTimer();
+  companyMrrScatterTooltipCloseTimer = setTimeout(() => {
+    companyMrrScatterSelectedPointId.value = '';
+  }, 150);
+}
+
+function holdCompanyMrrScatterTooltip() {
+  clearCompanyMrrScatterTooltipTimer();
+}
+
+function releaseCompanyMrrScatterTooltip() {
+  unhoverCompanyMrrScatterPoint();
 }
 
 function selectCompanyMrrScatterPoint(point = {}) {
   const id = String(point.id || '').trim();
   if (!id) return;
+  closeCompanyMrrScatterTooltip();
   selectCompanyModuleChartCompany(id);
   nextTick(() => {
     companyModuleChartRef.value?.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -6107,13 +6136,17 @@ function selectCompanyMrrScatterPoint(point = {}) {
 }
 
 function closeCompanyMrrScatterTooltip() {
+  clearCompanyMrrScatterTooltipTimer();
   companyMrrScatterSelectedPointId.value = '';
 }
 
 const companyMrrScatterTooltip = computed(() => {
   const id = companyMrrScatterSelectedPointId.value;
   if (!id) return null;
-  return companyMrrScatterPoints.value.find(point => String(point.id) === id) || null;
+  const active = companyMrrScatterPoints.value.find(point => String(point.id) === id);
+  if (!active) return null;
+  const points = companyMrrScatterPoints.value.filter(point => point.x === active.x && point.y === active.y);
+  return { x: active.x, y: active.y, points };
 });
 
 const companyMrrScatterTooltipStyle = computed(() => {
