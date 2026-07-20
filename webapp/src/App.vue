@@ -884,24 +884,46 @@
                     <div class="card-title">MRR taqsimoti</div>
                   </div>
                   <div class="company-module-table-controls">
-                    <label class="company-module-filter">
-                      <span>Biznes holati</span>
-                      <select v-model="companyMrrBusinessFilter" class="select mini-select">
-                        <option value="all">Hammasi</option>
-                        <option v-for="status in companyMrrBusinessOptions" :key="`mrr-bar-business-${status}`"
-                          :value="status">{{ businessStatusLabel(status) }}</option>
-                      </select>
-                    </label>
-                    <label class="company-module-filter">
-                      <span>Mas’ul xodim</span>
-                      <select v-model="companyMrrSupportFilter" class="select mini-select">
-                        <option value="all">Hammasi</option>
-                        <option value="assigned">Biriktirilgan</option>
-                        <option value="unassigned">Biriktirilmagan</option>
-                        <option v-for="username in companyMrrSupportOptions" :key="`mrr-bar-support-${username}`"
-                          :value="username">{{ companyModuleSupportDisplayLabel(username) }}</option>
-                      </select>
-                    </label>
+                    <div class="company-module-filter company-module-filter-wide company-module-filter-menu-wrap"
+                      ref="companyMrrFilterMenuRef">
+                      <span>Filter</span>
+                      <div class="company-module-filter-picker">
+                        <button type="button" class="company-module-filter-trigger select mini-select"
+                          @click.stop="toggleCompanyMrrFilterMenu">
+                          <span class="company-module-filter-trigger-label">{{ companyModuleFilterButtonLabel }}</span>
+                          <span class="company-module-filter-trigger-caret">▾</span>
+                        </button>
+                        <Transition name="fade">
+                          <div v-if="companyMrrFilterMenuOpen" class="company-module-filter-menu actions-dropdown"
+                            @click.stop>
+                            <template v-if="!companyMrrFilterMenuGroup">
+                              <button v-for="group in companyMrrControlGroups" :key="`mrr-filter-menu-${group.key}`"
+                                type="button" class="company-module-filter-menu-group"
+                                @click="group.key === 'show' ? selectCompanyModuleControlOption(group, group.options[0], closeCompanyMrrFilterMenu) : openCompanyMrrFilterGroup(group.key)">
+                                <span>{{ group.label }}</span>
+                                <span v-if="group.key !== 'show'" class="company-module-filter-menu-arrow">›</span>
+                              </button>
+                            </template>
+                            <template v-else-if="companyMrrFilterActiveGroup">
+                              <button type="button" class="company-module-filter-back"
+                                @click="companyMrrFilterMenuGroup = ''">
+                                <span class="company-module-filter-menu-arrow">‹</span>
+                                <span>{{ companyMrrFilterActiveGroup.label }}</span>
+                              </button>
+                              <button v-for="option in companyMrrFilterActiveGroup.options"
+                                :key="`mrr-filter-option-${companyMrrFilterActiveGroup.key}-${option.key}`"
+                                type="button" class="company-module-filter-option"
+                                :class="{ active: isCompanyModuleControlOptionActive(companyMrrFilterActiveGroup, option) }"
+                                @click="selectCompanyModuleControlOption(companyMrrFilterActiveGroup, option, closeCompanyMrrFilterMenu)">
+                                <span>{{ option.label }}</span>
+                                <span v-if="isCompanyModuleControlOptionActive(companyMrrFilterActiveGroup, option)"
+                                  class="company-module-filter-check">✓</span>
+                              </button>
+                            </template>
+                          </div>
+                        </Transition>
+                      </div>
+                    </div>
                     <label class="company-module-filter">
                       <span>Davr</span>
                       <select :value="companyModulePeriod" class="select mini-select"
@@ -936,38 +958,6 @@
                 <div class="card-header chart-card-head">
                   <div>
                     <div class="card-title">MRR vs Faollik</div>
-                  </div>
-                  <div class="company-module-table-controls">
-                    <label class="company-module-filter">
-                      <span>Biznes holati</span>
-                      <select v-model="companyMrrBusinessFilter" class="select mini-select">
-                        <option value="all">Hammasi</option>
-                        <option v-for="status in companyMrrBusinessOptions" :key="`mrr-scatter-business-${status}`"
-                          :value="status">{{ businessStatusLabel(status) }}</option>
-                      </select>
-                    </label>
-                    <label class="company-module-filter">
-                      <span>Mas’ul xodim</span>
-                      <select v-model="companyMrrSupportFilter" class="select mini-select">
-                        <option value="all">Hammasi</option>
-                        <option value="assigned">Biriktirilgan</option>
-                        <option value="unassigned">Biriktirilmagan</option>
-                        <option v-for="username in companyMrrSupportOptions" :key="`mrr-scatter-support-${username}`"
-                          :value="username">{{ companyModuleSupportDisplayLabel(username) }}</option>
-                      </select>
-                    </label>
-                    <label class="company-module-filter">
-                      <span>Davr</span>
-                      <select :value="companyModulePeriod" class="select mini-select"
-                        @change="handleCompanyModulePeriodChange($event.target.value)"
-                        @mousedown="handleCompanyModulePeriodSelectPointerDown"
-                        @mouseup="handleCompanyModulePeriodSelectPointerUp">
-                        <option v-for="period in companyModulePeriodOptions" :key="`mrr-scatter-period-${period.key}`"
-                          :value="period.key">
-                          {{ companyModulePeriodOptionLabel(period) }}
-                        </option>
-                      </select>
-                    </label>
                   </div>
                 </div>
                 <div v-if="companyMrrScatterPoints.length" class="trend-chart company-mrr-scatter">
@@ -3019,6 +3009,9 @@ const moduleCompareMenuRef = ref(null);
 const companyModuleFilterMenuOpen = ref(false);
 const companyModuleFilterMenuGroup = ref('');
 const companyModuleFilterMenuRef = ref(null);
+const companyMrrFilterMenuOpen = ref(false);
+const companyMrrFilterMenuGroup = ref('');
+const companyMrrFilterMenuRef = ref(null);
 const companyModuleChartCompanyId = ref('');
 const companyModuleChartCompanyMenuOpen = ref(false);
 const companyModuleChartCompanyMenuRef = ref(null);
@@ -4155,6 +4148,10 @@ function handleDocumentPointerDown(event) {
     const root = companyModuleFilterMenuRef.value;
     if (!root || !root.contains(event.target)) closeCompanyModuleFilterMenu();
   }
+  if (companyMrrFilterMenuOpen.value) {
+    const root = companyMrrFilterMenuRef.value;
+    if (!root || !root.contains(event.target)) closeCompanyMrrFilterMenu();
+  }
   if (companyModuleChartCompanyMenuOpen.value) {
     const root = companyModuleChartCompanyMenuRef.value;
     if (!root || !root.contains(event.target)) closeCompanyModuleChartCompanyMenu();
@@ -4167,6 +4164,7 @@ function handleDocumentKeydown(event) {
     rankingMenuOpen.value = false;
     moduleCompareMenuOpen.value = false;
     closeCompanyModuleFilterMenu();
+    closeCompanyMrrFilterMenu();
     closeCompanyModuleChartCompanyMenu();
     hideFloatingTooltip();
     if (modal.value) closeModal();
@@ -5460,6 +5458,20 @@ function openCompanyModuleFilterGroup(groupKey = '') {
   companyModuleFilterMenuGroup.value = String(groupKey || '');
 }
 
+function toggleCompanyMrrFilterMenu() {
+  companyMrrFilterMenuOpen.value = !companyMrrFilterMenuOpen.value;
+  companyMrrFilterMenuGroup.value = '';
+}
+
+function closeCompanyMrrFilterMenu() {
+  companyMrrFilterMenuOpen.value = false;
+  companyMrrFilterMenuGroup.value = '';
+}
+
+function openCompanyMrrFilterGroup(groupKey = '') {
+  companyMrrFilterMenuGroup.value = String(groupKey || '');
+}
+
 function findCompanyModuleControlOption(type = 'filter', key = '') {
   for (const group of companyModuleControlGroups.value) {
     if (group.type !== type) continue;
@@ -5478,15 +5490,15 @@ function isCompanyModuleControlOptionActive(group = {}, option = {}) {
   return companyModuleFilterKeys.value.includes(option.key);
 }
 
-function selectCompanyModuleControlOption(group = {}, option = {}) {
+function selectCompanyModuleControlOption(group = {}, option = {}, onClose = closeCompanyModuleFilterMenu) {
   if (group.type === 'sort') {
     companyModuleSort.value = companyModuleSort.value === option.key ? 'modules_desc' : option.key;
-    closeCompanyModuleFilterMenu();
+    onClose();
     return;
   }
   if (option.key === 'all') {
     companyModuleFilterKeys.value = [];
-    closeCompanyModuleFilterMenu();
+    onClose();
     return;
   }
   if (!group.multi) {
@@ -5494,12 +5506,12 @@ function selectCompanyModuleControlOption(group = {}, option = {}) {
     const keys = companyModuleFilterKeys.value.filter(key => companyModuleFilterNamespace(key) !== namespace);
     if (isCompanyModuleControlOptionActive(group, option)) {
       companyModuleFilterKeys.value = keys;
-      closeCompanyModuleFilterMenu();
+      onClose();
       return;
     }
     if (option.key !== 'support:all') keys.push(option.key);
     companyModuleFilterKeys.value = keys;
-    closeCompanyModuleFilterMenu();
+    onClose();
     return;
   }
   const keys = [...companyModuleFilterKeys.value];
@@ -5738,58 +5750,23 @@ function pearsonCorrelation(pairs = []) {
   return denom ? numerator / denom : 0;
 }
 
-const companyMrrBusinessFilter = ref('all');
-const companyMrrSupportFilter = ref('all');
-
-const companyMrrEligibleRows = computed(() => companyInfoRows.value.filter(row => Number(row.mrr_amount || 0) > 0));
-
-const companyMrrBusinessOptions = computed(() => {
-  const values = new Set();
-  companyMrrEligibleRows.value.forEach(row => {
-    const value = String(row.business_status || '').toUpperCase().trim();
-    if (value) values.add(value);
-  });
-  return [...values].sort();
-});
-
-const companyMrrSupportOptions = computed(() => {
-  const usernames = new Set();
-  companyMrrEligibleRows.value.forEach(row => {
-    const username = normalizeSupportUsername(row.uyqur_support_username);
-    if (username) usernames.add(username);
-  });
-  return [...usernames].sort((a, b) => companyModuleSupportDisplayLabel(a).localeCompare(companyModuleSupportDisplayLabel(b), 'uz'));
-});
-
-function matchesCompanyMrrSupportFilter(row = {}, filter = 'all') {
-  const username = normalizeSupportUsername(row.uyqur_support_username);
-  if (filter === 'all') return true;
-  if (filter === 'assigned') return Boolean(username);
-  if (filter === 'unassigned') return !username;
-  return username === filter;
-}
-
 const companyMrrRows = computed(() => {
-  const percentById = new Map();
+  const moduleDataById = new Map();
   companyModuleBaseRows.value.forEach(row => {
     const id = String(row.id || '').trim();
-    if (id) percentById.set(id, Number(row.module_active_percent || 0));
+    if (id) moduleDataById.set(id, row);
   });
-  const businessFilter = companyMrrBusinessFilter.value;
-  const supportFilter = companyMrrSupportFilter.value;
+  const filters = companyModuleFilterKeys.value;
   return companyInfoRows.value
     .filter(includesSearch)
-    .filter(row => businessFilter === 'all' || String(row.business_status || '').toUpperCase().trim() === businessFilter)
-    .filter(row => matchesCompanyMrrSupportFilter(row, supportFilter))
+    .filter(row => matchesCompanyModuleFilter(moduleDataById.get(String(row.id || '').trim()) || row, filters))
     .map(row => {
       const id = String(row.id || '').trim();
-      const percent = percentById.get(id) || 0;
+      const percent = Number(moduleDataById.get(id)?.module_active_percent || 0);
       return {
         id,
         name: row.name || 'Kompaniya',
         mrr_amount: Number(row.mrr_amount || 0),
-        business_status: row.business_status || '',
-        support_username: normalizeSupportUsername(row.uyqur_support_username),
         activity_percent: percent,
         activity_score: faollikScoreFromPercent(percent)
       };
@@ -5967,6 +5944,12 @@ const companyModuleControlGroups = computed(() => {
 
 const companyModuleFilterActiveGroup = computed(() => companyModuleControlGroups.value
   .find(group => group.key === companyModuleFilterMenuGroup.value) || null);
+
+const companyMrrControlGroups = computed(() => companyModuleControlGroups.value
+  .filter(group => ['show', 'business', 'support'].includes(group.key)));
+
+const companyMrrFilterActiveGroup = computed(() => companyMrrControlGroups.value
+  .find(group => group.key === companyMrrFilterMenuGroup.value) || null);
 
 const companyModuleFilterButtonLabel = computed(() => {
   const keys = companyModuleFilterKeys.value;
