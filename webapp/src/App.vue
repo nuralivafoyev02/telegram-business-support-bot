@@ -903,7 +903,7 @@
                       <span class="company-mrr-fill" :style="{ width: row.bar_percent + '%' }"></span>
                     </div>
                     <strong>
-                      {{ fmtNumber(row.mrr_amount) }} mln so‘m
+                      {{ fmtNumber(row.mrr_amount) }}
                       <span class="company-mrr-score" :style="{ background: activityScoreColor(row.activity_score) }"
                         :title="`Faollik balli: ${row.activity_score}/5`">{{ row.activity_score }}</span>
                     </strong>
@@ -957,7 +957,7 @@
                     </g>
                     <circle v-for="point in companyMrrScatterPoints" :key="`mrr-point-${point.id}`" :cx="point.x"
                       :cy="point.y" r="6" :fill="activityScoreColor(point.activity_score)" fill-opacity="0.85">
-                      <title>{{ point.name }} · {{ fmtNumber(point.mrr_amount) }} mln so‘m · Faollik {{
+                      <title>{{ point.name }} · {{ fmtNumber(point.mrr_amount) }} · Faollik {{
                         point.activity_score }}/5</title>
                     </circle>
                   </svg>
