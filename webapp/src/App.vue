@@ -883,18 +883,38 @@
                   <div>
                     <div class="card-title">MRR taqsimoti</div>
                   </div>
-                  <label class="company-module-filter">
-                    <span>Davr</span>
-                    <select :value="companyModulePeriod" class="select mini-select"
-                      @change="handleCompanyModulePeriodChange($event.target.value)"
-                      @mousedown="handleCompanyModulePeriodSelectPointerDown"
-                      @mouseup="handleCompanyModulePeriodSelectPointerUp">
-                      <option v-for="period in companyModulePeriodOptions" :key="`mrr-bar-period-${period.key}`"
-                        :value="period.key">
-                        {{ companyModulePeriodOptionLabel(period) }}
-                      </option>
-                    </select>
-                  </label>
+                  <div class="company-module-table-controls">
+                    <label class="company-module-filter">
+                      <span>Biznes holati</span>
+                      <select v-model="companyMrrBusinessFilter" class="select mini-select">
+                        <option value="all">Hammasi</option>
+                        <option v-for="status in companyMrrBusinessOptions" :key="`mrr-bar-business-${status}`"
+                          :value="status">{{ businessStatusLabel(status) }}</option>
+                      </select>
+                    </label>
+                    <label class="company-module-filter">
+                      <span>Mas’ul xodim</span>
+                      <select v-model="companyMrrSupportFilter" class="select mini-select">
+                        <option value="all">Hammasi</option>
+                        <option value="assigned">Biriktirilgan</option>
+                        <option value="unassigned">Biriktirilmagan</option>
+                        <option v-for="username in companyMrrSupportOptions" :key="`mrr-bar-support-${username}`"
+                          :value="username">{{ companyModuleSupportDisplayLabel(username) }}</option>
+                      </select>
+                    </label>
+                    <label class="company-module-filter">
+                      <span>Davr</span>
+                      <select :value="companyModulePeriod" class="select mini-select"
+                        @change="handleCompanyModulePeriodChange($event.target.value)"
+                        @mousedown="handleCompanyModulePeriodSelectPointerDown"
+                        @mouseup="handleCompanyModulePeriodSelectPointerUp">
+                        <option v-for="period in companyModulePeriodOptions" :key="`mrr-bar-period-${period.key}`"
+                          :value="period.key">
+                          {{ companyModulePeriodOptionLabel(period) }}
+                        </option>
+                      </select>
+                    </label>
+                  </div>
                 </div>
                 <div v-if="companyMrrChartRows.length" class="company-mrr-bars">
                   <article v-for="row in companyMrrChartRows" :key="`mrr-bar-${row.id}`" class="company-mrr-row">
@@ -917,18 +937,38 @@
                   <div>
                     <div class="card-title">MRR vs Faollik</div>
                   </div>
-                  <label class="company-module-filter">
-                    <span>Davr</span>
-                    <select :value="companyModulePeriod" class="select mini-select"
-                      @change="handleCompanyModulePeriodChange($event.target.value)"
-                      @mousedown="handleCompanyModulePeriodSelectPointerDown"
-                      @mouseup="handleCompanyModulePeriodSelectPointerUp">
-                      <option v-for="period in companyModulePeriodOptions" :key="`mrr-scatter-period-${period.key}`"
-                        :value="period.key">
-                        {{ companyModulePeriodOptionLabel(period) }}
-                      </option>
-                    </select>
-                  </label>
+                  <div class="company-module-table-controls">
+                    <label class="company-module-filter">
+                      <span>Biznes holati</span>
+                      <select v-model="companyMrrBusinessFilter" class="select mini-select">
+                        <option value="all">Hammasi</option>
+                        <option v-for="status in companyMrrBusinessOptions" :key="`mrr-scatter-business-${status}`"
+                          :value="status">{{ businessStatusLabel(status) }}</option>
+                      </select>
+                    </label>
+                    <label class="company-module-filter">
+                      <span>Mas’ul xodim</span>
+                      <select v-model="companyMrrSupportFilter" class="select mini-select">
+                        <option value="all">Hammasi</option>
+                        <option value="assigned">Biriktirilgan</option>
+                        <option value="unassigned">Biriktirilmagan</option>
+                        <option v-for="username in companyMrrSupportOptions" :key="`mrr-scatter-support-${username}`"
+                          :value="username">{{ companyModuleSupportDisplayLabel(username) }}</option>
+                      </select>
+                    </label>
+                    <label class="company-module-filter">
+                      <span>Davr</span>
+                      <select :value="companyModulePeriod" class="select mini-select"
+                        @change="handleCompanyModulePeriodChange($event.target.value)"
+                        @mousedown="handleCompanyModulePeriodSelectPointerDown"
+                        @mouseup="handleCompanyModulePeriodSelectPointerUp">
+                        <option v-for="period in companyModulePeriodOptions" :key="`mrr-scatter-period-${period.key}`"
+                          :value="period.key">
+                          {{ companyModulePeriodOptionLabel(period) }}
+                        </option>
+                      </select>
+                    </label>
+                  </div>
                 </div>
                 <div v-if="companyMrrScatterPoints.length" class="trend-chart company-mrr-scatter">
                   <svg :viewBox="`0 0 ${COMPANY_MRR_SCATTER_VIEW.width} ${COMPANY_MRR_SCATTER_VIEW.height}`" role="img"
@@ -5698,14 +5738,49 @@ function pearsonCorrelation(pairs = []) {
   return denom ? numerator / denom : 0;
 }
 
+const companyMrrBusinessFilter = ref('all');
+const companyMrrSupportFilter = ref('all');
+
+const companyMrrEligibleRows = computed(() => companyInfoRows.value.filter(row => Number(row.mrr_amount || 0) > 0));
+
+const companyMrrBusinessOptions = computed(() => {
+  const values = new Set();
+  companyMrrEligibleRows.value.forEach(row => {
+    const value = String(row.business_status || '').toUpperCase().trim();
+    if (value) values.add(value);
+  });
+  return [...values].sort();
+});
+
+const companyMrrSupportOptions = computed(() => {
+  const usernames = new Set();
+  companyMrrEligibleRows.value.forEach(row => {
+    const username = normalizeSupportUsername(row.uyqur_support_username);
+    if (username) usernames.add(username);
+  });
+  return [...usernames].sort((a, b) => companyModuleSupportDisplayLabel(a).localeCompare(companyModuleSupportDisplayLabel(b), 'uz'));
+});
+
+function matchesCompanyMrrSupportFilter(row = {}, filter = 'all') {
+  const username = normalizeSupportUsername(row.uyqur_support_username);
+  if (filter === 'all') return true;
+  if (filter === 'assigned') return Boolean(username);
+  if (filter === 'unassigned') return !username;
+  return username === filter;
+}
+
 const companyMrrRows = computed(() => {
   const percentById = new Map();
   companyModuleBaseRows.value.forEach(row => {
     const id = String(row.id || '').trim();
     if (id) percentById.set(id, Number(row.module_active_percent || 0));
   });
+  const businessFilter = companyMrrBusinessFilter.value;
+  const supportFilter = companyMrrSupportFilter.value;
   return companyInfoRows.value
     .filter(includesSearch)
+    .filter(row => businessFilter === 'all' || String(row.business_status || '').toUpperCase().trim() === businessFilter)
+    .filter(row => matchesCompanyMrrSupportFilter(row, supportFilter))
     .map(row => {
       const id = String(row.id || '').trim();
       const percent = percentById.get(id) || 0;
@@ -5713,6 +5788,8 @@ const companyMrrRows = computed(() => {
         id,
         name: row.name || 'Kompaniya',
         mrr_amount: Number(row.mrr_amount || 0),
+        business_status: row.business_status || '',
+        support_username: normalizeSupportUsername(row.uyqur_support_username),
         activity_percent: percent,
         activity_score: faollikScoreFromPercent(percent)
       };
