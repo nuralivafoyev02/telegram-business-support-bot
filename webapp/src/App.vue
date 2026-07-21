@@ -1037,9 +1037,10 @@
                       @mouseleave="unhoverCompanyMrrScatterPoint(point)"
                       @click.stop="selectCompanyMrrScatterPoint(point)">
                       <circle :cx="point.x" :cy="point.y" :r="point.clickup_point_radius"
-                        :fill="companyMrrScatterPointColor(point.activity_score)" fill-opacity="0.9" />
+                        :fill="companyMrrScatterPointColor(point.activity_score)" fill-opacity="0.85"
+                        :stroke="companyMrrScatterPointStrokeColor(point.activity_score)" stroke-width="1.5" />
                     </g>
-                    <g v-for="point in companyMrrScatterPoints.filter(item => item.clickup_linked_task_count > 0)"
+                    <g v-for="point in (companyMrrScatterClickupEnabled ? companyMrrScatterPoints.filter(item => item.clickup_linked_task_count > 0) : [])"
                       :key="`mrr-point-badge-${point.id}`" class="company-mrr-scatter-badge"
                       @click.stop="openCompanyMrrScatterTaskBadge(point)">
                       <circle :cx="point.clickup_badge_x" :cy="point.clickup_badge_y" :r="point.clickup_badge_radius" />
@@ -5815,6 +5816,12 @@ function companyMrrScatterPointColor(score = 0) {
   return '#fca5a5';
 }
 
+function companyMrrScatterPointStrokeColor(score = 0) {
+  if (score >= 4) return '#16a34a';
+  if (score >= 3) return '#d97706';
+  return '#dc2626';
+}
+
 function pearsonCorrelation(pairs = []) {
   const n = pairs.length;
   if (n < 2) return 0;
@@ -5977,10 +5984,30 @@ function clickupStatusTypeGroup(statusType = '') {
   return 'not_started';
 }
 
+const CLICKUP_STATUS_NAME_GROUP_MAP = {
+  'not started': 'not_started',
+  open: 'not_started',
+  todo: 'not_started',
+  pending: 'not_started',
+  'in progress': 'in_progress',
+  'code review': 'in_progress',
+  'in qa': 'in_progress',
+  'deployed must be tested': 'in_progress',
+  blocked: 'in_progress',
+  'issue found': 'in_progress',
+  closed: 'done',
+  'ready production': 'done'
+};
+
+function clickupStatusGroupForStatus(status = '', statusType = '') {
+  const key = String(status || '').toLowerCase().trim();
+  return CLICKUP_STATUS_NAME_GROUP_MAP[key] || clickupStatusTypeGroup(statusType);
+}
+
 const CLICKUP_STATUS_GROUP_LABELS = {
-  not_started: '▶ Not Started',
-  in_progress: '▶ In Progress',
-  done: '▶ Done'
+  not_started: '▶ Boshlanmagan (Not Started)',
+  in_progress: '▶ Jarayonda (In Progress)',
+  done: '▶ Tugagan (Completed)'
 };
 
 const companyMrrScatterClickupStatusGroups = computed(() => {
@@ -5993,7 +6020,7 @@ const companyMrrScatterClickupStatusGroups = computed(() => {
     (row.linked_tasks || []).forEach(task => {
       const status = String(task.status || '').trim();
       if (!status) return;
-      groups[clickupStatusTypeGroup(task.status_type)].add(status);
+      groups[clickupStatusGroupForStatus(status, task.status_type)].add(status);
     });
   });
   return Object.entries(groups)
@@ -6055,11 +6082,10 @@ const companyMrrScatterRawPoints = computed(() => {
   const max = companyMrrScatterMax.value;
   const linksByKey = clickupCompanyLinksByKey.value;
   const statusFilter = companyMrrScatterClickupStatusFilter.value;
-  const clickupEnabled = companyMrrScatterClickupEnabled.value;
   return companyMrrScatterRows.value.map(row => {
     const xRatio = row.activity_score / 5;
     const yRatio = row.mrr_amount / max;
-    const link = clickupEnabled ? linksByKey.get(clickupCompanyKey(row.name)) : null;
+    const link = linksByKey.get(clickupCompanyKey(row.name));
     const allLinkedTasks = link?.linked_tasks || [];
     const linkedTasks = statusFilter === 'all'
       ? allLinkedTasks
