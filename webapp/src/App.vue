@@ -5797,7 +5797,7 @@ const companyModuleBaseRows = computed(() => {
 
 const COMPANY_MRR_SCATTER_VIEW = { width: 720, height: 440 };
 const COMPANY_MRR_SCATTER_DIMS = { left: 70, right: 690, top: 20, bottom: 380 };
-const COMPANY_MRR_SCATTER_POINT_MIN_RADIUS = 3;
+const COMPANY_MRR_SCATTER_POINT_MIN_RADIUS = 5;
 const COMPANY_MRR_SCATTER_POINT_MAX_RADIUS = 22;
 const COMPANY_MRR_SCATTER_BADGE_RADIUS = 7;
 
@@ -6054,7 +6054,7 @@ function companyMrrScatterPointRadius(count = 0, maxCount = 1) {
   const minR = COMPANY_MRR_SCATTER_POINT_MIN_RADIUS;
   const maxR = COMPANY_MRR_SCATTER_POINT_MAX_RADIUS;
   if (count <= 0 || maxCount <= 1) return minR;
-  const ratio = Math.sqrt(count) / Math.sqrt(maxCount);
+  const ratio = count / maxCount;
   return Math.round((minR + (maxR - minR) * ratio) * 10) / 10;
 }
 
