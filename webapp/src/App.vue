@@ -5834,11 +5834,11 @@ const companyModuleBaseRows = computed(() => {
   });
 });
 
-const COMPANY_MRR_SCATTER_VIEW = { width: 1430, height: 910 };
-const COMPANY_MRR_SCATTER_DIMS = { left: 145, right: 1300, top: 110, bottom: 780 };
-const COMPANY_MRR_SCATTER_POINT_MIN_RADIUS = 11.25;
-const COMPANY_MRR_SCATTER_POINT_MAX_RADIUS = 49.5;
-const COMPANY_MRR_SCATTER_BADGE_RADIUS = 7;
+const COMPANY_MRR_SCATTER_VIEW = { width: 1460, height: 940 };
+const COMPANY_MRR_SCATTER_DIMS = { left: 145, right: 1300, top: 140, bottom: 810 };
+const COMPANY_MRR_SCATTER_POINT_MIN_RADIUS = 16.875;
+const COMPANY_MRR_SCATTER_POINT_MAX_RADIUS = 74.25;
+const COMPANY_MRR_SCATTER_BADGE_RADIUS = 21;
 
 function activityScoreColor(score = 0) {
   if (score >= 4) return 'var(--success)';
