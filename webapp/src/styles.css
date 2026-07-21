@@ -4539,7 +4539,7 @@ td,
 }
 
 .company-mrr-scatter-tooltip {
-  pointer-events: auto;
+  pointer-events: none;
   max-width: 240px;
 }
 
@@ -4558,17 +4558,9 @@ td,
   overflow-y: auto;
 }
 
-.company-mrr-scatter-tooltip-item {
-  cursor: pointer;
-}
-
 .company-mrr-scatter-tooltip-item + .company-mrr-scatter-tooltip-item {
   padding-top: 10px;
   border-top: 1px solid rgba(255, 255, 255, .14);
-}
-
-.company-mrr-scatter-tooltip-item:hover b {
-  text-decoration: underline;
 }
 
 .company-module-summary {

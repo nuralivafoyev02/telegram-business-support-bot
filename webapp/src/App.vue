@@ -1081,14 +1081,13 @@
                     </g>
                   </svg>
                   <div v-if="companyMrrScatterTooltip" class="company-module-chart-tooltip company-mrr-scatter-tooltip"
-                    :style="companyMrrScatterTooltipStyle" @mouseenter="holdCompanyMrrScatterTooltip"
-                    @mouseleave="releaseCompanyMrrScatterTooltip">
+                    :style="companyMrrScatterTooltipStyle">
                     <div v-if="companyMrrScatterTooltip.points.length > 1" class="company-mrr-scatter-tooltip-count">
                       {{ companyMrrScatterTooltip.points.length }} ta kompaniya shu nuqtada
                     </div>
                     <div class="company-mrr-scatter-tooltip-list">
                       <div v-for="item in companyMrrScatterTooltip.points" :key="`mrr-tooltip-item-${item.id}`"
-                        class="company-mrr-scatter-tooltip-item" @click.stop="selectCompanyMrrScatterPoint(item)">
+                        class="company-mrr-scatter-tooltip-item">
                         <b>{{ item.name }}</b>
                         <div class="company-module-chart-tooltip-row"><span>MRR</span><strong>{{
                           fmtNumber(item.mrr_amount) }}</strong></div>
@@ -4395,10 +4394,6 @@ function handleDocumentPointerDown(event) {
     const root = companyModuleChartCompanyMenuRef.value;
     if (!root || !root.contains(event.target)) closeCompanyModuleChartCompanyMenu();
   }
-  if (companyMrrScatterSelectedPointId.value) {
-    const root = companyMrrScatterChartRef.value;
-    if (!root || !root.contains(event.target)) closeCompanyMrrScatterTooltip();
-  }
   if (companyMrrClickupStatusMenuOpen.value) {
     const root = companyMrrClickupStatusMenuRef.value;
     if (!root || !root.contains(event.target)) closeCompanyMrrClickupStatusMenu();
@@ -4413,7 +4408,6 @@ function handleDocumentKeydown(event) {
     closeCompanyModuleFilterMenu();
     closeCompanyMrrFilterMenu();
     closeCompanyModuleChartCompanyMenu();
-    closeCompanyMrrScatterTooltip();
     closeCompanyMrrClickupStatusMenu();
     hideFloatingTooltip();
     if (modal.value) closeModal();
@@ -6400,7 +6394,6 @@ function companyMrrQuadrantRows(quadrantKey = '') {
 }
 
 function openCompanyMrrQuadrantDetail(quadrantKey = '') {
-  closeCompanyMrrScatterTooltip();
   const rows = companyMrrQuadrantRows(quadrantKey);
   if (!rows.length) return showToast('Bu zonada kompaniya topilmadi');
   setMetricDetail({
@@ -6425,7 +6418,6 @@ const clickupCompanyLinkTaskColumns = [
 function openCompanyMrrScatterTaskBadge(point = {}) {
   const id = String(point.id || '').trim();
   if (!id) return;
-  closeCompanyMrrScatterTooltip();
   openCompanyDetailModal(id, 'clickup');
 }
 
@@ -6437,40 +6429,44 @@ function adjustCompanyMrrScatterRadiusScale(delta = 0) {
   companyMrrScatterRadiusScale.value = Math.min(2.2, Math.max(0.5, next));
 }
 
-const companyMrrScatterSelectedPointId = ref('');
-let companyMrrScatterTooltipCloseTimer = null;
-
-function clearCompanyMrrScatterTooltipTimer() {
-  if (companyMrrScatterTooltipCloseTimer) {
-    clearTimeout(companyMrrScatterTooltipCloseTimer);
-    companyMrrScatterTooltipCloseTimer = null;
-  }
-}
+const companyMrrScatterHoverPointId = ref('');
 
 function hoverCompanyMrrScatterPoint(point = {}) {
-  clearCompanyMrrScatterTooltipTimer();
-  companyMrrScatterSelectedPointId.value = String(point.id || '').trim();
+  companyMrrScatterHoverPointId.value = String(point.id || '').trim();
 }
 
-function unhoverCompanyMrrScatterPoint(point = {}) {
-  clearCompanyMrrScatterTooltipTimer();
-  companyMrrScatterTooltipCloseTimer = setTimeout(() => {
-    companyMrrScatterSelectedPointId.value = '';
-  }, 150);
+function unhoverCompanyMrrScatterPoint() {
+  companyMrrScatterHoverPointId.value = '';
 }
 
-function holdCompanyMrrScatterTooltip() {
-  clearCompanyMrrScatterTooltipTimer();
-}
+const companyMrrScatterTooltip = computed(() => {
+  const id = companyMrrScatterHoverPointId.value;
+  if (!id) return null;
+  const active = companyMrrScatterPoints.value.find(point => String(point.id) === id);
+  if (!active) return null;
+  const points = companyMrrScatterPoints.value.filter(point => point.x === active.x && point.y === active.y);
+  return { x: active.x, y: active.y, points };
+});
 
-function releaseCompanyMrrScatterTooltip() {
-  unhoverCompanyMrrScatterPoint();
-}
+const companyMrrScatterTooltipStyle = computed(() => {
+  const tooltip = companyMrrScatterTooltip.value;
+  const root = companyMrrScatterChartRef.value;
+  if (!tooltip || !root) return {};
+  const svg = root.querySelector('svg');
+  if (!svg) return {};
+  const rect = svg.getBoundingClientRect();
+  const shellRect = root.getBoundingClientRect();
+  const ratio = rect.width / COMPANY_MRR_SCATTER_VIEW.width;
+  const left = (rect.left - shellRect.left) + tooltip.x * ratio;
+  const top = (rect.top - shellRect.top) + tooltip.y * ratio;
+  const clampedLeft = Math.max(12, Math.min(left, shellRect.width - 220));
+  const clampedTop = Math.max(12, top - 12);
+  return { left: `${clampedLeft}px`, top: `${clampedTop}px` };
+});
 
 function selectCompanyMrrScatterPoint(point = {}) {
   const id = String(point.id || '').trim();
   if (!id) return;
-  closeCompanyMrrScatterTooltip();
   openCompanyDetailModal(id);
 }
 
@@ -6503,36 +6499,6 @@ function openCompanyDetailModal(companyId = '', tab = 'employees') {
     .find(item => String(item.id || '').trim() === id) || null;
   modal.value = 'companyDetail';
 }
-
-function closeCompanyMrrScatterTooltip() {
-  clearCompanyMrrScatterTooltipTimer();
-  companyMrrScatterSelectedPointId.value = '';
-}
-
-const companyMrrScatterTooltip = computed(() => {
-  const id = companyMrrScatterSelectedPointId.value;
-  if (!id) return null;
-  const active = companyMrrScatterPoints.value.find(point => String(point.id) === id);
-  if (!active) return null;
-  const points = companyMrrScatterPoints.value.filter(point => point.x === active.x && point.y === active.y);
-  return { x: active.x, y: active.y, points };
-});
-
-const companyMrrScatterTooltipStyle = computed(() => {
-  const tooltip = companyMrrScatterTooltip.value;
-  const root = companyMrrScatterChartRef.value;
-  if (!tooltip || !root) return {};
-  const svg = root.querySelector('svg');
-  if (!svg) return {};
-  const rect = svg.getBoundingClientRect();
-  const shellRect = root.getBoundingClientRect();
-  const ratio = rect.width / COMPANY_MRR_SCATTER_VIEW.width;
-  const left = (rect.left - shellRect.left) + tooltip.x * ratio;
-  const top = (rect.top - shellRect.top) + tooltip.y * ratio;
-  const clampedLeft = Math.max(12, Math.min(left, shellRect.width - 220));
-  const clampedTop = Math.max(12, top - 12);
-  return { left: `${clampedLeft}px`, top: `${clampedTop}px` };
-});
 
 const companyModuleSupportFilterOptions = computed(() => {
   const usernames = new Set();
