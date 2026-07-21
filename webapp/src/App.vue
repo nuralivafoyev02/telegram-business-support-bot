@@ -1020,18 +1020,19 @@
                         </option>
                       </select>
                     </label>
-                    <div class="company-mrr-scatter-zoom">
-                      <button type="button" class="btn-icon mini-icon" title="Kichraytirish"
-                        @click="adjustCompanyMrrScatterZoom(-0.1)">−</button>
-                      <button type="button" class="btn-icon mini-icon" title="Kattalashtirish"
-                        @click="adjustCompanyMrrScatterZoom(0.1)">+</button>
-                    </div>
                   </div>
                 </div>
+                <div v-if="companyMrrScatterPoints.length" class="company-mrr-scatter-zoom">
+                  <button type="button" class="btn-icon mini-icon" title="Kichraytirish"
+                    @click="adjustCompanyMrrScatterZoom(-0.1)">−</button>
+                  <button type="button" class="btn-icon mini-icon" title="Kattalashtirish"
+                    @click="adjustCompanyMrrScatterZoom(0.1)">+</button>
+                </div>
                 <div v-if="companyMrrScatterPoints.length" class="trend-chart company-mrr-scatter"
-                  ref="companyMrrScatterChartRef" :style="{ width: (COMPANY_MRR_SCATTER_VIEW.width * companyMrrScatterZoom) + 'px' }">
+                  ref="companyMrrScatterChartRef">
                   <svg :viewBox="`0 0 ${COMPANY_MRR_SCATTER_VIEW.width} ${COMPANY_MRR_SCATTER_VIEW.height}`" role="img"
-                    aria-label="MRR va faollik balli nisbati">
+                    aria-label="MRR va faollik balli nisbati"
+                    :style="{ width: (COMPANY_MRR_SCATTER_VIEW.width * companyMrrScatterZoom) + 'px', maxWidth: 'none' }">
                     <rect class="company-mrr-scatter-risk company-mrr-scatter-quadrant"
                       :x="COMPANY_MRR_SCATTER_DIMS.left" :y="COMPANY_MRR_SCATTER_DIMS.top"
                       :width="companyMrrScatterThresholds.riskWidth" :height="companyMrrScatterThresholds.riskHeight"
