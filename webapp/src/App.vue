@@ -956,7 +956,11 @@
                           companyModuleSupportDisplayLabel(username) }}</option>
                       </select>
                     </label>
-                    <label class="company-module-filter">
+                    <label class="company-module-filter company-mrr-scatter-clickup-toggle">
+                      <span>ClickUp</span>
+                      <input type="checkbox" v-model="companyMrrScatterClickupEnabled" />
+                    </label>
+                    <label v-if="companyMrrScatterClickupEnabled" class="company-module-filter">
                       <span>ClickUp holati</span>
                       <select v-model="companyMrrScatterClickupStatusFilter" class="select mini-select">
                         <option value="all">Hammasi</option>
@@ -1029,14 +1033,14 @@
                       class="company-mrr-scatter-point" @mouseenter="hoverCompanyMrrScatterPoint(point)"
                       @mouseleave="unhoverCompanyMrrScatterPoint(point)"
                       @click.stop="selectCompanyMrrScatterPoint(point)">
-                      <circle :cx="point.x" :cy="point.y" r="3.5" :fill="activityScoreColor(point.activity_score)"
-                        fill-opacity="0.9" />
+                      <circle :cx="point.x" :cy="point.y" :r="point.clickup_point_radius"
+                        :fill="activityScoreColor(point.activity_score)" fill-opacity="0.9" />
                     </g>
                     <g v-for="point in companyMrrScatterPoints.filter(item => item.clickup_linked_task_count > 0)"
                       :key="`mrr-point-badge-${point.id}`" class="company-mrr-scatter-badge"
                       @click.stop="openCompanyMrrScatterTaskBadge(point)">
-                      <circle :cx="point.x + 6" :cy="point.y - 6" :r="point.clickup_badge_radius" />
-                      <text :x="point.x + 6" :y="point.y - 6">{{ point.clickup_linked_task_count }}</text>
+                      <circle :cx="point.clickup_badge_x" :cy="point.clickup_badge_y" :r="point.clickup_badge_radius" />
+                      <text :x="point.clickup_badge_x" :y="point.clickup_badge_y">{{ point.clickup_linked_task_count }}</text>
                     </g>
                   </svg>
                   <div v-if="companyMrrScatterTooltip" class="company-module-chart-tooltip company-mrr-scatter-tooltip"
@@ -5792,8 +5796,9 @@ const companyModuleBaseRows = computed(() => {
 
 const COMPANY_MRR_SCATTER_VIEW = { width: 720, height: 440 };
 const COMPANY_MRR_SCATTER_DIMS = { left: 70, right: 690, top: 20, bottom: 380 };
-const COMPANY_MRR_SCATTER_BADGE_MIN_RADIUS = 7;
-const COMPANY_MRR_SCATTER_BADGE_MAX_RADIUS = 14;
+const COMPANY_MRR_SCATTER_POINT_MIN_RADIUS = 3.5;
+const COMPANY_MRR_SCATTER_POINT_MAX_RADIUS = 11;
+const COMPANY_MRR_SCATTER_BADGE_RADIUS = 7;
 
 function activityScoreColor(score = 0) {
   if (score >= 4) return 'var(--success)';
@@ -5880,6 +5885,7 @@ const clickupCompanyLinksByKey = computed(() => {
 const companyMrrScatterBusinessFilter = ref('ACTIVE');
 const companyMrrScatterSupportFilter = ref('all');
 const companyMrrScatterClickupStatusFilter = ref('all');
+const companyMrrScatterClickupEnabled = ref(true);
 const companyMrrScatterCompanyId = ref('');
 const companyMrrScatterPeriodOptions = companyModulePeriodOptions.filter(period => period.key !== 'custom');
 
@@ -6016,10 +6022,11 @@ const companyMrrScatterRawPoints = computed(() => {
   const max = companyMrrScatterMax.value;
   const linksByKey = clickupCompanyLinksByKey.value;
   const statusFilter = companyMrrScatterClickupStatusFilter.value;
+  const clickupEnabled = companyMrrScatterClickupEnabled.value;
   return companyMrrScatterRows.value.map(row => {
     const xRatio = row.activity_score / 5;
     const yRatio = row.mrr_amount / max;
-    const link = linksByKey.get(clickupCompanyKey(row.name));
+    const link = clickupEnabled ? linksByKey.get(clickupCompanyKey(row.name)) : null;
     const allLinkedTasks = link?.linked_tasks || [];
     const linkedTasks = statusFilter === 'all'
       ? allLinkedTasks
@@ -6034,20 +6041,28 @@ const companyMrrScatterRawPoints = computed(() => {
   });
 });
 
-function companyMrrScatterBadgeRadius(count = 0, maxCount = 1) {
-  const minR = COMPANY_MRR_SCATTER_BADGE_MIN_RADIUS;
-  const maxR = COMPANY_MRR_SCATTER_BADGE_MAX_RADIUS;
-  if (maxCount <= 1) return minR;
+function companyMrrScatterPointRadius(count = 0, maxCount = 1) {
+  const minR = COMPANY_MRR_SCATTER_POINT_MIN_RADIUS;
+  const maxR = COMPANY_MRR_SCATTER_POINT_MAX_RADIUS;
+  if (count <= 0 || maxCount <= 1) return minR;
   const ratio = Math.sqrt(count) / Math.sqrt(maxCount);
   return Math.round((minR + (maxR - minR) * ratio) * 10) / 10;
 }
 
 const companyMrrScatterPoints = computed(() => {
   const maxCount = Math.max(1, ...companyMrrScatterRawPoints.value.map(point => point.clickup_linked_task_count));
-  return companyMrrScatterRawPoints.value.map(point => ({
-    ...point,
-    clickup_badge_radius: companyMrrScatterBadgeRadius(point.clickup_linked_task_count, maxCount)
-  }));
+  return companyMrrScatterRawPoints.value.map(point => {
+    const pointRadius = companyMrrScatterPointRadius(point.clickup_linked_task_count, maxCount);
+    const badgeRadius = COMPANY_MRR_SCATTER_BADGE_RADIUS;
+    const offset = (pointRadius + badgeRadius) / Math.SQRT2;
+    return {
+      ...point,
+      clickup_point_radius: pointRadius,
+      clickup_badge_radius: badgeRadius,
+      clickup_badge_x: Math.round((point.x + offset) * 10) / 10,
+      clickup_badge_y: Math.round((point.y - offset) * 10) / 10
+    };
+  });
 });
 
 const companyMrrScatterXTicks = computed(() => {
