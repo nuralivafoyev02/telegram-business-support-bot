@@ -1035,7 +1035,7 @@
                     <g v-for="point in companyMrrScatterPoints.filter(item => item.clickup_linked_task_count > 0)"
                       :key="`mrr-point-badge-${point.id}`" class="company-mrr-scatter-badge"
                       @click.stop="openCompanyMrrScatterTaskBadge(point)">
-                      <circle :cx="point.x + 6" :cy="point.y - 6" r="7" />
+                      <circle :cx="point.x + 6" :cy="point.y - 6" :r="point.clickup_badge_radius" />
                       <text :x="point.x + 6" :y="point.y - 6">{{ point.clickup_linked_task_count }}</text>
                     </g>
                   </svg>
@@ -5790,8 +5790,10 @@ const companyModuleBaseRows = computed(() => {
   });
 });
 
-const COMPANY_MRR_SCATTER_VIEW = { width: 620, height: 380 };
-const COMPANY_MRR_SCATTER_DIMS = { left: 70, right: 590, top: 20, bottom: 320 };
+const COMPANY_MRR_SCATTER_VIEW = { width: 720, height: 440 };
+const COMPANY_MRR_SCATTER_DIMS = { left: 70, right: 690, top: 20, bottom: 380 };
+const COMPANY_MRR_SCATTER_BADGE_MIN_RADIUS = 7;
+const COMPANY_MRR_SCATTER_BADGE_MAX_RADIUS = 14;
 
 function activityScoreColor(score = 0) {
   if (score >= 4) return 'var(--success)';
@@ -6007,7 +6009,7 @@ function niceAxisMax(value = 0) {
 
 const companyMrrScatterMax = computed(() => niceAxisMax(Math.max(1, ...companyMrrScatterRows.value.map(row => row.mrr_amount))));
 
-const companyMrrScatterPoints = computed(() => {
+const companyMrrScatterRawPoints = computed(() => {
   const dims = COMPANY_MRR_SCATTER_DIMS;
   const width = dims.right - dims.left;
   const height = dims.bottom - dims.top;
@@ -6030,6 +6032,22 @@ const companyMrrScatterPoints = computed(() => {
       clickup_linked_task_count: linkedTasks.length
     };
   });
+});
+
+function companyMrrScatterBadgeRadius(count = 0, maxCount = 1) {
+  const minR = COMPANY_MRR_SCATTER_BADGE_MIN_RADIUS;
+  const maxR = COMPANY_MRR_SCATTER_BADGE_MAX_RADIUS;
+  if (maxCount <= 1) return minR;
+  const ratio = Math.sqrt(count) / Math.sqrt(maxCount);
+  return Math.round((minR + (maxR - minR) * ratio) * 10) / 10;
+}
+
+const companyMrrScatterPoints = computed(() => {
+  const maxCount = Math.max(1, ...companyMrrScatterRawPoints.value.map(point => point.clickup_linked_task_count));
+  return companyMrrScatterRawPoints.value.map(point => ({
+    ...point,
+    clickup_badge_radius: companyMrrScatterBadgeRadius(point.clickup_linked_task_count, maxCount)
+  }));
 });
 
 const companyMrrScatterXTicks = computed(() => {
