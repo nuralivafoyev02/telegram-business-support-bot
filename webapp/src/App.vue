@@ -1050,7 +1050,7 @@
                     <line class="company-mrr-scatter-threshold" :x1="COMPANY_MRR_SCATTER_DIMS.left"
                       :x2="COMPANY_MRR_SCATTER_DIMS.right" :y1="companyMrrScatterThresholds.y"
                       :y2="companyMrrScatterThresholds.y" />
-                    <g class="trend-axis">
+                    <g class="trend-axis company-mrr-scatter-axis">
                       <text v-for="tick in companyMrrScatterYTicks" :key="`mrr-y-label-${tick.value}`" x="52"
                         :y="tick.y + 4" text-anchor="end">{{ fmtNumber(tick.value) }}</text>
                       <text v-for="tick in companyMrrScatterXTicks" :key="`mrr-x-label-${tick.value}`" :x="tick.x"
@@ -6177,7 +6177,9 @@ const companyMrrScatterPoints = computed(() => {
   const maxCount = Math.max(1, ...companyMrrScatterRawPoints.value.map(point => point.clickup_linked_task_count));
   return companyMrrScatterRawPoints.value.map(point => {
     const pointRadius = companyMrrScatterPointRadius(point.clickup_linked_task_count, maxCount);
-    const badgeRadius = COMPANY_MRR_SCATTER_BADGE_RADIUS;
+    const badgeRadius = point.clickup_linked_task_count === 1
+      ? Math.round(COMPANY_MRR_SCATTER_BADGE_RADIUS * 0.7 * 10) / 10
+      : COMPANY_MRR_SCATTER_BADGE_RADIUS;
     const offset = (pointRadius + badgeRadius) / Math.SQRT2;
     return {
       ...point,

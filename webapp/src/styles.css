@@ -4375,6 +4375,10 @@ td,
   letter-spacing: .04em;
 }
 
+.trend-axis.company-mrr-scatter-axis text {
+  font-size: 20px;
+}
+
 .company-module-chart-axis text {
   fill: var(--muted-strong);
   font-size: 12px;
