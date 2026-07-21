@@ -4002,14 +4002,14 @@ td,
   padding: 0 18px;
 }
 
-.company-mrr-clickup-status-group-label {
+.company-module-filter-option.company-mrr-clickup-status-group-label {
   font-weight: 800;
   border-top: 1px solid var(--line);
   margin-top: 4px;
   padding-top: 10px;
 }
 
-.company-mrr-clickup-status-sub {
+.company-module-filter-option.company-mrr-clickup-status-sub {
   padding-left: 26px;
   font-weight: 500;
 }
