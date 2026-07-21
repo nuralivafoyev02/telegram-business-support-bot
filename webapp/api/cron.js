@@ -7,6 +7,7 @@ const { sendMainStatsReport } = require('../../backend/lib/report');
 const { syncCompanyInfo } = require('../../backend/lib/company-info');
 const { syncCompanyReport } = require('../../backend/lib/company-report');
 const { syncClickUpCompletedTasks } = require('../../backend/lib/clickup-sync');
+const { syncClickUpCompanyLinks } = require('../../backend/lib/clickup-company-links');
 const { notifyOperationalError } = require('../../backend/lib/log-notifier');
 const { runWithTenant, resolveTenantFromQuery } = require('../../backend/lib/tenant');
 
@@ -45,6 +46,10 @@ export default async function handler(req, res) {
     }
     if (['clickupSync', 'clickup-sync', 'clickup'].includes(action)) {
       const result = await runWithTenant(tenantId, () => syncClickUpCompletedTasks({ limit: Number(query.limit || 50) }));
+      return sendJson(res, 200, { ok: true, data: result });
+    }
+    if (['clickupCompanyLinks', 'clickup-company-links'].includes(action)) {
+      const result = await runWithTenant(tenantId, () => syncClickUpCompanyLinks());
       return sendJson(res, 200, { ok: true, data: result });
     }
     if (action) {
