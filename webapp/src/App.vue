@@ -5797,8 +5797,8 @@ const companyModuleBaseRows = computed(() => {
 
 const COMPANY_MRR_SCATTER_VIEW = { width: 720, height: 440 };
 const COMPANY_MRR_SCATTER_DIMS = { left: 70, right: 690, top: 20, bottom: 380 };
-const COMPANY_MRR_SCATTER_POINT_MIN_RADIUS = 3.5;
-const COMPANY_MRR_SCATTER_POINT_MAX_RADIUS = 15;
+const COMPANY_MRR_SCATTER_POINT_MIN_RADIUS = 3;
+const COMPANY_MRR_SCATTER_POINT_MAX_RADIUS = 22;
 const COMPANY_MRR_SCATTER_BADGE_RADIUS = 7;
 
 function activityScoreColor(score = 0) {
