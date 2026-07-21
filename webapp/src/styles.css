@@ -1189,6 +1189,17 @@ tbody tr:hover {
   color: var(--primary);
 }
 
+.company-detail-period-filter {
+  margin-bottom: 16px;
+}
+
+.company-detail-clickup-status-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0 16px;
+}
+
 .company-detail-trend-slot .company-module-chart-card {
   border: 0;
   box-shadow: none;

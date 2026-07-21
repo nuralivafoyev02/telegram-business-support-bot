@@ -1778,7 +1778,7 @@
     </Transition>
 
     <Transition name="modal-fade">
-      <Modal v-if="modal === 'companyDetail'" :title="companyDetailModalTitle" xlarge @close="closeModal">
+      <Modal v-show="modal === 'companyDetail'" :title="companyDetailModalTitle" xlarge @close="closeModal">
         <div class="company-detail-tabs">
           <button type="button" class="company-detail-tab" :class="{ active: companyDetailActiveTab === 'employees' }"
             @click="companyDetailActiveTab = 'employees'">Xodimlar faolligi</button>
@@ -1791,6 +1791,14 @@
         </div>
 
         <div v-show="companyDetailActiveTab === 'employees'" class="company-module-employee-detail">
+          <label class="company-module-filter company-detail-period-filter">
+            <span>Davr</span>
+            <select :value="companyModulePeriod" class="select mini-select"
+              @change="handleCompanyDetailPeriodChange($event.target.value)">
+              <option v-for="period in companyModulePeriodOptions" :key="`detail-employees-period-${period.key}`"
+                :value="period.key">{{ companyModulePeriodOptionLabel(period) }}</option>
+            </select>
+          </label>
           <div v-if="companyModuleEmployeeDetail">
             <div class="company-module-employee-head">
               <div>
@@ -1866,7 +1874,7 @@
           <label class="company-module-filter">
             <span>Davr</span>
             <select :value="companyModulePeriod" class="select mini-select"
-              @change="handleCompanyModulePeriodChange($event.target.value)">
+              @change="handleCompanyDetailPeriodChange($event.target.value)">
               <option v-for="period in companyModulePeriodOptions" :key="`detail-modules-period-${period.key}`"
                 :value="period.key">{{ companyModulePeriodOptionLabel(period) }}</option>
             </select>
@@ -1898,6 +1906,12 @@
               <span>Vazifalar</span>
               <b>{{ fmtNumber(companyDetailClickupTasks.length) }}</b>
             </div>
+          </div>
+          <div class="company-detail-clickup-status-filter">
+            <button v-for="[key, label] in Object.entries(CLICKUP_STATUS_GROUP_LABELS)"
+              :key="`detail-clickup-status-${key}`" type="button" class="company-detail-tab"
+              :class="{ active: companyDetailClickupStatusFilter.has(key) }"
+              @click="toggleCompanyDetailClickupStatusFilter(key)">{{ label }}</button>
           </div>
           <DataTable :columns="clickupCompanyLinkTaskColumns" :rows="companyDetailClickupTasks"
             empty="Vazifa topilmadi" :page-size="12" :on-cell-action="handleTableCellAction" />
@@ -6482,11 +6496,27 @@ const companyDetailModuleRow = computed(() => (
   companyModuleBaseRows.value.find(item => String(item.id || '').trim() === companyDetailCompanyId.value) || null
 ));
 
-const companyDetailClickupTasks = computed(() => {
+const companyDetailClickupStatusFilter = ref(new Set());
+
+function toggleCompanyDetailClickupStatusFilter(key = '') {
+  const next = new Set(companyDetailClickupStatusFilter.value);
+  if (next.has(key)) next.delete(key);
+  else next.add(key);
+  companyDetailClickupStatusFilter.value = next;
+}
+
+const companyDetailAllClickupTasks = computed(() => {
   const row = companyDetailModuleRow.value;
   if (!row) return [];
   const link = clickupCompanyLinksByKey.value.get(clickupCompanyKey(row.name));
   return link?.linked_tasks || [];
+});
+
+const companyDetailClickupTasks = computed(() => {
+  const all = companyDetailAllClickupTasks.value;
+  const filter = companyDetailClickupStatusFilter.value;
+  if (!filter.size) return all;
+  return all.filter(task => filter.has(clickupStatusGroupForStatus(task.status, task.status_type)));
 });
 
 function openCompanyDetailModal(companyId = '', tab = 'employees') {
@@ -6494,10 +6524,18 @@ function openCompanyDetailModal(companyId = '', tab = 'employees') {
   if (!id) return;
   companyDetailCompanyId.value = id;
   companyDetailActiveTab.value = tab;
+  companyDetailClickupStatusFilter.value = new Set();
   selectCompanyModuleChartCompany(id);
   companyModuleEmployeeDetail.value = companyModuleBaseRows.value
     .find(item => String(item.id || '').trim() === id) || null;
   modal.value = 'companyDetail';
+}
+
+async function handleCompanyDetailPeriodChange(value) {
+  await handleCompanyModulePeriodChange(value);
+  if (!companyDetailCompanyId.value) return;
+  companyModuleEmployeeDetail.value = companyModuleBaseRows.value
+    .find(item => String(item.id || '').trim() === companyDetailCompanyId.value) || null;
 }
 
 const companyModuleSupportFilterOptions = computed(() => {
