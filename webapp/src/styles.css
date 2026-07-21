@@ -4002,29 +4002,11 @@ td,
   padding: 0 18px;
 }
 
-.company-module-filter-option.company-mrr-clickup-status-group-label {
-  font-weight: 800;
-  border-top: 1px solid var(--line);
-  margin-top: 4px;
-  padding-top: 10px;
-}
-
-.company-module-filter-option.company-mrr-clickup-status-sub {
-  padding-left: 26px;
-  font-weight: 500;
-}
-
 .company-module-filter-option span:first-child {
   min-width: 0;
   white-space: normal;
   overflow-wrap: break-word;
   text-align: left;
-}
-
-.company-mrr-scatter-clickup-toggle input[type='checkbox'] {
-  width: 15px;
-  height: 15px;
-  cursor: pointer;
 }
 
 .company-mrr-scatter-badge circle {
