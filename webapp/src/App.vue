@@ -5967,9 +5967,7 @@ const companyMrrScatterClickupStatusOptions = computed(() => {
 const companyMrrScatterRows = computed(() => {
   const businessFilter = companyMrrScatterBusinessFilter.value;
   const supportFilter = companyMrrScatterSupportFilter.value;
-  const clickupStatusFilter = companyMrrScatterClickupStatusFilter.value;
   const companyId = companyMrrScatterCompanyId.value;
-  const linksByKey = clickupCompanyLinksByKey.value;
   return companyMrrScatterBaseRows.value
     .filter(includesSearch)
     .filter(row => !companyId || String(row.id || '').trim() === companyId)
@@ -5980,11 +5978,6 @@ const companyMrrScatterRows = computed(() => {
       if (supportFilter === 'assigned') return Boolean(username);
       if (supportFilter === 'unassigned') return !username;
       return username === supportFilter;
-    })
-    .filter(row => {
-      if (clickupStatusFilter === 'all') return true;
-      const link = linksByKey.get(clickupCompanyKey(row.name));
-      return (link?.linked_tasks || []).some(task => task.status === clickupStatusFilter);
     })
     .map(row => {
       const usage = row.module_usage || {};
@@ -6020,16 +6013,21 @@ const companyMrrScatterPoints = computed(() => {
   const height = dims.bottom - dims.top;
   const max = companyMrrScatterMax.value;
   const linksByKey = clickupCompanyLinksByKey.value;
+  const statusFilter = companyMrrScatterClickupStatusFilter.value;
   return companyMrrScatterRows.value.map(row => {
     const xRatio = row.activity_score / 5;
     const yRatio = row.mrr_amount / max;
     const link = linksByKey.get(clickupCompanyKey(row.name));
+    const allLinkedTasks = link?.linked_tasks || [];
+    const linkedTasks = statusFilter === 'all'
+      ? allLinkedTasks
+      : allLinkedTasks.filter(task => task.status === statusFilter);
     return {
       ...row,
       x: Math.round((dims.left + xRatio * width) * 10) / 10,
       y: Math.round((dims.bottom - yRatio * height) * 10) / 10,
-      clickup_linked_tasks: link?.linked_tasks || [],
-      clickup_linked_task_count: Number(link?.linked_task_count || 0)
+      clickup_linked_tasks: linkedTasks,
+      clickup_linked_task_count: linkedTasks.length
     };
   });
 });
