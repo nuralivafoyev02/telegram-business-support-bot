@@ -712,6 +712,7 @@
                 </div>
               </section>
 
+              <Teleport to="#company-detail-trend-target" :disabled="modal !== 'companyDetail'">
               <section v-if="companyModuleChartRows.length"
                 class="card chart-card line-chart-card company-module-chart-card">
                 <div class="card-header chart-card-head company-module-chart-head">
@@ -847,6 +848,7 @@
                   </div>
                 </div>
               </section>
+              </Teleport>
 
               <section class="card chart-card">
                 <div class="card-header chart-card-head">
@@ -1772,6 +1774,134 @@
           <div v-else-if="!companyModuleEmployeeHasActivity" class="empty compact">
             Bu kompaniya uchun xodimlar faolligi hali saqlanmagan. Yangi syncdan keyin ko‘rinadi.
           </div>
+        </div>
+      </Modal>
+    </Transition>
+
+    <Transition name="modal-fade">
+      <Modal v-if="modal === 'companyDetail'" :title="companyDetailModalTitle" xlarge @close="closeModal">
+        <div class="company-detail-tabs">
+          <button type="button" class="company-detail-tab" :class="{ active: companyDetailActiveTab === 'employees' }"
+            @click="companyDetailActiveTab = 'employees'">Xodimlar faolligi</button>
+          <button type="button" class="company-detail-tab" :class="{ active: companyDetailActiveTab === 'trend' }"
+            @click="companyDetailActiveTab = 'trend'">Bo‘limlar dinamikasi</button>
+          <button type="button" class="company-detail-tab" :class="{ active: companyDetailActiveTab === 'modules' }"
+            @click="companyDetailActiveTab = 'modules'">Modul holati</button>
+          <button type="button" class="company-detail-tab" :class="{ active: companyDetailActiveTab === 'clickup' }"
+            @click="companyDetailActiveTab = 'clickup'">ClickUp vazifalari</button>
+        </div>
+
+        <div v-show="companyDetailActiveTab === 'employees'" class="company-module-employee-detail">
+          <div v-if="companyModuleEmployeeDetail">
+            <div class="company-module-employee-head">
+              <div>
+                <div class="company-module-employee-company">{{ companyModuleEmployeeDetail.name || 'Kompaniya' }}</div>
+                <div class="company-module-employee-meta">
+                  <span v-if="companyModuleEmployeeReportLabel">{{ companyModuleEmployeeReportLabel }}</span>
+                  <span v-if="companyModuleEmployeePanelPeriodLabel">{{ companyModuleEmployeePanelPeriodLabel }}</span>
+                  <span v-if="companyModuleEmployeeSupportLabel">Mas’ul: {{ companyModuleEmployeeSupportLabel }}</span>
+                </div>
+              </div>
+            </div>
+
+            <div v-if="companyModuleEmployeeHasActivity" class="company-module-employee-summary">
+              <div class="company-module-employee-summary-item">
+                <span class="company-module-employee-summary-icon">📊</span>
+                <span>Jami amallar: <b>{{ fmtNumber(companyModuleEmployeeActivity.total_actions || 0) }} amal</b></span>
+              </div>
+              <div class="company-module-employee-summary-item">
+                <span class="company-module-employee-summary-icon">✅</span>
+                <span>Faol xodimlar <b>({{ fmtNumber(companyModuleEmployeeActiveCount) }})</b></span>
+              </div>
+              <div class="company-module-employee-summary-item">
+                <span class="company-module-employee-summary-icon">❌</span>
+                <span>Nofaol xodimlar <b>({{ fmtNumber(companyModuleEmployeeInactiveCount) }})</b></span>
+              </div>
+            </div>
+
+            <div v-if="companyModuleEmployeeActiveRows.length" class="company-module-employee-section">
+              <div class="company-module-employee-section-title">Faol xodimlar</div>
+              <div class="company-module-employee-list">
+                <article v-for="employee in companyModuleEmployeeActiveRows"
+                  :key="`detail-active-employee-${employee.id || employee.name}`" class="company-module-employee-card">
+                  <div class="company-module-employee-card-head">
+                    <b>{{ employee.name || 'Xodim' }}</b>
+                    <span class="company-module-employee-count">{{ fmtNumber(employee.action_count || 0) }} amal</span>
+                  </div>
+                  <div v-if="employee.important_count" class="company-module-employee-note">
+                    Muhim amallar: {{ fmtNumber(employee.important_count) }}
+                  </div>
+                </article>
+              </div>
+            </div>
+
+            <div v-if="companyModuleEmployeeInactiveRows.length" class="company-module-employee-section">
+              <div class="company-module-employee-section-title">Nofaol xodimlar</div>
+              <div class="company-module-employee-list">
+                <article v-for="employee in companyModuleEmployeeInactiveRows"
+                  :key="`detail-inactive-employee-${employee.id || employee.name}`"
+                  class="company-module-employee-card inactive">
+                  <div class="company-module-employee-card-head">
+                    <b>{{ employee.name || 'Xodim' }}</b>
+                    <span v-if="employee.last_activity_date" class="company-module-employee-last">
+                      Oxirgi: {{ employee.last_activity_date }}
+                    </span>
+                  </div>
+                  <div v-if="employee.important_count" class="company-module-employee-note">
+                    Muhim amallar: {{ fmtNumber(employee.important_count) }}
+                  </div>
+                </article>
+              </div>
+            </div>
+
+            <div v-else-if="!companyModuleEmployeeHasActivity" class="empty compact">
+              Bu kompaniya uchun xodimlar faolligi hali saqlanmagan. Yangi syncdan keyin ko‘rinadi.
+            </div>
+          </div>
+        </div>
+
+        <div v-show="companyDetailActiveTab === 'trend'" id="company-detail-trend-target"
+          class="company-detail-trend-slot"></div>
+
+        <div v-show="companyDetailActiveTab === 'modules'" class="company-detail-modules">
+          <label class="company-module-filter">
+            <span>Davr</span>
+            <select :value="companyModulePeriod" class="select mini-select"
+              @change="handleCompanyModulePeriodChange($event.target.value)">
+              <option v-for="period in companyModulePeriodOptions" :key="`detail-modules-period-${period.key}`"
+                :value="period.key">{{ companyModulePeriodOptionLabel(period) }}</option>
+            </select>
+          </label>
+          <div v-if="companyDetailModuleRow" class="company-detail-modules-row">
+            <div class="module-count-stack">
+              <span class="module-count-badge"
+                :title="`${companyDetailModuleRow.module_active_count} / ${companyModuleKeys.length}`">
+                {{ companyDetailModuleRow.module_active_percent }}%
+              </span>
+            </div>
+            <div v-for="column in companyModuleColumns" :key="`detail-module-${column.key}`"
+              class="company-detail-modules-cell">
+              <span>{{ column.label }}</span>
+              <span class="module-status-icon"
+                :class="companyDetailModuleRow.module_usage[column.key] ? 'yes' : 'no'"
+                :title="moduleStatusTitle(companyDetailModuleRow, column.key)">
+                <template v-if="companyDetailModuleRow.module_usage[column.key]">✓</template>
+                <template v-else>✗</template>
+              </span>
+            </div>
+          </div>
+          <div v-else class="empty compact">Kompaniya ma’lumoti topilmadi</div>
+        </div>
+
+        <div v-show="companyDetailActiveTab === 'clickup'">
+          <div class="detail-summary">
+            <div>
+              <span>Vazifalar</span>
+              <b>{{ fmtNumber(companyDetailClickupTasks.length) }}</b>
+            </div>
+          </div>
+          <DataTable :columns="clickupCompanyLinkTaskColumns" :rows="companyDetailClickupTasks"
+            empty="Vazifa topilmadi" :page-size="12" :on-cell-action="handleTableCellAction" />
         </div>
       </Modal>
     </Transition>
@@ -6293,19 +6423,10 @@ const clickupCompanyLinkTaskColumns = [
 ];
 
 function openCompanyMrrScatterTaskBadge(point = {}) {
+  const id = String(point.id || '').trim();
+  if (!id) return;
   closeCompanyMrrScatterTooltip();
-  const rows = point.clickup_linked_tasks || [];
-  if (!rows.length) return showToast('Bog‘langan vazifalar topilmadi');
-  setMetricDetail({
-    title: `${point.name || 'Kompaniya'} · ClickUp vazifalari`,
-    rows,
-    columns: clickupCompanyLinkTaskColumns,
-    empty: 'Vazifa topilmadi',
-    showSourceTabs: false,
-    summary: [
-      { label: 'Vazifalar', value: fmtNumber(rows.length) }
-    ]
-  });
+  openCompanyDetailModal(id, 'clickup');
 }
 
 const companyMrrScatterChartRef = ref(null);
@@ -6350,10 +6471,37 @@ function selectCompanyMrrScatterPoint(point = {}) {
   const id = String(point.id || '').trim();
   if (!id) return;
   closeCompanyMrrScatterTooltip();
+  openCompanyDetailModal(id);
+}
+
+const companyDetailActiveTab = ref('employees');
+const companyDetailCompanyId = ref('');
+
+const companyDetailModalTitle = computed(() => {
+  const row = companyModuleBaseRows.value.find(item => String(item.id || '').trim() === companyDetailCompanyId.value);
+  return row?.name || 'Kompaniya tafsilotlari';
+});
+
+const companyDetailModuleRow = computed(() => (
+  companyModuleBaseRows.value.find(item => String(item.id || '').trim() === companyDetailCompanyId.value) || null
+));
+
+const companyDetailClickupTasks = computed(() => {
+  const row = companyDetailModuleRow.value;
+  if (!row) return [];
+  const link = clickupCompanyLinksByKey.value.get(clickupCompanyKey(row.name));
+  return link?.linked_tasks || [];
+});
+
+function openCompanyDetailModal(companyId = '', tab = 'employees') {
+  const id = String(companyId || '').trim();
+  if (!id) return;
+  companyDetailCompanyId.value = id;
+  companyDetailActiveTab.value = tab;
   selectCompanyModuleChartCompany(id);
-  nextTick(() => {
-    companyModuleChartRef.value?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  });
+  companyModuleEmployeeDetail.value = companyModuleBaseRows.value
+    .find(item => String(item.id || '').trim() === id) || null;
+  modal.value = 'companyDetail';
 }
 
 function closeCompanyMrrScatterTooltip() {
@@ -10716,6 +10864,10 @@ function closeModal() {
   if (modal.value === 'metricDetail') resetMetricChatDetail();
   if (modal.value === 'employeeCompanies') resetEmployeeProfileChat();
   if (modal.value === 'companyModuleEmployeeActivity') companyModuleEmployeeDetail.value = null;
+  if (modal.value === 'companyDetail') {
+    companyModuleEmployeeDetail.value = null;
+    companyDetailCompanyId.value = '';
+  }
   modal.value = '';
   selectedTarget.value = null;
 }

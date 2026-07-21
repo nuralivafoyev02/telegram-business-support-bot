@@ -1163,6 +1163,63 @@ tbody tr:hover {
   padding: 6px;
 }
 
+.company-detail-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 12px;
+}
+
+.company-detail-tab {
+  padding: 8px 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted-strong);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.company-detail-tab.active {
+  border-color: color-mix(in srgb, var(--primary) 35%, var(--line));
+  background: color-mix(in srgb, var(--primary) 10%, var(--surface));
+  color: var(--primary);
+}
+
+.company-detail-trend-slot .company-module-chart-card {
+  border: 0;
+  box-shadow: none;
+  padding: 0;
+}
+
+.company-detail-modules {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.company-detail-modules-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 18px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.company-detail-modules-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted-strong);
+}
+
 .modal-body {
   padding: 16px;
   min-height: 0;
