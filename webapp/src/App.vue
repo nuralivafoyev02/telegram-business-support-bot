@@ -4645,7 +4645,8 @@ function aggregateCompanyModuleChartMonths(rows = []) {
         counts: { ...(row.counts || {}) },
         percents: { ...(row.percents || {}) },
         avgActivity: Number(row.avgActivity || 0),
-        totalCompanies: Number(row.totalCompanies || 0)
+        totalCompanies: Number(row.totalCompanies || 0),
+        totalActions: Number(row.totalActions || 0)
       });
     }
   });
@@ -6404,6 +6405,7 @@ function companyModuleRowForChart(company = {}, reportRow = {}) {
     ...company,
     module_usage,
     module_active_count: Number(reportRow.module_active_count ?? companyModuleActiveCount(module_usage)),
+    total_actions: Number(reportRow.total_actions || 0),
     business_status: company.business_status,
     uyqur_support_username: company.uyqur_support_username
   };
@@ -6474,6 +6476,7 @@ function buildCompanyModuleChartDayRow(date, dailyRows, companyMap, filters, com
   const counts = Object.fromEntries(companyModuleKeys.map(key => [key, 0]));
   let totalCompanies = 0;
   let activitySum = 0;
+  let totalActionsSum = 0;
   const selectedCompanyId = String(companyId || '').trim();
   const dailyByCompanyId = new Map();
   dailyRows
@@ -6492,6 +6495,7 @@ function buildCompanyModuleChartDayRow(date, dailyRows, companyMap, filters, com
     if (!matchesCompanyModuleFilter(merged, filters)) return;
     totalCompanies += 1;
     activitySum += companyModuleActivePercent(merged.module_usage);
+    totalActionsSum += Number(merged.total_actions || 0);
     companyModuleKeys.forEach(key => {
       if (merged.module_usage?.[key]) counts[key] += 1;
     });
@@ -6505,7 +6509,8 @@ function buildCompanyModuleChartDayRow(date, dailyRows, companyMap, filters, com
     counts,
     percents,
     totalCompanies,
-    avgActivity: totalCompanies ? Math.round(activitySum / totalCompanies) : 0
+    avgActivity: totalCompanies ? Math.round(activitySum / totalCompanies) : 0,
+    totalActions: totalActionsSum
   };
 }
 
@@ -6519,7 +6524,7 @@ function companyModuleChartMetricValue(row = {}, key = '', metric = 'activity') 
 }
 
 function companyModuleChartValueText(value = 0, metric = 'activity') {
-  if (metric === 'actions') return `${fmtNumber(value)} amal`;
+  if (metric === 'actions') return `${fmtNumber(value)} kompaniya`;
   return `${fmtNumber(value)}%`;
 }
 
@@ -6627,8 +6632,20 @@ function companyModuleChartAverageForRow(row = {}, metric = 'activity', visibleK
 
 function companyModuleChartAverageActivityForRow(row = {}, metric = 'activity', visibleKeys = []) {
   const keys = visibleKeys.length ? visibleKeys : companyModuleKeys;
-  if (metric === 'activity' && keys.length === companyModuleKeys.length) return Number(row.avgActivity || 0);
+  if (keys.length === companyModuleKeys.length) {
+    if (metric === 'activity') return Number(row.avgActivity || 0);
+    return Number(row.totalActions || 0);
+  }
   return companyModuleChartAverageForRow(row, metric, keys);
+}
+
+function companyModuleChartAverageValueText(row = {}, metric = 'activity', visibleKeys = []) {
+  const value = companyModuleChartAverageActivityForRow(row, metric, visibleKeys);
+  const keys = visibleKeys.length ? visibleKeys : companyModuleKeys;
+  if (metric === 'actions' && keys.length === companyModuleKeys.length) {
+    return `${fmtNumber(value)} amal`;
+  }
+  return companyModuleChartValueText(value, metric);
 }
 
 const companyModuleChartRows = computed(() => {
@@ -6843,8 +6860,8 @@ const companyModuleChartTooltip = computed(() => {
         label: 'O‘rtacha',
         color: '#111827',
         dual: true,
-        activityText: companyModuleChartValueText(companyModuleChartAverageActivityForRow(row, 'activity', activeKeys), 'activity'),
-        actionsText: companyModuleChartValueText(companyModuleChartAverageForRow(row, 'actions', activeKeys), 'actions')
+        activityText: companyModuleChartAverageValueText(row, 'activity', activeKeys),
+        actionsText: companyModuleChartAverageValueText(row, 'actions', activeKeys)
       });
     } else {
       const metric = metricKeys.includes('actions') ? 'actions' : 'activity';
@@ -6853,7 +6870,7 @@ const companyModuleChartTooltip = computed(() => {
         label: 'O‘rtacha',
         color: '#111827',
         dual: false,
-        valueText: companyModuleChartValueText(companyModuleChartAverageActivityForRow(row, metric, activeKeys), metric)
+        valueText: companyModuleChartAverageValueText(row, metric, activeKeys)
       });
     }
   }

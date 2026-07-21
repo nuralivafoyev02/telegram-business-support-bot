@@ -705,12 +705,15 @@ function buildChartDailyCompanies(list = [], startDate = '', endDate = '') {
       const source = pickCompanyDailyRowForChartDate(companyRows, date);
       if (!source) return;
       const resolved = resolveModuleUsageForChartDate(companyRows, date);
+      const isExactDate = normalizeReportDateKey(source.report_date) === date;
+      const employeeActivity = isExactDate ? resolveEmployeeActivityFromRow(source) : null;
       result.push({
         company_id: Number(companyId),
         company_name: source.company_name || '',
         report_date: date,
         module_usage: resolved.module_usage,
-        module_active_count: resolved.module_active_count
+        module_active_count: resolved.module_active_count,
+        total_actions: Number(employeeActivity?.total_actions || 0)
       });
     });
   });
