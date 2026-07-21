@@ -4002,42 +4002,7 @@ td,
   padding: 0 18px;
 }
 
-.company-mrr-clickup-status-group-row {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  min-width: 0;
-}
-
-.company-mrr-clickup-status-group-dot {
-  flex: 0 0 auto;
-  width: 24px;
-  min-height: 38px;
-  border: 0;
-  border-radius: var(--radius);
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-  font-size: 12px;
-}
-
-.company-mrr-clickup-status-group-dot:hover {
-  background: var(--surface-soft);
-}
-
-.company-mrr-clickup-status-group-label {
-  flex: 1 1 auto;
-  min-width: 0;
-  font-weight: 800;
-}
-
-.company-mrr-clickup-status-sub {
-  padding-left: 34px;
-  min-width: 0;
-}
-
-.company-mrr-clickup-status-group-label span:first-child,
-.company-mrr-clickup-status-sub span:first-child {
+.company-module-filter-option span:first-child {
   min-width: 0;
   white-space: normal;
   overflow-wrap: break-word;
@@ -4151,6 +4116,7 @@ td,
 }
 
 .company-module-filter-option {
+  min-width: 0;
   font-size: 13px;
   font-weight: 600;
 }

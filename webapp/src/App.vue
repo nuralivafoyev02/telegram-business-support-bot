@@ -979,33 +979,14 @@
                               <span v-if="companyMrrScatterClickupStatusFilter === 'all'"
                                 class="company-module-filter-check">✓</span>
                             </button>
-                            <template v-for="group in companyMrrScatterClickupStatusGroups"
-                              :key="`mrr-clickup-group-${group.key}`">
-                              <div class="company-mrr-clickup-status-group-row">
-                                <button type="button" class="company-mrr-clickup-status-group-dot"
-                                  @click.stop="toggleCompanyMrrClickupGroupExpanded(group.key)">
-                                  {{ companyMrrClickupExpandedGroups.has(group.key) ? '▾' : '▸' }}
-                                </button>
-                                <button type="button" class="company-module-filter-option company-mrr-clickup-status-group-label"
-                                  :class="{ active: companyMrrScatterClickupStatusFilter === group.key }"
-                                  @click="selectCompanyMrrClickupStatusFilter(group.key)">
-                                  <span>{{ group.label }}</span>
-                                  <span v-if="companyMrrScatterClickupStatusFilter === group.key"
-                                    class="company-module-filter-check">✓</span>
-                                </button>
-                              </div>
-                              <template v-if="companyMrrClickupExpandedGroups.has(group.key)">
-                                <button v-for="status in group.statuses"
-                                  :key="`mrr-clickup-status-${group.key}-${status}`" type="button"
-                                  class="company-module-filter-option company-mrr-clickup-status-sub"
-                                  :class="{ active: companyMrrScatterClickupStatusFilter === status }"
-                                  @click="selectCompanyMrrClickupStatusFilter(status)">
-                                  <span>{{ status }}</span>
-                                  <span v-if="companyMrrScatterClickupStatusFilter === status"
-                                    class="company-module-filter-check">✓</span>
-                                </button>
-                              </template>
-                            </template>
+                            <button v-for="group in companyMrrScatterClickupStatusGroups"
+                              :key="`mrr-clickup-group-${group.key}`" type="button" class="company-module-filter-option"
+                              :class="{ active: companyMrrScatterClickupStatusFilter === group.key }"
+                              @click="selectCompanyMrrClickupStatusFilter(group.key)">
+                              <span>{{ group.label }}</span>
+                              <span v-if="companyMrrScatterClickupStatusFilter === group.key"
+                                class="company-module-filter-check">✓</span>
+                            </button>
                           </div>
                         </Transition>
                       </div>
@@ -6086,7 +6067,6 @@ const companyMrrScatterClickupStatusGroups = computed(() => {
 
 const companyMrrClickupStatusMenuOpen = ref(false);
 const companyMrrClickupStatusMenuRef = ref(null);
-const companyMrrClickupExpandedGroups = ref(new Set());
 
 function toggleCompanyMrrClickupStatusMenu() {
   companyMrrClickupStatusMenuOpen.value = !companyMrrClickupStatusMenuOpen.value;
@@ -6094,13 +6074,6 @@ function toggleCompanyMrrClickupStatusMenu() {
 
 function closeCompanyMrrClickupStatusMenu() {
   companyMrrClickupStatusMenuOpen.value = false;
-}
-
-function toggleCompanyMrrClickupGroupExpanded(key = '') {
-  const next = new Set(companyMrrClickupExpandedGroups.value);
-  if (next.has(key)) next.delete(key);
-  else next.add(key);
-  companyMrrClickupExpandedGroups.value = next;
 }
 
 function selectCompanyMrrClickupStatusFilter(value = 'all') {
@@ -6327,7 +6300,7 @@ function openCompanyMrrScatterTaskBadge(point = {}) {
 }
 
 const companyMrrScatterChartRef = ref(null);
-const companyMrrScatterZoom = ref(1);
+const companyMrrScatterZoom = ref(1.4);
 
 function adjustCompanyMrrScatterZoom(delta = 0) {
   const next = Math.round((companyMrrScatterZoom.value + delta) * 10) / 10;
