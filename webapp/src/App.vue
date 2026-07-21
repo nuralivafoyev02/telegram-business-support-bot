@@ -957,6 +957,14 @@
                       </select>
                     </label>
                     <label class="company-module-filter">
+                      <span>ClickUp holati</span>
+                      <select v-model="companyMrrScatterClickupStatusFilter" class="select mini-select">
+                        <option value="all">Hammasi</option>
+                        <option v-for="status in companyMrrScatterClickupStatusOptions"
+                          :key="`mrr-scatter-clickup-status-${status}`" :value="status">{{ status }}</option>
+                      </select>
+                    </label>
+                    <label class="company-module-filter">
                       <span>Davr</span>
                       <select :value="companyMrrScatterPeriod" class="select mini-select"
                         @change="handleCompanyMrrScatterPeriodChange($event.target.value)">
@@ -5869,6 +5877,7 @@ const clickupCompanyLinksByKey = computed(() => {
 });
 const companyMrrScatterBusinessFilter = ref('ACTIVE');
 const companyMrrScatterSupportFilter = ref('all');
+const companyMrrScatterClickupStatusFilter = ref('all');
 const companyMrrScatterCompanyId = ref('');
 const companyMrrScatterPeriodOptions = companyModulePeriodOptions.filter(period => period.key !== 'custom');
 
@@ -5944,10 +5953,23 @@ const companyMrrScatterSupportOptions = computed(() => {
   return [...usernames].sort((a, b) => companyModuleSupportDisplayLabel(a).localeCompare(companyModuleSupportDisplayLabel(b), 'uz'));
 });
 
+const companyMrrScatterClickupStatusOptions = computed(() => {
+  const statuses = new Set();
+  clickupCompanyLinks.value.forEach(row => {
+    (row.linked_tasks || []).forEach(task => {
+      const status = String(task.status || '').trim();
+      if (status) statuses.add(status);
+    });
+  });
+  return [...statuses].sort((a, b) => a.localeCompare(b, 'uz'));
+});
+
 const companyMrrScatterRows = computed(() => {
   const businessFilter = companyMrrScatterBusinessFilter.value;
   const supportFilter = companyMrrScatterSupportFilter.value;
+  const clickupStatusFilter = companyMrrScatterClickupStatusFilter.value;
   const companyId = companyMrrScatterCompanyId.value;
+  const linksByKey = clickupCompanyLinksByKey.value;
   return companyMrrScatterBaseRows.value
     .filter(includesSearch)
     .filter(row => !companyId || String(row.id || '').trim() === companyId)
@@ -5958,6 +5980,11 @@ const companyMrrScatterRows = computed(() => {
       if (supportFilter === 'assigned') return Boolean(username);
       if (supportFilter === 'unassigned') return !username;
       return username === supportFilter;
+    })
+    .filter(row => {
+      if (clickupStatusFilter === 'all') return true;
+      const link = linksByKey.get(clickupCompanyKey(row.name));
+      return (link?.linked_tasks || []).some(task => task.status === clickupStatusFilter);
     })
     .map(row => {
       const usage = row.module_usage || {};
