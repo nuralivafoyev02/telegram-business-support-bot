@@ -1907,11 +1907,39 @@
               <b>{{ fmtNumber(companyDetailClickupTasks.length) }}</b>
             </div>
           </div>
-          <div class="company-detail-clickup-status-filter">
-            <button v-for="[key, label] in Object.entries(CLICKUP_STATUS_GROUP_LABELS)"
-              :key="`detail-clickup-status-${key}`" type="button" class="company-detail-tab"
-              :class="{ active: companyDetailClickupStatusFilter.has(key) }"
-              @click="toggleCompanyDetailClickupStatusFilter(key)">{{ label }}</button>
+          <div class="company-module-filter company-module-filter-menu-wrap company-detail-clickup-status-filter"
+            ref="companyDetailClickupStatusMenuRef">
+            <span>ClickUp holati</span>
+            <div class="company-module-filter-picker">
+              <button type="button" class="company-module-filter-trigger select mini-select"
+                @click.stop="toggleCompanyDetailClickupStatusMenu">
+                <span class="company-module-filter-trigger-label">{{ companyDetailClickupStatusFilterLabel }}</span>
+                <span class="company-module-filter-trigger-caret">▾</span>
+              </button>
+              <Transition name="fade">
+                <div v-if="companyDetailClickupStatusMenuOpen" class="company-module-filter-menu actions-dropdown"
+                  @click.stop>
+                  <template v-for="group in companyMrrScatterClickupStatusGroups"
+                    :key="`detail-clickup-group-${group.key}`">
+                    <button type="button" class="company-module-filter-option company-mrr-clickup-status-group-label"
+                      :class="{ active: companyDetailClickupStatusFilter.has(group.key) }"
+                      @click="toggleCompanyDetailClickupStatusFilter(group.key)">
+                      <span>{{ group.label }}</span>
+                      <span v-if="companyDetailClickupStatusFilter.has(group.key)"
+                        class="company-module-filter-check">✓</span>
+                    </button>
+                    <button v-for="status in group.statuses" :key="`detail-clickup-status-${group.key}-${status}`"
+                      type="button" class="company-module-filter-option company-mrr-clickup-status-sub"
+                      :class="{ active: companyDetailClickupStatusFilter.has(status) }"
+                      @click="toggleCompanyDetailClickupStatusFilter(status)">
+                      <span>{{ status }}</span>
+                      <span v-if="companyDetailClickupStatusFilter.has(status)"
+                        class="company-module-filter-check">✓</span>
+                    </button>
+                  </template>
+                </div>
+              </Transition>
+            </div>
           </div>
           <DataTable :columns="clickupCompanyLinkTaskColumns" :rows="companyDetailClickupTasks"
             empty="Vazifa topilmadi" :page-size="12" :on-cell-action="handleTableCellAction" />
@@ -4412,6 +4440,10 @@ function handleDocumentPointerDown(event) {
     const root = companyMrrClickupStatusMenuRef.value;
     if (!root || !root.contains(event.target)) closeCompanyMrrClickupStatusMenu();
   }
+  if (companyDetailClickupStatusMenuOpen.value) {
+    const root = companyDetailClickupStatusMenuRef.value;
+    if (!root || !root.contains(event.target)) closeCompanyDetailClickupStatusMenu();
+  }
 }
 
 function handleDocumentKeydown(event) {
@@ -4423,6 +4455,7 @@ function handleDocumentKeydown(event) {
     closeCompanyMrrFilterMenu();
     closeCompanyModuleChartCompanyMenu();
     closeCompanyMrrClickupStatusMenu();
+    closeCompanyDetailClickupStatusMenu();
     hideFloatingTooltip();
     if (modal.value) closeModal();
   }
@@ -5976,7 +6009,7 @@ const COMPANY_MRR_SCATTER_VIEW = { width: 1460, height: 940 };
 const COMPANY_MRR_SCATTER_DIMS = { left: 145, right: 1300, top: 140, bottom: 810 };
 const COMPANY_MRR_SCATTER_POINT_MIN_RADIUS = 16.875;
 const COMPANY_MRR_SCATTER_POINT_MAX_RADIUS = 74.25;
-const COMPANY_MRR_SCATTER_BADGE_RADIUS = 21;
+const COMPANY_MRR_SCATTER_BADGE_RADIUS = 15;
 
 function activityScoreColor(score = 0) {
   if (score >= 4) return 'var(--success)';
@@ -6316,7 +6349,7 @@ const companyMrrScatterPoints = computed(() => {
   return companyMrrScatterRawPoints.value.map(point => {
     const pointRadius = companyMrrScatterPointRadius(point.clickup_linked_task_count, maxCount);
     const badgeRadius = point.clickup_linked_task_count === 1
-      ? Math.round(COMPANY_MRR_SCATTER_BADGE_RADIUS * 0.7 * 10) / 10
+      ? Math.round(COMPANY_MRR_SCATTER_BADGE_RADIUS * 0.8 * 10) / 10
       : COMPANY_MRR_SCATTER_BADGE_RADIUS;
     const offset = (pointRadius + badgeRadius) / Math.SQRT2;
     return {
@@ -6497,6 +6530,16 @@ const companyDetailModuleRow = computed(() => (
 ));
 
 const companyDetailClickupStatusFilter = ref(new Set());
+const companyDetailClickupStatusMenuOpen = ref(false);
+const companyDetailClickupStatusMenuRef = ref(null);
+
+function toggleCompanyDetailClickupStatusMenu() {
+  companyDetailClickupStatusMenuOpen.value = !companyDetailClickupStatusMenuOpen.value;
+}
+
+function closeCompanyDetailClickupStatusMenu() {
+  companyDetailClickupStatusMenuOpen.value = false;
+}
 
 function toggleCompanyDetailClickupStatusFilter(key = '') {
   const next = new Set(companyDetailClickupStatusFilter.value);
@@ -6504,6 +6547,14 @@ function toggleCompanyDetailClickupStatusFilter(key = '') {
   else next.add(key);
   companyDetailClickupStatusFilter.value = next;
 }
+
+const companyDetailClickupStatusFilterLabel = computed(() => {
+  const selected = companyDetailClickupStatusFilter.value;
+  if (!selected.size) return 'Hammasi';
+  const labels = [...selected].map(value => CLICKUP_STATUS_GROUP_LABELS[value] || value);
+  if (labels.length === 1) return labels[0];
+  return `${labels.length} ta tanlangan`;
+});
 
 const companyDetailAllClickupTasks = computed(() => {
   const row = companyDetailModuleRow.value;

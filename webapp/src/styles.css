@@ -1194,9 +1194,6 @@ tbody tr:hover {
 }
 
 .company-detail-clickup-status-filter {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
   margin: 12px 0 16px;
 }
 
@@ -4097,7 +4094,7 @@ td,
 
 .company-mrr-scatter-badge text {
   fill: #fff;
-  font-size: 27px;
+  font-size: 19px;
   font-weight: 800;
   text-anchor: middle;
   dominant-baseline: central;
