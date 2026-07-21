@@ -4002,6 +4002,18 @@ td,
   padding: 0 18px;
 }
 
+.company-mrr-clickup-status-group-label {
+  font-weight: 800;
+  border-top: 1px solid var(--line);
+  margin-top: 4px;
+  padding-top: 10px;
+}
+
+.company-mrr-clickup-status-sub {
+  padding-left: 26px;
+  font-weight: 500;
+}
+
 .company-module-filter-option span:first-child {
   min-width: 0;
   white-space: normal;
@@ -4356,6 +4368,13 @@ td,
 }
 
 .company-module-chart-axis-title {
+  fill: var(--muted-strong);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .04em;
+}
+
+.company-mrr-scatter-axis-title {
   fill: var(--muted-strong);
   font-size: 12px;
   font-weight: 800;

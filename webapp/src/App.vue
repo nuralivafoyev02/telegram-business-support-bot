@@ -973,20 +973,30 @@
                           <div v-if="companyMrrClickupStatusMenuOpen" class="company-module-filter-menu actions-dropdown"
                             @click.stop>
                             <button type="button" class="company-module-filter-option"
-                              :class="{ active: companyMrrScatterClickupStatusFilter === 'all' }"
-                              @click="selectCompanyMrrClickupStatusFilter('all')">
+                              :class="{ active: !companyMrrScatterClickupStatusFilter.size }"
+                              @click="clearCompanyMrrClickupStatusFilter">
                               <span>Hammasi</span>
-                              <span v-if="companyMrrScatterClickupStatusFilter === 'all'"
+                              <span v-if="!companyMrrScatterClickupStatusFilter.size"
                                 class="company-module-filter-check">✓</span>
                             </button>
-                            <button v-for="group in companyMrrScatterClickupStatusGroups"
-                              :key="`mrr-clickup-group-${group.key}`" type="button" class="company-module-filter-option"
-                              :class="{ active: companyMrrScatterClickupStatusFilter === group.key }"
-                              @click="selectCompanyMrrClickupStatusFilter(group.key)">
-                              <span>{{ group.label }}</span>
-                              <span v-if="companyMrrScatterClickupStatusFilter === group.key"
-                                class="company-module-filter-check">✓</span>
-                            </button>
+                            <template v-for="group in companyMrrScatterClickupStatusGroups"
+                              :key="`mrr-clickup-group-${group.key}`">
+                              <button type="button" class="company-module-filter-option company-mrr-clickup-status-group-label"
+                                :class="{ active: companyMrrScatterClickupStatusFilter.has(group.key) }"
+                                @click="toggleCompanyMrrClickupStatusFilterValue(group.key)">
+                                <span>{{ group.label }}</span>
+                                <span v-if="companyMrrScatterClickupStatusFilter.has(group.key)"
+                                  class="company-module-filter-check">✓</span>
+                              </button>
+                              <button v-for="status in group.statuses" :key="`mrr-clickup-status-${group.key}-${status}`"
+                                type="button" class="company-module-filter-option company-mrr-clickup-status-sub"
+                                :class="{ active: companyMrrScatterClickupStatusFilter.has(status) }"
+                                @click="toggleCompanyMrrClickupStatusFilterValue(status)">
+                                <span>{{ status }}</span>
+                                <span v-if="companyMrrScatterClickupStatusFilter.has(status)"
+                                  class="company-module-filter-check">✓</span>
+                              </button>
+                            </template>
                           </div>
                         </Transition>
                       </div>
@@ -1004,16 +1014,15 @@
                   </div>
                 </div>
                 <div v-if="companyMrrScatterPoints.length" class="company-mrr-scatter-zoom">
-                  <button type="button" class="btn-icon mini-icon" title="Kichraytirish"
-                    @click="adjustCompanyMrrScatterZoom(-0.1)">−</button>
-                  <button type="button" class="btn-icon mini-icon" title="Kattalashtirish"
-                    @click="adjustCompanyMrrScatterZoom(0.1)">+</button>
+                  <button type="button" class="btn-icon mini-icon" title="Doiralarni kichraytirish"
+                    @click="adjustCompanyMrrScatterRadiusScale(-0.1)">−</button>
+                  <button type="button" class="btn-icon mini-icon" title="Doiralarni kattalashtirish"
+                    @click="adjustCompanyMrrScatterRadiusScale(0.1)">+</button>
                 </div>
                 <div v-if="companyMrrScatterPoints.length" class="trend-chart company-mrr-scatter"
                   ref="companyMrrScatterChartRef">
                   <svg :viewBox="`0 0 ${COMPANY_MRR_SCATTER_VIEW.width} ${COMPANY_MRR_SCATTER_VIEW.height}`" role="img"
-                    aria-label="MRR va faollik balli nisbati"
-                    :style="{ width: (COMPANY_MRR_SCATTER_VIEW.width * companyMrrScatterZoom) + 'px', maxWidth: 'none' }">
+                    aria-label="MRR va faollik balli nisbati">
                     <rect class="company-mrr-scatter-risk company-mrr-scatter-quadrant"
                       :x="COMPANY_MRR_SCATTER_DIMS.left" :y="COMPANY_MRR_SCATTER_DIMS.top"
                       :width="companyMrrScatterThresholds.riskWidth" :height="companyMrrScatterThresholds.riskHeight"
@@ -1059,6 +1068,13 @@
                       <text v-for="tick in companyMrrScatterXTicks" :key="`mrr-x-label-${tick.value}`" :x="tick.x"
                         :y="COMPANY_MRR_SCATTER_DIMS.bottom + 16" text-anchor="middle">{{ tick.value }}</text>
                     </g>
+                    <text class="company-mrr-scatter-axis-title" :x="20"
+                      :y="(COMPANY_MRR_SCATTER_DIMS.top + COMPANY_MRR_SCATTER_DIMS.bottom) / 2"
+                      :transform="`rotate(-90 20 ${(COMPANY_MRR_SCATTER_DIMS.top + COMPANY_MRR_SCATTER_DIMS.bottom) / 2})`"
+                      text-anchor="middle">MRR (oylik to‘lov)</text>
+                    <text class="company-mrr-scatter-axis-title"
+                      :x="(COMPANY_MRR_SCATTER_DIMS.left + COMPANY_MRR_SCATTER_DIMS.right) / 2"
+                      :y="COMPANY_MRR_SCATTER_DIMS.bottom + 42" text-anchor="middle">Faollik balli (0–5)</text>
                     <g v-for="point in companyMrrScatterPointsDrawOrder" :key="`mrr-point-${point.id}`"
                       class="company-mrr-scatter-point" @mouseenter="hoverCompanyMrrScatterPoint(point)"
                       @mouseleave="unhoverCompanyMrrScatterPoint(point)"
@@ -5830,8 +5846,8 @@ const companyModuleBaseRows = computed(() => {
   });
 });
 
-const COMPANY_MRR_SCATTER_VIEW = { width: 760, height: 480 };
-const COMPANY_MRR_SCATTER_DIMS = { left: 70, right: 690, top: 60, bottom: 420 };
+const COMPANY_MRR_SCATTER_VIEW = { width: 920, height: 580 };
+const COMPANY_MRR_SCATTER_DIMS = { left: 90, right: 830, top: 70, bottom: 500 };
 const COMPANY_MRR_SCATTER_POINT_MIN_RADIUS = 7.5;
 const COMPANY_MRR_SCATTER_POINT_MAX_RADIUS = 33;
 const COMPANY_MRR_SCATTER_BADGE_RADIUS = 7;
@@ -5932,7 +5948,7 @@ const clickupCompanyLinksByKey = computed(() => {
 });
 const companyMrrScatterBusinessFilter = ref('ACTIVE');
 const companyMrrScatterSupportFilter = ref('all');
-const companyMrrScatterClickupStatusFilter = ref('all');
+const companyMrrScatterClickupStatusFilter = ref(new Set(['not_started', 'in_progress']));
 const companyMrrScatterClickupEnabled = ref(true);
 const companyMrrScatterCompanyId = ref('');
 const companyMrrScatterPeriodOptions = companyModulePeriodOptions.filter(period => period.key !== 'custom');
@@ -6041,7 +6057,6 @@ const CLICKUP_STATUS_GROUP_LABELS = {
   in_progress: 'Jarayonda (In Progress)',
   done: 'Tugagan (Completed)'
 };
-const CLICKUP_STATUS_GROUP_KEYS = Object.keys(CLICKUP_STATUS_GROUP_LABELS);
 
 const companyMrrScatterClickupStatusGroups = computed(() => {
   const groups = {
@@ -6076,16 +6091,24 @@ function closeCompanyMrrClickupStatusMenu() {
   companyMrrClickupStatusMenuOpen.value = false;
 }
 
-function selectCompanyMrrClickupStatusFilter(value = 'all') {
-  companyMrrScatterClickupStatusFilter.value = value;
+function clearCompanyMrrClickupStatusFilter() {
+  companyMrrScatterClickupStatusFilter.value = new Set();
   closeCompanyMrrClickupStatusMenu();
 }
 
+function toggleCompanyMrrClickupStatusFilterValue(value = '') {
+  const next = new Set(companyMrrScatterClickupStatusFilter.value);
+  if (next.has(value)) next.delete(value);
+  else next.add(value);
+  companyMrrScatterClickupStatusFilter.value = next;
+}
+
 const companyMrrScatterClickupStatusFilterLabel = computed(() => {
-  const value = companyMrrScatterClickupStatusFilter.value;
-  if (value === 'all') return 'Hammasi';
-  if (CLICKUP_STATUS_GROUP_LABELS[value]) return CLICKUP_STATUS_GROUP_LABELS[value];
-  return value;
+  const selected = companyMrrScatterClickupStatusFilter.value;
+  if (!selected.size) return 'Hammasi';
+  const labels = [...selected].map(value => CLICKUP_STATUS_GROUP_LABELS[value] || value);
+  if (labels.length === 1) return labels[0];
+  return `${labels.length} ta tanlangan`;
 });
 
 const companyMrrScatterRows = computed(() => {
@@ -6138,16 +6161,18 @@ const companyMrrScatterRawPoints = computed(() => {
   const max = companyMrrScatterMax.value;
   const linksByKey = clickupCompanyLinksByKey.value;
   const statusFilter = companyMrrScatterClickupStatusFilter.value;
+  const clickupEnabled = companyMrrScatterClickupEnabled.value;
   return companyMrrScatterRows.value.map(row => {
     const xRatio = row.activity_score / 5;
     const yRatio = row.mrr_amount / max;
-    const link = linksByKey.get(clickupCompanyKey(row.name));
+    const link = clickupEnabled ? linksByKey.get(clickupCompanyKey(row.name)) : null;
     const allLinkedTasks = link?.linked_tasks || [];
-    const linkedTasks = statusFilter === 'all'
+    const linkedTasks = !statusFilter.size
       ? allLinkedTasks
-      : CLICKUP_STATUS_GROUP_KEYS.includes(statusFilter)
-        ? allLinkedTasks.filter(task => clickupStatusGroupForStatus(task.status, task.status_type) === statusFilter)
-        : allLinkedTasks.filter(task => task.status === statusFilter);
+      : allLinkedTasks.filter(task => {
+          const group = clickupStatusGroupForStatus(task.status, task.status_type);
+          return statusFilter.has(group) || statusFilter.has(task.status);
+        });
     return {
       ...row,
       x: Math.round((dims.left + xRatio * width) * 10) / 10,
@@ -6159,9 +6184,10 @@ const companyMrrScatterRawPoints = computed(() => {
 });
 
 function companyMrrScatterPointRadius(count = 0, maxCount = 1) {
-  const minR = COMPANY_MRR_SCATTER_POINT_MIN_RADIUS;
-  const maxR = COMPANY_MRR_SCATTER_POINT_MAX_RADIUS;
-  if (count <= 0 || maxCount <= 1) return minR;
+  const scale = companyMrrScatterRadiusScale.value;
+  const minR = COMPANY_MRR_SCATTER_POINT_MIN_RADIUS * scale;
+  const maxR = COMPANY_MRR_SCATTER_POINT_MAX_RADIUS * scale;
+  if (count <= 0 || maxCount <= 1) return Math.round(minR * 10) / 10;
   const ratio = count / maxCount;
   return Math.round((minR + (maxR - minR) * ratio) * 10) / 10;
 }
@@ -6300,11 +6326,11 @@ function openCompanyMrrScatterTaskBadge(point = {}) {
 }
 
 const companyMrrScatterChartRef = ref(null);
-const companyMrrScatterZoom = ref(1.4);
+const companyMrrScatterRadiusScale = ref(1);
 
-function adjustCompanyMrrScatterZoom(delta = 0) {
-  const next = Math.round((companyMrrScatterZoom.value + delta) * 10) / 10;
-  companyMrrScatterZoom.value = Math.min(1.6, Math.max(0.6, next));
+function adjustCompanyMrrScatterRadiusScale(delta = 0) {
+  const next = Math.round((companyMrrScatterRadiusScale.value + delta) * 10) / 10;
+  companyMrrScatterRadiusScale.value = Math.min(2.2, Math.max(0.5, next));
 }
 
 const companyMrrScatterSelectedPointId = ref('');
