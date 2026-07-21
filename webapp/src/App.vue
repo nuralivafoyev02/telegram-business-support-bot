@@ -6631,18 +6631,15 @@ function companyModuleChartAverageForRow(row = {}, metric = 'activity', visibleK
 }
 
 function companyModuleChartAverageActivityForRow(row = {}, metric = 'activity', visibleKeys = []) {
+  if (metric === 'actions') return Number(row.totalActions || 0);
   const keys = visibleKeys.length ? visibleKeys : companyModuleKeys;
-  if (keys.length === companyModuleKeys.length) {
-    if (metric === 'activity') return Number(row.avgActivity || 0);
-    return Number(row.totalActions || 0);
-  }
+  if (keys.length === companyModuleKeys.length) return Number(row.avgActivity || 0);
   return companyModuleChartAverageForRow(row, metric, keys);
 }
 
 function companyModuleChartAverageValueText(row = {}, metric = 'activity', visibleKeys = []) {
   const value = companyModuleChartAverageActivityForRow(row, metric, visibleKeys);
-  const keys = visibleKeys.length ? visibleKeys : companyModuleKeys;
-  if (metric === 'actions' && keys.length === companyModuleKeys.length) {
+  if (metric === 'actions') {
     return `${fmtNumber(value)} amal`;
   }
   return companyModuleChartValueText(value, metric);
