@@ -964,9 +964,11 @@
                       <span>ClickUp holati</span>
                       <select v-model="companyMrrScatterClickupStatusFilter" class="select mini-select">
                         <option value="all">Hammasi</option>
-                        <option v-for="status in companyMrrScatterClickupStatusOptions"
-                          :key="`mrr-scatter-clickup-status-${status.key}`" :value="status.key">{{ status.label }}
-                        </option>
+                        <optgroup v-for="group in companyMrrScatterClickupStatusGroups" :key="`mrr-scatter-clickup-group-${group.key}`"
+                          :label="group.label">
+                          <option v-for="status in group.statuses" :key="`mrr-scatter-clickup-status-${status}`"
+                            :value="status">{{ status }}</option>
+                        </optgroup>
                       </select>
                     </label>
                     <label class="company-module-filter">
@@ -5795,10 +5797,10 @@ const companyModuleBaseRows = computed(() => {
   });
 });
 
-const COMPANY_MRR_SCATTER_VIEW = { width: 720, height: 440 };
-const COMPANY_MRR_SCATTER_DIMS = { left: 70, right: 690, top: 20, bottom: 380 };
-const COMPANY_MRR_SCATTER_POINT_MIN_RADIUS = 5;
-const COMPANY_MRR_SCATTER_POINT_MAX_RADIUS = 22;
+const COMPANY_MRR_SCATTER_VIEW = { width: 760, height: 480 };
+const COMPANY_MRR_SCATTER_DIMS = { left: 70, right: 690, top: 60, bottom: 420 };
+const COMPANY_MRR_SCATTER_POINT_MIN_RADIUS = 7.5;
+const COMPANY_MRR_SCATTER_POINT_MAX_RADIUS = 33;
 const COMPANY_MRR_SCATTER_BADGE_RADIUS = 7;
 
 function activityScoreColor(score = 0) {
@@ -5975,11 +5977,33 @@ function clickupStatusTypeGroup(statusType = '') {
   return 'not_started';
 }
 
-const companyMrrScatterClickupStatusOptions = [
-  { key: 'not_started', label: 'Boshlanmagan' },
-  { key: 'in_progress', label: 'Jarayonda' },
-  { key: 'done', label: 'Tugagan' }
-];
+const CLICKUP_STATUS_GROUP_LABELS = {
+  not_started: '▶ Not Started',
+  in_progress: '▶ In Progress',
+  done: '▶ Done'
+};
+
+const companyMrrScatterClickupStatusGroups = computed(() => {
+  const groups = {
+    not_started: new Set(),
+    in_progress: new Set(),
+    done: new Set()
+  };
+  clickupCompanyLinks.value.forEach(row => {
+    (row.linked_tasks || []).forEach(task => {
+      const status = String(task.status || '').trim();
+      if (!status) return;
+      groups[clickupStatusTypeGroup(task.status_type)].add(status);
+    });
+  });
+  return Object.entries(groups)
+    .map(([key, statuses]) => ({
+      key,
+      label: CLICKUP_STATUS_GROUP_LABELS[key],
+      statuses: [...statuses].sort((a, b) => a.localeCompare(b, 'uz'))
+    }))
+    .filter(group => group.statuses.length);
+});
 
 const companyMrrScatterRows = computed(() => {
   const businessFilter = companyMrrScatterBusinessFilter.value;
@@ -6039,7 +6063,7 @@ const companyMrrScatterRawPoints = computed(() => {
     const allLinkedTasks = link?.linked_tasks || [];
     const linkedTasks = statusFilter === 'all'
       ? allLinkedTasks
-      : allLinkedTasks.filter(task => clickupStatusTypeGroup(task.status_type) === statusFilter);
+      : allLinkedTasks.filter(task => task.status === statusFilter);
     return {
       ...row,
       x: Math.round((dims.left + xRatio * width) * 10) / 10,
