@@ -965,7 +965,8 @@
                       <select v-model="companyMrrScatterClickupStatusFilter" class="select mini-select">
                         <option value="all">Hammasi</option>
                         <option v-for="status in companyMrrScatterClickupStatusOptions"
-                          :key="`mrr-scatter-clickup-status-${status}`" :value="status">{{ status }}</option>
+                          :key="`mrr-scatter-clickup-status-${status.key}`" :value="status.key">{{ status.label }}
+                        </option>
                       </select>
                     </label>
                     <label class="company-module-filter">
@@ -1029,12 +1030,12 @@
                       <text v-for="tick in companyMrrScatterXTicks" :key="`mrr-x-label-${tick.value}`" :x="tick.x"
                         :y="COMPANY_MRR_SCATTER_DIMS.bottom + 16" text-anchor="middle">{{ tick.value }}</text>
                     </g>
-                    <g v-for="point in companyMrrScatterPoints" :key="`mrr-point-${point.id}`"
+                    <g v-for="point in companyMrrScatterPointsDrawOrder" :key="`mrr-point-${point.id}`"
                       class="company-mrr-scatter-point" @mouseenter="hoverCompanyMrrScatterPoint(point)"
                       @mouseleave="unhoverCompanyMrrScatterPoint(point)"
                       @click.stop="selectCompanyMrrScatterPoint(point)">
                       <circle :cx="point.x" :cy="point.y" :r="point.clickup_point_radius"
-                        :fill="activityScoreColor(point.activity_score)" fill-opacity="0.9" />
+                        :fill="companyMrrScatterPointColor(point.activity_score)" fill-opacity="0.9" />
                     </g>
                     <g v-for="point in companyMrrScatterPoints.filter(item => item.clickup_linked_task_count > 0)"
                       :key="`mrr-point-badge-${point.id}`" class="company-mrr-scatter-badge"
@@ -1068,9 +1069,9 @@
                 </div>
                 <div v-else class="empty compact">MRR ma’lumoti topilmadi</div>
                 <div class="company-ticket-legend">
-                  <span><i class="legend-square" style="background: var(--danger);"></i>Past faollik (0-2)</span>
-                  <span><i class="legend-square" style="background: #f59e0b;"></i>O‘rtacha faollik (3)</span>
-                  <span><i class="legend-square" style="background: var(--success);"></i>Yuqori faollik (4-5)</span>
+                  <span><i class="legend-square" style="background: #fca5a5;"></i>Past faollik (0-2)</span>
+                  <span><i class="legend-square" style="background: #fcd34d;"></i>O‘rtacha faollik (3)</span>
+                  <span><i class="legend-square" style="background: #86efac;"></i>Yuqori faollik (4-5)</span>
                   <span>r = {{ fmtNumber(companyMrrCorrelation) }}</span>
                 </div>
               </section>
@@ -5797,13 +5798,19 @@ const companyModuleBaseRows = computed(() => {
 const COMPANY_MRR_SCATTER_VIEW = { width: 720, height: 440 };
 const COMPANY_MRR_SCATTER_DIMS = { left: 70, right: 690, top: 20, bottom: 380 };
 const COMPANY_MRR_SCATTER_POINT_MIN_RADIUS = 3.5;
-const COMPANY_MRR_SCATTER_POINT_MAX_RADIUS = 11;
+const COMPANY_MRR_SCATTER_POINT_MAX_RADIUS = 15;
 const COMPANY_MRR_SCATTER_BADGE_RADIUS = 7;
 
 function activityScoreColor(score = 0) {
   if (score >= 4) return 'var(--success)';
   if (score >= 3) return '#f59e0b';
   return 'var(--danger)';
+}
+
+function companyMrrScatterPointColor(score = 0) {
+  if (score >= 4) return '#86efac';
+  if (score >= 3) return '#fcd34d';
+  return '#fca5a5';
 }
 
 function pearsonCorrelation(pairs = []) {
@@ -5961,16 +5968,18 @@ const companyMrrScatterSupportOptions = computed(() => {
   return [...usernames].sort((a, b) => companyModuleSupportDisplayLabel(a).localeCompare(companyModuleSupportDisplayLabel(b), 'uz'));
 });
 
-const companyMrrScatterClickupStatusOptions = computed(() => {
-  const statuses = new Set();
-  clickupCompanyLinks.value.forEach(row => {
-    (row.linked_tasks || []).forEach(task => {
-      const status = String(task.status || '').trim();
-      if (status) statuses.add(status);
-    });
-  });
-  return [...statuses].sort((a, b) => a.localeCompare(b, 'uz'));
-});
+function clickupStatusTypeGroup(statusType = '') {
+  const type = String(statusType || '').toLowerCase().trim();
+  if (type === 'closed' || type === 'done') return 'done';
+  if (type === 'custom') return 'in_progress';
+  return 'not_started';
+}
+
+const companyMrrScatterClickupStatusOptions = [
+  { key: 'not_started', label: 'Boshlanmagan' },
+  { key: 'in_progress', label: 'Jarayonda' },
+  { key: 'done', label: 'Tugagan' }
+];
 
 const companyMrrScatterRows = computed(() => {
   const businessFilter = companyMrrScatterBusinessFilter.value;
@@ -6030,7 +6039,7 @@ const companyMrrScatterRawPoints = computed(() => {
     const allLinkedTasks = link?.linked_tasks || [];
     const linkedTasks = statusFilter === 'all'
       ? allLinkedTasks
-      : allLinkedTasks.filter(task => task.status === statusFilter);
+      : allLinkedTasks.filter(task => clickupStatusTypeGroup(task.status_type) === statusFilter);
     return {
       ...row,
       x: Math.round((dims.left + xRatio * width) * 10) / 10,
@@ -6064,6 +6073,10 @@ const companyMrrScatterPoints = computed(() => {
     };
   });
 });
+
+const companyMrrScatterPointsDrawOrder = computed(() => (
+  [...companyMrrScatterPoints.value].sort((a, b) => b.clickup_point_radius - a.clickup_point_radius)
+));
 
 const companyMrrScatterXTicks = computed(() => {
   const dims = COMPANY_MRR_SCATTER_DIMS;

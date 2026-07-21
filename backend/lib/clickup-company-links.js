@@ -42,11 +42,12 @@ async function fetchLinkedTaskDetails(config, taskIds = []) {
           id: task.id,
           name: task.name || '',
           status: task.status?.status || '',
+          status_type: task.status?.type || '',
           list_name: task.list?.name || '',
           url: task.url || ''
         });
       } catch (error) {
-        details.set(taskId, { id: taskId, name: '', status: '', list_name: '', url: '', error: error.message });
+        details.set(taskId, { id: taskId, name: '', status: '', status_type: '', list_name: '', url: '', error: error.message });
       }
     }
   }
