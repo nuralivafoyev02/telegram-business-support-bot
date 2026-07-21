@@ -956,6 +956,39 @@
                           companyModuleSupportDisplayLabel(username) }}</option>
                       </select>
                     </label>
+                    <div class="company-module-filter company-module-filter-menu-wrap" ref="companyMrrClickupStatusMenuRef">
+                      <span>ClickUp holati</span>
+                      <div class="company-module-filter-picker">
+                        <button type="button" class="company-module-filter-trigger select mini-select"
+                          @click.stop="toggleCompanyMrrClickupStatusMenu">
+                          <span class="company-module-filter-trigger-label">{{ companyMrrScatterClickupStatusFilterLabel }}</span>
+                          <span class="company-module-filter-trigger-caret">▾</span>
+                        </button>
+                        <Transition name="fade">
+                          <div v-if="companyMrrClickupStatusMenuOpen" class="company-module-filter-menu actions-dropdown"
+                            @click.stop>
+                            <template v-for="group in companyMrrScatterClickupStatusGroups"
+                              :key="`mrr-clickup-group-${group.key}`">
+                              <button type="button" class="company-module-filter-option company-mrr-clickup-status-group-label"
+                                :class="{ active: companyMrrScatterClickupStatusFilter.has(group.key) }"
+                                @click="toggleCompanyMrrClickupStatusFilterValue(group.key)">
+                                <span>{{ group.label }}</span>
+                                <span v-if="companyMrrScatterClickupStatusFilter.has(group.key)"
+                                  class="company-module-filter-check">✓</span>
+                              </button>
+                              <button v-for="status in group.statuses" :key="`mrr-clickup-status-${group.key}-${status}`"
+                                type="button" class="company-module-filter-option company-mrr-clickup-status-sub"
+                                :class="{ active: companyMrrScatterClickupStatusFilter.has(status) }"
+                                @click="toggleCompanyMrrClickupStatusFilterValue(status)">
+                                <span>{{ status }}</span>
+                                <span v-if="companyMrrScatterClickupStatusFilter.has(status)"
+                                  class="company-module-filter-check">✓</span>
+                              </button>
+                            </template>
+                          </div>
+                        </Transition>
+                      </div>
+                    </div>
                     <label class="company-module-filter">
                       <span>Davr</span>
                       <select :value="companyMrrScatterPeriod" class="select mini-select"
@@ -4236,6 +4269,10 @@ function handleDocumentPointerDown(event) {
     const root = companyMrrScatterChartRef.value;
     if (!root || !root.contains(event.target)) closeCompanyMrrScatterTooltip();
   }
+  if (companyMrrClickupStatusMenuOpen.value) {
+    const root = companyMrrClickupStatusMenuRef.value;
+    if (!root || !root.contains(event.target)) closeCompanyMrrClickupStatusMenu();
+  }
 }
 
 function handleDocumentKeydown(event) {
@@ -4247,6 +4284,7 @@ function handleDocumentKeydown(event) {
     closeCompanyMrrFilterMenu();
     closeCompanyModuleChartCompanyMenu();
     closeCompanyMrrScatterTooltip();
+    closeCompanyMrrClickupStatusMenu();
     hideFloatingTooltip();
     if (modal.value) closeModal();
   }
@@ -5898,6 +5936,7 @@ const clickupCompanyLinksByKey = computed(() => {
 });
 const companyMrrScatterBusinessFilter = ref('ACTIVE');
 const companyMrrScatterSupportFilter = ref('all');
+const companyMrrScatterClickupStatusFilter = ref(new Set(['not_started', 'in_progress']));
 const companyMrrScatterCompanyId = ref('');
 const companyMrrScatterPeriodOptions = companyModulePeriodOptions.filter(period => period.key !== 'custom');
 
@@ -5973,6 +6012,87 @@ const companyMrrScatterSupportOptions = computed(() => {
   return [...usernames].sort((a, b) => companyModuleSupportDisplayLabel(a).localeCompare(companyModuleSupportDisplayLabel(b), 'uz'));
 });
 
+function clickupStatusTypeGroup(statusType = '') {
+  const type = String(statusType || '').toLowerCase().trim();
+  if (type === 'closed' || type === 'done') return 'done';
+  if (type === 'custom') return 'in_progress';
+  return 'not_started';
+}
+
+const CLICKUP_STATUS_NAME_GROUP_MAP = {
+  'not started': 'not_started',
+  open: 'not_started',
+  todo: 'not_started',
+  pending: 'not_started',
+  'in progress': 'in_progress',
+  'code review': 'in_progress',
+  'in qa': 'in_progress',
+  'deployed must be tested': 'in_progress',
+  blocked: 'in_progress',
+  'issue found': 'in_progress',
+  closed: 'done',
+  'ready production': 'done'
+};
+
+function clickupStatusGroupForStatus(status = '', statusType = '') {
+  const key = String(status || '').toLowerCase().trim();
+  return CLICKUP_STATUS_NAME_GROUP_MAP[key] || clickupStatusTypeGroup(statusType);
+}
+
+const CLICKUP_STATUS_GROUP_LABELS = {
+  not_started: 'Boshlanmagan (Not Started)',
+  in_progress: 'Jarayonda (In Progress)',
+  done: 'Tugagan (Completed)'
+};
+
+const companyMrrScatterClickupStatusGroups = computed(() => {
+  const groups = {
+    not_started: new Set(),
+    in_progress: new Set(),
+    done: new Set()
+  };
+  clickupCompanyLinks.value.forEach(row => {
+    (row.linked_tasks || []).forEach(task => {
+      const status = String(task.status || '').trim();
+      if (!status) return;
+      groups[clickupStatusGroupForStatus(status, task.status_type)].add(status);
+    });
+  });
+  return Object.entries(groups)
+    .map(([key, statuses]) => ({
+      key,
+      label: CLICKUP_STATUS_GROUP_LABELS[key],
+      statuses: [...statuses].sort((a, b) => a.localeCompare(b, 'uz'))
+    }))
+    .filter(group => group.statuses.length);
+});
+
+const companyMrrClickupStatusMenuOpen = ref(false);
+const companyMrrClickupStatusMenuRef = ref(null);
+
+function toggleCompanyMrrClickupStatusMenu() {
+  companyMrrClickupStatusMenuOpen.value = !companyMrrClickupStatusMenuOpen.value;
+}
+
+function closeCompanyMrrClickupStatusMenu() {
+  companyMrrClickupStatusMenuOpen.value = false;
+}
+
+function toggleCompanyMrrClickupStatusFilterValue(value = '') {
+  const next = new Set(companyMrrScatterClickupStatusFilter.value);
+  if (next.has(value)) next.delete(value);
+  else next.add(value);
+  companyMrrScatterClickupStatusFilter.value = next;
+}
+
+const companyMrrScatterClickupStatusFilterLabel = computed(() => {
+  const selected = companyMrrScatterClickupStatusFilter.value;
+  if (!selected.size) return 'Hammasi';
+  const labels = [...selected].map(value => CLICKUP_STATUS_GROUP_LABELS[value] || value);
+  if (labels.length === 1) return labels[0];
+  return `${labels.length} ta tanlangan`;
+});
+
 const companyMrrScatterRows = computed(() => {
   const businessFilter = companyMrrScatterBusinessFilter.value;
   const supportFilter = companyMrrScatterSupportFilter.value;
@@ -6022,11 +6142,18 @@ const companyMrrScatterRawPoints = computed(() => {
   const height = dims.bottom - dims.top;
   const max = companyMrrScatterMax.value;
   const linksByKey = clickupCompanyLinksByKey.value;
+  const statusFilter = companyMrrScatterClickupStatusFilter.value;
   return companyMrrScatterRows.value.map(row => {
     const xRatio = row.activity_score / 5;
     const yRatio = row.mrr_amount / max;
     const link = linksByKey.get(clickupCompanyKey(row.name));
-    const linkedTasks = link?.linked_tasks || [];
+    const allLinkedTasks = link?.linked_tasks || [];
+    const linkedTasks = !statusFilter.size
+      ? allLinkedTasks
+      : allLinkedTasks.filter(task => {
+          const group = clickupStatusGroupForStatus(task.status, task.status_type);
+          return statusFilter.has(group) || statusFilter.has(task.status);
+        });
     return {
       ...row,
       x: Math.round((dims.left + xRatio * width) * 10) / 10,
