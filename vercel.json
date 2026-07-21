@@ -12,6 +12,10 @@
     {
       "path": "/api/cron?action=companyInfo&syncReport=1",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron?action=clickupCompanyLinks",
+      "schedule": "15 * * * *"
     }
   ],
   "headers": [

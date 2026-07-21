@@ -3990,6 +3990,25 @@ td,
   cursor: pointer;
 }
 
+.company-mrr-scatter-badge {
+  cursor: pointer;
+}
+
+.company-mrr-scatter-badge circle {
+  fill: var(--danger, #e5484d);
+  stroke: #fff;
+  stroke-width: 1.5;
+}
+
+.company-mrr-scatter-badge text {
+  fill: #fff;
+  font-size: 9px;
+  font-weight: 800;
+  text-anchor: middle;
+  dominant-baseline: central;
+  pointer-events: none;
+}
+
 .company-module-table-card {
   overflow: hidden;
 }

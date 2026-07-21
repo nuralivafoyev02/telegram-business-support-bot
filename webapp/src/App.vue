@@ -1024,6 +1024,12 @@
                       <circle :cx="point.x" :cy="point.y" r="3.5" :fill="activityScoreColor(point.activity_score)"
                         fill-opacity="0.9" />
                     </g>
+                    <g v-for="point in companyMrrScatterPoints.filter(item => item.clickup_linked_task_count > 0)"
+                      :key="`mrr-point-badge-${point.id}`" class="company-mrr-scatter-badge"
+                      @click.stop="openCompanyMrrScatterTaskBadge(point)">
+                      <circle :cx="point.x + 6" :cy="point.y - 6" r="7" />
+                      <text :x="point.x + 6" :y="point.y - 6">{{ point.clickup_linked_task_count }}</text>
+                    </g>
                   </svg>
                   <div v-if="companyMrrScatterTooltip" class="company-module-chart-tooltip company-mrr-scatter-tooltip"
                     :style="companyMrrScatterTooltipStyle" @mouseenter="holdCompanyMrrScatterTooltip"
@@ -5840,6 +5846,27 @@ const companyMrrChartRows = computed(() => {
 
 const companyMrrScatterPeriod = ref('today');
 const companyMrrScatterReports = ref({ companies: [], report_dates: [], period: 'today', fetched_at: null });
+const clickupCompanyLinks = ref([]);
+
+function clickupCompanyKey(name = '') {
+  return String(name || '').trim().toUpperCase().replace(/\s+/g, ' ');
+}
+
+async function loadClickupCompanyLinks() {
+  try {
+    clickupCompanyLinks.value = await api.clickupCompanyLinks();
+  } catch {
+    clickupCompanyLinks.value = [];
+  }
+}
+
+const clickupCompanyLinksByKey = computed(() => {
+  const map = new Map();
+  clickupCompanyLinks.value.forEach(row => {
+    if (row.company_key) map.set(row.company_key, row);
+  });
+  return map;
+});
 const companyMrrScatterBusinessFilter = ref('ACTIVE');
 const companyMrrScatterSupportFilter = ref('all');
 const companyMrrScatterCompanyId = ref('');
@@ -5965,13 +5992,17 @@ const companyMrrScatterPoints = computed(() => {
   const width = dims.right - dims.left;
   const height = dims.bottom - dims.top;
   const max = companyMrrScatterMax.value;
+  const linksByKey = clickupCompanyLinksByKey.value;
   return companyMrrScatterRows.value.map(row => {
     const xRatio = row.activity_score / 5;
     const yRatio = row.mrr_amount / max;
+    const link = linksByKey.get(clickupCompanyKey(row.name));
     return {
       ...row,
       x: Math.round((dims.left + xRatio * width) * 10) / 10,
-      y: Math.round((dims.bottom - yRatio * height) * 10) / 10
+      y: Math.round((dims.bottom - yRatio * height) * 10) / 10,
+      clickup_linked_tasks: link?.linked_tasks || [],
+      clickup_linked_task_count: Number(link?.linked_task_count || 0)
     };
   });
 });
@@ -6063,6 +6094,28 @@ function openCompanyMrrQuadrantDetail(quadrantKey = '') {
     summary: [
       { label: 'Kompaniya', value: fmtNumber(rows.length) },
       { label: 'Jami MRR', value: fmtNumber(rows.reduce((sum, row) => sum + row.mrr_amount, 0)) }
+    ]
+  });
+}
+
+const clickupCompanyLinkTaskColumns = [
+  { key: 'name', label: 'Vazifa', action: 'openClickupTask' },
+  { key: 'status', label: 'Holati' },
+  { key: 'list_name', label: 'Ro‘yxat' }
+];
+
+function openCompanyMrrScatterTaskBadge(point = {}) {
+  closeCompanyMrrScatterTooltip();
+  const rows = point.clickup_linked_tasks || [];
+  if (!rows.length) return showToast('Bog‘langan vazifalar topilmadi');
+  setMetricDetail({
+    title: `${point.name || 'Kompaniya'} · ClickUp vazifalari`,
+    rows,
+    columns: clickupCompanyLinkTaskColumns,
+    empty: 'Vazifa topilmadi',
+    showSourceTabs: false,
+    summary: [
+      { label: 'Vazifalar', value: fmtNumber(rows.length) }
     ]
   });
 }
@@ -8521,6 +8574,7 @@ async function loadCompanyActivity(options = {}) {
     refreshCompanyModuleReports(),
     refreshCompanyModuleChartData(),
     loadCompanyMrrScatterReports(),
+    loadClickupCompanyLinks(),
     loadDashboard()
   ]);
   if (syncLive) {
@@ -8961,6 +9015,10 @@ function handleTableCellAction({ action, row }) {
   }
   if (action === 'telegram') {
     openTelegramChat(row);
+    return;
+  }
+  if (action === 'openClickupTask') {
+    if (row?.url) window.open(row.url, '_blank', 'noopener');
     return;
   }
   if (action === 'chatDetail') {

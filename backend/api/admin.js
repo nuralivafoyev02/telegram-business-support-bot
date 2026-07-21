@@ -37,6 +37,7 @@ const {
   migrateBotSettingsHistoryToDaily,
   slimCompanyReportResponse
 } = require('../lib/company-report');
+const { getStoredClickUpCompanyLinks, syncClickUpCompanyLinks } = require('../lib/clickup-company-links');
 const { notifyOperationalLog, notifyOperationalError } = require('../lib/log-notifier');
 const stats = require('../lib/stats');
 const { refreshTicketNotificationMessage, loadRequestById } = require('../lib/ticket-notifier');
@@ -6400,6 +6401,7 @@ async function handleGet(action, query) {
     case 'companyReport': return getCompanyReport(query);
     case 'companyModuleReports': return getCompanyModuleReports(query);
     case 'migrateCompanyReportHistory': return migrateCompanyReportHistory(query);
+    case 'clickupCompanyLinks': return getStoredClickUpCompanyLinks(query);
     case 'employees': return listEmployees(query);
     case 'employeeActivity': return getEmployeeActivity(query);
     case 'settings': return listSettings();
@@ -6430,6 +6432,7 @@ async function handlePost(action, body, currentAdmin) {
     case 'testLogNotification': return sendTestLogNotification(body, currentAdmin);
     case 'setTelegramWebhook': return connectTelegramWebhook(body);
     case 'syncTelegramUpdates': return syncTelegramUpdates(body);
+    case 'clickupCompanyLinksSync': return syncClickUpCompanyLinks();
     default: throw new Error(`Unknown POST action: ${action}`);
   }
 }

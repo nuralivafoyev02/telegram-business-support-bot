@@ -118,6 +118,7 @@ export const api = {
   companyModuleReports: (query = {}) => request('companyModuleReports', { query }).then(r => r.data),
   employees: () => request('employees').then(r => r.data),
   clickupTasks: (query = {}) => request('clickupTasks', { query }).then(r => r.data),
+  clickupCompanyLinks: (query = {}) => request('clickupCompanyLinks', { query }).then(r => r.data),
   employeeActivity: query => request('employeeActivity', { query }).then(r => r.data),
   requests: query => request('requests', { query }).then(r => r.data),
   chatDetail: query => request('chatDetail', { query }).then(r => r.data),
@@ -144,5 +145,6 @@ export const api = {
   testLogNotification: payload => request('testLogNotification', { method: 'POST', body: payload || {} }).then(r => r.data),
   telegramWebhookInfo: () => request('telegramWebhookInfo').then(r => r.data),
   setTelegramWebhook: payload => request('setTelegramWebhook', { method: 'POST', body: payload || {} }).then(r => r.data),
-  syncTelegramUpdates: payload => request('syncTelegramUpdates', { method: 'POST', body: payload || {} }).then(r => r.data)
+  syncTelegramUpdates: payload => request('syncTelegramUpdates', { method: 'POST', body: payload || {} }).then(r => r.data),
+  syncClickupCompanyLinks: payload => request('clickupCompanyLinksSync', { method: 'POST', body: payload || {} }).then(r => r.data)
 };
