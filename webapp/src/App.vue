@@ -5796,10 +5796,10 @@ const companyModuleBaseRows = computed(() => {
   });
 });
 
-const COMPANY_MRR_SCATTER_VIEW = { width: 1100, height: 700 };
-const COMPANY_MRR_SCATTER_DIMS = { left: 110, right: 1000, top: 85, bottom: 600 };
-const COMPANY_MRR_SCATTER_POINT_MIN_RADIUS = 7.5;
-const COMPANY_MRR_SCATTER_POINT_MAX_RADIUS = 33;
+const COMPANY_MRR_SCATTER_VIEW = { width: 1430, height: 910 };
+const COMPANY_MRR_SCATTER_DIMS = { left: 145, right: 1300, top: 110, bottom: 780 };
+const COMPANY_MRR_SCATTER_POINT_MIN_RADIUS = 11.25;
+const COMPANY_MRR_SCATTER_POINT_MAX_RADIUS = 49.5;
 const COMPANY_MRR_SCATTER_BADGE_RADIUS = 7;
 
 function activityScoreColor(score = 0) {
