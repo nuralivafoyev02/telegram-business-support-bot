@@ -972,13 +972,6 @@
                         <Transition name="fade">
                           <div v-if="companyMrrClickupStatusMenuOpen" class="company-module-filter-menu actions-dropdown"
                             @click.stop>
-                            <button type="button" class="company-module-filter-option"
-                              :class="{ active: !companyMrrScatterClickupStatusFilter.size }"
-                              @click="clearCompanyMrrClickupStatusFilter">
-                              <span>Hammasi</span>
-                              <span v-if="!companyMrrScatterClickupStatusFilter.size"
-                                class="company-module-filter-check">✓</span>
-                            </button>
                             <template v-for="group in companyMrrScatterClickupStatusGroups"
                               :key="`mrr-clickup-group-${group.key}`">
                               <button type="button" class="company-module-filter-option company-mrr-clickup-status-group-label"
@@ -6089,11 +6082,6 @@ function toggleCompanyMrrClickupStatusMenu() {
 
 function closeCompanyMrrClickupStatusMenu() {
   companyMrrClickupStatusMenuOpen.value = false;
-}
-
-function clearCompanyMrrClickupStatusFilter() {
-  companyMrrScatterClickupStatusFilter.value = new Set();
-  closeCompanyMrrClickupStatusMenu();
 }
 
 function toggleCompanyMrrClickupStatusFilterValue(value = '') {
