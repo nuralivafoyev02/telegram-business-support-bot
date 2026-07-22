@@ -4025,12 +4025,6 @@ td,
   fill-opacity: .08;
 }
 
-.company-mrr-scatter-risk-label {
-  fill: var(--danger);
-  font-size: 11px;
-  font-weight: 700;
-}
-
 .company-mrr-scatter-threshold {
   stroke: var(--muted-strong);
   stroke-width: 1;

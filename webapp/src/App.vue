@@ -1039,8 +1039,6 @@
                       @click="openCompanyMrrQuadrantDetail('bottomRight')">
                       <title>Past MRR + yuqori faollik — ro‘yxatni ko‘rish uchun bosing</title>
                     </rect>
-                    <text class="company-mrr-scatter-risk-label" :x="COMPANY_MRR_SCATTER_DIMS.left + 8"
-                      :y="COMPANY_MRR_SCATTER_DIMS.top + 18">Yuqori MRR + past faollik (Risk zonasi)</text>
                     <g class="trend-grid">
                       <line v-for="tick in companyMrrScatterYTicks" :key="`mrr-y-grid-${tick.value}`"
                         :x1="COMPANY_MRR_SCATTER_DIMS.left" :x2="COMPANY_MRR_SCATTER_DIMS.right" :y1="tick.y"
@@ -6529,7 +6527,7 @@ const companyDetailModuleRow = computed(() => (
   companyModuleBaseRows.value.find(item => String(item.id || '').trim() === companyDetailCompanyId.value) || null
 ));
 
-const companyDetailClickupStatusFilter = ref(new Set());
+const companyDetailClickupStatusFilter = ref(new Set(['not_started', 'in_progress']));
 const companyDetailClickupStatusMenuOpen = ref(false);
 const companyDetailClickupStatusMenuRef = ref(null);
 
@@ -6573,9 +6571,10 @@ const companyDetailClickupTasks = computed(() => {
 function openCompanyDetailModal(companyId = '', tab = 'employees') {
   const id = String(companyId || '').trim();
   if (!id) return;
+  companyMrrScatterHoverPointId.value = '';
   companyDetailCompanyId.value = id;
   companyDetailActiveTab.value = tab;
-  companyDetailClickupStatusFilter.value = new Set();
+  companyDetailClickupStatusFilter.value = new Set(['not_started', 'in_progress']);
   selectCompanyModuleChartCompany(id);
   companyModuleEmployeeDetail.value = companyModuleBaseRows.value
     .find(item => String(item.id || '').trim() === id) || null;
