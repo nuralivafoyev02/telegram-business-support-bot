@@ -7478,7 +7478,6 @@ const companyModuleChartTooltip = computed(() => {
   const metricKeys = companyModuleChartMetricKeysSelected();
   const visible = companyModuleChartVisibleModules.value;
   const items = companyModuleColumns
-    .filter(column => visible.includes(column.key))
     .filter(column => companyModuleChartModuleIsActive(row, column.key, metricKeys))
     .map(column => ({
       key: column.key,
@@ -7492,7 +7491,7 @@ const companyModuleChartTooltip = computed(() => {
       items.push({
         key: 'average',
         label: 'O‘rtacha',
-        color: '#111827',
+        color: '#e5e7eb',
         dual: true,
         activityText: companyModuleChartAverageValueText(row, 'activity', activeKeys),
         actionsText: companyModuleChartAverageValueText(row, 'actions', activeKeys)
@@ -7502,7 +7501,7 @@ const companyModuleChartTooltip = computed(() => {
       items.push({
         key: 'average',
         label: 'O‘rtacha',
-        color: '#111827',
+        color: '#e5e7eb',
         dual: false,
         valueText: companyModuleChartAverageValueText(row, metric, activeKeys)
       });
