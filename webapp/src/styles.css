@@ -1177,6 +1177,11 @@ tbody tr:hover {
   margin: 0;
 }
 
+.company-detail-section-head.start {
+  justify-content: flex-start;
+  gap: 20px;
+}
+
 .company-detail-navbar {
   display: flex;
   flex-wrap: wrap;
