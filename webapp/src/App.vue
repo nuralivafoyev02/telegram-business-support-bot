@@ -1856,7 +1856,7 @@
             </template>
 
             <template v-else-if="companyDetailActiveSection === 'tasks'">
-              <div class="company-detail-section-head start">
+              <div class="company-detail-section-head">
                 <div class="company-module-employee-section-title company-detail-section-heading">Vazifalar</div>
                 <div class="company-module-filter company-module-filter-menu-wrap company-detail-clickup-status-filter"
                   ref="companyDetailClickupStatusMenuRef">

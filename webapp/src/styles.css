@@ -1177,9 +1177,9 @@ tbody tr:hover {
   margin: 0;
 }
 
-.company-detail-section-head.start {
-  justify-content: flex-start;
-  gap: 20px;
+.company-detail-clickup-status-filter .company-module-filter-menu {
+  left: auto;
+  right: 0;
 }
 
 .company-detail-navbar {
