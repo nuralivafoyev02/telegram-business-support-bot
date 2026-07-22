@@ -1798,7 +1798,6 @@
             <button type="button" class="company-detail-stat-card clickable"
               :class="{ active: companyDetailShowClickupTasks }"
               @click="companyDetailShowClickupTasks = !companyDetailShowClickupTasks">
-              <span class="company-detail-stat-icon">🗂️</span>
               <div class="company-detail-stat-body">
                 <span class="company-detail-stat-label">Vazifalar</span>
                 <b class="company-detail-stat-value">{{ fmtNumber(companyDetailClickupTasks.length) }}</b>
