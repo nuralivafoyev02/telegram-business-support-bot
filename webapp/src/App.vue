@@ -1803,6 +1803,24 @@
                 <b class="company-detail-stat-value">{{ fmtNumber(companyDetailClickupTasks.length) }}</b>
               </div>
             </button>
+            <div class="company-detail-stat-card">
+              <div class="company-detail-stat-body">
+                <span class="company-detail-stat-label">Loyihalar soni</span>
+                <b class="company-detail-stat-value">{{ fmtNumber(companyDetailAllClickupTasks.length) }}</b>
+              </div>
+            </div>
+            <div class="company-detail-stat-card">
+              <div class="company-detail-stat-body">
+                <span class="company-detail-stat-label">Oxirgi 7 kundagi faollik</span>
+                <b class="company-detail-stat-value">{{ companyDetailWeekActivityPercent === null ? '—' : `${companyDetailWeekActivityPercent}%` }}</b>
+              </div>
+            </div>
+            <div class="company-detail-stat-card">
+              <div class="company-detail-stat-body">
+                <span class="company-detail-stat-label">Dasturdan foydalanish darajasi</span>
+                <b class="company-detail-stat-value">{{ companyDetailModuleRow ? `${companyDetailModuleRow.module_active_percent}%` : '—' }}</b>
+              </div>
+            </div>
           </div>
 
           <div v-if="companyDetailShowClickupTasks" class="company-detail-clickup-panel">
@@ -6813,6 +6831,30 @@ const companyDetailClickupTasks = computed(() => {
   return all.filter(task => filter.has(clickupStatusGroupForStatus(task.status, task.status_type)));
 });
 
+const companyDetailWeekActivityPercent = ref(null);
+
+async function fetchCompanyDetailWeekActivity() {
+  const infoRow = companyDetailInfoRow.value;
+  if (!infoRow) {
+    companyDetailWeekActivityPercent.value = null;
+    return;
+  }
+  try {
+    const data = await api.companyModuleReports({ period: 'week' });
+    const map = buildCompanyModuleReportMap(data.companies || []);
+    const report = findCompanyModuleReport(map, infoRow);
+    const context = {
+      expectedDates: [...(data.report_dates || [])].filter(Boolean),
+      mode: data.mode || '',
+      targetDate: data.target_date || ''
+    };
+    const usage = companyModuleUsageForPeriod(infoRow, report, context);
+    companyDetailWeekActivityPercent.value = companyModuleActivePercent(usage);
+  } catch (error) {
+    companyDetailWeekActivityPercent.value = null;
+  }
+}
+
 function openCompanyDetailModal(companyId = '', { showClickup = false } = {}) {
   const id = String(companyId || '').trim();
   if (!id) return;
@@ -6825,6 +6867,8 @@ function openCompanyDetailModal(companyId = '', { showClickup = false } = {}) {
   companyDetailEmployeeReportData.value = companyModuleReports.value;
   companyDetailModulesPeriod.value = companyModulePeriod.value;
   companyDetailModulesReportData.value = companyModuleReports.value;
+  companyDetailWeekActivityPercent.value = null;
+  fetchCompanyDetailWeekActivity();
   modal.value = 'companyDetail';
 }
 
