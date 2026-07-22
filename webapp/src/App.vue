@@ -1776,94 +1776,17 @@
     <Transition name="modal-fade">
       <Modal v-show="modal === 'companyDetail'" :title="companyDetailModalTitle" xlarge @close="closeModal">
         <div class="company-detail-dashboard">
-          <div class="company-detail-stats-row">
-            <div class="company-detail-stat-card">
-              <div class="company-detail-stat-body">
-                <span class="company-detail-stat-label">Jami amallar</span>
-                <b class="company-detail-stat-value">{{ fmtNumber(companyDetailEmployeeActivity?.total_actions || 0) }}</b>
-              </div>
-            </div>
-            <div class="company-detail-stat-card">
-              <div class="company-detail-stat-body">
-                <span class="company-detail-stat-label">Faol xodimlar</span>
-                <b class="company-detail-stat-value">{{ fmtNumber(companyDetailEmployeeActiveCount) }}</b>
-              </div>
-            </div>
-            <div class="company-detail-stat-card">
-              <div class="company-detail-stat-body">
-                <span class="company-detail-stat-label">Nofaol xodimlar</span>
-                <b class="company-detail-stat-value">{{ fmtNumber(companyDetailEmployeeInactiveCount) }}</b>
-              </div>
-            </div>
-            <button type="button" class="company-detail-stat-card clickable"
-              :class="{ active: companyDetailShowClickupTasks }"
-              @click="companyDetailShowClickupTasks = !companyDetailShowClickupTasks">
-              <div class="company-detail-stat-body">
-                <span class="company-detail-stat-label">Vazifalar</span>
-                <b class="company-detail-stat-value">{{ fmtNumber(companyDetailClickupTasks.length) }}</b>
-              </div>
+          <div class="company-detail-navbar">
+            <button v-for="item in companyDetailNavItems" :key="`detail-nav-${item.key}`" type="button"
+              class="company-detail-nav-item" :class="{ active: companyDetailActiveSection === item.key }"
+              @click="selectCompanyDetailSection(item.key)">
+              <span class="company-detail-nav-label">{{ item.label }}</span>
+              <b class="company-detail-nav-value">{{ item.value }}</b>
             </button>
-            <div class="company-detail-stat-card">
-              <div class="company-detail-stat-body">
-                <span class="company-detail-stat-label">Loyihalar soni</span>
-                <b class="company-detail-stat-value">{{ fmtNumber(companyDetailAllClickupTasks.length) }}</b>
-              </div>
-            </div>
-            <div class="company-detail-stat-card">
-              <div class="company-detail-stat-body">
-                <span class="company-detail-stat-label">Oxirgi 7 kundagi faollik</span>
-                <b class="company-detail-stat-value">{{ companyDetailWeekActivityPercent === null ? '—' : `${companyDetailWeekActivityPercent}%` }}</b>
-              </div>
-            </div>
-            <div class="company-detail-stat-card">
-              <div class="company-detail-stat-body">
-                <span class="company-detail-stat-label">Dasturdan foydalanish darajasi</span>
-                <b class="company-detail-stat-value">{{ companyDetailModuleRow ? `${companyDetailModuleRow.module_active_percent}%` : '—' }}</b>
-              </div>
-            </div>
           </div>
 
-          <div v-if="companyDetailShowClickupTasks" class="company-detail-clickup-panel">
-            <div class="company-module-filter company-module-filter-menu-wrap company-detail-clickup-status-filter"
-              ref="companyDetailClickupStatusMenuRef">
-              <span>ClickUp holati</span>
-              <div class="company-module-filter-picker">
-                <button type="button" class="company-module-filter-trigger select mini-select"
-                  @click.stop="toggleCompanyDetailClickupStatusMenu">
-                  <span class="company-module-filter-trigger-label">{{ companyDetailClickupStatusFilterLabel }}</span>
-                  <span class="company-module-filter-trigger-caret">▾</span>
-                </button>
-                <Transition name="fade">
-                  <div v-if="companyDetailClickupStatusMenuOpen" class="company-module-filter-menu actions-dropdown"
-                    @click.stop>
-                    <template v-for="group in companyMrrScatterClickupStatusGroups"
-                      :key="`detail-clickup-group-${group.key}`">
-                      <button type="button" class="company-module-filter-option company-mrr-clickup-status-group-label"
-                        :class="{ active: companyDetailClickupStatusFilter.has(group.key) }"
-                        @click="toggleCompanyDetailClickupStatusFilter(group.key)">
-                        <span>{{ group.label }}</span>
-                        <span v-if="companyDetailClickupStatusFilter.has(group.key)"
-                          class="company-module-filter-check">✓</span>
-                      </button>
-                      <button v-for="status in group.statuses" :key="`detail-clickup-status-${group.key}-${status}`"
-                        type="button" class="company-module-filter-option company-mrr-clickup-status-sub"
-                        :class="{ active: companyDetailClickupStatusFilter.has(status) }"
-                        @click="toggleCompanyDetailClickupStatusFilter(status)">
-                        <span>{{ status }}</span>
-                        <span v-if="companyDetailClickupStatusFilter.has(status)"
-                          class="company-module-filter-check">✓</span>
-                      </button>
-                    </template>
-                  </div>
-                </Transition>
-              </div>
-            </div>
-            <DataTable :columns="clickupCompanyLinkTaskColumns" :rows="companyDetailClickupTasks"
-              empty="Vazifa topilmadi" :page-size="12" :on-cell-action="handleTableCellAction" />
-          </div>
-
-          <div v-else class="company-detail-grid">
-            <div class="company-detail-col company-detail-col-employees">
+          <div class="company-detail-panel">
+            <template v-if="companyDetailActiveSection === 'total'">
               <div class="company-detail-section-head">
                 <div class="company-module-employee-section-title company-detail-section-heading">Xodimlarni aniqlash</div>
                 <label class="company-module-filter company-detail-period-filter">
@@ -1875,12 +1798,12 @@
                   </select>
                 </label>
               </div>
-              <div v-if="companyDetailEmployeeHasActivity">
+              <div v-if="companyDetailEmployeeHasActivity" class="company-detail-employee-columns">
                 <div class="company-module-employee-section">
                   <div class="company-module-employee-section-title">Faol xodimlar</div>
                   <div v-if="companyDetailEmployeeActiveRows.length" class="company-detail-employee-list scroll">
                     <article v-for="employee in companyDetailEmployeeActiveRows"
-                      :key="`detail-active-employee-${employee.id || employee.name}`"
+                      :key="`detail-total-active-employee-${employee.id || employee.name}`"
                       class="company-detail-employee-card">
                       <span class="company-detail-avatar"
                         :style="{ background: companyDetailAvatarColor(employee.name) }">
@@ -1902,7 +1825,7 @@
                   <div class="company-module-employee-section-title">Nofaol xodimlar</div>
                   <div v-if="companyDetailEmployeeInactiveRows.length" class="company-detail-employee-list scroll">
                     <article v-for="employee in companyDetailEmployeeInactiveRows"
-                      :key="`detail-inactive-employee-${employee.id || employee.name}`"
+                      :key="`detail-total-inactive-employee-${employee.id || employee.name}`"
                       class="company-detail-employee-card inactive">
                       <span class="company-detail-avatar inactive">
                         {{ companyDetailAvatarInitial(employee.name) }}
@@ -1924,9 +1847,123 @@
               <div v-else class="empty compact">
                 Bu kompaniya uchun xodimlar faolligi hali saqlanmagan. Yangi syncdan keyin ko‘rinadi.
               </div>
-            </div>
+            </template>
 
-            <div class="company-detail-col company-detail-col-widgets">
+            <template v-else-if="companyDetailActiveSection === 'active'">
+              <div class="company-detail-section-head">
+                <div class="company-module-employee-section-title company-detail-section-heading">Faol xodimlar</div>
+                <label class="company-module-filter company-detail-period-filter">
+                  <span>Davr</span>
+                  <select :value="companyDetailEmployeePeriod" class="select mini-select"
+                    @change="handleCompanyDetailEmployeePeriodChange($event.target.value)">
+                    <option v-for="period in companyMrrScatterPeriodOptions" :key="`detail-active-period-${period.key}`"
+                      :value="period.key">{{ period.label }}</option>
+                  </select>
+                </label>
+              </div>
+              <div v-if="companyDetailEmployeeActiveRows.length" class="company-detail-employee-list scroll tall">
+                <article v-for="employee in companyDetailEmployeeActiveRows"
+                  :key="`detail-active-employee-${employee.id || employee.name}`" class="company-detail-employee-card">
+                  <span class="company-detail-avatar" :style="{ background: companyDetailAvatarColor(employee.name) }">
+                    {{ companyDetailAvatarInitial(employee.name) }}
+                  </span>
+                  <div class="company-detail-employee-info">
+                    <b>{{ employee.name || 'Xodim' }}</b>
+                    <span v-if="employee.important_count" class="company-detail-employee-note">
+                      Muhim amallar: {{ fmtNumber(employee.important_count) }}
+                    </span>
+                  </div>
+                  <span class="company-detail-employee-count">{{ fmtNumber(employee.action_count || 0) }} amal</span>
+                </article>
+              </div>
+              <div v-else class="empty compact">Faol xodim topilmadi</div>
+            </template>
+
+            <template v-else-if="companyDetailActiveSection === 'inactive'">
+              <div class="company-detail-section-head">
+                <div class="company-module-employee-section-title company-detail-section-heading">Nofaol xodimlar</div>
+                <label class="company-module-filter company-detail-period-filter">
+                  <span>Davr</span>
+                  <select :value="companyDetailEmployeePeriod" class="select mini-select"
+                    @change="handleCompanyDetailEmployeePeriodChange($event.target.value)">
+                    <option v-for="period in companyMrrScatterPeriodOptions" :key="`detail-inactive-period-${period.key}`"
+                      :value="period.key">{{ period.label }}</option>
+                  </select>
+                </label>
+              </div>
+              <div v-if="companyDetailEmployeeInactiveRows.length" class="company-detail-employee-list scroll tall">
+                <article v-for="employee in companyDetailEmployeeInactiveRows"
+                  :key="`detail-inactive-employee-${employee.id || employee.name}`"
+                  class="company-detail-employee-card inactive">
+                  <span class="company-detail-avatar inactive">
+                    {{ companyDetailAvatarInitial(employee.name) }}
+                  </span>
+                  <div class="company-detail-employee-info">
+                    <b>{{ employee.name || 'Xodim' }}</b>
+                    <span v-if="employee.important_count" class="company-detail-employee-note">
+                      Muhim amallar: {{ fmtNumber(employee.important_count) }}
+                    </span>
+                  </div>
+                  <span v-if="employee.last_activity_date" class="company-detail-employee-last">
+                    Oxirgi: {{ employee.last_activity_date }}
+                  </span>
+                </article>
+              </div>
+              <div v-else class="empty compact">Nofaol xodim topilmadi</div>
+            </template>
+
+            <template v-else-if="companyDetailActiveSection === 'tasks'">
+              <div class="company-detail-section-head">
+                <div class="company-module-employee-section-title company-detail-section-heading">Vazifalar</div>
+                <div class="company-module-filter company-module-filter-menu-wrap company-detail-clickup-status-filter"
+                  ref="companyDetailClickupStatusMenuRef">
+                  <span>ClickUp holati</span>
+                  <div class="company-module-filter-picker">
+                    <button type="button" class="company-module-filter-trigger select mini-select"
+                      @click.stop="toggleCompanyDetailClickupStatusMenu">
+                      <span class="company-module-filter-trigger-label">{{ companyDetailClickupStatusFilterLabel }}</span>
+                      <span class="company-module-filter-trigger-caret">▾</span>
+                    </button>
+                    <Transition name="fade">
+                      <div v-if="companyDetailClickupStatusMenuOpen" class="company-module-filter-menu actions-dropdown"
+                        @click.stop>
+                        <template v-for="group in companyMrrScatterClickupStatusGroups"
+                          :key="`detail-clickup-group-${group.key}`">
+                          <button type="button"
+                            class="company-module-filter-option company-mrr-clickup-status-group-label"
+                            :class="{ active: companyDetailClickupStatusFilter.has(group.key) }"
+                            @click="toggleCompanyDetailClickupStatusFilter(group.key)">
+                            <span>{{ group.label }}</span>
+                            <span v-if="companyDetailClickupStatusFilter.has(group.key)"
+                              class="company-module-filter-check">✓</span>
+                          </button>
+                          <button v-for="status in group.statuses" :key="`detail-clickup-status-${group.key}-${status}`"
+                            type="button" class="company-module-filter-option company-mrr-clickup-status-sub"
+                            :class="{ active: companyDetailClickupStatusFilter.has(status) }"
+                            @click="toggleCompanyDetailClickupStatusFilter(status)">
+                            <span>{{ status }}</span>
+                            <span v-if="companyDetailClickupStatusFilter.has(status)"
+                              class="company-module-filter-check">✓</span>
+                          </button>
+                        </template>
+                      </div>
+                    </Transition>
+                  </div>
+                </div>
+              </div>
+              <DataTable :columns="clickupCompanyLinkTaskColumns" :rows="companyDetailClickupTasks"
+                empty="Vazifa topilmadi" :page-size="12" :on-cell-action="handleTableCellAction" />
+            </template>
+
+            <template v-else-if="companyDetailActiveSection === 'projects'">
+              <div class="company-detail-section-head">
+                <div class="company-module-employee-section-title company-detail-section-heading">Loyihalar</div>
+              </div>
+              <DataTable :columns="clickupCompanyLinkTaskColumns" :rows="companyDetailAllClickupTasks"
+                empty="Loyiha topilmadi" :page-size="12" :on-cell-action="handleTableCellAction" />
+            </template>
+
+            <template v-else-if="companyDetailActiveSection === 'weekActivity'">
               <section v-if="companyModuleChartRows.length"
                 class="card chart-card line-chart-card company-module-chart-card company-detail-trend-widget">
                 <div class="card-header chart-card-head company-module-chart-head">
@@ -2033,48 +2070,48 @@
                 </div>
               </section>
               <div v-else class="empty compact">Ma’lumot topilmadi</div>
+            </template>
 
-              <section class="card company-detail-modules-widget">
-                <div class="card-header">
-                  <div class="card-title">Modul holati</div>
-                  <label class="company-module-filter">
-                    <span>Davr</span>
-                    <select :value="companyDetailModulesPeriod" class="select mini-select"
-                      @change="handleCompanyDetailModulesPeriodChange($event.target.value)">
-                      <option v-for="period in companyMrrScatterPeriodOptions" :key="`detail-modules-period-${period.key}`"
-                        :value="period.key">{{ period.label }}</option>
-                    </select>
-                  </label>
-                </div>
-                <div v-if="companyDetailModuleRow" class="company-detail-modules-body">
-                  <div class="company-detail-donut-wrap">
-                    <svg class="company-detail-donut" viewBox="0 0 100 100">
-                      <circle class="company-detail-donut-track" cx="50" cy="50" r="40" />
-                      <circle class="company-detail-donut-value" cx="50" cy="50" r="40"
-                        :stroke-dasharray="COMPANY_DETAIL_DONUT_CIRCUMFERENCE"
-                        :stroke-dashoffset="companyDetailDonutOffset" />
-                    </svg>
-                    <div class="company-detail-donut-label">
-                      <b>{{ companyDetailModuleRow.module_active_percent }}%</b>
-                      <span>Umumiy holat</span>
-                    </div>
-                  </div>
-                  <div class="company-detail-module-pills">
-                    <div v-for="column in companyModuleColumns" :key="`detail-module-pill-${column.key}`"
-                      class="company-detail-module-pill">
-                      <span>{{ column.label }}</span>
-                      <span class="module-status-icon"
-                        :class="companyDetailModuleRow.module_usage[column.key] ? 'yes' : 'no'"
-                        :title="moduleStatusTitle(companyDetailModuleRow, column.key)">
-                        <template v-if="companyDetailModuleRow.module_usage[column.key]">✓</template>
-                        <template v-else>✗</template>
-                      </span>
-                    </div>
+            <template v-else-if="companyDetailActiveSection === 'usage'">
+              <div class="company-detail-section-head">
+                <div class="company-module-employee-section-title company-detail-section-heading">Dasturdan foydalanish darajasi</div>
+                <label class="company-module-filter">
+                  <span>Davr</span>
+                  <select :value="companyDetailModulesPeriod" class="select mini-select"
+                    @change="handleCompanyDetailModulesPeriodChange($event.target.value)">
+                    <option v-for="period in companyMrrScatterPeriodOptions" :key="`detail-modules-period-${period.key}`"
+                      :value="period.key">{{ period.label }}</option>
+                  </select>
+                </label>
+              </div>
+              <div v-if="companyDetailModuleRow" class="company-detail-modules-body wide">
+                <div class="company-detail-donut-wrap">
+                  <svg class="company-detail-donut" viewBox="0 0 100 100">
+                    <circle class="company-detail-donut-track" cx="50" cy="50" r="40" />
+                    <circle class="company-detail-donut-value" cx="50" cy="50" r="40"
+                      :stroke-dasharray="COMPANY_DETAIL_DONUT_CIRCUMFERENCE"
+                      :stroke-dashoffset="companyDetailDonutOffset" />
+                  </svg>
+                  <div class="company-detail-donut-label">
+                    <b>{{ companyDetailModuleRow.module_active_percent }}%</b>
+                    <span>Umumiy holat</span>
                   </div>
                 </div>
-                <div v-else class="empty compact">Kompaniya ma’lumoti topilmadi</div>
-              </section>
-            </div>
+                <div class="company-detail-module-pills">
+                  <div v-for="column in companyModuleColumns" :key="`detail-module-pill-${column.key}`"
+                    class="company-detail-module-pill">
+                    <span>{{ column.label }}</span>
+                    <span class="module-status-icon"
+                      :class="companyDetailModuleRow.module_usage[column.key] ? 'yes' : 'no'"
+                      :title="moduleStatusTitle(companyDetailModuleRow, column.key)">
+                      <template v-if="companyDetailModuleRow.module_usage[column.key]">✓</template>
+                      <template v-else>✗</template>
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <div v-else class="empty compact">Kompaniya ma’lumoti topilmadi</div>
+            </template>
           </div>
         </div>
       </Modal>
@@ -6599,7 +6636,7 @@ const clickupCompanyLinkTaskColumns = [
 function openCompanyMrrScatterTaskBadge(point = {}) {
   const id = String(point.id || '').trim();
   if (!id) return;
-  openCompanyDetailModal(id, { showClickup: true });
+  openCompanyDetailModal(id, { section: 'tasks' });
 }
 
 const companyMrrScatterChartRef = ref(null);
@@ -6664,7 +6701,13 @@ function selectCompanyMrrScatterPoint(point = {}) {
 }
 
 const companyDetailCompanyId = ref('');
-const companyDetailShowClickupTasks = ref(false);
+const companyDetailActiveSection = ref('total');
+
+function selectCompanyDetailSection(key = 'total') {
+  companyDetailActiveSection.value = key;
+  companyDetailClickupStatusMenuOpen.value = false;
+}
+
 const COMPANY_DETAIL_DONUT_RADIUS = 40;
 const COMPANY_DETAIL_DONUT_CIRCUMFERENCE = 2 * Math.PI * COMPANY_DETAIL_DONUT_RADIUS;
 const COMPANY_DETAIL_AVATAR_COLORS = ['#6366f1', '#22c55e', '#f59e0b', '#ec4899', '#06b6d4', '#8b5cf6', '#ef4444', '#14b8a6'];
@@ -6833,6 +6876,24 @@ const companyDetailClickupTasks = computed(() => {
 
 const companyDetailWeekActivityPercent = ref(null);
 
+const companyDetailNavItems = computed(() => [
+  { key: 'total', label: 'Jami amallar', value: fmtNumber(companyDetailEmployeeActivity.value?.total_actions || 0) },
+  { key: 'active', label: 'Faol xodimlar', value: fmtNumber(companyDetailEmployeeActiveCount.value) },
+  { key: 'inactive', label: 'Nofaol xodimlar', value: fmtNumber(companyDetailEmployeeInactiveCount.value) },
+  { key: 'tasks', label: 'Vazifalar', value: fmtNumber(companyDetailClickupTasks.value.length) },
+  { key: 'projects', label: 'Loyihalar soni', value: fmtNumber(companyDetailAllClickupTasks.value.length) },
+  {
+    key: 'weekActivity',
+    label: 'Oxirgi 7 kundagi faollik',
+    value: companyDetailWeekActivityPercent.value === null ? '—' : `${companyDetailWeekActivityPercent.value}%`
+  },
+  {
+    key: 'usage',
+    label: 'Dasturdan foydalanish darajasi',
+    value: companyDetailModuleRow.value ? `${companyDetailModuleRow.value.module_active_percent}%` : '—'
+  }
+]);
+
 async function fetchCompanyDetailWeekActivity() {
   const infoRow = companyDetailInfoRow.value;
   if (!infoRow) {
@@ -6855,12 +6916,12 @@ async function fetchCompanyDetailWeekActivity() {
   }
 }
 
-function openCompanyDetailModal(companyId = '', { showClickup = false } = {}) {
+function openCompanyDetailModal(companyId = '', { section = 'total' } = {}) {
   const id = String(companyId || '').trim();
   if (!id) return;
   suppressCompanyMrrScatterHover();
   companyDetailCompanyId.value = id;
-  companyDetailShowClickupTasks.value = showClickup;
+  companyDetailActiveSection.value = section;
   companyDetailClickupStatusFilter.value = new Set(['not_started', 'in_progress']);
   selectCompanyModuleChartCompany(id);
   companyDetailEmployeePeriod.value = companyModulePeriod.value;
@@ -7617,7 +7678,7 @@ const companyModuleChartTooltip = computed(() => {
 
 const companyModuleChartTooltipStyle = computed(() => {
   const tooltip = companyModuleChartTooltip.value;
-  const useDetailRef = modal.value === 'companyDetail' && !companyDetailShowClickupTasks.value;
+  const useDetailRef = modal.value === 'companyDetail' && companyDetailActiveSection.value === 'weekActivity';
   const root = useDetailRef ? companyDetailModuleChartRef.value : companyModuleChartRef.value;
   if (!tooltip || !root) return {};
   const svg = root.querySelector('svg');
