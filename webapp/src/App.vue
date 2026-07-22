@@ -1799,9 +1799,12 @@
                 </label>
               </div>
               <div v-if="companyDetailEmployeeHasActivity" class="company-detail-employee-columns">
-                <div class="company-module-employee-section">
-                  <div class="company-module-employee-section-title">Faol xodimlar</div>
-                  <div v-if="companyDetailEmployeeActiveRows.length" class="company-detail-employee-list scroll">
+                <div class="company-module-employee-section faol">
+                  <div class="company-module-employee-section-title">
+                    Faol xodimlar
+                    <span class="company-detail-section-count">{{ companyDetailEmployeeActiveRows.length }}</span>
+                  </div>
+                  <div v-if="companyDetailEmployeeActiveRows.length" class="company-detail-employee-list scroll tall">
                     <article v-for="employee in companyDetailEmployeeActiveRows"
                       :key="`detail-total-active-employee-${employee.id || employee.name}`"
                       class="company-detail-employee-card">
@@ -1821,9 +1824,12 @@
                   <div v-else class="empty compact">Faol xodim topilmadi</div>
                 </div>
 
-                <div class="company-module-employee-section">
-                  <div class="company-module-employee-section-title">Nofaol xodimlar</div>
-                  <div v-if="companyDetailEmployeeInactiveRows.length" class="company-detail-employee-list scroll">
+                <div class="company-module-employee-section nofaol">
+                  <div class="company-module-employee-section-title">
+                    Nofaol xodimlar
+                    <span class="company-detail-section-count">{{ companyDetailEmployeeInactiveRows.length }}</span>
+                  </div>
+                  <div v-if="companyDetailEmployeeInactiveRows.length" class="company-detail-employee-list scroll tall">
                     <article v-for="employee in companyDetailEmployeeInactiveRows"
                       :key="`detail-total-inactive-employee-${employee.id || employee.name}`"
                       class="company-detail-employee-card inactive">
@@ -1847,69 +1853,6 @@
               <div v-else class="empty compact">
                 Bu kompaniya uchun xodimlar faolligi hali saqlanmagan. Yangi syncdan keyin ko‘rinadi.
               </div>
-            </template>
-
-            <template v-else-if="companyDetailActiveSection === 'active'">
-              <div class="company-detail-section-head">
-                <div class="company-module-employee-section-title company-detail-section-heading">Faol xodimlar</div>
-                <label class="company-module-filter company-detail-period-filter">
-                  <span>Davr</span>
-                  <select :value="companyDetailEmployeePeriod" class="select mini-select"
-                    @change="handleCompanyDetailEmployeePeriodChange($event.target.value)">
-                    <option v-for="period in companyMrrScatterPeriodOptions" :key="`detail-active-period-${period.key}`"
-                      :value="period.key">{{ period.label }}</option>
-                  </select>
-                </label>
-              </div>
-              <div v-if="companyDetailEmployeeActiveRows.length" class="company-detail-employee-list scroll tall">
-                <article v-for="employee in companyDetailEmployeeActiveRows"
-                  :key="`detail-active-employee-${employee.id || employee.name}`" class="company-detail-employee-card">
-                  <span class="company-detail-avatar" :style="{ background: companyDetailAvatarColor(employee.name) }">
-                    {{ companyDetailAvatarInitial(employee.name) }}
-                  </span>
-                  <div class="company-detail-employee-info">
-                    <b>{{ employee.name || 'Xodim' }}</b>
-                    <span v-if="employee.important_count" class="company-detail-employee-note">
-                      Muhim amallar: {{ fmtNumber(employee.important_count) }}
-                    </span>
-                  </div>
-                  <span class="company-detail-employee-count">{{ fmtNumber(employee.action_count || 0) }} amal</span>
-                </article>
-              </div>
-              <div v-else class="empty compact">Faol xodim topilmadi</div>
-            </template>
-
-            <template v-else-if="companyDetailActiveSection === 'inactive'">
-              <div class="company-detail-section-head">
-                <div class="company-module-employee-section-title company-detail-section-heading">Nofaol xodimlar</div>
-                <label class="company-module-filter company-detail-period-filter">
-                  <span>Davr</span>
-                  <select :value="companyDetailEmployeePeriod" class="select mini-select"
-                    @change="handleCompanyDetailEmployeePeriodChange($event.target.value)">
-                    <option v-for="period in companyMrrScatterPeriodOptions" :key="`detail-inactive-period-${period.key}`"
-                      :value="period.key">{{ period.label }}</option>
-                  </select>
-                </label>
-              </div>
-              <div v-if="companyDetailEmployeeInactiveRows.length" class="company-detail-employee-list scroll tall">
-                <article v-for="employee in companyDetailEmployeeInactiveRows"
-                  :key="`detail-inactive-employee-${employee.id || employee.name}`"
-                  class="company-detail-employee-card inactive">
-                  <span class="company-detail-avatar inactive">
-                    {{ companyDetailAvatarInitial(employee.name) }}
-                  </span>
-                  <div class="company-detail-employee-info">
-                    <b>{{ employee.name || 'Xodim' }}</b>
-                    <span v-if="employee.important_count" class="company-detail-employee-note">
-                      Muhim amallar: {{ fmtNumber(employee.important_count) }}
-                    </span>
-                  </div>
-                  <span v-if="employee.last_activity_date" class="company-detail-employee-last">
-                    Oxirgi: {{ employee.last_activity_date }}
-                  </span>
-                </article>
-              </div>
-              <div v-else class="empty compact">Nofaol xodim topilmadi</div>
             </template>
 
             <template v-else-if="companyDetailActiveSection === 'tasks'">
@@ -6813,19 +6756,11 @@ const companyDetailEmployeeHasActivity = computed(() => Boolean(
   )
 ));
 
-const companyDetailEmployeeActiveCount = computed(() => Number(
-  companyDetailEmployeeActivity.value?.active_employee_count
-  ?? (companyDetailEmployeeActivity.value?.active_employees || []).filter(employee => Number(employee.action_count || 0) > 0).length
-));
-
-const companyDetailEmployeeInactiveCount = computed(() => Number(
-  companyDetailEmployeeActivity.value?.inactive_employee_count
-  ?? (companyDetailEmployeeActivity.value?.inactive_employees || []).length
-));
-
 const companyDetailEmployeeActiveRows = computed(() => {
   const rows = companyDetailEmployeeActivity.value?.active_employees || [];
-  return [...rows].sort((a, b) => Number(b.action_count || 0) - Number(a.action_count || 0));
+  return rows
+    .filter(employee => Number(employee.action_count || 0) > 0)
+    .sort((a, b) => Number(b.action_count || 0) - Number(a.action_count || 0));
 });
 
 const companyDetailEmployeeInactiveRows = computed(() => {
@@ -6878,13 +6813,11 @@ const companyDetailWeekActivityPercent = ref(null);
 
 const companyDetailNavItems = computed(() => [
   { key: 'total', label: 'Jami amallar', value: fmtNumber(companyDetailEmployeeActivity.value?.total_actions || 0) },
-  { key: 'active', label: 'Faol xodimlar', value: fmtNumber(companyDetailEmployeeActiveCount.value) },
-  { key: 'inactive', label: 'Nofaol xodimlar', value: fmtNumber(companyDetailEmployeeInactiveCount.value) },
   { key: 'tasks', label: 'Vazifalar', value: fmtNumber(companyDetailClickupTasks.value.length) },
   { key: 'projects', label: 'Loyihalar soni', value: fmtNumber(companyDetailAllClickupTasks.value.length) },
   {
     key: 'weekActivity',
-    label: 'Oxirgi 7 kundagi faollik',
+    label: 'Faollik',
     value: companyDetailWeekActivityPercent.value === null ? '—' : `${companyDetailWeekActivityPercent.value}%`
   },
   {

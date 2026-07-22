@@ -4511,12 +4511,51 @@ td,
 }
 
 .company-module-employee-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin-bottom: 10px;
   font-size: 13px;
   font-weight: 800;
   color: var(--muted-strong);
   text-transform: uppercase;
   letter-spacing: 0.04em;
+}
+
+.company-detail-section-count {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--muted-strong) 14%, transparent);
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.company-detail-employee-columns > .company-module-employee-section {
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  border-top: 3px solid var(--line);
+}
+
+.company-detail-employee-columns > .company-module-employee-section.faol {
+  border-top-color: #22c55e;
+}
+
+.company-detail-employee-columns > .company-module-employee-section.faol .company-detail-section-count {
+  background: color-mix(in srgb, #22c55e 20%, transparent);
+  color: #15803d;
+}
+
+.company-detail-employee-columns > .company-module-employee-section.nofaol {
+  border-top-color: #ef4444;
+}
+
+.company-detail-employee-columns > .company-module-employee-section.nofaol .company-detail-section-count {
+  background: color-mix(in srgb, #ef4444 18%, transparent);
+  color: #b91c1c;
 }
 
 .company-module-employee-list {
