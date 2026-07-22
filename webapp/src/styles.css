@@ -1163,69 +1163,273 @@ tbody tr:hover {
   padding: 6px;
 }
 
-.company-detail-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 16px;
-  border-bottom: 1px solid var(--line);
-  padding-bottom: 12px;
-}
-
-.company-detail-tab {
-  padding: 8px 14px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--surface);
-  color: var(--muted-strong);
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 800;
-}
-
-.company-detail-tab.active {
-  border-color: color-mix(in srgb, var(--primary) 35%, var(--line));
-  background: color-mix(in srgb, var(--primary) 10%, var(--surface));
-  color: var(--primary);
-}
-
-.company-detail-period-filter {
-  margin-bottom: 16px;
-}
-
-.company-detail-clickup-status-filter {
-  margin: 12px 0 16px;
-}
-
-.company-detail-trend-slot .company-module-chart-card {
-  border: 0;
-  box-shadow: none;
-  padding: 0;
-}
-
-.company-detail-modules {
+.company-detail-dashboard {
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
 
-.company-detail-modules-row {
+.company-detail-toolbar {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 18px;
-  padding: 14px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
+  justify-content: flex-end;
 }
 
-.company-detail-modules-cell {
+.company-detail-period-filter {
+  margin-bottom: 0;
+}
+
+.company-detail-clickup-status-filter {
+  margin: 0 0 16px;
+}
+
+.company-detail-stats-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.company-detail-stat-card {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 13px;
+  gap: 10px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: default;
+}
+
+button.company-detail-stat-card.clickable {
+  cursor: pointer;
+}
+
+button.company-detail-stat-card.clickable:hover {
+  border-color: color-mix(in srgb, var(--primary) 35%, var(--line));
+}
+
+button.company-detail-stat-card.clickable.active {
+  border-color: color-mix(in srgb, var(--primary) 45%, var(--line));
+  background: color-mix(in srgb, var(--primary) 10%, var(--surface));
+}
+
+.company-detail-stat-icon {
+  font-size: 20px;
+}
+
+.company-detail-stat-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.company-detail-stat-label {
+  font-size: 12px;
   font-weight: 700;
   color: var(--muted-strong);
+}
+
+.company-detail-stat-value {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.company-detail-clickup-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.company-detail-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.company-detail-col {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+}
+
+.company-detail-employee-list {
+  display: grid;
+  gap: 8px;
+}
+
+.company-detail-employee-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.company-detail-employee-card.inactive {
+  background: color-mix(in srgb, var(--surface) 92%, #ef4444 8%);
+}
+
+.company-detail-avatar {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 800;
+  color: #fff;
+}
+
+.company-detail-avatar.inactive {
+  background: #ef4444;
+}
+
+.company-detail-employee-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.company-detail-employee-info b {
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.company-detail-employee-note {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.company-detail-employee-count,
+.company-detail-employee-last {
+  flex: none;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted-strong);
+  white-space: nowrap;
+}
+
+.company-detail-see-all {
+  margin-top: 8px;
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.company-detail-trend-widget {
+  margin-top: 0;
+}
+
+.company-detail-trend-widget .company-module-trend-chart svg {
+  min-height: 220px;
+}
+
+.company-detail-modules-widget {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.company-detail-modules-body {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+.company-detail-donut-wrap {
+  position: relative;
+  width: 100px;
+  height: 100px;
+  flex: none;
+}
+
+.company-detail-donut {
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+
+.company-detail-donut-track {
+  fill: none;
+  stroke: var(--line);
+  stroke-width: 10;
+}
+
+.company-detail-donut-value {
+  fill: none;
+  stroke: var(--primary);
+  stroke-width: 10;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.3s ease;
+}
+
+.company-detail-donut-label {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  text-align: center;
+}
+
+.company-detail-donut-label b {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.company-detail-donut-label span {
+  font-size: 10px;
+  color: var(--muted-strong);
+  font-weight: 600;
+}
+
+.company-detail-module-pills {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  min-width: 160px;
+}
+
+.company-detail-module-pill {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted-strong);
+}
+
+@media (max-width: 900px) {
+  .company-detail-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .company-detail-stats-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .modal-body {

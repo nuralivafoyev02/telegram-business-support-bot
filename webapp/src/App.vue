@@ -1775,306 +1775,323 @@
 
     <Transition name="modal-fade">
       <Modal v-show="modal === 'companyDetail'" :title="companyDetailModalTitle" xlarge @close="closeModal">
-        <div class="company-detail-tabs">
-          <button type="button" class="company-detail-tab" :class="{ active: companyDetailActiveTab === 'employees' }"
-            @click="companyDetailActiveTab = 'employees'">Xodimlar faolligi</button>
-          <button type="button" class="company-detail-tab" :class="{ active: companyDetailActiveTab === 'trend' }"
-            @click="companyDetailActiveTab = 'trend'">Bo‘limlar dinamikasi</button>
-          <button type="button" class="company-detail-tab" :class="{ active: companyDetailActiveTab === 'modules' }"
-            @click="companyDetailActiveTab = 'modules'">Modul holati</button>
-          <button type="button" class="company-detail-tab" :class="{ active: companyDetailActiveTab === 'clickup' }"
-            @click="companyDetailActiveTab = 'clickup'">ClickUp vazifalari</button>
-        </div>
-
-        <div v-show="companyDetailActiveTab === 'employees'" class="company-module-employee-detail">
-          <label class="company-module-filter company-detail-period-filter">
-            <span>Davr</span>
-            <select :value="companyModulePeriod" class="select mini-select"
-              @change="handleCompanyDetailPeriodChange($event.target.value)">
-              <option v-for="period in companyModulePeriodOptions" :key="`detail-employees-period-${period.key}`"
-                :value="period.key">{{ companyModulePeriodOptionLabel(period) }}</option>
-            </select>
-          </label>
-          <div v-if="companyModuleEmployeeDetail">
-            <div class="company-module-employee-head">
-              <div>
-                <div class="company-module-employee-company">{{ companyModuleEmployeeDetail.name || 'Kompaniya' }}</div>
-                <div class="company-module-employee-meta">
-                  <span v-if="companyModuleEmployeeReportLabel">{{ companyModuleEmployeeReportLabel }}</span>
-                  <span v-if="companyModuleEmployeePanelPeriodLabel">{{ companyModuleEmployeePanelPeriodLabel }}</span>
-                  <span v-if="companyModuleEmployeeSupportLabel">Mas’ul: {{ companyModuleEmployeeSupportLabel }}</span>
-                </div>
-              </div>
-            </div>
-
-            <div v-if="companyModuleEmployeeHasActivity" class="company-module-employee-summary">
-              <div class="company-module-employee-summary-item">
-                <span class="company-module-employee-summary-icon">📊</span>
-                <span>Jami amallar: <b>{{ fmtNumber(companyModuleEmployeeActivity.total_actions || 0) }} amal</b></span>
-              </div>
-              <div class="company-module-employee-summary-item">
-                <span class="company-module-employee-summary-icon">✅</span>
-                <span>Faol xodimlar <b>({{ fmtNumber(companyModuleEmployeeActiveCount) }})</b></span>
-              </div>
-              <div class="company-module-employee-summary-item">
-                <span class="company-module-employee-summary-icon">❌</span>
-                <span>Nofaol xodimlar <b>({{ fmtNumber(companyModuleEmployeeInactiveCount) }})</b></span>
-              </div>
-            </div>
-
-            <div v-if="companyModuleEmployeeActiveRows.length" class="company-module-employee-section">
-              <div class="company-module-employee-section-title">Faol xodimlar</div>
-              <div class="company-module-employee-list">
-                <article v-for="employee in companyModuleEmployeeActiveRows"
-                  :key="`detail-active-employee-${employee.id || employee.name}`" class="company-module-employee-card">
-                  <div class="company-module-employee-card-head">
-                    <b>{{ employee.name || 'Xodim' }}</b>
-                    <span class="company-module-employee-count">{{ fmtNumber(employee.action_count || 0) }} amal</span>
-                  </div>
-                  <div v-if="employee.important_count" class="company-module-employee-note">
-                    Muhim amallar: {{ fmtNumber(employee.important_count) }}
-                  </div>
-                </article>
-              </div>
-            </div>
-
-            <div v-if="companyModuleEmployeeInactiveRows.length" class="company-module-employee-section">
-              <div class="company-module-employee-section-title">Nofaol xodimlar</div>
-              <div class="company-module-employee-list">
-                <article v-for="employee in companyModuleEmployeeInactiveRows"
-                  :key="`detail-inactive-employee-${employee.id || employee.name}`"
-                  class="company-module-employee-card inactive">
-                  <div class="company-module-employee-card-head">
-                    <b>{{ employee.name || 'Xodim' }}</b>
-                    <span v-if="employee.last_activity_date" class="company-module-employee-last">
-                      Oxirgi: {{ employee.last_activity_date }}
-                    </span>
-                  </div>
-                  <div v-if="employee.important_count" class="company-module-employee-note">
-                    Muhim amallar: {{ fmtNumber(employee.important_count) }}
-                  </div>
-                </article>
-              </div>
-            </div>
-
-            <div v-else-if="!companyModuleEmployeeHasActivity" class="empty compact">
-              Bu kompaniya uchun xodimlar faolligi hali saqlanmagan. Yangi syncdan keyin ko‘rinadi.
-            </div>
+        <div class="company-detail-dashboard">
+          <div class="company-detail-toolbar">
+            <label class="company-module-filter company-detail-period-filter">
+              <span>Davr</span>
+              <select :value="companyModulePeriod" class="select mini-select"
+                @change="handleCompanyDetailPeriodChange($event.target.value)">
+                <option v-for="period in companyModulePeriodOptions" :key="`detail-period-${period.key}`"
+                  :value="period.key">{{ companyModulePeriodOptionLabel(period) }}</option>
+              </select>
+            </label>
           </div>
-        </div>
 
-        <div v-show="companyDetailActiveTab === 'trend'" class="company-detail-trend-slot">
-          <section v-if="companyModuleChartRows.length"
-            class="card chart-card line-chart-card company-module-chart-card">
-            <div class="card-header chart-card-head company-module-chart-head">
-              <div>
-                <div class="card-title">Bo‘limlar dinamikasi</div>
+          <div class="company-detail-stats-row">
+            <div class="company-detail-stat-card">
+              <span class="company-detail-stat-icon">📊</span>
+              <div class="company-detail-stat-body">
+                <span class="company-detail-stat-label">Jami amallar</span>
+                <b class="company-detail-stat-value">{{ fmtNumber(companyModuleEmployeeActivity?.total_actions || 0) }}</b>
               </div>
-              <div class="company-module-chart-controls">
-                <div class="company-module-filter company-module-filter-wide company-module-filter-menu-wrap"
-                  ref="companyDetailModuleChartCompanyMenuRef">
-                  <span>Kompaniyalar</span>
-                  <div class="company-module-filter-picker">
-                    <button type="button" class="company-module-filter-trigger select mini-select"
-                      @click.stop="toggleCompanyModuleChartCompanyMenu">
-                      <span class="company-module-filter-trigger-label">{{ companyModuleChartCompanyLabel }}</span>
-                      <span class="company-module-filter-trigger-caret">▾</span>
-                    </button>
-                    <Transition name="fade">
-                      <div v-if="companyModuleChartCompanyMenuOpen"
-                        class="company-module-filter-menu actions-dropdown" @click.stop>
-                        <button type="button" class="company-module-filter-option"
-                          :class="{ active: !companyModuleChartCompanyId }"
-                          @click="selectCompanyModuleChartCompany('')">
-                          <span>Hammasi</span>
-                          <span v-if="!companyModuleChartCompanyId" class="company-module-filter-check">✓</span>
-                        </button>
-                        <button v-for="company in companyModuleChartCompanyOptions"
-                          :key="`detail-module-chart-company-${company.id}`" type="button"
-                          class="company-module-filter-option"
-                          :class="{ active: companyModuleChartCompanyId === company.id }"
-                          @click="selectCompanyModuleChartCompany(company.id)">
-                          <span>{{ company.name }}</span>
-                          <span v-if="companyModuleChartCompanyId === company.id"
-                            class="company-module-filter-check">✓</span>
-                        </button>
-                      </div>
-                    </Transition>
+            </div>
+            <div class="company-detail-stat-card">
+              <span class="company-detail-stat-icon">✅</span>
+              <div class="company-detail-stat-body">
+                <span class="company-detail-stat-label">Faol xodimlar</span>
+                <b class="company-detail-stat-value">{{ fmtNumber(companyModuleEmployeeActiveCount) }}</b>
+              </div>
+            </div>
+            <div class="company-detail-stat-card">
+              <span class="company-detail-stat-icon">❌</span>
+              <div class="company-detail-stat-body">
+                <span class="company-detail-stat-label">Nofaol xodimlar</span>
+                <b class="company-detail-stat-value">{{ fmtNumber(companyModuleEmployeeInactiveCount) }}</b>
+              </div>
+            </div>
+            <button type="button" class="company-detail-stat-card clickable"
+              :class="{ active: companyDetailShowClickupTasks }"
+              @click="companyDetailShowClickupTasks = !companyDetailShowClickupTasks">
+              <span class="company-detail-stat-icon">🗂️</span>
+              <div class="company-detail-stat-body">
+                <span class="company-detail-stat-label">Vazifalar</span>
+                <b class="company-detail-stat-value">{{ fmtNumber(companyDetailClickupTasks.length) }}</b>
+              </div>
+            </button>
+          </div>
+
+          <div v-if="companyDetailShowClickupTasks" class="company-detail-clickup-panel">
+            <div class="company-module-filter company-module-filter-menu-wrap company-detail-clickup-status-filter"
+              ref="companyDetailClickupStatusMenuRef">
+              <span>ClickUp holati</span>
+              <div class="company-module-filter-picker">
+                <button type="button" class="company-module-filter-trigger select mini-select"
+                  @click.stop="toggleCompanyDetailClickupStatusMenu">
+                  <span class="company-module-filter-trigger-label">{{ companyDetailClickupStatusFilterLabel }}</span>
+                  <span class="company-module-filter-trigger-caret">▾</span>
+                </button>
+                <Transition name="fade">
+                  <div v-if="companyDetailClickupStatusMenuOpen" class="company-module-filter-menu actions-dropdown"
+                    @click.stop>
+                    <template v-for="group in companyMrrScatterClickupStatusGroups"
+                      :key="`detail-clickup-group-${group.key}`">
+                      <button type="button" class="company-module-filter-option company-mrr-clickup-status-group-label"
+                        :class="{ active: companyDetailClickupStatusFilter.has(group.key) }"
+                        @click="toggleCompanyDetailClickupStatusFilter(group.key)">
+                        <span>{{ group.label }}</span>
+                        <span v-if="companyDetailClickupStatusFilter.has(group.key)"
+                          class="company-module-filter-check">✓</span>
+                      </button>
+                      <button v-for="status in group.statuses" :key="`detail-clickup-status-${group.key}-${status}`"
+                        type="button" class="company-module-filter-option company-mrr-clickup-status-sub"
+                        :class="{ active: companyDetailClickupStatusFilter.has(status) }"
+                        @click="toggleCompanyDetailClickupStatusFilter(status)">
+                        <span>{{ status }}</span>
+                        <span v-if="companyDetailClickupStatusFilter.has(status)"
+                          class="company-module-filter-check">✓</span>
+                      </button>
+                    </template>
                   </div>
-                </div>
-                <div class="company-module-chart-metric-tabs">
-                  <button v-for="option in companyModuleChartMetricOptions"
-                    :key="`detail-module-chart-metric-${option.key}`" type="button"
-                    class="company-module-chart-metric-btn" :class="{ active: companyModuleChartMetricKeys.includes(option.key) }"
-                    @click="toggleCompanyModuleChartMetric(option.key)">
-                    {{ option.label }}
+                </Transition>
+              </div>
+            </div>
+            <DataTable :columns="clickupCompanyLinkTaskColumns" :rows="companyDetailClickupTasks"
+              empty="Vazifa topilmadi" :page-size="12" :on-cell-action="handleTableCellAction" />
+          </div>
+
+          <div v-else class="company-detail-grid">
+            <div class="company-detail-col company-detail-col-employees">
+              <div v-if="companyModuleEmployeeHasActivity">
+                <div class="company-module-employee-section">
+                  <div class="company-module-employee-section-title">Faol xodimlar</div>
+                  <div v-if="companyModuleEmployeeActiveRows.length" class="company-detail-employee-list">
+                    <article v-for="employee in companyDetailVisibleActiveRows"
+                      :key="`detail-active-employee-${employee.id || employee.name}`"
+                      class="company-detail-employee-card">
+                      <span class="company-detail-avatar"
+                        :style="{ background: companyDetailAvatarColor(employee.name) }">
+                        {{ companyDetailAvatarInitial(employee.name) }}
+                      </span>
+                      <div class="company-detail-employee-info">
+                        <b>{{ employee.name || 'Xodim' }}</b>
+                        <span v-if="employee.important_count" class="company-detail-employee-note">
+                          Muhim amallar: {{ fmtNumber(employee.important_count) }}
+                        </span>
+                      </div>
+                      <span class="company-detail-employee-count">{{ fmtNumber(employee.action_count || 0) }} amal</span>
+                    </article>
+                  </div>
+                  <div v-else class="empty compact">Faol xodim topilmadi</div>
+                  <button v-if="companyModuleEmployeeActiveRows.length > COMPANY_DETAIL_EMPLOYEE_PREVIEW_COUNT"
+                    type="button" class="company-detail-see-all" @click="companyDetailShowAllActive = !companyDetailShowAllActive">
+                    {{ companyDetailShowAllActive ? 'Kamroq ko‘rsatish' : 'Barchasini ko‘rish' }}
                   </button>
                 </div>
-                <label class="company-module-filter">
-                  <span>Davr</span>
-                  <select :value="companyModuleChartPeriod" class="select mini-select"
-                    @change="handleCompanyModuleChartPeriodChange($event.target.value)"
-                    @mousedown="handleCompanyModuleChartPeriodSelectPointerDown"
-                    @mouseup="handleCompanyModuleChartPeriodSelectPointerUp">
-                    <option v-for="period in companyModulePeriodOptions"
-                      :key="`detail-module-chart-period-${period.key}`" :value="period.key">
-                      {{ companyModuleChartPeriodOptionLabel(period) }}
-                    </option>
-                  </select>
-                </label>
+
+                <div class="company-module-employee-section">
+                  <div class="company-module-employee-section-title">Nofaol xodimlar</div>
+                  <div v-if="companyModuleEmployeeInactiveRows.length" class="company-detail-employee-list">
+                    <article v-for="employee in companyDetailVisibleInactiveRows"
+                      :key="`detail-inactive-employee-${employee.id || employee.name}`"
+                      class="company-detail-employee-card inactive">
+                      <span class="company-detail-avatar inactive">
+                        {{ companyDetailAvatarInitial(employee.name) }}
+                      </span>
+                      <div class="company-detail-employee-info">
+                        <b>{{ employee.name || 'Xodim' }}</b>
+                        <span v-if="employee.important_count" class="company-detail-employee-note">
+                          Muhim amallar: {{ fmtNumber(employee.important_count) }}
+                        </span>
+                      </div>
+                      <span v-if="employee.last_activity_date" class="company-detail-employee-last">
+                        Oxirgi: {{ employee.last_activity_date }}
+                      </span>
+                    </article>
+                  </div>
+                  <div v-else class="empty compact">Nofaol xodim topilmadi</div>
+                  <button v-if="companyModuleEmployeeInactiveRows.length > COMPANY_DETAIL_EMPLOYEE_PREVIEW_COUNT"
+                    type="button" class="company-detail-see-all" @click="companyDetailShowAllInactive = !companyDetailShowAllInactive">
+                    {{ companyDetailShowAllInactive ? 'Kamroq ko‘rsatish' : 'Barchasini ko‘rish' }}
+                  </button>
+                </div>
+              </div>
+              <div v-else class="empty compact">
+                Bu kompaniya uchun xodimlar faolligi hali saqlanmagan. Yangi syncdan keyin ko‘rinadi.
               </div>
             </div>
-            <div class="company-module-chart-shell" ref="companyDetailModuleChartRef"
-              @mouseleave="companyModuleChartHoverIndex = -1">
-              <div class="company-module-chart-legend top">
-                <button v-for="line in companyModuleChartLines" :key="`detail-module-chart-legend-${line.key}`"
-                  type="button" class="company-module-chart-legend-item"
-                  :class="{ inactive: !companyModuleChartVisibleModules.includes(line.key) }"
-                  @click="toggleCompanyModuleChartModule(line.key)">
-                  <i :style="{ borderColor: line.color }"></i>{{ line.label }}
-                </button>
-                <button type="button" class="company-module-chart-legend-item average"
-                  :class="{ inactive: !companyModuleChartShowAverage }"
-                  @click="companyModuleChartShowAverage = !companyModuleChartShowAverage">
-                  <i></i>O‘rtacha
-                </button>
-              </div>
-              <div class="trend-chart company-module-trend-chart">
-                <svg :viewBox="`0 0 ${COMPANY_MODULE_CHART_VIEW.width} ${COMPANY_MODULE_CHART_VIEW.height}`"
-                  role="img" :aria-label="companyModuleChartAriaLabel" @mousemove="onCompanyModuleChartMove"
-                  @touchstart.passive="onCompanyModuleChartTouch" @touchmove.passive="onCompanyModuleChartTouch">
-                  <text class="company-module-chart-axis-title" x="14" :y="companyModuleChartAxisTitleY"
-                    :transform="`rotate(-90 14 ${companyModuleChartAxisTitleY})`">{{ companyModuleChartAxisLabel
-                    }}</text>
-                  <g class="trend-grid">
-                    <line v-for="tick in companyModuleChartYTicks" :key="`detail-module-chart-y-${tick.value}`"
-                      :x1="COMPANY_MODULE_CHART_DIMS.left" :x2="COMPANY_MODULE_CHART_DIMS.right" :y1="tick.y"
-                      :y2="tick.y" />
-                  </g>
-                  <g class="trend-axis company-module-chart-axis">
-                    <text v-for="tick in companyModuleChartYTicks" :key="`detail-module-chart-y-label-${tick.value}`"
-                      x="52" :y="tick.y + 4" text-anchor="end">{{ tick.value }}</text>
-                  </g>
-                  <line v-if="companyModuleChartTooltip" class="company-module-chart-guide"
-                    :x1="companyModuleChartTooltip.x" :x2="companyModuleChartTooltip.x"
-                    :y1="COMPANY_MODULE_CHART_DIMS.top" :y2="COMPANY_MODULE_CHART_DIMS.bottom" />
-                  <g v-for="line in companyModuleChartVisibleLines" :key="`detail-module-chart-line-${line.key}`"
-                    class="company-module-chart-module-line">
-                    <path v-if="line.points.length > 1 && line.path" :d="line.path" fill="none" :stroke="line.color"
-                      stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="8 6" />
-                    <circle v-for="(point, pointIndex) in line.points"
-                      :key="`detail-module-chart-dot-${line.key}-${pointIndex}`" class="company-module-chart-dot"
-                      :class="{ active: companyModuleChartHoverIndex === pointIndex }" :cx="point.x" :cy="point.y"
-                      :r="companyModuleChartHoverIndex === pointIndex ? 3.5 : 2.5" :fill="line.color"
-                      :stroke="line.color" :stroke-width="companyModuleChartHoverIndex === pointIndex ? 2 : 1" />
-                  </g>
-                  <g v-if="companyModuleChartShowAverage && companyModuleChartAverageLine.points.length > 1"
-                    class="company-module-chart-average-line">
-                    <path :d="companyModuleChartAverageLine.path" fill="none" stroke="#111827" stroke-width="2.5"
-                      stroke-linecap="round" stroke-linejoin="round" />
-                    <circle v-for="(point, pointIndex) in companyModuleChartAverageLine.points"
-                      :key="`detail-module-chart-avg-dot-${pointIndex}`" :cx="point.x" :cy="point.y" r="3.5"
-                      fill="#111827" stroke="#111827" stroke-width="1.5" />
-                  </g>
-                  <g class="trend-axis company-module-chart-axis">
-                    <text v-for="tick in companyModuleChartXTicks" :key="`detail-module-chart-x-${tick.date_key}`"
-                      :x="tick.x" :y="COMPANY_MODULE_CHART_DIMS.bottom + 16" text-anchor="middle">{{ tick.label
-                      }}</text>
-                  </g>
-                </svg>
-                <div v-if="companyModuleChartTooltip" class="company-module-chart-tooltip"
-                  :style="companyModuleChartTooltipStyle">
-                  <b>{{ companyModuleChartTooltip.label }}</b>
-                  <div v-for="item in companyModuleChartTooltip.items" :key="`detail-module-chart-tip-${item.key}`"
-                    class="company-module-chart-tooltip-row">
-                    <span :style="{ color: item.color }">{{ item.label }}</span>
-                    <strong v-if="item.dual" class="company-module-chart-tooltip-pair">
-                      <span>{{ item.activityText }}</span>
-                      <span class="company-module-chart-tooltip-sep">·</span>
-                      <span>{{ item.actionsText }}</span>
-                    </strong>
-                    <strong v-else>{{ item.valueText }}</strong>
+
+            <div class="company-detail-col company-detail-col-widgets">
+              <section v-if="companyModuleChartRows.length"
+                class="card chart-card line-chart-card company-module-chart-card company-detail-trend-widget">
+                <div class="card-header chart-card-head company-module-chart-head">
+                  <div>
+                    <div class="card-title">Bo‘limlar dinamikasi</div>
+                  </div>
+                  <div class="company-module-chart-controls">
+                    <div class="company-module-filter company-module-filter-wide company-module-filter-menu-wrap"
+                      ref="companyDetailModuleChartCompanyMenuRef">
+                      <span>Kompaniya</span>
+                      <div class="company-module-filter-picker">
+                        <button type="button" class="company-module-filter-trigger select mini-select"
+                          @click.stop="toggleCompanyModuleChartCompanyMenu">
+                          <span class="company-module-filter-trigger-label">{{ companyModuleChartCompanyLabel }}</span>
+                          <span class="company-module-filter-trigger-caret">▾</span>
+                        </button>
+                        <Transition name="fade">
+                          <div v-if="companyModuleChartCompanyMenuOpen"
+                            class="company-module-filter-menu actions-dropdown" @click.stop>
+                            <button type="button" class="company-module-filter-option"
+                              :class="{ active: !companyModuleChartCompanyId }"
+                              @click="selectCompanyModuleChartCompany('')">
+                              <span>Hammasi</span>
+                              <span v-if="!companyModuleChartCompanyId" class="company-module-filter-check">✓</span>
+                            </button>
+                            <button v-for="company in companyModuleChartCompanyOptions"
+                              :key="`detail-module-chart-company-${company.id}`" type="button"
+                              class="company-module-filter-option"
+                              :class="{ active: companyModuleChartCompanyId === company.id }"
+                              @click="selectCompanyModuleChartCompany(company.id)">
+                              <span>{{ company.name }}</span>
+                              <span v-if="companyModuleChartCompanyId === company.id"
+                                class="company-module-filter-check">✓</span>
+                            </button>
+                          </div>
+                        </Transition>
+                      </div>
+                    </div>
+                    <div class="company-module-chart-metric-tabs">
+                      <button v-for="option in companyModuleChartMetricOptions"
+                        :key="`detail-module-chart-metric-${option.key}`" type="button"
+                        class="company-module-chart-metric-btn" :class="{ active: companyModuleChartMetricKeys.includes(option.key) }"
+                        @click="toggleCompanyModuleChartMetric(option.key)">
+                        {{ option.label }}
+                      </button>
+                    </div>
+                    <label class="company-module-filter">
+                      <span>Davr</span>
+                      <select :value="companyModuleChartPeriod" class="select mini-select"
+                        @change="handleCompanyModuleChartPeriodChange($event.target.value)"
+                        @mousedown="handleCompanyModuleChartPeriodSelectPointerDown"
+                        @mouseup="handleCompanyModuleChartPeriodSelectPointerUp">
+                        <option v-for="period in companyModulePeriodOptions"
+                          :key="`detail-module-chart-period-${period.key}`" :value="period.key">
+                          {{ companyModuleChartPeriodOptionLabel(period) }}
+                        </option>
+                      </select>
+                    </label>
                   </div>
                 </div>
-              </div>
-            </div>
-          </section>
-          <div v-else class="empty compact">Ma’lumot topilmadi</div>
-        </div>
-
-        <div v-show="companyDetailActiveTab === 'modules'" class="company-detail-modules">
-          <label class="company-module-filter">
-            <span>Davr</span>
-            <select :value="companyModulePeriod" class="select mini-select"
-              @change="handleCompanyDetailPeriodChange($event.target.value)">
-              <option v-for="period in companyModulePeriodOptions" :key="`detail-modules-period-${period.key}`"
-                :value="period.key">{{ companyModulePeriodOptionLabel(period) }}</option>
-            </select>
-          </label>
-          <div v-if="companyDetailModuleRow" class="company-detail-modules-row">
-            <div class="module-count-stack">
-              <span class="module-count-badge"
-                :title="`${companyDetailModuleRow.module_active_count} / ${companyModuleKeys.length}`">
-                {{ companyDetailModuleRow.module_active_percent }}%
-              </span>
-            </div>
-            <div v-for="column in companyModuleColumns" :key="`detail-module-${column.key}`"
-              class="company-detail-modules-cell">
-              <span>{{ column.label }}</span>
-              <span class="module-status-icon"
-                :class="companyDetailModuleRow.module_usage[column.key] ? 'yes' : 'no'"
-                :title="moduleStatusTitle(companyDetailModuleRow, column.key)">
-                <template v-if="companyDetailModuleRow.module_usage[column.key]">✓</template>
-                <template v-else>✗</template>
-              </span>
-            </div>
-          </div>
-          <div v-else class="empty compact">Kompaniya ma’lumoti topilmadi</div>
-        </div>
-
-        <div v-show="companyDetailActiveTab === 'clickup'">
-          <div class="detail-summary">
-            <div>
-              <span>Vazifalar</span>
-              <b>{{ fmtNumber(companyDetailClickupTasks.length) }}</b>
-            </div>
-          </div>
-          <div class="company-module-filter company-module-filter-menu-wrap company-detail-clickup-status-filter"
-            ref="companyDetailClickupStatusMenuRef">
-            <span>ClickUp holati</span>
-            <div class="company-module-filter-picker">
-              <button type="button" class="company-module-filter-trigger select mini-select"
-                @click.stop="toggleCompanyDetailClickupStatusMenu">
-                <span class="company-module-filter-trigger-label">{{ companyDetailClickupStatusFilterLabel }}</span>
-                <span class="company-module-filter-trigger-caret">▾</span>
-              </button>
-              <Transition name="fade">
-                <div v-if="companyDetailClickupStatusMenuOpen" class="company-module-filter-menu actions-dropdown"
-                  @click.stop>
-                  <template v-for="group in companyMrrScatterClickupStatusGroups"
-                    :key="`detail-clickup-group-${group.key}`">
-                    <button type="button" class="company-module-filter-option company-mrr-clickup-status-group-label"
-                      :class="{ active: companyDetailClickupStatusFilter.has(group.key) }"
-                      @click="toggleCompanyDetailClickupStatusFilter(group.key)">
-                      <span>{{ group.label }}</span>
-                      <span v-if="companyDetailClickupStatusFilter.has(group.key)"
-                        class="company-module-filter-check">✓</span>
+                <div class="company-module-chart-shell" ref="companyDetailModuleChartRef"
+                  @mouseleave="companyModuleChartHoverIndex = -1">
+                  <div class="company-module-chart-legend top">
+                    <button v-for="line in companyModuleChartLines" :key="`detail-module-chart-legend-${line.key}`"
+                      type="button" class="company-module-chart-legend-item"
+                      :class="{ inactive: !companyModuleChartVisibleModules.includes(line.key) }"
+                      @click="toggleCompanyModuleChartModule(line.key)">
+                      <i :style="{ borderColor: line.color }"></i>{{ line.label }}
                     </button>
-                    <button v-for="status in group.statuses" :key="`detail-clickup-status-${group.key}-${status}`"
-                      type="button" class="company-module-filter-option company-mrr-clickup-status-sub"
-                      :class="{ active: companyDetailClickupStatusFilter.has(status) }"
-                      @click="toggleCompanyDetailClickupStatusFilter(status)">
-                      <span>{{ status }}</span>
-                      <span v-if="companyDetailClickupStatusFilter.has(status)"
-                        class="company-module-filter-check">✓</span>
+                    <button type="button" class="company-module-chart-legend-item average"
+                      :class="{ inactive: !companyModuleChartShowAverage }"
+                      @click="companyModuleChartShowAverage = !companyModuleChartShowAverage">
+                      <i></i>O‘rtacha
                     </button>
-                  </template>
+                  </div>
+                  <div class="trend-chart company-module-trend-chart">
+                    <svg :viewBox="`0 0 ${COMPANY_MODULE_CHART_VIEW.width} ${COMPANY_MODULE_CHART_VIEW.height}`"
+                      role="img" :aria-label="companyModuleChartAriaLabel" @mousemove="onCompanyModuleChartMove"
+                      @touchstart.passive="onCompanyModuleChartTouch" @touchmove.passive="onCompanyModuleChartTouch">
+                      <text class="company-module-chart-axis-title" x="14" :y="companyModuleChartAxisTitleY"
+                        :transform="`rotate(-90 14 ${companyModuleChartAxisTitleY})`">{{ companyModuleChartAxisLabel
+                        }}</text>
+                      <g class="trend-grid">
+                        <line v-for="tick in companyModuleChartYTicks" :key="`detail-module-chart-y-${tick.value}`"
+                          :x1="COMPANY_MODULE_CHART_DIMS.left" :x2="COMPANY_MODULE_CHART_DIMS.right" :y1="tick.y"
+                          :y2="tick.y" />
+                      </g>
+                      <g class="trend-axis company-module-chart-axis">
+                        <text v-for="tick in companyModuleChartYTicks" :key="`detail-module-chart-y-label-${tick.value}`"
+                          x="52" :y="tick.y + 4" text-anchor="end">{{ tick.value }}</text>
+                      </g>
+                      <line v-if="companyModuleChartTooltip" class="company-module-chart-guide"
+                        :x1="companyModuleChartTooltip.x" :x2="companyModuleChartTooltip.x"
+                        :y1="COMPANY_MODULE_CHART_DIMS.top" :y2="COMPANY_MODULE_CHART_DIMS.bottom" />
+                      <g v-for="line in companyModuleChartVisibleLines" :key="`detail-module-chart-line-${line.key}`"
+                        class="company-module-chart-module-line">
+                        <path v-if="line.points.length > 1 && line.path" :d="line.path" fill="none" :stroke="line.color"
+                          stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="8 6" />
+                        <circle v-for="(point, pointIndex) in line.points"
+                          :key="`detail-module-chart-dot-${line.key}-${pointIndex}`" class="company-module-chart-dot"
+                          :class="{ active: companyModuleChartHoverIndex === pointIndex }" :cx="point.x" :cy="point.y"
+                          :r="companyModuleChartHoverIndex === pointIndex ? 3.5 : 2.5" :fill="line.color"
+                          :stroke="line.color" :stroke-width="companyModuleChartHoverIndex === pointIndex ? 2 : 1" />
+                      </g>
+                      <g v-if="companyModuleChartShowAverage && companyModuleChartAverageLine.points.length > 1"
+                        class="company-module-chart-average-line">
+                        <path :d="companyModuleChartAverageLine.path" fill="none" stroke="#111827" stroke-width="2.5"
+                          stroke-linecap="round" stroke-linejoin="round" />
+                        <circle v-for="(point, pointIndex) in companyModuleChartAverageLine.points"
+                          :key="`detail-module-chart-avg-dot-${pointIndex}`" :cx="point.x" :cy="point.y" r="3.5"
+                          fill="#111827" stroke="#111827" stroke-width="1.5" />
+                      </g>
+                      <g class="trend-axis company-module-chart-axis">
+                        <text v-for="tick in companyModuleChartXTicks" :key="`detail-module-chart-x-${tick.date_key}`"
+                          :x="tick.x" :y="COMPANY_MODULE_CHART_DIMS.bottom + 16" text-anchor="middle">{{ tick.label
+                          }}</text>
+                      </g>
+                    </svg>
+                    <div v-if="companyModuleChartTooltip" class="company-module-chart-tooltip"
+                      :style="companyModuleChartTooltipStyle">
+                      <b>{{ companyModuleChartTooltip.label }}</b>
+                      <div v-for="item in companyModuleChartTooltip.items" :key="`detail-module-chart-tip-${item.key}`"
+                        class="company-module-chart-tooltip-row">
+                        <span :style="{ color: item.color }">{{ item.label }}</span>
+                        <strong v-if="item.dual" class="company-module-chart-tooltip-pair">
+                          <span>{{ item.activityText }}</span>
+                          <span class="company-module-chart-tooltip-sep">·</span>
+                          <span>{{ item.actionsText }}</span>
+                        </strong>
+                        <strong v-else>{{ item.valueText }}</strong>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-              </Transition>
+              </section>
+              <div v-else class="empty compact">Ma’lumot topilmadi</div>
+
+              <section class="card company-detail-modules-widget">
+                <div class="card-header">
+                  <div class="card-title">Modul holati</div>
+                </div>
+                <div v-if="companyDetailModuleRow" class="company-detail-modules-body">
+                  <div class="company-detail-donut-wrap">
+                    <svg class="company-detail-donut" viewBox="0 0 100 100">
+                      <circle class="company-detail-donut-track" cx="50" cy="50" r="40" />
+                      <circle class="company-detail-donut-value" cx="50" cy="50" r="40"
+                        :stroke-dasharray="COMPANY_DETAIL_DONUT_CIRCUMFERENCE"
+                        :stroke-dashoffset="companyDetailDonutOffset" />
+                    </svg>
+                    <div class="company-detail-donut-label">
+                      <b>{{ companyDetailModuleRow.module_active_percent }}%</b>
+                      <span>Umumiy holat</span>
+                    </div>
+                  </div>
+                  <div class="company-detail-module-pills">
+                    <div v-for="column in companyModuleColumns" :key="`detail-module-pill-${column.key}`"
+                      class="company-detail-module-pill">
+                      <span>{{ column.label }}</span>
+                      <span class="module-status-icon"
+                        :class="companyDetailModuleRow.module_usage[column.key] ? 'yes' : 'no'"
+                        :title="moduleStatusTitle(companyDetailModuleRow, column.key)">
+                        <template v-if="companyDetailModuleRow.module_usage[column.key]">✓</template>
+                        <template v-else>✗</template>
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <div v-else class="empty compact">Kompaniya ma’lumoti topilmadi</div>
+              </section>
             </div>
           </div>
-          <DataTable :columns="clickupCompanyLinkTaskColumns" :rows="companyDetailClickupTasks"
-            empty="Vazifa topilmadi" :page-size="12" :on-cell-action="handleTableCellAction" />
         </div>
       </Modal>
     </Transition>
@@ -6601,7 +6618,7 @@ const clickupCompanyLinkTaskColumns = [
 function openCompanyMrrScatterTaskBadge(point = {}) {
   const id = String(point.id || '').trim();
   if (!id) return;
-  openCompanyDetailModal(id, 'clickup');
+  openCompanyDetailModal(id, { showClickup: true });
 }
 
 const companyMrrScatterChartRef = ref(null);
@@ -6665,8 +6682,43 @@ function selectCompanyMrrScatterPoint(point = {}) {
   openCompanyDetailModal(id);
 }
 
-const companyDetailActiveTab = ref('employees');
 const companyDetailCompanyId = ref('');
+const companyDetailShowClickupTasks = ref(false);
+const companyDetailShowAllActive = ref(false);
+const companyDetailShowAllInactive = ref(false);
+const COMPANY_DETAIL_EMPLOYEE_PREVIEW_COUNT = 5;
+const COMPANY_DETAIL_DONUT_RADIUS = 40;
+const COMPANY_DETAIL_DONUT_CIRCUMFERENCE = 2 * Math.PI * COMPANY_DETAIL_DONUT_RADIUS;
+const COMPANY_DETAIL_AVATAR_COLORS = ['#6366f1', '#22c55e', '#f59e0b', '#ec4899', '#06b6d4', '#8b5cf6', '#ef4444', '#14b8a6'];
+
+function companyDetailAvatarColor(name = '') {
+  const str = String(name || '');
+  let hash = 0;
+  for (let i = 0; i < str.length; i += 1) hash = (hash * 31 + str.charCodeAt(i)) >>> 0;
+  return COMPANY_DETAIL_AVATAR_COLORS[hash % COMPANY_DETAIL_AVATAR_COLORS.length];
+}
+
+function companyDetailAvatarInitial(name = '') {
+  const trimmed = String(name || '').trim();
+  return trimmed ? trimmed[0].toUpperCase() : '?';
+}
+
+const companyDetailVisibleActiveRows = computed(() => (
+  companyDetailShowAllActive.value
+    ? companyModuleEmployeeActiveRows.value
+    : companyModuleEmployeeActiveRows.value.slice(0, COMPANY_DETAIL_EMPLOYEE_PREVIEW_COUNT)
+));
+
+const companyDetailVisibleInactiveRows = computed(() => (
+  companyDetailShowAllInactive.value
+    ? companyModuleEmployeeInactiveRows.value
+    : companyModuleEmployeeInactiveRows.value.slice(0, COMPANY_DETAIL_EMPLOYEE_PREVIEW_COUNT)
+));
+
+const companyDetailDonutOffset = computed(() => {
+  const percent = Number(companyDetailModuleRow.value?.module_active_percent || 0);
+  return COMPANY_DETAIL_DONUT_CIRCUMFERENCE * (1 - Math.min(100, Math.max(0, percent)) / 100);
+});
 
 const companyDetailModalTitle = computed(() => {
   const row = companyModuleBaseRows.value.find(item => String(item.id || '').trim() === companyDetailCompanyId.value);
@@ -6718,12 +6770,14 @@ const companyDetailClickupTasks = computed(() => {
   return all.filter(task => filter.has(clickupStatusGroupForStatus(task.status, task.status_type)));
 });
 
-function openCompanyDetailModal(companyId = '', tab = 'employees') {
+function openCompanyDetailModal(companyId = '', { showClickup = false } = {}) {
   const id = String(companyId || '').trim();
   if (!id) return;
   suppressCompanyMrrScatterHover();
   companyDetailCompanyId.value = id;
-  companyDetailActiveTab.value = tab;
+  companyDetailShowClickupTasks.value = showClickup;
+  companyDetailShowAllActive.value = false;
+  companyDetailShowAllInactive.value = false;
   companyDetailClickupStatusFilter.value = new Set(['not_started', 'in_progress']);
   selectCompanyModuleChartCompany(id);
   companyModuleEmployeeDetail.value = companyModuleBaseRows.value
@@ -7483,7 +7537,7 @@ const companyModuleChartTooltip = computed(() => {
 
 const companyModuleChartTooltipStyle = computed(() => {
   const tooltip = companyModuleChartTooltip.value;
-  const useDetailRef = modal.value === 'companyDetail' && companyDetailActiveTab.value === 'trend';
+  const useDetailRef = modal.value === 'companyDetail' && !companyDetailShowClickupTasks.value;
   const root = useDetailRef ? companyDetailModuleChartRef.value : companyModuleChartRef.value;
   if (!tooltip || !root) return {};
   const svg = root.querySelector('svg');
