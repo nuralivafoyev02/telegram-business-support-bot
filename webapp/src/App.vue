@@ -1898,14 +1898,6 @@
                 empty="Vazifa topilmadi" :page-size="12" :on-cell-action="handleTableCellAction" />
             </template>
 
-            <template v-else-if="companyDetailActiveSection === 'projects'">
-              <div class="company-detail-section-head">
-                <div class="company-module-employee-section-title company-detail-section-heading">Loyihalar</div>
-              </div>
-              <DataTable :columns="clickupCompanyLinkTaskColumns" :rows="companyDetailAllClickupTasks"
-                empty="Loyiha topilmadi" :page-size="12" :on-cell-action="handleTableCellAction" />
-            </template>
-
             <template v-else-if="companyDetailActiveSection === 'weekActivity'">
               <section v-if="companyModuleChartRows.length"
                 class="card chart-card line-chart-card company-module-chart-card company-detail-trend-widget">
@@ -2013,47 +2005,6 @@
                 </div>
               </section>
               <div v-else class="empty compact">Ma’lumot topilmadi</div>
-            </template>
-
-            <template v-else-if="companyDetailActiveSection === 'usage'">
-              <div class="company-detail-section-head">
-                <div class="company-module-employee-section-title company-detail-section-heading">Dasturdan foydalanish darajasi</div>
-                <label class="company-module-filter">
-                  <span>Davr</span>
-                  <select :value="companyDetailModulesPeriod" class="select mini-select"
-                    @change="handleCompanyDetailModulesPeriodChange($event.target.value)">
-                    <option v-for="period in companyMrrScatterPeriodOptions" :key="`detail-modules-period-${period.key}`"
-                      :value="period.key">{{ period.label }}</option>
-                  </select>
-                </label>
-              </div>
-              <div v-if="companyDetailModuleRow" class="company-detail-modules-body wide">
-                <div class="company-detail-donut-wrap">
-                  <svg class="company-detail-donut" viewBox="0 0 100 100">
-                    <circle class="company-detail-donut-track" cx="50" cy="50" r="40" />
-                    <circle class="company-detail-donut-value" cx="50" cy="50" r="40"
-                      :stroke-dasharray="COMPANY_DETAIL_DONUT_CIRCUMFERENCE"
-                      :stroke-dashoffset="companyDetailDonutOffset" />
-                  </svg>
-                  <div class="company-detail-donut-label">
-                    <b>{{ companyDetailModuleRow.module_active_percent }}%</b>
-                    <span>Umumiy holat</span>
-                  </div>
-                </div>
-                <div class="company-detail-module-pills">
-                  <div v-for="column in companyModuleColumns" :key="`detail-module-pill-${column.key}`"
-                    class="company-detail-module-pill">
-                    <span>{{ column.label }}</span>
-                    <span class="module-status-icon"
-                      :class="companyDetailModuleRow.module_usage[column.key] ? 'yes' : 'no'"
-                      :title="moduleStatusTitle(companyDetailModuleRow, column.key)">
-                      <template v-if="companyDetailModuleRow.module_usage[column.key]">✓</template>
-                      <template v-else>✗</template>
-                    </span>
-                  </div>
-                </div>
-              </div>
-              <div v-else class="empty compact">Kompaniya ma’lumoti topilmadi</div>
             </template>
           </div>
         </div>
@@ -6651,8 +6602,6 @@ function selectCompanyDetailSection(key = 'total') {
   companyDetailClickupStatusMenuOpen.value = false;
 }
 
-const COMPANY_DETAIL_DONUT_RADIUS = 40;
-const COMPANY_DETAIL_DONUT_CIRCUMFERENCE = 2 * Math.PI * COMPANY_DETAIL_DONUT_RADIUS;
 const COMPANY_DETAIL_AVATAR_COLORS = ['#6366f1', '#22c55e', '#f59e0b', '#ec4899', '#06b6d4', '#8b5cf6', '#ef4444', '#14b8a6'];
 
 function companyDetailAvatarColor(name = '') {
@@ -6666,11 +6615,6 @@ function companyDetailAvatarInitial(name = '') {
   const trimmed = String(name || '').trim();
   return trimmed ? trimmed[0].toUpperCase() : '?';
 }
-
-const companyDetailDonutOffset = computed(() => {
-  const percent = Number(companyDetailModuleRow.value?.module_active_percent || 0);
-  return COMPANY_DETAIL_DONUT_CIRCUMFERENCE * (1 - Math.min(100, Math.max(0, percent)) / 100);
-});
 
 const companyDetailInfoRow = computed(() => (
   companyModuleBaseRows.value.find(item => String(item.id || '').trim() === companyDetailCompanyId.value) || null
@@ -6690,10 +6634,6 @@ const companyDetailEmployeePeriod = ref('today');
 const companyDetailEmployeeReportData = ref({ companies: [], report_dates: [], mode: '', target_date: '' });
 const companyDetailEmployeeLoading = ref(false);
 
-const companyDetailModulesPeriod = ref('today');
-const companyDetailModulesReportData = ref({ companies: [], report_dates: [], mode: '', target_date: '' });
-const companyDetailModulesLoading = ref(false);
-
 async function fetchCompanyDetailPeriodReport(period, dataRef, loadingRef) {
   loadingRef.value = true;
   try {
@@ -6711,32 +6651,7 @@ async function handleCompanyDetailEmployeePeriodChange(value) {
   await fetchCompanyDetailPeriodReport(value, companyDetailEmployeeReportData, companyDetailEmployeeLoading);
 }
 
-async function handleCompanyDetailModulesPeriodChange(value) {
-  companyDetailModulesPeriod.value = value;
-  await fetchCompanyDetailPeriodReport(value, companyDetailModulesReportData, companyDetailModulesLoading);
-}
-
 const companyDetailEmployeeReportMap = computed(() => buildCompanyModuleReportMap(companyDetailEmployeeReportData.value.companies || []));
-const companyDetailModulesReportMap = computed(() => buildCompanyModuleReportMap(companyDetailModulesReportData.value.companies || []));
-
-const companyDetailModuleRow = computed(() => {
-  const infoRow = companyDetailInfoRow.value;
-  if (!infoRow) return null;
-  const report = findCompanyModuleReport(companyDetailModulesReportMap.value, infoRow);
-  const context = {
-    expectedDates: [...(companyDetailModulesReportData.value.report_dates || [])].filter(Boolean),
-    mode: companyDetailModulesReportData.value.mode || '',
-    targetDate: companyDetailModulesReportData.value.target_date || ''
-  };
-  const module_usage = companyModuleUsageForPeriod(infoRow, report, context);
-  return {
-    ...infoRow,
-    module_usage,
-    module_last_dates: report?.module_last_dates || {},
-    module_active_count: companyModuleActiveCount(module_usage),
-    module_active_percent: companyModuleActivePercent(module_usage)
-  };
-});
 
 const companyDetailEmployeeRow = computed(() => {
   const infoRow = companyDetailInfoRow.value;
@@ -6796,7 +6711,7 @@ const companyDetailClickupStatusFilterLabel = computed(() => {
 });
 
 const companyDetailAllClickupTasks = computed(() => {
-  const row = companyDetailModuleRow.value;
+  const row = companyDetailInfoRow.value;
   if (!row) return [];
   const link = clickupCompanyLinksByKey.value.get(clickupCompanyKey(row.name));
   return link?.linked_tasks || [];
@@ -6814,16 +6729,10 @@ const companyDetailWeekActivityPercent = ref(null);
 const companyDetailNavItems = computed(() => [
   { key: 'total', label: 'Jami amallar', value: fmtNumber(companyDetailEmployeeActivity.value?.total_actions || 0) },
   { key: 'tasks', label: 'Vazifalar', value: fmtNumber(companyDetailClickupTasks.value.length) },
-  { key: 'projects', label: 'Loyihalar soni', value: fmtNumber(companyDetailAllClickupTasks.value.length) },
   {
     key: 'weekActivity',
     label: 'Faollik',
     value: companyDetailWeekActivityPercent.value === null ? '—' : `${companyDetailWeekActivityPercent.value}%`
-  },
-  {
-    key: 'usage',
-    label: 'Dasturdan foydalanish darajasi',
-    value: companyDetailModuleRow.value ? `${companyDetailModuleRow.value.module_active_percent}%` : '—'
   }
 ]);
 
@@ -6859,8 +6768,6 @@ function openCompanyDetailModal(companyId = '', { section = 'total' } = {}) {
   selectCompanyModuleChartCompany(id);
   companyDetailEmployeePeriod.value = companyModulePeriod.value;
   companyDetailEmployeeReportData.value = companyModuleReports.value;
-  companyDetailModulesPeriod.value = companyModulePeriod.value;
-  companyDetailModulesReportData.value = companyModuleReports.value;
   companyDetailWeekActivityPercent.value = null;
   fetchCompanyDetailWeekActivity();
   modal.value = 'companyDetail';
