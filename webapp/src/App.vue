@@ -6475,8 +6475,15 @@ function adjustCompanyMrrScatterRadiusScale(delta = 0) {
 }
 
 const companyMrrScatterHoverPointId = ref('');
+let companyMrrScatterHoverSuppressedUntil = 0;
+
+function suppressCompanyMrrScatterHover(durationMs = 500) {
+  companyMrrScatterHoverSuppressedUntil = Date.now() + durationMs;
+  companyMrrScatterHoverPointId.value = '';
+}
 
 function hoverCompanyMrrScatterPoint(point = {}) {
+  if (Date.now() < companyMrrScatterHoverSuppressedUntil) return;
   companyMrrScatterHoverPointId.value = String(point.id || '').trim();
 }
 
@@ -6571,7 +6578,7 @@ const companyDetailClickupTasks = computed(() => {
 function openCompanyDetailModal(companyId = '', tab = 'employees') {
   const id = String(companyId || '').trim();
   if (!id) return;
-  companyMrrScatterHoverPointId.value = '';
+  suppressCompanyMrrScatterHover();
   companyDetailCompanyId.value = id;
   companyDetailActiveTab.value = tab;
   companyDetailClickupStatusFilter.value = new Set(['not_started', 'in_progress']);
@@ -10921,6 +10928,7 @@ function closeModal() {
   if (modal.value === 'companyDetail') {
     companyModuleEmployeeDetail.value = null;
     companyDetailCompanyId.value = '';
+    suppressCompanyMrrScatterHover();
   }
   modal.value = '';
   selectedTarget.value = null;
