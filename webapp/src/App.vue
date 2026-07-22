@@ -1776,37 +1776,23 @@
     <Transition name="modal-fade">
       <Modal v-show="modal === 'companyDetail'" :title="companyDetailModalTitle" xlarge @close="closeModal">
         <div class="company-detail-dashboard">
-          <div class="company-detail-toolbar">
-            <label class="company-module-filter company-detail-period-filter">
-              <span>Davr</span>
-              <select :value="companyModulePeriod" class="select mini-select"
-                @change="handleCompanyDetailPeriodChange($event.target.value)">
-                <option v-for="period in companyModulePeriodOptions" :key="`detail-period-${period.key}`"
-                  :value="period.key">{{ companyModulePeriodOptionLabel(period) }}</option>
-              </select>
-            </label>
-          </div>
-
           <div class="company-detail-stats-row">
             <div class="company-detail-stat-card">
-              <span class="company-detail-stat-icon">📊</span>
               <div class="company-detail-stat-body">
                 <span class="company-detail-stat-label">Jami amallar</span>
-                <b class="company-detail-stat-value">{{ fmtNumber(companyModuleEmployeeActivity?.total_actions || 0) }}</b>
+                <b class="company-detail-stat-value">{{ fmtNumber(companyDetailEmployeeActivity?.total_actions || 0) }}</b>
               </div>
             </div>
             <div class="company-detail-stat-card">
-              <span class="company-detail-stat-icon">✅</span>
               <div class="company-detail-stat-body">
                 <span class="company-detail-stat-label">Faol xodimlar</span>
-                <b class="company-detail-stat-value">{{ fmtNumber(companyModuleEmployeeActiveCount) }}</b>
+                <b class="company-detail-stat-value">{{ fmtNumber(companyDetailEmployeeActiveCount) }}</b>
               </div>
             </div>
             <div class="company-detail-stat-card">
-              <span class="company-detail-stat-icon">❌</span>
               <div class="company-detail-stat-body">
                 <span class="company-detail-stat-label">Nofaol xodimlar</span>
-                <b class="company-detail-stat-value">{{ fmtNumber(companyModuleEmployeeInactiveCount) }}</b>
+                <b class="company-detail-stat-value">{{ fmtNumber(companyDetailEmployeeInactiveCount) }}</b>
               </div>
             </div>
             <button type="button" class="company-detail-stat-card clickable"
@@ -1861,11 +1847,22 @@
 
           <div v-else class="company-detail-grid">
             <div class="company-detail-col company-detail-col-employees">
-              <div v-if="companyModuleEmployeeHasActivity">
+              <div class="company-detail-section-head">
+                <div class="company-module-employee-section-title company-detail-section-heading">Xodimlarni aniqlash</div>
+                <label class="company-module-filter company-detail-period-filter">
+                  <span>Davr</span>
+                  <select :value="companyDetailEmployeePeriod" class="select mini-select"
+                    @change="handleCompanyDetailEmployeePeriodChange($event.target.value)">
+                    <option v-for="period in companyMrrScatterPeriodOptions" :key="`detail-employee-period-${period.key}`"
+                      :value="period.key">{{ period.label }}</option>
+                  </select>
+                </label>
+              </div>
+              <div v-if="companyDetailEmployeeHasActivity">
                 <div class="company-module-employee-section">
                   <div class="company-module-employee-section-title">Faol xodimlar</div>
-                  <div v-if="companyModuleEmployeeActiveRows.length" class="company-detail-employee-list">
-                    <article v-for="employee in companyDetailVisibleActiveRows"
+                  <div v-if="companyDetailEmployeeActiveRows.length" class="company-detail-employee-list scroll">
+                    <article v-for="employee in companyDetailEmployeeActiveRows"
                       :key="`detail-active-employee-${employee.id || employee.name}`"
                       class="company-detail-employee-card">
                       <span class="company-detail-avatar"
@@ -1882,16 +1879,12 @@
                     </article>
                   </div>
                   <div v-else class="empty compact">Faol xodim topilmadi</div>
-                  <button v-if="companyModuleEmployeeActiveRows.length > COMPANY_DETAIL_EMPLOYEE_PREVIEW_COUNT"
-                    type="button" class="company-detail-see-all" @click="companyDetailShowAllActive = !companyDetailShowAllActive">
-                    {{ companyDetailShowAllActive ? 'Kamroq ko‘rsatish' : 'Barchasini ko‘rish' }}
-                  </button>
                 </div>
 
                 <div class="company-module-employee-section">
                   <div class="company-module-employee-section-title">Nofaol xodimlar</div>
-                  <div v-if="companyModuleEmployeeInactiveRows.length" class="company-detail-employee-list">
-                    <article v-for="employee in companyDetailVisibleInactiveRows"
+                  <div v-if="companyDetailEmployeeInactiveRows.length" class="company-detail-employee-list scroll">
+                    <article v-for="employee in companyDetailEmployeeInactiveRows"
                       :key="`detail-inactive-employee-${employee.id || employee.name}`"
                       class="company-detail-employee-card inactive">
                       <span class="company-detail-avatar inactive">
@@ -1909,10 +1902,6 @@
                     </article>
                   </div>
                   <div v-else class="empty compact">Nofaol xodim topilmadi</div>
-                  <button v-if="companyModuleEmployeeInactiveRows.length > COMPANY_DETAIL_EMPLOYEE_PREVIEW_COUNT"
-                    type="button" class="company-detail-see-all" @click="companyDetailShowAllInactive = !companyDetailShowAllInactive">
-                    {{ companyDetailShowAllInactive ? 'Kamroq ko‘rsatish' : 'Barchasini ko‘rish' }}
-                  </button>
                 </div>
               </div>
               <div v-else class="empty compact">
@@ -1928,37 +1917,7 @@
                     <div class="card-title">Bo‘limlar dinamikasi</div>
                   </div>
                   <div class="company-module-chart-controls">
-                    <div class="company-module-filter company-module-filter-wide company-module-filter-menu-wrap"
-                      ref="companyDetailModuleChartCompanyMenuRef">
-                      <span>Kompaniya</span>
-                      <div class="company-module-filter-picker">
-                        <button type="button" class="company-module-filter-trigger select mini-select"
-                          @click.stop="toggleCompanyModuleChartCompanyMenu">
-                          <span class="company-module-filter-trigger-label">{{ companyModuleChartCompanyLabel }}</span>
-                          <span class="company-module-filter-trigger-caret">▾</span>
-                        </button>
-                        <Transition name="fade">
-                          <div v-if="companyModuleChartCompanyMenuOpen"
-                            class="company-module-filter-menu actions-dropdown" @click.stop>
-                            <button type="button" class="company-module-filter-option"
-                              :class="{ active: !companyModuleChartCompanyId }"
-                              @click="selectCompanyModuleChartCompany('')">
-                              <span>Hammasi</span>
-                              <span v-if="!companyModuleChartCompanyId" class="company-module-filter-check">✓</span>
-                            </button>
-                            <button v-for="company in companyModuleChartCompanyOptions"
-                              :key="`detail-module-chart-company-${company.id}`" type="button"
-                              class="company-module-filter-option"
-                              :class="{ active: companyModuleChartCompanyId === company.id }"
-                              @click="selectCompanyModuleChartCompany(company.id)">
-                              <span>{{ company.name }}</span>
-                              <span v-if="companyModuleChartCompanyId === company.id"
-                                class="company-module-filter-check">✓</span>
-                            </button>
-                          </div>
-                        </Transition>
-                      </div>
-                    </div>
+                    <div class="company-detail-trend-company">{{ companyModuleChartCompanyLabel }}</div>
                     <div class="company-module-chart-metric-tabs">
                       <button v-for="option in companyModuleChartMetricOptions"
                         :key="`detail-module-chart-metric-${option.key}`" type="button"
@@ -2061,6 +2020,14 @@
               <section class="card company-detail-modules-widget">
                 <div class="card-header">
                   <div class="card-title">Modul holati</div>
+                  <label class="company-module-filter">
+                    <span>Davr</span>
+                    <select :value="companyDetailModulesPeriod" class="select mini-select"
+                      @change="handleCompanyDetailModulesPeriodChange($event.target.value)">
+                      <option v-for="period in companyMrrScatterPeriodOptions" :key="`detail-modules-period-${period.key}`"
+                        :value="period.key">{{ period.label }}</option>
+                    </select>
+                  </label>
                 </div>
                 <div v-if="companyDetailModuleRow" class="company-detail-modules-body">
                   <div class="company-detail-donut-wrap">
@@ -3446,7 +3413,6 @@ const companyModuleChartCompanyMenuOpen = ref(false);
 const companyModuleChartCompanyMenuRef = ref(null);
 const companyModuleChartRef = ref(null);
 const companyDetailModuleChartRef = ref(null);
-const companyDetailModuleChartCompanyMenuRef = ref(null);
 const companyModuleChartHoverIndex = ref(-1);
 const comparisonEnabled = ref(getStoredComparisonEnabled());
 const themeMode = ref(getStoredThemeMode());
@@ -4585,9 +4551,7 @@ function handleDocumentPointerDown(event) {
   }
   if (companyModuleChartCompanyMenuOpen.value) {
     const root = companyModuleChartCompanyMenuRef.value;
-    const detailRoot = companyDetailModuleChartCompanyMenuRef.value;
-    const inside = (root && root.contains(event.target)) || (detailRoot && detailRoot.contains(event.target));
-    if (!inside) closeCompanyModuleChartCompanyMenu();
+    if (!root || !root.contains(event.target)) closeCompanyModuleChartCompanyMenu();
   }
   if (companyMrrClickupStatusMenuOpen.value) {
     const root = companyMrrClickupStatusMenuRef.value;
@@ -6684,9 +6648,6 @@ function selectCompanyMrrScatterPoint(point = {}) {
 
 const companyDetailCompanyId = ref('');
 const companyDetailShowClickupTasks = ref(false);
-const companyDetailShowAllActive = ref(false);
-const companyDetailShowAllInactive = ref(false);
-const COMPANY_DETAIL_EMPLOYEE_PREVIEW_COUNT = 5;
 const COMPANY_DETAIL_DONUT_RADIUS = 40;
 const COMPANY_DETAIL_DONUT_CIRCUMFERENCE = 2 * Math.PI * COMPANY_DETAIL_DONUT_RADIUS;
 const COMPANY_DETAIL_AVATAR_COLORS = ['#6366f1', '#22c55e', '#f59e0b', '#ec4899', '#06b6d4', '#8b5cf6', '#ef4444', '#14b8a6'];
@@ -6703,31 +6664,114 @@ function companyDetailAvatarInitial(name = '') {
   return trimmed ? trimmed[0].toUpperCase() : '?';
 }
 
-const companyDetailVisibleActiveRows = computed(() => (
-  companyDetailShowAllActive.value
-    ? companyModuleEmployeeActiveRows.value
-    : companyModuleEmployeeActiveRows.value.slice(0, COMPANY_DETAIL_EMPLOYEE_PREVIEW_COUNT)
-));
-
-const companyDetailVisibleInactiveRows = computed(() => (
-  companyDetailShowAllInactive.value
-    ? companyModuleEmployeeInactiveRows.value
-    : companyModuleEmployeeInactiveRows.value.slice(0, COMPANY_DETAIL_EMPLOYEE_PREVIEW_COUNT)
-));
-
 const companyDetailDonutOffset = computed(() => {
   const percent = Number(companyDetailModuleRow.value?.module_active_percent || 0);
   return COMPANY_DETAIL_DONUT_CIRCUMFERENCE * (1 - Math.min(100, Math.max(0, percent)) / 100);
 });
 
-const companyDetailModalTitle = computed(() => {
-  const row = companyModuleBaseRows.value.find(item => String(item.id || '').trim() === companyDetailCompanyId.value);
-  return row?.name || 'Kompaniya tafsilotlari';
-});
-
-const companyDetailModuleRow = computed(() => (
+const companyDetailInfoRow = computed(() => (
   companyModuleBaseRows.value.find(item => String(item.id || '').trim() === companyDetailCompanyId.value) || null
 ));
+
+const companyDetailModalTitle = computed(() => companyDetailInfoRow.value?.name || 'Kompaniya tafsilotlari');
+
+function buildCompanyModuleReportMap(companies = []) {
+  const map = new Map();
+  companies.forEach(row => {
+    companyModuleReportRowKeys(row).forEach(key => map.set(key, row));
+  });
+  return map;
+}
+
+const companyDetailEmployeePeriod = ref('today');
+const companyDetailEmployeeReportData = ref({ companies: [], report_dates: [], mode: '', target_date: '' });
+const companyDetailEmployeeLoading = ref(false);
+
+const companyDetailModulesPeriod = ref('today');
+const companyDetailModulesReportData = ref({ companies: [], report_dates: [], mode: '', target_date: '' });
+const companyDetailModulesLoading = ref(false);
+
+async function fetchCompanyDetailPeriodReport(period, dataRef, loadingRef) {
+  loadingRef.value = true;
+  try {
+    const data = await api.companyModuleReports({ period });
+    dataRef.value = data || { companies: [], report_dates: [] };
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    loadingRef.value = false;
+  }
+}
+
+async function handleCompanyDetailEmployeePeriodChange(value) {
+  companyDetailEmployeePeriod.value = value;
+  await fetchCompanyDetailPeriodReport(value, companyDetailEmployeeReportData, companyDetailEmployeeLoading);
+}
+
+async function handleCompanyDetailModulesPeriodChange(value) {
+  companyDetailModulesPeriod.value = value;
+  await fetchCompanyDetailPeriodReport(value, companyDetailModulesReportData, companyDetailModulesLoading);
+}
+
+const companyDetailEmployeeReportMap = computed(() => buildCompanyModuleReportMap(companyDetailEmployeeReportData.value.companies || []));
+const companyDetailModulesReportMap = computed(() => buildCompanyModuleReportMap(companyDetailModulesReportData.value.companies || []));
+
+const companyDetailModuleRow = computed(() => {
+  const infoRow = companyDetailInfoRow.value;
+  if (!infoRow) return null;
+  const report = findCompanyModuleReport(companyDetailModulesReportMap.value, infoRow);
+  const context = {
+    expectedDates: [...(companyDetailModulesReportData.value.report_dates || [])].filter(Boolean),
+    mode: companyDetailModulesReportData.value.mode || '',
+    targetDate: companyDetailModulesReportData.value.target_date || ''
+  };
+  const module_usage = companyModuleUsageForPeriod(infoRow, report, context);
+  return {
+    ...infoRow,
+    module_usage,
+    module_last_dates: report?.module_last_dates || {},
+    module_active_count: companyModuleActiveCount(module_usage),
+    module_active_percent: companyModuleActivePercent(module_usage)
+  };
+});
+
+const companyDetailEmployeeRow = computed(() => {
+  const infoRow = companyDetailInfoRow.value;
+  if (!infoRow) return null;
+  const report = findCompanyModuleReport(companyDetailEmployeeReportMap.value, infoRow);
+  return { ...infoRow, employee_activity: report?.employee_activity || null };
+});
+
+const companyDetailEmployeeActivity = computed(() => companyDetailEmployeeRow.value?.employee_activity || null);
+
+const companyDetailEmployeeHasActivity = computed(() => Boolean(
+  companyDetailEmployeeActivity.value
+  && (
+    Number(companyDetailEmployeeActivity.value.total_actions || 0) > 0
+    || (companyDetailEmployeeActivity.value.active_employees || []).length
+    || (companyDetailEmployeeActivity.value.inactive_employees || []).length
+  )
+));
+
+const companyDetailEmployeeActiveCount = computed(() => Number(
+  companyDetailEmployeeActivity.value?.active_employee_count
+  ?? (companyDetailEmployeeActivity.value?.active_employees || []).filter(employee => Number(employee.action_count || 0) > 0).length
+));
+
+const companyDetailEmployeeInactiveCount = computed(() => Number(
+  companyDetailEmployeeActivity.value?.inactive_employee_count
+  ?? (companyDetailEmployeeActivity.value?.inactive_employees || []).length
+));
+
+const companyDetailEmployeeActiveRows = computed(() => {
+  const rows = companyDetailEmployeeActivity.value?.active_employees || [];
+  return [...rows].sort((a, b) => Number(b.action_count || 0) - Number(a.action_count || 0));
+});
+
+const companyDetailEmployeeInactiveRows = computed(() => {
+  const rows = companyDetailEmployeeActivity.value?.inactive_employees || [];
+  return [...rows].sort((a, b) => String(a.last_activity_date || '').localeCompare(String(b.last_activity_date || '')));
+});
 
 const companyDetailClickupStatusFilter = ref(new Set(['not_started', 'in_progress']));
 const companyDetailClickupStatusMenuOpen = ref(false);
@@ -6776,20 +6820,13 @@ function openCompanyDetailModal(companyId = '', { showClickup = false } = {}) {
   suppressCompanyMrrScatterHover();
   companyDetailCompanyId.value = id;
   companyDetailShowClickupTasks.value = showClickup;
-  companyDetailShowAllActive.value = false;
-  companyDetailShowAllInactive.value = false;
   companyDetailClickupStatusFilter.value = new Set(['not_started', 'in_progress']);
   selectCompanyModuleChartCompany(id);
-  companyModuleEmployeeDetail.value = companyModuleBaseRows.value
-    .find(item => String(item.id || '').trim() === id) || null;
+  companyDetailEmployeePeriod.value = companyModulePeriod.value;
+  companyDetailEmployeeReportData.value = companyModuleReports.value;
+  companyDetailModulesPeriod.value = companyModulePeriod.value;
+  companyDetailModulesReportData.value = companyModuleReports.value;
   modal.value = 'companyDetail';
-}
-
-async function handleCompanyDetailPeriodChange(value) {
-  await handleCompanyModulePeriodChange(value);
-  if (!companyDetailCompanyId.value) return;
-  companyModuleEmployeeDetail.value = companyModuleBaseRows.value
-    .find(item => String(item.id || '').trim() === companyDetailCompanyId.value) || null;
 }
 
 const companyModuleSupportFilterOptions = computed(() => {

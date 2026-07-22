@@ -1257,9 +1257,27 @@ button.company-detail-stat-card.clickable.active {
   min-width: 0;
 }
 
+.company-detail-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.company-detail-section-heading {
+  margin-bottom: 0;
+}
+
 .company-detail-employee-list {
   display: grid;
   gap: 8px;
+}
+
+.company-detail-employee-list.scroll {
+  max-height: 260px;
+  overflow-y: auto;
+  padding-right: 4px;
 }
 
 .company-detail-employee-card {
@@ -1322,15 +1340,10 @@ button.company-detail-stat-card.clickable.active {
   white-space: nowrap;
 }
 
-.company-detail-see-all {
-  margin-top: 8px;
-  border: 0;
-  background: none;
-  padding: 0;
-  color: var(--primary);
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
+.company-detail-trend-company {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text);
 }
 
 .company-detail-trend-widget {
