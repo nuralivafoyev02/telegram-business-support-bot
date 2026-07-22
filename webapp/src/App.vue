@@ -836,12 +836,12 @@
                       <div v-for="item in companyModuleChartTooltip.items" :key="`module-chart-tip-${item.key}`"
                         class="company-module-chart-tooltip-row">
                         <span :style="{ color: item.color }">{{ item.label }}</span>
-                        <strong v-if="item.dual" class="company-module-chart-tooltip-pair">
+                        <strong v-if="item.key === 'average' && item.dual" class="company-module-chart-tooltip-pair">
                           <span>{{ item.activityText }}</span>
                           <span class="company-module-chart-tooltip-sep">·</span>
                           <span>{{ item.actionsText }}</span>
                         </strong>
-                        <strong v-else>{{ item.valueText }}</strong>
+                        <strong v-else-if="item.key === 'average'">{{ item.valueText }}</strong>
                       </div>
                     </div>
                   </div>
@@ -1993,12 +1993,12 @@
                       <div v-for="item in companyModuleChartTooltip.items" :key="`detail-module-chart-tip-${item.key}`"
                         class="company-module-chart-tooltip-row">
                         <span :style="{ color: item.color }">{{ item.label }}</span>
-                        <strong v-if="item.dual" class="company-module-chart-tooltip-pair">
+                        <strong v-if="item.key === 'average' && item.dual" class="company-module-chart-tooltip-pair">
                           <span>{{ item.activityText }}</span>
                           <span class="company-module-chart-tooltip-sep">·</span>
                           <span>{{ item.actionsText }}</span>
                         </strong>
-                        <strong v-else>{{ item.valueText }}</strong>
+                        <strong v-else-if="item.key === 'average'">{{ item.valueText }}</strong>
                       </div>
                     </div>
                   </div>
