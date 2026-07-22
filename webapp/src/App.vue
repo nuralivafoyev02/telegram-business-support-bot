@@ -6530,7 +6530,7 @@ const companyMrrScatterThresholds = computed(() => {
   const max = companyMrrScatterMax.value;
   const width = dims.right - dims.left;
   const height = dims.bottom - dims.top;
-  const scoreThreshold = 3;
+  const scoreThreshold = 2.5;
   const mrrThreshold = 5;
   const x = Math.round((dims.left + (scoreThreshold / 5) * width) * 10) / 10;
   const y = Math.round((dims.bottom - (mrrThreshold / max) * height) * 10) / 10;
@@ -6614,20 +6614,24 @@ function adjustCompanyMrrScatterRadiusScale(delta = 0) {
 
 const companyMrrScatterHoverPointId = ref('');
 const companyMrrScatterHoverArmed = ref(true);
+let companyMrrScatterHoverSuppressedUntil = 0;
 
-function suppressCompanyMrrScatterHover() {
+function suppressCompanyMrrScatterHover(durationMs = 600) {
   companyMrrScatterHoverArmed.value = false;
+  companyMrrScatterHoverSuppressedUntil = Date.now() + durationMs;
   companyMrrScatterHoverPointId.value = '';
 }
 
 function hoverCompanyMrrScatterPoint(point = {}) {
-  if (!companyMrrScatterHoverArmed.value) return;
+  if (!companyMrrScatterHoverArmed.value || Date.now() < companyMrrScatterHoverSuppressedUntil) return;
   companyMrrScatterHoverPointId.value = String(point.id || '').trim();
 }
 
 function unhoverCompanyMrrScatterPoint() {
-  companyMrrScatterHoverArmed.value = true;
   companyMrrScatterHoverPointId.value = '';
+  if (Date.now() >= companyMrrScatterHoverSuppressedUntil) {
+    companyMrrScatterHoverArmed.value = true;
+  }
 }
 
 const companyMrrScatterTooltip = computed(() => {
