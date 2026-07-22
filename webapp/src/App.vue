@@ -68,7 +68,7 @@
         <button :class="{ active: activeTab === settingsTab.key }" @click="setTab(settingsTab.key)">
           <b>{{ settingsTab.label }}</b>
         </button>
-      </nav>
+      </nav>  
     </aside>
 
     <section class="main">
@@ -6975,10 +6975,7 @@ const companyModuleEmployeeHasActivity = computed(() => Boolean(
   )
 ));
 
-const companyModuleEmployeeActiveCount = computed(() => Number(
-  companyModuleEmployeeActivity.value?.active_employee_count
-  ?? (companyModuleEmployeeActivity.value?.active_employees || []).filter(employee => Number(employee.action_count || 0) > 0).length
-));
+const companyModuleEmployeeActiveCount = computed(() => companyModuleEmployeeActiveRows.value.length);
 
 const companyModuleEmployeeInactiveCount = computed(() => Number(
   companyModuleEmployeeActivity.value?.inactive_employee_count
@@ -6987,7 +6984,9 @@ const companyModuleEmployeeInactiveCount = computed(() => Number(
 
 const companyModuleEmployeeActiveRows = computed(() => {
   const rows = companyModuleEmployeeActivity.value?.active_employees || [];
-  return [...rows].sort((a, b) => Number(b.action_count || 0) - Number(a.action_count || 0));
+  return rows
+    .filter(employee => Number(employee.action_count || 0) > 0)
+    .sort((a, b) => Number(b.action_count || 0) - Number(a.action_count || 0));
 });
 
 const companyModuleEmployeeInactiveRows = computed(() => {
@@ -7266,7 +7265,16 @@ function companyModuleChartAverageForRow(row = {}, metric = 'activity', visibleK
 }
 
 function companyModuleChartAverageActivityForRow(row = {}, metric = 'activity', visibleKeys = []) {
-  if (metric === 'actions') return Number(row.totalActions || 0);
+  if (metric === 'actions') {
+    const keys = visibleKeys.length ? visibleKeys : companyModuleKeys;
+    const totalActions = Number(row.totalActions || 0);
+    if (keys.length === companyModuleKeys.length) return totalActions;
+    const activeKeys = companyModuleKeys.filter(key => Number(row.counts?.[key] || 0) > 0);
+    if (!activeKeys.length) return 0;
+    const selectedActiveKeys = keys.filter(key => activeKeys.includes(key));
+    if (!selectedActiveKeys.length) return 0;
+    return Math.round(totalActions * (selectedActiveKeys.length / activeKeys.length));
+  }
   const keys = visibleKeys.length ? visibleKeys : companyModuleKeys;
   if (keys.length === companyModuleKeys.length) return Number(row.avgActivity || 0);
   return companyModuleChartAverageForRow(row, metric, keys);
