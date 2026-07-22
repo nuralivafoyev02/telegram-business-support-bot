@@ -6475,19 +6475,20 @@ function adjustCompanyMrrScatterRadiusScale(delta = 0) {
 }
 
 const companyMrrScatterHoverPointId = ref('');
-let companyMrrScatterHoverSuppressedUntil = 0;
+const companyMrrScatterHoverArmed = ref(true);
 
-function suppressCompanyMrrScatterHover(durationMs = 500) {
-  companyMrrScatterHoverSuppressedUntil = Date.now() + durationMs;
+function suppressCompanyMrrScatterHover() {
+  companyMrrScatterHoverArmed.value = false;
   companyMrrScatterHoverPointId.value = '';
 }
 
 function hoverCompanyMrrScatterPoint(point = {}) {
-  if (Date.now() < companyMrrScatterHoverSuppressedUntil) return;
+  if (!companyMrrScatterHoverArmed.value) return;
   companyMrrScatterHoverPointId.value = String(point.id || '').trim();
 }
 
 function unhoverCompanyMrrScatterPoint() {
+  companyMrrScatterHoverArmed.value = true;
   companyMrrScatterHoverPointId.value = '';
 }
 
