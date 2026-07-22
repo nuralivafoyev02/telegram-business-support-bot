@@ -712,7 +712,6 @@
                 </div>
               </section>
 
-              <Teleport to="#company-detail-trend-target" :disabled="modal !== 'companyDetail'">
               <section v-if="companyModuleChartRows.length"
                 class="card chart-card line-chart-card company-module-chart-card">
                 <div class="card-header chart-card-head company-module-chart-head">
@@ -848,7 +847,6 @@
                   </div>
                 </div>
               </section>
-              </Teleport>
 
               <section class="card chart-card">
                 <div class="card-header chart-card-head">
@@ -1865,8 +1863,144 @@
           </div>
         </div>
 
-        <div v-show="companyDetailActiveTab === 'trend'" id="company-detail-trend-target"
-          class="company-detail-trend-slot"></div>
+        <div v-show="companyDetailActiveTab === 'trend'" class="company-detail-trend-slot">
+          <section v-if="companyModuleChartRows.length"
+            class="card chart-card line-chart-card company-module-chart-card">
+            <div class="card-header chart-card-head company-module-chart-head">
+              <div>
+                <div class="card-title">Bo‘limlar dinamikasi</div>
+              </div>
+              <div class="company-module-chart-controls">
+                <div class="company-module-filter company-module-filter-wide company-module-filter-menu-wrap"
+                  ref="companyDetailModuleChartCompanyMenuRef">
+                  <span>Kompaniyalar</span>
+                  <div class="company-module-filter-picker">
+                    <button type="button" class="company-module-filter-trigger select mini-select"
+                      @click.stop="toggleCompanyModuleChartCompanyMenu">
+                      <span class="company-module-filter-trigger-label">{{ companyModuleChartCompanyLabel }}</span>
+                      <span class="company-module-filter-trigger-caret">▾</span>
+                    </button>
+                    <Transition name="fade">
+                      <div v-if="companyModuleChartCompanyMenuOpen"
+                        class="company-module-filter-menu actions-dropdown" @click.stop>
+                        <button type="button" class="company-module-filter-option"
+                          :class="{ active: !companyModuleChartCompanyId }"
+                          @click="selectCompanyModuleChartCompany('')">
+                          <span>Hammasi</span>
+                          <span v-if="!companyModuleChartCompanyId" class="company-module-filter-check">✓</span>
+                        </button>
+                        <button v-for="company in companyModuleChartCompanyOptions"
+                          :key="`detail-module-chart-company-${company.id}`" type="button"
+                          class="company-module-filter-option"
+                          :class="{ active: companyModuleChartCompanyId === company.id }"
+                          @click="selectCompanyModuleChartCompany(company.id)">
+                          <span>{{ company.name }}</span>
+                          <span v-if="companyModuleChartCompanyId === company.id"
+                            class="company-module-filter-check">✓</span>
+                        </button>
+                      </div>
+                    </Transition>
+                  </div>
+                </div>
+                <div class="company-module-chart-metric-tabs">
+                  <button v-for="option in companyModuleChartMetricOptions"
+                    :key="`detail-module-chart-metric-${option.key}`" type="button"
+                    class="company-module-chart-metric-btn" :class="{ active: companyModuleChartMetricKeys.includes(option.key) }"
+                    @click="toggleCompanyModuleChartMetric(option.key)">
+                    {{ option.label }}
+                  </button>
+                </div>
+                <label class="company-module-filter">
+                  <span>Davr</span>
+                  <select :value="companyModuleChartPeriod" class="select mini-select"
+                    @change="handleCompanyModuleChartPeriodChange($event.target.value)"
+                    @mousedown="handleCompanyModuleChartPeriodSelectPointerDown"
+                    @mouseup="handleCompanyModuleChartPeriodSelectPointerUp">
+                    <option v-for="period in companyModulePeriodOptions"
+                      :key="`detail-module-chart-period-${period.key}`" :value="period.key">
+                      {{ companyModuleChartPeriodOptionLabel(period) }}
+                    </option>
+                  </select>
+                </label>
+              </div>
+            </div>
+            <div class="company-module-chart-shell" ref="companyDetailModuleChartRef"
+              @mouseleave="companyModuleChartHoverIndex = -1">
+              <div class="company-module-chart-legend top">
+                <button v-for="line in companyModuleChartLines" :key="`detail-module-chart-legend-${line.key}`"
+                  type="button" class="company-module-chart-legend-item"
+                  :class="{ inactive: !companyModuleChartVisibleModules.includes(line.key) }"
+                  @click="toggleCompanyModuleChartModule(line.key)">
+                  <i :style="{ borderColor: line.color }"></i>{{ line.label }}
+                </button>
+                <button type="button" class="company-module-chart-legend-item average"
+                  :class="{ inactive: !companyModuleChartShowAverage }"
+                  @click="companyModuleChartShowAverage = !companyModuleChartShowAverage">
+                  <i></i>O‘rtacha
+                </button>
+              </div>
+              <div class="trend-chart company-module-trend-chart">
+                <svg :viewBox="`0 0 ${COMPANY_MODULE_CHART_VIEW.width} ${COMPANY_MODULE_CHART_VIEW.height}`"
+                  role="img" :aria-label="companyModuleChartAriaLabel" @mousemove="onCompanyModuleChartMove"
+                  @touchstart.passive="onCompanyModuleChartTouch" @touchmove.passive="onCompanyModuleChartTouch">
+                  <text class="company-module-chart-axis-title" x="14" :y="companyModuleChartAxisTitleY"
+                    :transform="`rotate(-90 14 ${companyModuleChartAxisTitleY})`">{{ companyModuleChartAxisLabel
+                    }}</text>
+                  <g class="trend-grid">
+                    <line v-for="tick in companyModuleChartYTicks" :key="`detail-module-chart-y-${tick.value}`"
+                      :x1="COMPANY_MODULE_CHART_DIMS.left" :x2="COMPANY_MODULE_CHART_DIMS.right" :y1="tick.y"
+                      :y2="tick.y" />
+                  </g>
+                  <g class="trend-axis company-module-chart-axis">
+                    <text v-for="tick in companyModuleChartYTicks" :key="`detail-module-chart-y-label-${tick.value}`"
+                      x="52" :y="tick.y + 4" text-anchor="end">{{ tick.value }}</text>
+                  </g>
+                  <line v-if="companyModuleChartTooltip" class="company-module-chart-guide"
+                    :x1="companyModuleChartTooltip.x" :x2="companyModuleChartTooltip.x"
+                    :y1="COMPANY_MODULE_CHART_DIMS.top" :y2="COMPANY_MODULE_CHART_DIMS.bottom" />
+                  <g v-for="line in companyModuleChartVisibleLines" :key="`detail-module-chart-line-${line.key}`"
+                    class="company-module-chart-module-line">
+                    <path v-if="line.points.length > 1 && line.path" :d="line.path" fill="none" :stroke="line.color"
+                      stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="8 6" />
+                    <circle v-for="(point, pointIndex) in line.points"
+                      :key="`detail-module-chart-dot-${line.key}-${pointIndex}`" class="company-module-chart-dot"
+                      :class="{ active: companyModuleChartHoverIndex === pointIndex }" :cx="point.x" :cy="point.y"
+                      :r="companyModuleChartHoverIndex === pointIndex ? 3.5 : 2.5" :fill="line.color"
+                      :stroke="line.color" :stroke-width="companyModuleChartHoverIndex === pointIndex ? 2 : 1" />
+                  </g>
+                  <g v-if="companyModuleChartShowAverage && companyModuleChartAverageLine.points.length > 1"
+                    class="company-module-chart-average-line">
+                    <path :d="companyModuleChartAverageLine.path" fill="none" stroke="#111827" stroke-width="2.5"
+                      stroke-linecap="round" stroke-linejoin="round" />
+                    <circle v-for="(point, pointIndex) in companyModuleChartAverageLine.points"
+                      :key="`detail-module-chart-avg-dot-${pointIndex}`" :cx="point.x" :cy="point.y" r="3.5"
+                      fill="#111827" stroke="#111827" stroke-width="1.5" />
+                  </g>
+                  <g class="trend-axis company-module-chart-axis">
+                    <text v-for="tick in companyModuleChartXTicks" :key="`detail-module-chart-x-${tick.date_key}`"
+                      :x="tick.x" :y="COMPANY_MODULE_CHART_DIMS.bottom + 16" text-anchor="middle">{{ tick.label
+                      }}</text>
+                  </g>
+                </svg>
+                <div v-if="companyModuleChartTooltip" class="company-module-chart-tooltip"
+                  :style="companyModuleChartTooltipStyle">
+                  <b>{{ companyModuleChartTooltip.label }}</b>
+                  <div v-for="item in companyModuleChartTooltip.items" :key="`detail-module-chart-tip-${item.key}`"
+                    class="company-module-chart-tooltip-row">
+                    <span :style="{ color: item.color }">{{ item.label }}</span>
+                    <strong v-if="item.dual" class="company-module-chart-tooltip-pair">
+                      <span>{{ item.activityText }}</span>
+                      <span class="company-module-chart-tooltip-sep">·</span>
+                      <span>{{ item.actionsText }}</span>
+                    </strong>
+                    <strong v-else>{{ item.valueText }}</strong>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+          <div v-else class="empty compact">Ma’lumot topilmadi</div>
+        </div>
 
         <div v-show="companyDetailActiveTab === 'modules'" class="company-detail-modules">
           <label class="company-module-filter">
@@ -3294,6 +3428,8 @@ const companyModuleChartCompanyId = ref('');
 const companyModuleChartCompanyMenuOpen = ref(false);
 const companyModuleChartCompanyMenuRef = ref(null);
 const companyModuleChartRef = ref(null);
+const companyDetailModuleChartRef = ref(null);
+const companyDetailModuleChartCompanyMenuRef = ref(null);
 const companyModuleChartHoverIndex = ref(-1);
 const comparisonEnabled = ref(getStoredComparisonEnabled());
 const themeMode = ref(getStoredThemeMode());
@@ -4432,7 +4568,9 @@ function handleDocumentPointerDown(event) {
   }
   if (companyModuleChartCompanyMenuOpen.value) {
     const root = companyModuleChartCompanyMenuRef.value;
-    if (!root || !root.contains(event.target)) closeCompanyModuleChartCompanyMenu();
+    const detailRoot = companyDetailModuleChartCompanyMenuRef.value;
+    const inside = (root && root.contains(event.target)) || (detailRoot && detailRoot.contains(event.target));
+    if (!inside) closeCompanyModuleChartCompanyMenu();
   }
   if (companyMrrClickupStatusMenuOpen.value) {
     const root = companyMrrClickupStatusMenuRef.value;
@@ -7138,8 +7276,8 @@ const companyModuleChartAxisLabel = computed(() => (
   companyModuleChartActiveMetric.value === 'actions' ? 'Amallar soni' : 'Foiz (%)'
 ));
 
-function onCompanyModuleChartPointer(clientX = 0) {
-  const root = companyModuleChartRef.value;
+function onCompanyModuleChartPointer(clientX = 0, rootEl = null) {
+  const root = rootEl || companyModuleChartRef.value;
   const svg = root?.querySelector('svg');
   const points = companyModuleChartPlotPoints.value;
   if (!svg || !points.length) {
@@ -7161,13 +7299,15 @@ function onCompanyModuleChartPointer(clientX = 0) {
 }
 
 function onCompanyModuleChartMove(event) {
-  onCompanyModuleChartPointer(event.clientX);
+  const root = event.currentTarget?.closest('.company-module-chart-shell');
+  onCompanyModuleChartPointer(event.clientX, root);
 }
 
 function onCompanyModuleChartTouch(event) {
   const touch = event.touches?.[0];
   if (!touch) return;
-  onCompanyModuleChartPointer(touch.clientX);
+  const root = event.currentTarget?.closest('.company-module-chart-shell');
+  onCompanyModuleChartPointer(touch.clientX, root);
 }
 
 const companyModuleChartPlotPoints = computed(() => {
@@ -7339,7 +7479,8 @@ const companyModuleChartTooltip = computed(() => {
 
 const companyModuleChartTooltipStyle = computed(() => {
   const tooltip = companyModuleChartTooltip.value;
-  const root = companyModuleChartRef.value;
+  const useDetailRef = modal.value === 'companyDetail' && companyDetailActiveTab.value === 'trend';
+  const root = useDetailRef ? companyDetailModuleChartRef.value : companyModuleChartRef.value;
   if (!tooltip || !root) return {};
   const svg = root.querySelector('svg');
   if (!svg) return {};
