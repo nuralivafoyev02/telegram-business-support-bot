@@ -146,5 +146,7 @@ export const api = {
   telegramWebhookInfo: () => request('telegramWebhookInfo').then(r => r.data),
   setTelegramWebhook: payload => request('setTelegramWebhook', { method: 'POST', body: payload || {} }).then(r => r.data),
   syncTelegramUpdates: payload => request('syncTelegramUpdates', { method: 'POST', body: payload || {} }).then(r => r.data),
-  syncClickupCompanyLinks: payload => request('clickupCompanyLinksSync', { method: 'POST', body: payload || {} }).then(r => r.data)
+  syncClickupCompanyLinks: payload => request('clickupCompanyLinksSync', { method: 'POST', body: payload || {} }).then(r => r.data),
+  uyqurPermissions: () => request('uyqurPermissions').then(r => r.data),
+  saveUyqurPermissions: payload => request('uyqurPermissionsSave', { method: 'POST', body: payload }).then(r => r.data)
 };

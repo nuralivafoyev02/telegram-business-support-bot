@@ -1596,6 +1596,50 @@
               </section>
             </div>
           </template>
+
+          <template v-if="activeTab === 'uyqurPermissions'">
+            <section class="card pad settings-card">
+              <div class="settings-head">
+                <div>
+                  <div class="card-title">Uyqur Funksiyalari</div>
+                  <p class="muted">Tizim funksiyalarini boshqarish va ko‘rish huquqlarini belgilash</p>
+                </div>
+                <button class="btn primary" :disabled="loadingAction === 'saveUyqurPermissions'"
+                  @click="saveUyqurPermissions">
+                  {{ loadingAction === 'saveUyqurPermissions' ? 'Saqlanmoqda...' : 'Saqlash' }}
+                </button>
+              </div>
+              <div class="table-wrap">
+                <table v-if="permissionModules.length">
+                  <thead>
+                    <tr>
+                      <th>Funksiya</th>
+                      <th class="select-cell">Belgilash</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <template v-for="module in permissionModules" :key="'module-' + module.id">
+                      <tr>
+                        <td><b>{{ module.name || module.key }}</b></td>
+                        <td class="select-cell">
+                          <input class="row-check" type="checkbox" :checked="isPermissionModuleSelected(module)"
+                            @change="togglePermissionModule(module, $event.target.checked)" />
+                        </td>
+                      </tr>
+                      <tr v-for="submodule in module.submodules" :key="'submodule-' + submodule.id">
+                        <td>- {{ submodule.name || submodule.key }}</td>
+                        <td class="select-cell">
+                          <input class="row-check" type="checkbox" :checked="isPermissionSelected(submodule.key)"
+                            @change="togglePermissionSubmodule(submodule.key, $event.target.checked)" />
+                        </td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+                <div v-else class="empty">{{ loadingAction === 'tab' ? 'Yuklanmoqda...' : 'Funksiyalar topilmadi' }}</div>
+              </div>
+            </section>
+          </template>
         </div>
       </Transition>
     </section>
@@ -3275,10 +3319,11 @@ const tabs = [
   { key: 'clickup', label: 'ClickUp', icon: '✅' },
   { key: 'privates', label: 'Mijozlar', icon: '💬' },
   { key: 'knowledgeBase', label: 'Bilim bazasi', icon: '📚' },
+  { key: 'uyqurPermissions', label: 'Uyqur Funksiyalari', icon: '🧩' },
   { key: 'settings', label: 'Sozlamalar', icon: '⚙️' }
 ];
 const mainTabKeys = ['stats', 'productAnalytics', 'companyActivity'];
-const otherTabKeys = ['groups', 'employees', 'companies', 'clickup', 'privates', 'knowledgeBase'];
+const otherTabKeys = ['groups', 'employees', 'companies', 'clickup', 'privates', 'knowledgeBase', 'uyqurPermissions'];
 
 function isValidTab(key) {
   return tabs.some(tab => tab.key === key);
@@ -3374,6 +3419,8 @@ const groups = ref([]);
 const privates = ref([]);
 const employees = ref([]);
 const clickupTasks = ref([]);
+const permissionModules = ref([]);
+const permissionSelected = ref([]);
 const companyInfo = ref({ summary: {}, companies: [], fetched_at: '', source: '' });
 const companyModuleReports = ref({ companies: [], report_dates: [], period: 'all' });
 const companyModuleChartSource = ref({ period: 'week', daily_companies: [], report_dates: [] });
@@ -8827,6 +8874,7 @@ async function refresh() {
     if (activeTab.value === 'companies') await loadCompanyInfo();
     if (activeTab.value === 'clickup') await loadClickUpTasks();
     if (activeTab.value === 'knowledgeBase') await loadSettings();
+    if (activeTab.value === 'uyqurPermissions') await loadPermissionView();
     if (activeTab.value === 'settings') await loadSettings();
     if (activeTab.value === 'settings') checkTelegramWebhook(false).catch(() => null);
   } catch (error) {
@@ -9300,6 +9348,52 @@ async function loadClickUpTasks() {
   clickupTasks.value = await api.clickupTasks({ limit: 200 });
 }
 
+async function loadPermissionView() {
+  const data = await api.uyqurPermissions();
+  permissionModules.value = Array.isArray(data.modules) ? data.modules : [];
+  permissionSelected.value = Array.isArray(data.selected) ? data.selected.map(String) : [];
+}
+
+function isPermissionSelected(key) {
+  return permissionSelected.value.includes(String(key));
+}
+
+function togglePermissionSubmodule(key, checked) {
+  const stringKey = String(key);
+  if (checked) {
+    if (!permissionSelected.value.includes(stringKey)) permissionSelected.value = [...permissionSelected.value, stringKey];
+  } else {
+    permissionSelected.value = permissionSelected.value.filter(item => item !== stringKey);
+  }
+}
+
+function isPermissionModuleSelected(module) {
+  const keys = (module.submodules || []).map(submodule => String(submodule.key));
+  return keys.length > 0 && keys.every(key => permissionSelected.value.includes(key));
+}
+
+function togglePermissionModule(module, checked) {
+  const keys = (module.submodules || []).map(submodule => String(submodule.key));
+  if (checked) {
+    permissionSelected.value = Array.from(new Set([...permissionSelected.value, ...keys]));
+  } else {
+    permissionSelected.value = permissionSelected.value.filter(item => !keys.includes(item));
+  }
+}
+
+async function saveUyqurPermissions() {
+  startLoading('saveUyqurPermissions');
+  try {
+    const data = await api.saveUyqurPermissions({ selected: permissionSelected.value });
+    permissionSelected.value = Array.isArray(data.selected) ? data.selected.map(String) : permissionSelected.value;
+    showToast('Saqlandi');
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    stopLoading('saveUyqurPermissions');
+  }
+}
+
 function setThemeMode(mode) {
   const safeMode = ['system', 'light', 'dark'].includes(mode) ? mode : 'system';
   themeMode.value = safeMode;
@@ -9415,6 +9509,7 @@ async function setTab(key) {
     if (activeTab.value === 'companies') await loadCompanyInfo();
     if (activeTab.value === 'clickup') await loadClickUpTasks();
     if (activeTab.value === 'knowledgeBase') await loadSettings();
+    if (activeTab.value === 'uyqurPermissions') await loadPermissionView();
     if (activeTab.value === 'settings') await loadSettings();
     if (activeTab.value === 'settings') checkTelegramWebhook(false).catch(() => null);
   } catch (error) {
