@@ -1639,6 +1639,50 @@
                 <div v-else class="empty">{{ loadingAction === 'tab' ? 'Yuklanmoqda...' : 'Funksiyalar topilmadi' }}</div>
               </div>
             </section>
+
+            <section class="card pad settings-card">
+              <div class="settings-head">
+                <div>
+                  <div class="card-title">Supportlar</div>
+                  <p class="muted">Funksiya yoqilganda bildirishnoma shu yerga keladi</p>
+                </div>
+              </div>
+              <div class="table-wrap">
+                <table v-if="supportNotifications.length">
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>Support</th>
+                      <th>%</th>
+                      <th>Bildirishnomalar</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="(row, index) in supportNotifications" :key="row.id">
+                      <td>{{ index + 1 }}</td>
+                      <td>
+                        <span class="employee-cell">
+                          <span class="employee-avatar fallback">{{ employeeInitials(row) }}</span>
+                          <span>
+                            <b>{{ row.full_name }}</b><br />
+                            <span class="muted">@{{ row.username || '—' }}</span>
+                          </span>
+                        </span>
+                      </td>
+                      <td>{{ row.percent }}%</td>
+                      <td>
+                        <button class="btn small notif-bell" type="button" @click="markSupportRead(row)"
+                          title="O‘qilgan deb belgilash">
+                          🔔
+                          <span v-if="row.unread" class="notif-badge">{{ row.unread }}</span>
+                        </button>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+                <div v-else class="empty">Support xodimlar topilmadi</div>
+              </div>
+            </section>
           </template>
         </div>
       </Transition>
@@ -3421,6 +3465,7 @@ const employees = ref([]);
 const clickupTasks = ref([]);
 const permissionModules = ref([]);
 const permissionSelected = ref([]);
+const supportNotifications = ref([]);
 const companyInfo = ref({ summary: {}, companies: [], fetched_at: '', source: '' });
 const companyModuleReports = ref({ companies: [], report_dates: [], period: 'all' });
 const companyModuleChartSource = ref({ period: 'week', daily_companies: [], report_dates: [] });
@@ -8874,7 +8919,7 @@ async function refresh() {
     if (activeTab.value === 'companies') await loadCompanyInfo();
     if (activeTab.value === 'clickup') await loadClickUpTasks();
     if (activeTab.value === 'knowledgeBase') await loadSettings();
-    if (activeTab.value === 'uyqurPermissions') await loadPermissionView();
+    if (activeTab.value === 'uyqurPermissions') await Promise.all([loadPermissionView(), loadSupportNotifications()]);
     if (activeTab.value === 'settings') await loadSettings();
     if (activeTab.value === 'settings') checkTelegramWebhook(false).catch(() => null);
   } catch (error) {
@@ -9387,10 +9432,24 @@ async function saveUyqurPermissions() {
     const data = await api.saveUyqurPermissions({ selected: permissionSelected.value });
     permissionSelected.value = Array.isArray(data.selected) ? data.selected.map(String) : permissionSelected.value;
     showToast('Saqlandi');
+    loadSupportNotifications().catch(() => null);
   } catch (error) {
     showToast(error.message);
   } finally {
     stopLoading('saveUyqurPermissions');
+  }
+}
+
+async function loadSupportNotifications() {
+  supportNotifications.value = await api.uyqurSupportNotifications();
+}
+
+async function markSupportRead(row) {
+  try {
+    await api.markUyqurSupportNotificationRead({ employee_id: row.id });
+    await loadSupportNotifications();
+  } catch (error) {
+    showToast(error.message);
   }
 }
 
@@ -9509,7 +9568,7 @@ async function setTab(key) {
     if (activeTab.value === 'companies') await loadCompanyInfo();
     if (activeTab.value === 'clickup') await loadClickUpTasks();
     if (activeTab.value === 'knowledgeBase') await loadSettings();
-    if (activeTab.value === 'uyqurPermissions') await loadPermissionView();
+    if (activeTab.value === 'uyqurPermissions') await Promise.all([loadPermissionView(), loadSupportNotifications()]);
     if (activeTab.value === 'settings') await loadSettings();
     if (activeTab.value === 'settings') checkTelegramWebhook(false).catch(() => null);
   } catch (error) {

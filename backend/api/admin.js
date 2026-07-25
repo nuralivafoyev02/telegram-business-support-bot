@@ -29,7 +29,7 @@ const {
 const { extractTextFromUpload } = require('../lib/document-text');
 const { resolveMainStatsChatId, sendMainStatsReport } = require('../lib/report');
 const { syncCompanyInfo, getCachedCompanyInfo, resolveCachedCompanyInfoCompanies, emptyCompanyInfoResult } = require('../lib/company-info');
-const { getPermissionView, savePermissionSelection } = require('../lib/permission-view');
+const { getPermissionView, savePermissionSelection, getSupportNotifications, markSupportNotificationsRead } = require('../lib/permission-view');
 const {
   syncCompanyReport,
   getCachedCompanyReport,
@@ -6409,6 +6409,7 @@ async function handleGet(action, query) {
     case 'clickupTasks': return listClickUpTasks(query);
     case 'telegramWebhookInfo': return getTelegramWebhookStatus();
     case 'uyqurPermissions': return getPermissionView();
+    case 'uyqurSupportNotifications': return getSupportNotifications();
     default: throw new Error(`Unknown GET action: ${action}`);
   }
 }
@@ -6436,6 +6437,7 @@ async function handlePost(action, body, currentAdmin) {
     case 'syncTelegramUpdates': return syncTelegramUpdates(body);
     case 'clickupCompanyLinksSync': return syncClickUpCompanyLinks();
     case 'uyqurPermissionsSave': return savePermissionSelection(body.selected);
+    case 'uyqurSupportNotificationRead': return markSupportNotificationsRead(body.employee_id);
     default: throw new Error(`Unknown POST action: ${action}`);
   }
 }
