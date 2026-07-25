@@ -1648,7 +1648,7 @@
                 </div>
               </div>
               <div class="table-wrap">
-                <table v-if="supportNotifications.length">
+                <table v-if="supportOverview.length">
                   <thead>
                     <tr>
                       <th>#</th>
@@ -1658,7 +1658,7 @@
                     </tr>
                   </thead>
                   <tbody>
-                    <tr v-for="(row, index) in supportNotifications" :key="row.id">
+                    <tr v-for="(row, index) in supportOverview" :key="row.id">
                       <td>{{ index + 1 }}</td>
                       <td>
                         <span class="employee-cell">
@@ -1671,16 +1671,97 @@
                       </td>
                       <td>{{ row.percent }}%</td>
                       <td>
-                        <button class="btn small notif-bell" type="button" @click="markSupportRead(row)"
-                          title="O‘qilgan deb belgilash">
+                        <span class="notif-bell" title="Tasdiqlanmagan bildirishnomalar">
                           🔔
                           <span v-if="row.unread" class="notif-badge">{{ row.unread }}</span>
-                        </button>
+                        </span>
                       </td>
                     </tr>
                   </tbody>
                 </table>
                 <div v-else class="empty">Support xodimlar topilmadi</div>
+              </div>
+            </section>
+
+            <section class="card pad settings-card">
+              <div class="settings-head">
+                <div>
+                  <div class="card-title">Funksiyalar bo‘yicha o‘rganish holati</div>
+                  <p class="muted">Support tanlangan funksiyani o‘rgangach, belgisi yashil bo‘ladi</p>
+                </div>
+                <select class="select" v-model="selectedEventId" @change="onEventSelectChange">
+                  <option v-for="event in notificationEvents" :key="event.id" :value="String(event.id)">
+                    {{ event.submodule_name || event.submodule_key }}
+                  </option>
+                </select>
+              </div>
+              <div class="table-wrap">
+                <table v-if="eventLearningRows.length">
+                  <thead>
+                    <tr>
+                      <th>Supportlar</th>
+                      <th>Funksiya</th>
+                      <th>O‘rganildi</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="row in eventLearningRows" :key="row.employee_id">
+                      <td>
+                        <span class="employee-cell">
+                          <span class="employee-avatar fallback">{{ employeeInitials(row) }}</span>
+                          <b>{{ row.full_name }}</b>
+                        </span>
+                      </td>
+                      <td>{{ (notificationEvents.find(event => String(event.id) === selectedEventId) || {}).submodule_name || '—' }}</td>
+                      <td>
+                        <button class="btn small learn-btn" :class="{ learned: row.learned }" type="button"
+                          @click="toggleLearned(row)">
+                          {{ row.learned ? '✓ O‘rganildi' : 'O‘rganildi' }}
+                        </button>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+                <div v-else class="empty">Hozircha funksiya yoqilmagan</div>
+              </div>
+            </section>
+
+            <section class="card pad settings-card">
+              <div class="settings-head">
+                <div>
+                  <div class="card-title">Menejerlar</div>
+                  <p class="muted">Support o‘rgangan funksiyalarni tasdiqlash</p>
+                </div>
+              </div>
+              <div class="table-wrap">
+                <table v-if="managerReviewRows.length">
+                  <thead>
+                    <tr>
+                      <th>№</th>
+                      <th>Support</th>
+                      <th>Funksiya</th>
+                      <th>O‘rganildi</th>
+                      <th class="select-cell">Tasdiqlash</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="(row, index) in managerReviewRows" :key="row.event_id + ':' + row.employee_id">
+                      <td>{{ index + 1 }}</td>
+                      <td>{{ row.full_name }}</td>
+                      <td>{{ row.submodule_name }}</td>
+                      <td>
+                        <span class="badge" :class="row.learned_at ? 'green' : 'blue'">
+                          {{ row.learned_at ? '✓ O‘rganildi' : 'O‘rganildi' }}
+                        </span>
+                      </td>
+                      <td class="select-cell">
+                        <input class="row-check" type="checkbox" :checked="row.confirmed"
+                          @change="toggleConfirmed(row)" />
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+                <div v-else class="empty">Tasdiqlash uchun funksiya yo‘q</div>
               </div>
             </section>
           </template>
@@ -3465,7 +3546,11 @@ const employees = ref([]);
 const clickupTasks = ref([]);
 const permissionModules = ref([]);
 const permissionSelected = ref([]);
-const supportNotifications = ref([]);
+const supportOverview = ref([]);
+const notificationEvents = ref([]);
+const selectedEventId = ref('');
+const eventLearningRows = ref([]);
+const managerReviewRows = ref([]);
 const companyInfo = ref({ summary: {}, companies: [], fetched_at: '', source: '' });
 const companyModuleReports = ref({ companies: [], report_dates: [], period: 'all' });
 const companyModuleChartSource = ref({ period: 'week', daily_companies: [], report_dates: [] });
@@ -8919,7 +9004,9 @@ async function refresh() {
     if (activeTab.value === 'companies') await loadCompanyInfo();
     if (activeTab.value === 'clickup') await loadClickUpTasks();
     if (activeTab.value === 'knowledgeBase') await loadSettings();
-    if (activeTab.value === 'uyqurPermissions') await Promise.all([loadPermissionView(), loadSupportNotifications()]);
+    if (activeTab.value === 'uyqurPermissions') {
+      await Promise.all([loadPermissionView(), loadSupportOverview(), loadNotificationEvents(), loadManagerReviewQueue()]);
+    }
     if (activeTab.value === 'settings') await loadSettings();
     if (activeTab.value === 'settings') checkTelegramWebhook(false).catch(() => null);
   } catch (error) {
@@ -9432,7 +9519,7 @@ async function saveUyqurPermissions() {
     const data = await api.saveUyqurPermissions({ selected: permissionSelected.value });
     permissionSelected.value = Array.isArray(data.selected) ? data.selected.map(String) : permissionSelected.value;
     showToast('Saqlandi');
-    loadSupportNotifications().catch(() => null);
+    await Promise.all([loadSupportOverview(), loadNotificationEvents(), loadManagerReviewQueue()]);
   } catch (error) {
     showToast(error.message);
   } finally {
@@ -9440,14 +9527,48 @@ async function saveUyqurPermissions() {
   }
 }
 
-async function loadSupportNotifications() {
-  supportNotifications.value = await api.uyqurSupportNotifications();
+async function loadSupportOverview() {
+  supportOverview.value = await api.uyqurSupportOverview();
 }
 
-async function markSupportRead(row) {
+async function loadNotificationEvents() {
+  notificationEvents.value = await api.uyqurNotificationEvents();
+  if (!selectedEventId.value && notificationEvents.value.length) {
+    selectedEventId.value = String(notificationEvents.value[0].id);
+  }
+  await loadEventLearningStatus();
+}
+
+async function loadEventLearningStatus() {
+  if (!selectedEventId.value) {
+    eventLearningRows.value = [];
+    return;
+  }
+  const data = await api.uyqurEventLearningStatus({ event_id: selectedEventId.value });
+  eventLearningRows.value = data.rows || [];
+}
+
+async function loadManagerReviewQueue() {
+  managerReviewRows.value = await api.uyqurManagerReviewQueue();
+}
+
+function onEventSelectChange() {
+  loadEventLearningStatus().catch(error => showToast(error.message));
+}
+
+async function toggleLearned(row) {
   try {
-    await api.markUyqurSupportNotificationRead({ employee_id: row.id });
-    await loadSupportNotifications();
+    await api.markUyqurLearned({ event_id: selectedEventId.value, employee_id: row.employee_id, learned: !row.learned });
+    await Promise.all([loadEventLearningStatus(), loadManagerReviewQueue(), loadSupportOverview()]);
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
+async function toggleConfirmed(row) {
+  try {
+    await api.confirmUyqurReview({ event_id: row.event_id, employee_id: row.employee_id, confirmed: !row.confirmed });
+    await Promise.all([loadManagerReviewQueue(), loadSupportOverview(), loadEventLearningStatus()]);
   } catch (error) {
     showToast(error.message);
   }
@@ -9568,7 +9689,9 @@ async function setTab(key) {
     if (activeTab.value === 'companies') await loadCompanyInfo();
     if (activeTab.value === 'clickup') await loadClickUpTasks();
     if (activeTab.value === 'knowledgeBase') await loadSettings();
-    if (activeTab.value === 'uyqurPermissions') await Promise.all([loadPermissionView(), loadSupportNotifications()]);
+    if (activeTab.value === 'uyqurPermissions') {
+      await Promise.all([loadPermissionView(), loadSupportOverview(), loadNotificationEvents(), loadManagerReviewQueue()]);
+    }
     if (activeTab.value === 'settings') await loadSettings();
     if (activeTab.value === 'settings') checkTelegramWebhook(false).catch(() => null);
   } catch (error) {

@@ -105,7 +105,7 @@ async function getNotificationRecord() {
   const value = row && row.value && typeof row.value === 'object' ? row.value : {};
   return {
     events: Array.isArray(value.events) ? value.events : [],
-    reads: value.reads && typeof value.reads === 'object' ? value.reads : {}
+    progress: value.progress && typeof value.progress === 'object' ? value.progress : {}
   };
 }
 
@@ -146,37 +146,114 @@ async function savePermissionSelection(selected = []) {
   return { selected: next.selected };
 }
 
-async function getSupportNotifications() {
-  const [employees, record] = await Promise.all([
-    supabase.select('employees', {
-      select: 'id,username,full_name,role,is_active',
-      role: supabase.eq('support'),
-      is_active: supabase.eq(true),
-      limit: '200'
-    }).catch(() => []),
-    getNotificationRecord()
-  ]);
-  const totalEvents = record.events.length;
+async function getSupportEmployees() {
+  return supabase.select('employees', {
+    select: 'id,username,full_name,role,is_active',
+    role: supabase.eq('support'),
+    is_active: supabase.eq(true),
+    limit: '200'
+  }).catch(() => []);
+}
+
+function progressFor(record, eventId, employeeId) {
+  const eventProgress = record.progress[eventId];
+  return (eventProgress && eventProgress[employeeId]) || {};
+}
+
+async function getSupportOverview() {
+  const [employees, record] = await Promise.all([getSupportEmployees(), getNotificationRecord()]);
+  const total = record.events.length;
   return employees.map(employee => {
-    const lastRead = record.reads[String(employee.id)] || null;
-    const unread = lastRead ? record.events.filter(event => event.created_at > lastRead).length : totalEvents;
-    const read = totalEvents - unread;
-    const percent = totalEvents ? Math.round((read / totalEvents) * 100) : 0;
+    const confirmedCount = record.events.filter(event => progressFor(record, event.id, employee.id).confirmed_at).length;
+    const pending = total - confirmedCount;
+    const percent = total ? Math.round((confirmedCount / total) * 100) : 0;
     return {
       id: employee.id,
       full_name: employee.full_name || employee.username || 'Support',
       username: employee.username || '',
-      unread,
+      unread: pending,
       percent
     };
   });
 }
 
-async function markSupportNotificationsRead(employeeId) {
+async function listNotificationEvents() {
   const record = await getNotificationRecord();
-  record.reads[String(employeeId)] = new Date().toISOString();
+  return record.events.slice().reverse();
+}
+
+async function getEventLearningStatus(eventId) {
+  const [employees, record] = await Promise.all([getSupportEmployees(), getNotificationRecord()]);
+  const events = record.events.slice().reverse();
+  const targetEvent = eventId ? events.find(event => String(event.id) === String(eventId)) : events[0];
+  if (!targetEvent) return { event: null, rows: [] };
+  const rows = employees.map(employee => {
+    const progress = progressFor(record, targetEvent.id, employee.id);
+    return {
+      employee_id: employee.id,
+      full_name: employee.full_name || employee.username || 'Support',
+      username: employee.username || '',
+      learned: Boolean(progress.learned_at),
+      learned_at: progress.learned_at || null,
+      confirmed: Boolean(progress.confirmed_at)
+    };
+  });
+  return { event: targetEvent, rows };
+}
+
+async function setEventLearned(eventId, employeeId, learned = true) {
+  if (!eventId || !employeeId) throw new Error('event_id va employee_id majburiy');
+  const record = await getNotificationRecord();
+  if (!record.progress[eventId]) record.progress[eventId] = {};
+  const current = record.progress[eventId][employeeId] || {};
+  record.progress[eventId][employeeId] = {
+    ...current,
+    learned_at: learned ? new Date().toISOString() : null,
+    confirmed_at: learned ? current.confirmed_at || null : null,
+    confirmed_by: learned ? current.confirmed_by || null : null
+  };
   await saveNotificationRecord(record);
-  return { ok: true };
+  return record.progress[eventId][employeeId];
+}
+
+async function getManagerReviewQueue() {
+  const [supports, record] = await Promise.all([getSupportEmployees(), getNotificationRecord()]);
+  const supportById = new Map(supports.map(employee => [String(employee.id), employee]));
+  const rows = [];
+  record.events.forEach(event => {
+    const eventProgress = record.progress[event.id] || {};
+    Object.entries(eventProgress).forEach(([employeeId, progress]) => {
+      if (!progress.learned_at) return;
+      const employee = supportById.get(String(employeeId));
+      if (!employee) return;
+      rows.push({
+        event_id: event.id,
+        submodule_name: event.submodule_name,
+        module_name: event.module_name,
+        employee_id: employeeId,
+        full_name: employee.full_name || employee.username || 'Support',
+        username: employee.username || '',
+        learned_at: progress.learned_at,
+        confirmed: Boolean(progress.confirmed_at),
+        confirmed_at: progress.confirmed_at || null
+      });
+    });
+  });
+  return rows.sort((a, b) => String(b.learned_at).localeCompare(String(a.learned_at)));
+}
+
+async function setManagerConfirmation(eventId, employeeId, confirmed = true, managerName = '') {
+  if (!eventId || !employeeId) throw new Error('event_id va employee_id majburiy');
+  const record = await getNotificationRecord();
+  if (!record.progress[eventId]) record.progress[eventId] = {};
+  const current = record.progress[eventId][employeeId] || {};
+  record.progress[eventId][employeeId] = {
+    ...current,
+    confirmed_at: confirmed ? new Date().toISOString() : null,
+    confirmed_by: confirmed ? (managerName || null) : null
+  };
+  await saveNotificationRecord(record);
+  return record.progress[eventId][employeeId];
 }
 
 async function getPermissionView() {
@@ -203,6 +280,10 @@ module.exports = {
   fetchPermissionView,
   getPermissionView,
   savePermissionSelection,
-  getSupportNotifications,
-  markSupportNotificationsRead
+  getSupportOverview,
+  listNotificationEvents,
+  getEventLearningStatus,
+  setEventLearned,
+  getManagerReviewQueue,
+  setManagerConfirmation
 };

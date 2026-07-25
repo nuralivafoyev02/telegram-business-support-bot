@@ -149,6 +149,10 @@ export const api = {
   syncClickupCompanyLinks: payload => request('clickupCompanyLinksSync', { method: 'POST', body: payload || {} }).then(r => r.data),
   uyqurPermissions: () => request('uyqurPermissions').then(r => r.data),
   saveUyqurPermissions: payload => request('uyqurPermissionsSave', { method: 'POST', body: payload }).then(r => r.data),
-  uyqurSupportNotifications: () => request('uyqurSupportNotifications').then(r => r.data),
-  markUyqurSupportNotificationRead: payload => request('uyqurSupportNotificationRead', { method: 'POST', body: payload }).then(r => r.data)
+  uyqurSupportOverview: () => request('uyqurSupportOverview').then(r => r.data),
+  uyqurNotificationEvents: () => request('uyqurNotificationEvents').then(r => r.data),
+  uyqurEventLearningStatus: (query = {}) => request('uyqurEventLearningStatus', { query }).then(r => r.data),
+  uyqurManagerReviewQueue: () => request('uyqurManagerReviewQueue').then(r => r.data),
+  markUyqurLearned: payload => request('uyqurMarkLearned', { method: 'POST', body: payload }).then(r => r.data),
+  confirmUyqurReview: payload => request('uyqurConfirmReview', { method: 'POST', body: payload }).then(r => r.data)
 };

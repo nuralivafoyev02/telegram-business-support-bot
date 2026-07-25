@@ -29,7 +29,16 @@ const {
 const { extractTextFromUpload } = require('../lib/document-text');
 const { resolveMainStatsChatId, sendMainStatsReport } = require('../lib/report');
 const { syncCompanyInfo, getCachedCompanyInfo, resolveCachedCompanyInfoCompanies, emptyCompanyInfoResult } = require('../lib/company-info');
-const { getPermissionView, savePermissionSelection, getSupportNotifications, markSupportNotificationsRead } = require('../lib/permission-view');
+const {
+  getPermissionView,
+  savePermissionSelection,
+  getSupportOverview,
+  listNotificationEvents,
+  getEventLearningStatus,
+  setEventLearned,
+  getManagerReviewQueue,
+  setManagerConfirmation
+} = require('../lib/permission-view');
 const {
   syncCompanyReport,
   getCachedCompanyReport,
@@ -6409,7 +6418,10 @@ async function handleGet(action, query) {
     case 'clickupTasks': return listClickUpTasks(query);
     case 'telegramWebhookInfo': return getTelegramWebhookStatus();
     case 'uyqurPermissions': return getPermissionView();
-    case 'uyqurSupportNotifications': return getSupportNotifications();
+    case 'uyqurSupportOverview': return getSupportOverview();
+    case 'uyqurNotificationEvents': return listNotificationEvents();
+    case 'uyqurEventLearningStatus': return getEventLearningStatus(query.event_id);
+    case 'uyqurManagerReviewQueue': return getManagerReviewQueue();
     default: throw new Error(`Unknown GET action: ${action}`);
   }
 }
@@ -6437,7 +6449,8 @@ async function handlePost(action, body, currentAdmin) {
     case 'syncTelegramUpdates': return syncTelegramUpdates(body);
     case 'clickupCompanyLinksSync': return syncClickUpCompanyLinks();
     case 'uyqurPermissionsSave': return savePermissionSelection(body.selected);
-    case 'uyqurSupportNotificationRead': return markSupportNotificationsRead(body.employee_id);
+    case 'uyqurMarkLearned': return setEventLearned(body.event_id, body.employee_id, body.learned !== false);
+    case 'uyqurConfirmReview': return setManagerConfirmation(body.event_id, body.employee_id, body.confirmed !== false, currentAdmin.username || currentAdmin.full_name || '');
     default: throw new Error(`Unknown POST action: ${action}`);
   }
 }

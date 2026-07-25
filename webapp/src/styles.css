@@ -3512,6 +3512,13 @@ body {
   text-align: center;
 }
 
+.learn-btn.learned {
+  background: rgba(34, 197, 94, .18);
+  border-color: rgba(34, 197, 94, .5);
+  color: #22c55e;
+  font-weight: 700;
+}
+
 .employee-cell b,
 .table-strong {
   color: var(--text);
