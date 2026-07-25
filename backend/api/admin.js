@@ -33,6 +33,7 @@ const {
   getPermissionView,
   savePermissionSelection,
   getSupportOverview,
+  getSupportEventHistory,
   listNotificationEvents,
   getEventLearningStatus,
   setEventLearned,
@@ -6419,6 +6420,7 @@ async function handleGet(action, query) {
     case 'telegramWebhookInfo': return getTelegramWebhookStatus();
     case 'uyqurPermissions': return getPermissionView();
     case 'uyqurSupportOverview': return getSupportOverview();
+    case 'uyqurSupportHistory': return getSupportEventHistory(query.employee_id);
     case 'uyqurNotificationEvents': return listNotificationEvents();
     case 'uyqurEventLearningStatus': return getEventLearningStatus(query.event_id);
     case 'uyqurManagerReviewQueue': return getManagerReviewQueue();

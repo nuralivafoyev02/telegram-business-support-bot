@@ -3519,6 +3519,14 @@ body {
   font-weight: 700;
 }
 
+.clickable-row {
+  cursor: pointer;
+}
+
+.clickable-row.active {
+  background: rgba(142, 199, 255, .08);
+}
+
 .employee-cell b,
 .table-strong {
   color: var(--text);

@@ -216,6 +216,25 @@ async function setEventLearned(eventId, employeeId, learned = true) {
   return record.progress[eventId][employeeId];
 }
 
+async function getSupportEventHistory(employeeId) {
+  if (!employeeId) return [];
+  const record = await getNotificationRecord();
+  return record.events.slice().reverse().map(event => {
+    const progress = progressFor(record, event.id, employeeId);
+    return {
+      event_id: event.id,
+      module_name: event.module_name,
+      submodule_name: event.submodule_name,
+      submodule_key: event.submodule_key,
+      created_at: event.created_at,
+      learned: Boolean(progress.learned_at),
+      learned_at: progress.learned_at || null,
+      confirmed: Boolean(progress.confirmed_at),
+      confirmed_at: progress.confirmed_at || null
+    };
+  });
+}
+
 async function getManagerReviewQueue() {
   const [supports, record] = await Promise.all([getSupportEmployees(), getNotificationRecord()]);
   const supportById = new Map(supports.map(employee => [String(employee.id), employee]));
@@ -281,6 +300,7 @@ module.exports = {
   getPermissionView,
   savePermissionSelection,
   getSupportOverview,
+  getSupportEventHistory,
   listNotificationEvents,
   getEventLearningStatus,
   setEventLearned,

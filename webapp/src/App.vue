@@ -1658,7 +1658,8 @@
                     </tr>
                   </thead>
                   <tbody>
-                    <tr v-for="(row, index) in supportOverview" :key="row.id">
+                    <tr v-for="(row, index) in supportOverview" :key="row.id" class="clickable-row"
+                      :class="{ active: selectedSupportId === String(row.id) }" @click="openSupportHistory(row)">
                       <td>{{ index + 1 }}</td>
                       <td>
                         <span class="employee-cell">
@@ -1680,6 +1681,39 @@
                   </tbody>
                 </table>
                 <div v-else class="empty">Support xodimlar topilmadi</div>
+              </div>
+            </section>
+
+            <section v-if="selectedSupportId" class="card pad settings-card">
+              <div class="settings-head">
+                <div>
+                  <div class="card-title">{{ selectedSupportName }} — bildirishnomalar tarixi</div>
+                  <p class="muted">Bu supportga yuborilgan funksiyalar va ularning holati</p>
+                </div>
+                <button class="btn small" type="button" @click="closeSupportHistory">Yopish</button>
+              </div>
+              <div class="table-wrap">
+                <table v-if="supportHistoryRows.length">
+                  <thead>
+                    <tr>
+                      <th>Funksiya</th>
+                      <th>Yuborilgan</th>
+                      <th>Holati</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="row in supportHistoryRows" :key="row.event_id">
+                      <td>{{ row.submodule_name || row.submodule_key }}</td>
+                      <td>{{ fmtDate(row.created_at) }}</td>
+                      <td>
+                        <span class="badge" :class="row.confirmed ? 'green' : (row.learned ? 'blue' : 'orange')">
+                          {{ row.confirmed ? '✓ Qabul qilindi' : (row.learned ? 'O‘rganildi' : 'Kutilmoqda') }}
+                        </span>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+                <div v-else class="empty">Bu supportga hali hech narsa yuborilmagan</div>
               </div>
             </section>
 
@@ -3547,6 +3581,9 @@ const clickupTasks = ref([]);
 const permissionModules = ref([]);
 const permissionSelected = ref([]);
 const supportOverview = ref([]);
+const selectedSupportId = ref('');
+const selectedSupportName = ref('');
+const supportHistoryRows = ref([]);
 const notificationEvents = ref([]);
 const selectedEventId = ref('');
 const eventLearningRows = ref([]);
@@ -9531,6 +9568,22 @@ async function loadSupportOverview() {
   supportOverview.value = await api.uyqurSupportOverview();
 }
 
+async function openSupportHistory(row) {
+  selectedSupportId.value = String(row.id);
+  selectedSupportName.value = row.full_name || 'Support';
+  try {
+    supportHistoryRows.value = await api.uyqurSupportHistory({ employee_id: row.id });
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
+function closeSupportHistory() {
+  selectedSupportId.value = '';
+  selectedSupportName.value = '';
+  supportHistoryRows.value = [];
+}
+
 async function loadNotificationEvents() {
   notificationEvents.value = await api.uyqurNotificationEvents();
   if (!selectedEventId.value && notificationEvents.value.length) {
@@ -9556,10 +9609,16 @@ function onEventSelectChange() {
   loadEventLearningStatus().catch(error => showToast(error.message));
 }
 
+async function refreshSupportHistoryIfOpen(employeeId) {
+  if (selectedSupportId.value && selectedSupportId.value === String(employeeId)) {
+    supportHistoryRows.value = await api.uyqurSupportHistory({ employee_id: employeeId }).catch(() => supportHistoryRows.value);
+  }
+}
+
 async function toggleLearned(row) {
   try {
     await api.markUyqurLearned({ event_id: selectedEventId.value, employee_id: row.employee_id, learned: !row.learned });
-    await Promise.all([loadEventLearningStatus(), loadManagerReviewQueue(), loadSupportOverview()]);
+    await Promise.all([loadEventLearningStatus(), loadManagerReviewQueue(), loadSupportOverview(), refreshSupportHistoryIfOpen(row.employee_id)]);
   } catch (error) {
     showToast(error.message);
   }
@@ -9568,7 +9627,7 @@ async function toggleLearned(row) {
 async function toggleConfirmed(row) {
   try {
     await api.confirmUyqurReview({ event_id: row.event_id, employee_id: row.employee_id, confirmed: !row.confirmed });
-    await Promise.all([loadManagerReviewQueue(), loadSupportOverview(), loadEventLearningStatus()]);
+    await Promise.all([loadManagerReviewQueue(), loadSupportOverview(), loadEventLearningStatus(), refreshSupportHistoryIfOpen(row.employee_id)]);
   } catch (error) {
     showToast(error.message);
   }

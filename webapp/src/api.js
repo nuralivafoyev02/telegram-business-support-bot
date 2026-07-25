@@ -150,6 +150,7 @@ export const api = {
   uyqurPermissions: () => request('uyqurPermissions').then(r => r.data),
   saveUyqurPermissions: payload => request('uyqurPermissionsSave', { method: 'POST', body: payload }).then(r => r.data),
   uyqurSupportOverview: () => request('uyqurSupportOverview').then(r => r.data),
+  uyqurSupportHistory: (query = {}) => request('uyqurSupportHistory', { query }).then(r => r.data),
   uyqurNotificationEvents: () => request('uyqurNotificationEvents').then(r => r.data),
   uyqurEventLearningStatus: (query = {}) => request('uyqurEventLearningStatus', { query }).then(r => r.data),
   uyqurManagerReviewQueue: () => request('uyqurManagerReviewQueue').then(r => r.data),
