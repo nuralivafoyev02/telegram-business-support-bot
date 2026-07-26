@@ -155,6 +155,7 @@ export const api = {
   uyqurEventLearningStatus: (query = {}) => request('uyqurEventLearningStatus', { query }).then(r => r.data),
   uyqurManagerReviewQueue: () => request('uyqurManagerReviewQueue').then(r => r.data),
   uyqurManagerConfirmers: () => request('uyqurManagerConfirmers').then(r => r.data),
+  uyqurManagerEmployees: () => request('uyqurManagerEmployees').then(r => r.data),
   saveUyqurManagerConfirmers: payload => request('uyqurManagerConfirmersSave', { method: 'POST', body: payload }).then(r => r.data),
   markUyqurLearned: payload => request('uyqurMarkLearned', { method: 'POST', body: payload }).then(r => r.data),
   confirmUyqurReview: payload => request('uyqurConfirmReview', { method: 'POST', body: payload }).then(r => r.data)

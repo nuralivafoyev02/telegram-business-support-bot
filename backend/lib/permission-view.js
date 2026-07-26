@@ -156,6 +156,15 @@ async function getSupportEmployees() {
   }).catch(() => []);
 }
 
+async function getManagerEmployees() {
+  return supabase.select('employees', {
+    select: 'id,username,full_name,role,is_active',
+    role: supabase.eq('manager'),
+    is_active: supabase.eq(true),
+    limit: '200'
+  }).catch(() => []);
+}
+
 function progressFor(record, eventId, employeeId) {
   const eventProgress = record.progress[eventId];
   return (eventProgress && eventProgress[employeeId]) || {};
@@ -342,5 +351,6 @@ module.exports = {
   getManagerReviewQueue,
   setManagerConfirmation,
   getManagerConfirmers,
-  saveManagerConfirmers
+  saveManagerConfirmers,
+  getManagerEmployees
 };

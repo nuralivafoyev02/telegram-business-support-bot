@@ -1575,12 +1575,12 @@
                   </div>
                 </div>
                 <div class="form settings-form">
-                  <label v-for="admin in settingsRaw?.admins || []" :key="admin.id" class="checkbox-label">
-                    <input type="checkbox" :checked="isManagerConfirmerChecked(admin.username)"
-                      @change="toggleManagerConfirmerUsername(admin.username, $event.target.checked)" />
-                    {{ admin.full_name || admin.username }} <span class="muted">({{ admin.username }})</span>
+                  <label v-for="manager in managerEmployees" :key="manager.id" class="checkbox-label">
+                    <input type="checkbox" :checked="isManagerConfirmerChecked(manager.username)"
+                      @change="toggleManagerConfirmerUsername(manager.username, $event.target.checked)" />
+                    {{ manager.full_name || manager.username }} <span class="muted">({{ manager.username }})</span>
                   </label>
-                  <div v-if="!settingsRaw?.admins?.length" class="empty">Adminlar topilmadi</div>
+                  <div v-if="!managerEmployees.length" class="empty">Menejer xodimlar topilmadi</div>
                   <button class="btn primary" type="button" :disabled="loadingAction === 'saveManagerConfirmers'"
                     @click="saveManagerConfirmers">
                     {{ loadingAction === 'saveManagerConfirmers' ? 'Saqlanmoqda...' : 'Saqlash' }}
@@ -3613,6 +3613,7 @@ const selectedSupportEventLearningRows = computed(() => eventLearningRows.value.
 ));
 const managerReviewRows = ref([]);
 const managerConfirmerUsernames = ref([]);
+const managerEmployees = ref([]);
 const companyInfo = ref({ summary: {}, companies: [], fetched_at: '', source: '' });
 const companyModuleReports = ref({ companies: [], report_dates: [], period: 'all' });
 const companyModuleChartSource = ref({ period: 'week', daily_companies: [], report_dates: [] });
@@ -9465,6 +9466,9 @@ async function loadSettings() {
   }
   api.uyqurManagerConfirmers().then(result => {
     managerConfirmerUsernames.value = Array.isArray(result.usernames) ? result.usernames : [];
+  }).catch(() => null);
+  api.uyqurManagerEmployees().then(result => {
+    managerEmployees.value = Array.isArray(result) ? result : [];
   }).catch(() => null);
   const ai = data.settings?.find(s => s.key === 'ai_mode')?.value;
   const integration = data.settings?.find(s => s.key === 'ai_integration')?.value;

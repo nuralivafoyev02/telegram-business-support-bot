@@ -40,7 +40,8 @@ const {
   getManagerReviewQueue,
   setManagerConfirmation,
   getManagerConfirmers,
-  saveManagerConfirmers
+  saveManagerConfirmers,
+  getManagerEmployees
 } = require('../lib/permission-view');
 const {
   syncCompanyReport,
@@ -6427,6 +6428,7 @@ async function handleGet(action, query) {
     case 'uyqurEventLearningStatus': return getEventLearningStatus(query.event_id);
     case 'uyqurManagerReviewQueue': return getManagerReviewQueue();
     case 'uyqurManagerConfirmers': return getManagerConfirmers();
+    case 'uyqurManagerEmployees': return getManagerEmployees();
     default: throw new Error(`Unknown GET action: ${action}`);
   }
 }
