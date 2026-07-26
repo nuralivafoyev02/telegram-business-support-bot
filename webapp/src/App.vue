@@ -1717,7 +1717,7 @@
               </div>
             </section>
 
-            <section class="card pad settings-card">
+            <section v-if="selectedSupportId" class="card pad settings-card">
               <div class="settings-head">
                 <div>
                   <div class="card-title">Funksiyalar bo‘yicha o‘rganish holati</div>
@@ -1730,7 +1730,7 @@
                 </select>
               </div>
               <div class="table-wrap">
-                <table v-if="eventLearningRows.length">
+                <table v-if="selectedSupportEventLearningRows.length">
                   <thead>
                     <tr>
                       <th>Supportlar</th>
@@ -1739,7 +1739,7 @@
                     </tr>
                   </thead>
                   <tbody>
-                    <tr v-for="row in eventLearningRows" :key="row.employee_id">
+                    <tr v-for="row in selectedSupportEventLearningRows" :key="row.employee_id">
                       <td>
                         <span class="employee-cell">
                           <span class="employee-avatar fallback">{{ employeeInitials(row) }}</span>
@@ -3587,6 +3587,9 @@ const supportHistoryRows = ref([]);
 const notificationEvents = ref([]);
 const selectedEventId = ref('');
 const eventLearningRows = ref([]);
+const selectedSupportEventLearningRows = computed(() => eventLearningRows.value.filter(
+  row => String(row.employee_id) === selectedSupportId.value
+));
 const managerReviewRows = ref([]);
 const companyInfo = ref({ summary: {}, companies: [], fetched_at: '', source: '' });
 const companyModuleReports = ref({ companies: [], report_dates: [], period: 'all' });
