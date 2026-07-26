@@ -1684,82 +1684,6 @@
               </div>
             </section>
 
-            <section v-if="selectedSupportId" class="card pad settings-card">
-              <div class="settings-head">
-                <div>
-                  <div class="card-title">{{ selectedSupportName }} — bildirishnomalar tarixi</div>
-                  <p class="muted">Bu supportga yuborilgan funksiyalar va ularning holati</p>
-                </div>
-                <button class="btn small" type="button" @click="closeSupportHistory">Yopish</button>
-              </div>
-              <div class="table-wrap">
-                <table v-if="supportHistoryRows.length">
-                  <thead>
-                    <tr>
-                      <th>Funksiya</th>
-                      <th>Yuborilgan</th>
-                      <th>Holati</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="row in supportHistoryRows" :key="row.event_id">
-                      <td>{{ row.submodule_name || row.submodule_key }}</td>
-                      <td>{{ fmtDate(row.created_at) }}</td>
-                      <td>
-                        <span class="badge" :class="row.confirmed ? 'green' : (row.learned ? 'blue' : 'orange')">
-                          {{ row.confirmed ? '✓ Qabul qilindi' : (row.learned ? 'O‘rganildi' : 'Kutilmoqda') }}
-                        </span>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-                <div v-else class="empty">Bu supportga hali hech narsa yuborilmagan</div>
-              </div>
-            </section>
-
-            <section v-if="selectedSupportId" class="card pad settings-card">
-              <div class="settings-head">
-                <div>
-                  <div class="card-title">Funksiyalar bo‘yicha o‘rganish holati</div>
-                  <p class="muted">Support tanlangan funksiyani o‘rgangach, belgisi yashil bo‘ladi</p>
-                </div>
-                <select class="select" v-model="selectedEventId" @change="onEventSelectChange">
-                  <option v-for="event in notificationEvents" :key="event.id" :value="String(event.id)">
-                    {{ event.submodule_name || event.submodule_key }}
-                  </option>
-                </select>
-              </div>
-              <div class="table-wrap">
-                <table v-if="selectedSupportEventLearningRows.length">
-                  <thead>
-                    <tr>
-                      <th>Supportlar</th>
-                      <th>Funksiya</th>
-                      <th>O‘rganildi</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="row in selectedSupportEventLearningRows" :key="row.employee_id">
-                      <td>
-                        <span class="employee-cell">
-                          <span class="employee-avatar fallback">{{ employeeInitials(row) }}</span>
-                          <b>{{ row.full_name }}</b>
-                        </span>
-                      </td>
-                      <td>{{ (notificationEvents.find(event => String(event.id) === selectedEventId) || {}).submodule_name || '—' }}</td>
-                      <td>
-                        <button class="btn small learn-btn" :class="{ learned: row.learned }" type="button"
-                          @click="toggleLearned(row)">
-                          {{ row.learned ? '✓ O‘rganildi' : 'O‘rganildi' }}
-                        </button>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-                <div v-else class="empty">Hozircha funksiya yoqilmagan</div>
-              </div>
-            </section>
-
             <section class="card pad settings-card">
               <div class="settings-head">
                 <div>
@@ -1802,6 +1726,82 @@
         </div>
       </Transition>
     </section>
+
+    <Transition name="modal-fade">
+      <Modal v-if="modal === 'supportHistory'" :title="`${selectedSupportName} — bildirishnomalar`" wide
+        @close="closeModal">
+        <section class="settings-stack">
+          <div>
+            <div class="card-title">Bildirishnomalar tarixi</div>
+            <p class="muted">Bu supportga yuborilgan funksiyalar va ularning holati</p>
+          </div>
+          <div class="table-wrap">
+            <table v-if="supportHistoryRows.length">
+              <thead>
+                <tr>
+                  <th>Funksiya</th>
+                  <th>Yuborilgan</th>
+                  <th>Holati</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in supportHistoryRows" :key="row.event_id">
+                  <td>{{ row.submodule_name || row.submodule_key }}</td>
+                  <td>{{ fmtDate(row.created_at) }}</td>
+                  <td>
+                    <span class="badge" :class="row.confirmed ? 'green' : (row.learned ? 'blue' : 'orange')">
+                      {{ row.confirmed ? '✓ Qabul qilindi' : (row.learned ? 'O‘rganildi' : 'Kutilmoqda') }}
+                    </span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <div v-else class="empty">Bu supportga hali hech narsa yuborilmagan</div>
+          </div>
+
+          <div class="settings-head">
+            <div>
+              <div class="card-title">Funksiyalar bo‘yicha o‘rganish holati</div>
+              <p class="muted">Support tanlangan funksiyani o‘rgangach, belgisi yashil bo‘ladi</p>
+            </div>
+            <select class="select" v-model="selectedEventId" @change="onEventSelectChange">
+              <option v-for="event in notificationEvents" :key="event.id" :value="String(event.id)">
+                {{ event.submodule_name || event.submodule_key }}
+              </option>
+            </select>
+          </div>
+          <div class="table-wrap">
+            <table v-if="selectedSupportEventLearningRows.length">
+              <thead>
+                <tr>
+                  <th>Supportlar</th>
+                  <th>Funksiya</th>
+                  <th>O‘rganildi</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in selectedSupportEventLearningRows" :key="row.employee_id">
+                  <td>
+                    <span class="employee-cell">
+                      <span class="employee-avatar fallback">{{ employeeInitials(row) }}</span>
+                      <b>{{ row.full_name }}</b>
+                    </span>
+                  </td>
+                  <td>{{ (notificationEvents.find(event => String(event.id) === selectedEventId) || {}).submodule_name || '—' }}</td>
+                  <td>
+                    <button class="btn small learn-btn" :class="{ learned: row.learned }" type="button"
+                      @click="toggleLearned(row)">
+                      {{ row.learned ? '✓ O‘rganildi' : 'O‘rganildi' }}
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <div v-else class="empty">Hozircha funksiya yoqilmagan</div>
+          </div>
+        </section>
+      </Modal>
+    </Transition>
 
     <Transition name="modal-fade">
       <Modal v-if="modal === 'send'" title="Xabar yuborish" @close="closeModal">
@@ -9574,6 +9574,7 @@ async function loadSupportOverview() {
 async function openSupportHistory(row) {
   selectedSupportId.value = String(row.id);
   selectedSupportName.value = row.full_name || 'Support';
+  modal.value = 'supportHistory';
   try {
     supportHistoryRows.value = await api.uyqurSupportHistory({ employee_id: row.id });
   } catch (error) {
@@ -11452,6 +11453,7 @@ function closeModal() {
   if (modal.value === 'metricDetail') resetMetricChatDetail();
   if (modal.value === 'employeeCompanies') resetEmployeeProfileChat();
   if (modal.value === 'companyModuleEmployeeActivity') companyModuleEmployeeDetail.value = null;
+  if (modal.value === 'supportHistory') closeSupportHistory();
   if (modal.value === 'companyDetail') {
     companyModuleEmployeeDetail.value = null;
     companyDetailCompanyId.value = '';

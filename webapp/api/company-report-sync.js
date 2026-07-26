@@ -28,4 +28,4 @@ export default async function handler(req, res) {
     });
     return sendJson(res, 500, { ok: false, error: error.message });
   }
-}
+}  
