@@ -1566,6 +1566,27 @@
                     ? 'Saqlamoqda...' : 'Saqlash' }}</button>
                 </form>
               </section>
+
+              <section v-if="activeSettingsSection === 'admin'" class="card pad settings-card settings-panel">
+                <div class="settings-head">
+                  <div>
+                    <div class="card-title">Tasdiqlovchi menejerlar</div>
+                    <p class="muted">Faqat belgilangan adminlar "Uyqur Funksiyalari" sahifasida Tasdiqlashni bosa oladi. Hech kim belgilanmasa, cheklovsiz.</p>
+                  </div>
+                </div>
+                <div class="form settings-form">
+                  <label v-for="admin in settingsRaw?.admins || []" :key="admin.id" class="checkbox-label">
+                    <input type="checkbox" :checked="isManagerConfirmerChecked(admin.username)"
+                      @change="toggleManagerConfirmerUsername(admin.username, $event.target.checked)" />
+                    {{ admin.full_name || admin.username }} <span class="muted">({{ admin.username }})</span>
+                  </label>
+                  <div v-if="!settingsRaw?.admins?.length" class="empty">Adminlar topilmadi</div>
+                  <button class="btn primary" type="button" :disabled="loadingAction === 'saveManagerConfirmers'"
+                    @click="saveManagerConfirmers">
+                    {{ loadingAction === 'saveManagerConfirmers' ? 'Saqlanmoqda...' : 'Saqlash' }}
+                  </button>
+                </div>
+              </section>
             </div>
           </template>
 
@@ -3591,6 +3612,7 @@ const selectedSupportEventLearningRows = computed(() => eventLearningRows.value.
   row => String(row.employee_id) === selectedSupportId.value
 ));
 const managerReviewRows = ref([]);
+const managerConfirmerUsernames = ref([]);
 const companyInfo = ref({ summary: {}, companies: [], fetched_at: '', source: '' });
 const companyModuleReports = ref({ companies: [], report_dates: [], period: 'all' });
 const companyModuleChartSource = ref({ period: 'week', daily_companies: [], report_dates: [] });
@@ -9441,6 +9463,9 @@ async function loadSettings() {
     adminForm.username = admin.username || 'admin';
     adminForm.full_name = admin.full_name || 'Tizim admini';
   }
+  api.uyqurManagerConfirmers().then(result => {
+    managerConfirmerUsernames.value = Array.isArray(result.usernames) ? result.usernames : [];
+  }).catch(() => null);
   const ai = data.settings?.find(s => s.key === 'ai_mode')?.value;
   const integration = data.settings?.find(s => s.key === 'ai_integration')?.value;
   const clickupIntegration = data.settings?.find(s => s.key === 'clickup_integration')?.value;
@@ -9625,6 +9650,32 @@ async function toggleLearned(row) {
     await Promise.all([loadEventLearningStatus(), loadManagerReviewQueue(), loadSupportOverview(), refreshSupportHistoryIfOpen(row.employee_id)]);
   } catch (error) {
     showToast(error.message);
+  }
+}
+
+function isManagerConfirmerChecked(username) {
+  return managerConfirmerUsernames.value.includes(String(username));
+}
+
+function toggleManagerConfirmerUsername(username, checked) {
+  const name = String(username);
+  if (checked) {
+    if (!managerConfirmerUsernames.value.includes(name)) managerConfirmerUsernames.value = [...managerConfirmerUsernames.value, name];
+  } else {
+    managerConfirmerUsernames.value = managerConfirmerUsernames.value.filter(item => item !== name);
+  }
+}
+
+async function saveManagerConfirmers() {
+  startLoading('saveManagerConfirmers');
+  try {
+    const data = await api.saveUyqurManagerConfirmers({ usernames: managerConfirmerUsernames.value });
+    managerConfirmerUsernames.value = Array.isArray(data.usernames) ? data.usernames : managerConfirmerUsernames.value;
+    showToast('Saqlandi');
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    stopLoading('saveManagerConfirmers');
   }
 }
 

@@ -38,7 +38,9 @@ const {
   getEventLearningStatus,
   setEventLearned,
   getManagerReviewQueue,
-  setManagerConfirmation
+  setManagerConfirmation,
+  getManagerConfirmers,
+  saveManagerConfirmers
 } = require('../lib/permission-view');
 const {
   syncCompanyReport,
@@ -6424,6 +6426,7 @@ async function handleGet(action, query) {
     case 'uyqurNotificationEvents': return listNotificationEvents();
     case 'uyqurEventLearningStatus': return getEventLearningStatus(query.event_id);
     case 'uyqurManagerReviewQueue': return getManagerReviewQueue();
+    case 'uyqurManagerConfirmers': return getManagerConfirmers();
     default: throw new Error(`Unknown GET action: ${action}`);
   }
 }
@@ -6453,6 +6456,7 @@ async function handlePost(action, body, currentAdmin) {
     case 'uyqurPermissionsSave': return savePermissionSelection(body.selected);
     case 'uyqurMarkLearned': return setEventLearned(body.event_id, body.employee_id, body.learned !== false);
     case 'uyqurConfirmReview': return setManagerConfirmation(body.event_id, body.employee_id, body.confirmed !== false, currentAdmin.username || currentAdmin.full_name || '');
+    case 'uyqurManagerConfirmersSave': return saveManagerConfirmers(body.usernames);
     default: throw new Error(`Unknown POST action: ${action}`);
   }
 }

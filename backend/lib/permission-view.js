@@ -9,6 +9,7 @@ const PERMISSION_VIEW_SETTINGS_KEY = 'uyqur_permission_view_selection';
 const PERMISSION_VIEW_CACHE_TTL_MS = 10 * 60 * 1000;
 const PERMISSION_NOTIFICATIONS_KEY = 'uyqur_permission_notifications';
 const MAX_NOTIFICATION_EVENTS = 200;
+const MANAGER_CONFIRMERS_KEY = 'uyqur_manager_confirmers';
 
 function permissionViewUrl() {
   const configured = optionalEnv('FUNCSIYALAR', DEFAULT_PERMISSION_VIEW_PATH).trim();
@@ -261,8 +262,42 @@ async function getManagerReviewQueue() {
   return rows.sort((a, b) => String(b.learned_at).localeCompare(String(a.learned_at)));
 }
 
+async function getManagerConfirmerRecord() {
+  const rows = await supabase.select('bot_settings', {
+    select: 'key,value',
+    key: supabase.eq(MANAGER_CONFIRMERS_KEY),
+    limit: '1'
+  }).catch(() => []);
+  const row = rows[0] || null;
+  const value = row && row.value && typeof row.value === 'object' ? row.value : {};
+  return { usernames: Array.isArray(value.usernames) ? value.usernames.map(String) : [] };
+}
+
+async function getManagerConfirmers() {
+  return getManagerConfirmerRecord();
+}
+
+async function saveManagerConfirmers(usernames = []) {
+  const normalized = Array.from(new Set((Array.isArray(usernames) ? usernames : []).map(String).filter(Boolean)));
+  await supabase.insert('bot_settings', [{
+    key: MANAGER_CONFIRMERS_KEY,
+    value: { usernames: normalized },
+    updated_at: new Date().toISOString()
+  }], { upsert: true, onConflict: 'key', prefer: 'return=minimal' });
+  return { usernames: normalized };
+}
+
+async function assertManagerCanConfirm(managerUsername = '') {
+  const { usernames } = await getManagerConfirmerRecord();
+  if (!usernames.length) return;
+  if (!usernames.includes(String(managerUsername || ''))) {
+    throw new Error('Sizda tasdiqlash huquqi yo‘q — bu Sozlamalarda faqat belgilangan menejerlarga ruxsat berilgan');
+  }
+}
+
 async function setManagerConfirmation(eventId, employeeId, confirmed = true, managerName = '') {
   if (!eventId || !employeeId) throw new Error('event_id va employee_id majburiy');
+  await assertManagerCanConfirm(managerName);
   const record = await getNotificationRecord();
   if (!record.progress[eventId]) record.progress[eventId] = {};
   const current = record.progress[eventId][employeeId] || {};
@@ -305,5 +340,7 @@ module.exports = {
   getEventLearningStatus,
   setEventLearned,
   getManagerReviewQueue,
-  setManagerConfirmation
+  setManagerConfirmation,
+  getManagerConfirmers,
+  saveManagerConfirmers
 };
