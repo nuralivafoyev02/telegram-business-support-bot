@@ -3527,6 +3527,59 @@ body {
   background: rgba(142, 199, 255, .08);
 }
 
+.manager-confirmer-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.manager-confirmer-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-soft);
+  cursor: pointer;
+  transition: background-color .12s ease, border-color .12s ease;
+}
+
+.manager-confirmer-row:hover {
+  background: rgba(142, 199, 255, .07);
+}
+
+.manager-confirmer-row.checked {
+  border-color: rgba(59, 130, 246, .55);
+  background: rgba(59, 130, 246, .1);
+}
+
+.manager-confirmer-row input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  accent-color: var(--primary);
+}
+
+.manager-confirmer-avatar {
+  width: 34px;
+  height: 34px;
+  font-size: 13px;
+  border-radius: 50%;
+}
+
+.manager-confirmer-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 13px;
+  color: #eef6ff;
+}
+
+.manager-confirmer-info .muted {
+  font-size: 12px;
+}
+
 .employee-cell b,
 .table-strong {
   color: var(--text);

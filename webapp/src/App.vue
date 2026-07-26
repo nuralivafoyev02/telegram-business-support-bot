@@ -1575,11 +1575,18 @@
                   </div>
                 </div>
                 <div class="form settings-form">
-                  <label v-for="manager in managerEmployees" :key="manager.id" class="checkbox-label">
-                    <input type="checkbox" :checked="isManagerConfirmerChecked(manager.username)"
-                      @change="toggleManagerConfirmerUsername(manager.username, $event.target.checked)" />
-                    {{ manager.full_name || manager.username }} <span class="muted">({{ manager.username }})</span>
-                  </label>
+                  <div class="manager-confirmer-list">
+                    <label v-for="manager in managerEmployees" :key="manager.id" class="manager-confirmer-row"
+                      :class="{ checked: isManagerConfirmerChecked(manager.username) }">
+                      <input type="checkbox" :checked="isManagerConfirmerChecked(manager.username)"
+                        @change="toggleManagerConfirmerUsername(manager.username, $event.target.checked)" />
+                      <span class="employee-avatar fallback manager-confirmer-avatar">{{ employeeInitials(manager) }}</span>
+                      <span class="manager-confirmer-info">
+                        <b>{{ manager.full_name || manager.username }}</b>
+                        <span class="muted">@{{ manager.username }}</span>
+                      </span>
+                    </label>
+                  </div>
                   <div v-if="!managerEmployees.length" class="empty">Menejer xodimlar topilmadi</div>
                   <button class="btn primary" type="button" :disabled="loadingAction === 'saveManagerConfirmers'"
                     @click="saveManagerConfirmers">
