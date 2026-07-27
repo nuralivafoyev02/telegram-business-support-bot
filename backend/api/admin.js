@@ -6379,6 +6379,13 @@ async function sendTestLogNotification(body = {}, currentAdmin = {}) {
   });
 }
 
+async function verifyManagerPanelPassword(password) {
+  if (!password) throw new Error('Parol kiriting');
+  const expected = optionalEnv('UYQUR_MANAGER_PANEL_PASSWORD', 'uyqur123');
+  if (password !== expected) throw new Error('Parol noto‘g‘ri');
+  return { ok: true };
+}
+
 async function updateAdmin(body, currentAdmin) {
   const admins = await supabase.select('admins', { select: 'id,username,full_name,role,is_active', username: supabase.eq(currentAdmin.username), limit: '1' }).catch(() => []);
   const admin = admins[0];
@@ -6461,6 +6468,7 @@ async function handlePost(action, body, currentAdmin) {
     case 'uyqurConfirmReview': return setManagerConfirmation(body.event_id, body.employee_id, body.confirmed !== false, body.manager_username || '');
     case 'uyqurManagerConfirmersSave': return saveManagerConfirmers(body.usernames);
     case 'uyqurResetNotifications': return resetPermissionNotifications();
+    case 'uyqurVerifyManagerPassword': return verifyManagerPanelPassword(body.password);
     default: throw new Error(`Unknown POST action: ${action}`);
   }
 }

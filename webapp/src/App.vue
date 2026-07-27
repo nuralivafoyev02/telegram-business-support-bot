@@ -1733,7 +1733,7 @@
                 <div>
                   <div class="card-title">Menejerlar</div>
                 </div>
-                <label class="company-module-filter">
+                <label v-if="managerPanelUnlocked" class="company-module-filter">
                   <span>Filter</span>
                   <select class="select mini-select" v-model="selectedManagerReviewSupport">
                     <option value="">Hammasi</option>
@@ -1742,7 +1742,18 @@
                   </select>
                 </label>
               </div>
-              <div class="table-wrap permission-table-wrap">
+
+              <form v-if="!managerPanelUnlocked" class="form manager-panel-lock" @submit.prevent="unlockManagerPanel">
+                <p class="muted">Bu bo‘lim parol bilan himoyalangan</p>
+                <input v-model="managerPasswordInput" class="input" type="password" autocomplete="current-password"
+                  placeholder="Parol" />
+                <p v-if="managerPasswordError" class="form-error">{{ managerPasswordError }}</p>
+                <button class="btn primary" type="submit" :disabled="loadingAction === 'unlockManagerPanel'">
+                  {{ loadingAction === 'unlockManagerPanel' ? 'Tekshirilmoqda...' : 'Ochish' }}
+                </button>
+              </form>
+
+              <div v-else class="table-wrap permission-table-wrap">
                 <table v-if="filteredManagerReviewRows.length">
                   <thead>
                     <tr>
@@ -3649,6 +3660,9 @@ const selectedModuleHistoryRows = computed(() => supportHistoryRows.value.filter
   row => row.module_name === selectedModuleName.value
 ));
 const managerReviewRows = ref([]);
+const managerPanelUnlocked = ref(false);
+const managerPasswordInput = ref('');
+const managerPasswordError = ref('');
 const selectedManagerReviewSupport = ref('');
 const managerReviewSupportOptions = computed(() => {
   const options = new Map();
@@ -9695,6 +9709,24 @@ async function loadManagerReviewQueue() {
   managerReviewRows.value = await api.uyqurManagerReviewQueue();
 }
 
+async function unlockManagerPanel() {
+  managerPasswordError.value = '';
+  if (!managerPasswordInput.value) {
+    managerPasswordError.value = 'Parolni kiriting';
+    return;
+  }
+  startLoading('unlockManagerPanel');
+  try {
+    await api.verifyUyqurManagerPassword({ password: managerPasswordInput.value });
+    managerPanelUnlocked.value = true;
+    managerPasswordInput.value = '';
+  } catch (error) {
+    managerPasswordError.value = error.message;
+  } finally {
+    stopLoading('unlockManagerPanel');
+  }
+}
+
 async function refreshSupportHistoryIfOpen(employeeId) {
   if (selectedSupportId.value && selectedSupportId.value === String(employeeId)) {
     supportHistoryRows.value = await api.uyqurSupportHistory({ employee_id: employeeId }).catch(() => supportHistoryRows.value);
@@ -9891,6 +9923,9 @@ async function setTab(key) {
     if (activeTab.value === 'clickup') await loadClickUpTasks();
     if (activeTab.value === 'knowledgeBase') await loadSettings();
     if (activeTab.value === 'uyqurPermissions') {
+      managerPanelUnlocked.value = false;
+      managerPasswordInput.value = '';
+      managerPasswordError.value = '';
       await Promise.all([loadPermissionView(), loadSupportOverview(), loadManagerReviewQueue(), loadManagerConfirmerConfig()]);
     }
     if (activeTab.value === 'settings') await loadSettings();

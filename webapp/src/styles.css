@@ -3537,6 +3537,10 @@ body {
   overflow-y: auto;
 }
 
+.manager-panel-lock {
+  max-width: 320px;
+}
+
 .manager-confirmer-list {
   display: flex;
   flex-wrap: wrap;
