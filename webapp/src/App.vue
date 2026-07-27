@@ -1572,7 +1572,6 @@
                   <div class="settings-head">
                     <div>
                       <div class="card-title">Tasdiqlovchi menejerlar</div>
-                      <p class="muted">Faqat belgilangan adminlar "Uyqur Funksiyalari" sahifasida Tasdiqlashni bosa oladi. Hech kim belgilanmasa, cheklovsiz.</p>
                     </div>
                   </div>
                   <div class="table-wrap manager-confirmer-table-wrap">
@@ -1645,7 +1644,6 @@
               <div class="settings-head">
                 <div>
                   <div class="card-title">Uyqur Funksiyalari</div>
-                  <p class="muted">Tizim funksiyalarini boshqarish va ko‘rish huquqlarini belgilash</p>
                 </div>
                 <button class="btn primary" :disabled="loadingAction === 'saveUyqurPermissions'"
                   @click="saveUyqurPermissions">
@@ -1687,7 +1685,6 @@
               <div class="settings-head">
                 <div>
                   <div class="card-title">Supportlar</div>
-                  <p class="muted">Funksiya yoqilganda bildirishnoma shu yerga keladi</p>
                 </div>
               </div>
               <div class="table-wrap">
@@ -1731,7 +1728,6 @@
               <div class="settings-head">
                 <div>
                   <div class="card-title">Menejerlar</div>
-                  <p class="muted">Support o‘rgangan funksiyalarni tasdiqlash</p>
                 </div>
               </div>
               <div class="table-wrap permission-table-wrap">
