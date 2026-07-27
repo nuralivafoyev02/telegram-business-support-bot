@@ -1772,7 +1772,6 @@
         <section class="settings-stack">
           <div>
             <div class="card-title">Bildirishnomalar tarixi</div>
-            <p class="muted">Bu supportga yuborilgan funksiyalar va ularning holati</p>
           </div>
           <div class="table-wrap">
             <table v-if="supportHistoryRows.length">
@@ -1801,7 +1800,6 @@
           <div class="settings-head">
             <div>
               <div class="card-title">Funksiyalar bo‘yicha o‘rganish holati</div>
-              <p class="muted">Support tanlangan funksiyani o‘rgangach, belgisi yashil bo‘ladi</p>
             </div>
             <select class="select" v-model="selectedEventId" @change="onEventSelectChange">
               <option v-for="event in notificationEvents" :key="event.id" :value="String(event.id)">
