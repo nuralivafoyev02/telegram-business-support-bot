@@ -137,13 +137,34 @@ async function recordPermissionToggleEvents(addedKeys = [], modules = []) {
   await saveNotificationRecord(record);
 }
 
+async function removePermissionToggleEvents(removedKeys = []) {
+  if (!removedKeys.length) return;
+  const removedSet = new Set(removedKeys.map(String));
+  const record = await getNotificationRecord();
+  const removedEventIds = record.events
+    .filter(event => removedSet.has(String(event.submodule_key)))
+    .map(event => event.id);
+  if (!removedEventIds.length) return;
+  const remainingEvents = record.events.filter(event => !removedSet.has(String(event.submodule_key)));
+  const nextProgress = { ...record.progress };
+  removedEventIds.forEach(eventId => { delete nextProgress[eventId]; });
+  await saveNotificationRecord({ events: remainingEvents, progress: nextProgress });
+}
+
+async function resetPermissionNotifications() {
+  await saveNotificationRecord({ events: [], progress: {} });
+  return { ok: true };
+}
+
 async function savePermissionSelection(selected = []) {
   const normalized = Array.from(new Set((Array.isArray(selected) ? selected : []).map(String).filter(Boolean)));
   const current = await getPermissionViewRecord();
   const previousSelected = Array.isArray(current.selected) ? current.selected.map(String) : [];
   const addedKeys = normalized.filter(key => !previousSelected.includes(key));
+  const removedKeys = previousSelected.filter(key => !normalized.includes(key));
   const next = await savePermissionViewRecord({ selected: normalized });
   if (addedKeys.length) await recordPermissionToggleEvents(addedKeys, Array.isArray(current.modules) ? current.modules : []);
+  if (removedKeys.length) await removePermissionToggleEvents(removedKeys);
   return { selected: next.selected };
 }
 
@@ -352,5 +373,6 @@ module.exports = {
   setManagerConfirmation,
   getManagerConfirmers,
   saveManagerConfirmers,
-  getManagerEmployees
+  getManagerEmployees,
+  resetPermissionNotifications
 };
