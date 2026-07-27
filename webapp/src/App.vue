@@ -1773,7 +1773,7 @@
           <div>
             <div class="card-title">Bildirishnomalar tarixi</div>
           </div>
-          <div class="table-wrap">
+          <div class="table-wrap permission-table-wrap">
             <table v-if="supportHistoryRows.length">
               <thead>
                 <tr>
@@ -1801,30 +1801,21 @@
             <div>
               <div class="card-title">Funksiyalar bo‘yicha o‘rganish holati</div>
             </div>
-            <select class="select" v-model="selectedEventId" @change="onEventSelectChange">
-              <option v-for="event in notificationEvents" :key="event.id" :value="String(event.id)">
-                {{ event.submodule_name || event.submodule_key }}
-              </option>
+            <select class="select" v-model="selectedModuleName">
+              <option v-for="name in supportHistoryModuleNames" :key="name" :value="name">{{ name }}</option>
             </select>
           </div>
           <div class="table-wrap">
-            <table v-if="selectedSupportEventLearningRows.length">
+            <table v-if="selectedModuleHistoryRows.length">
               <thead>
                 <tr>
-                  <th>Supportlar</th>
                   <th>Funksiya</th>
                   <th>O‘rganildi</th>
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="row in selectedSupportEventLearningRows" :key="row.employee_id">
-                  <td>
-                    <span class="employee-cell">
-                      <span class="employee-avatar fallback">{{ employeeInitials(row) }}</span>
-                      <b>{{ row.full_name }}</b>
-                    </span>
-                  </td>
-                  <td>{{ (notificationEvents.find(event => String(event.id) === selectedEventId) || {}).submodule_name || '—' }}</td>
+                <tr v-for="row in selectedModuleHistoryRows" :key="row.event_id">
+                  <td>{{ row.submodule_name || row.submodule_key }}</td>
                   <td>
                     <button class="btn small learn-btn" :class="{ learned: row.learned }" type="button"
                       @click="toggleLearned(row)">
@@ -3638,11 +3629,12 @@ const supportOverview = ref([]);
 const selectedSupportId = ref('');
 const selectedSupportName = ref('');
 const supportHistoryRows = ref([]);
-const notificationEvents = ref([]);
-const selectedEventId = ref('');
-const eventLearningRows = ref([]);
-const selectedSupportEventLearningRows = computed(() => eventLearningRows.value.filter(
-  row => String(row.employee_id) === selectedSupportId.value
+const selectedModuleName = ref('');
+const supportHistoryModuleNames = computed(() => [...new Set(
+  supportHistoryRows.value.map(row => row.module_name).filter(Boolean)
+)]);
+const selectedModuleHistoryRows = computed(() => supportHistoryRows.value.filter(
+  row => row.module_name === selectedModuleName.value
 ));
 const managerReviewRows = ref([]);
 const managerConfirmerUsernames = ref([]);
@@ -9106,7 +9098,7 @@ async function refresh() {
     if (activeTab.value === 'clickup') await loadClickUpTasks();
     if (activeTab.value === 'knowledgeBase') await loadSettings();
     if (activeTab.value === 'uyqurPermissions') {
-      await Promise.all([loadPermissionView(), loadSupportOverview(), loadNotificationEvents(), loadManagerReviewQueue(), loadManagerConfirmerConfig()]);
+      await Promise.all([loadPermissionView(), loadSupportOverview(), loadManagerReviewQueue(), loadManagerConfirmerConfig()]);
     }
     if (activeTab.value === 'settings') await loadSettings();
     if (activeTab.value === 'settings') checkTelegramWebhook(false).catch(() => null);
@@ -9630,7 +9622,7 @@ async function saveUyqurPermissions() {
     const data = await api.saveUyqurPermissions({ selected: permissionSelected.value });
     permissionSelected.value = Array.isArray(data.selected) ? data.selected.map(String) : permissionSelected.value;
     showToast('Saqlandi');
-    await Promise.all([loadSupportOverview(), loadNotificationEvents(), loadManagerReviewQueue()]);
+    await Promise.all([loadSupportOverview(), loadManagerReviewQueue()]);
   } catch (error) {
     showToast(error.message);
   } finally {
@@ -9648,6 +9640,7 @@ async function openSupportHistory(row) {
   modal.value = 'supportHistory';
   try {
     supportHistoryRows.value = await api.uyqurSupportHistory({ employee_id: row.id });
+    selectedModuleName.value = supportHistoryModuleNames.value[0] || '';
   } catch (error) {
     showToast(error.message);
   }
@@ -9657,31 +9650,11 @@ function closeSupportHistory() {
   selectedSupportId.value = '';
   selectedSupportName.value = '';
   supportHistoryRows.value = [];
-}
-
-async function loadNotificationEvents() {
-  notificationEvents.value = await api.uyqurNotificationEvents();
-  if (!selectedEventId.value && notificationEvents.value.length) {
-    selectedEventId.value = String(notificationEvents.value[0].id);
-  }
-  await loadEventLearningStatus();
-}
-
-async function loadEventLearningStatus() {
-  if (!selectedEventId.value) {
-    eventLearningRows.value = [];
-    return;
-  }
-  const data = await api.uyqurEventLearningStatus({ event_id: selectedEventId.value });
-  eventLearningRows.value = data.rows || [];
+  selectedModuleName.value = '';
 }
 
 async function loadManagerReviewQueue() {
   managerReviewRows.value = await api.uyqurManagerReviewQueue();
-}
-
-function onEventSelectChange() {
-  loadEventLearningStatus().catch(error => showToast(error.message));
 }
 
 async function refreshSupportHistoryIfOpen(employeeId) {
@@ -9692,8 +9665,12 @@ async function refreshSupportHistoryIfOpen(employeeId) {
 
 async function toggleLearned(row) {
   try {
-    await api.markUyqurLearned({ event_id: selectedEventId.value, employee_id: row.employee_id, learned: !row.learned });
-    await Promise.all([loadEventLearningStatus(), loadManagerReviewQueue(), loadSupportOverview(), refreshSupportHistoryIfOpen(row.employee_id)]);
+    await api.markUyqurLearned({ event_id: row.event_id, employee_id: selectedSupportId.value, learned: !row.learned });
+    await Promise.all([
+      refreshSupportHistoryIfOpen(selectedSupportId.value),
+      loadManagerReviewQueue(),
+      loadSupportOverview()
+    ]);
   } catch (error) {
     showToast(error.message);
   }
@@ -9733,7 +9710,7 @@ async function applyConfirmation(row, confirmed, managerUsername) {
       confirmed,
       manager_username: managerUsername || ''
     });
-    await Promise.all([loadManagerReviewQueue(), loadSupportOverview(), loadEventLearningStatus(), refreshSupportHistoryIfOpen(row.employee_id)]);
+    await Promise.all([loadManagerReviewQueue(), loadSupportOverview(), refreshSupportHistoryIfOpen(row.employee_id)]);
   } catch (error) {
     showToast(error.message);
   }
@@ -9876,7 +9853,7 @@ async function setTab(key) {
     if (activeTab.value === 'clickup') await loadClickUpTasks();
     if (activeTab.value === 'knowledgeBase') await loadSettings();
     if (activeTab.value === 'uyqurPermissions') {
-      await Promise.all([loadPermissionView(), loadSupportOverview(), loadNotificationEvents(), loadManagerReviewQueue(), loadManagerConfirmerConfig()]);
+      await Promise.all([loadPermissionView(), loadSupportOverview(), loadManagerReviewQueue(), loadManagerConfirmerConfig()]);
     }
     if (activeTab.value === 'settings') await loadSettings();
     if (activeTab.value === 'settings') checkTelegramWebhook(false).catch(() => null);
