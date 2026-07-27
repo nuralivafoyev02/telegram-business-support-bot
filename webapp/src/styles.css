@@ -3544,6 +3544,10 @@ body {
   border-radius: var(--radius);
   background: var(--surface-soft);
   cursor: pointer;
+  font: inherit;
+  text-align: left;
+  color: inherit;
+  appearance: none;
   transition: background-color .12s ease, border-color .12s ease;
 }
 

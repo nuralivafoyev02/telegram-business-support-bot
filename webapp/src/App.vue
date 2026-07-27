@@ -1832,6 +1832,23 @@
     </Transition>
 
     <Transition name="modal-fade">
+      <Modal v-if="modal === 'confirmIdentity'" title="Kim sifatida tasdiqlaysiz?" @close="closeModal">
+        <div class="manager-confirmer-list">
+          <button v-for="manager in allowedConfirmerEmployees" :key="manager.id" type="button"
+            class="manager-confirmer-row" @click="chooseConfirmIdentity(manager)">
+            <span class="employee-avatar fallback manager-confirmer-avatar">{{ employeeInitials(manager) }}</span>
+            <span class="manager-confirmer-info">
+              <b>{{ manager.full_name || manager.username }}</b>
+              <span class="muted">@{{ manager.username }}</span>
+            </span>
+          </button>
+          <div v-if="!allowedConfirmerEmployees.length" class="empty">Ruxsat berilgan menejer yo‘q — avval
+            Sozlamalarda belgilang</div>
+        </div>
+      </Modal>
+    </Transition>
+
+    <Transition name="modal-fade">
       <Modal v-if="modal === 'send'" title="Xabar yuborish" @close="closeModal">
         <form class="form" @submit.prevent="sendSingleMessage">
           <label class="label">Chat
@@ -3621,6 +3638,11 @@ const selectedSupportEventLearningRows = computed(() => eventLearningRows.value.
 const managerReviewRows = ref([]);
 const managerConfirmerUsernames = ref([]);
 const managerEmployees = ref([]);
+const pendingConfirmRow = ref(null);
+const pendingConfirmValue = ref(true);
+const allowedConfirmerEmployees = computed(() => managerConfirmerUsernames.value.length
+  ? managerEmployees.value.filter(manager => managerConfirmerUsernames.value.includes(String(manager.username)))
+  : managerEmployees.value);
 const companyInfo = ref({ summary: {}, companies: [], fetched_at: '', source: '' });
 const companyModuleReports = ref({ companies: [], report_dates: [], period: 'all' });
 const companyModuleChartSource = ref({ period: 'week', daily_companies: [], report_dates: [] });
@@ -9075,7 +9097,7 @@ async function refresh() {
     if (activeTab.value === 'clickup') await loadClickUpTasks();
     if (activeTab.value === 'knowledgeBase') await loadSettings();
     if (activeTab.value === 'uyqurPermissions') {
-      await Promise.all([loadPermissionView(), loadSupportOverview(), loadNotificationEvents(), loadManagerReviewQueue()]);
+      await Promise.all([loadPermissionView(), loadSupportOverview(), loadNotificationEvents(), loadManagerReviewQueue(), loadManagerConfirmerConfig()]);
     }
     if (activeTab.value === 'settings') await loadSettings();
     if (activeTab.value === 'settings') checkTelegramWebhook(false).catch(() => null);
@@ -9463,6 +9485,15 @@ function startCompanyActivitySyncTimer() {
 
 watch(companyModuleCompareEnabled, refreshCompanyModuleReports);
 
+async function loadManagerConfirmerConfig() {
+  const [confirmers, managers] = await Promise.all([
+    api.uyqurManagerConfirmers(),
+    api.uyqurManagerEmployees()
+  ]);
+  managerConfirmerUsernames.value = Array.isArray(confirmers.usernames) ? confirmers.usernames : [];
+  managerEmployees.value = Array.isArray(managers) ? managers : [];
+}
+
 async function loadSettings() {
   const data = await api.settings();
   settingsRaw.value = data;
@@ -9471,12 +9502,7 @@ async function loadSettings() {
     adminForm.username = admin.username || 'admin';
     adminForm.full_name = admin.full_name || 'Tizim admini';
   }
-  api.uyqurManagerConfirmers().then(result => {
-    managerConfirmerUsernames.value = Array.isArray(result.usernames) ? result.usernames : [];
-  }).catch(() => null);
-  api.uyqurManagerEmployees().then(result => {
-    managerEmployees.value = Array.isArray(result) ? result : [];
-  }).catch(() => null);
+  loadManagerConfirmerConfig().catch(() => null);
   const ai = data.settings?.find(s => s.key === 'ai_mode')?.value;
   const integration = data.settings?.find(s => s.key === 'ai_integration')?.value;
   const clickupIntegration = data.settings?.find(s => s.key === 'clickup_integration')?.value;
@@ -9690,13 +9716,39 @@ async function saveManagerConfirmers() {
   }
 }
 
-async function toggleConfirmed(row) {
+async function applyConfirmation(row, confirmed, managerUsername) {
   try {
-    await api.confirmUyqurReview({ event_id: row.event_id, employee_id: row.employee_id, confirmed: !row.confirmed });
+    await api.confirmUyqurReview({
+      event_id: row.event_id,
+      employee_id: row.employee_id,
+      confirmed,
+      manager_username: managerUsername || ''
+    });
     await Promise.all([loadManagerReviewQueue(), loadSupportOverview(), loadEventLearningStatus(), refreshSupportHistoryIfOpen(row.employee_id)]);
   } catch (error) {
     showToast(error.message);
   }
+}
+
+function toggleConfirmed(row) {
+  const nextValue = !row.confirmed;
+  if (!managerConfirmerUsernames.value.length) {
+    return applyConfirmation(row, nextValue, '');
+  }
+  const candidates = allowedConfirmerEmployees.value;
+  if (candidates.length === 1) {
+    return applyConfirmation(row, nextValue, candidates[0].username);
+  }
+  pendingConfirmRow.value = row;
+  pendingConfirmValue.value = nextValue;
+  modal.value = 'confirmIdentity';
+}
+
+function chooseConfirmIdentity(manager) {
+  const row = pendingConfirmRow.value;
+  const value = pendingConfirmValue.value;
+  closeModal();
+  if (row) applyConfirmation(row, value, manager.username);
 }
 
 function setThemeMode(mode) {
@@ -9815,7 +9867,7 @@ async function setTab(key) {
     if (activeTab.value === 'clickup') await loadClickUpTasks();
     if (activeTab.value === 'knowledgeBase') await loadSettings();
     if (activeTab.value === 'uyqurPermissions') {
-      await Promise.all([loadPermissionView(), loadSupportOverview(), loadNotificationEvents(), loadManagerReviewQueue()]);
+      await Promise.all([loadPermissionView(), loadSupportOverview(), loadNotificationEvents(), loadManagerReviewQueue(), loadManagerConfirmerConfig()]);
     }
     if (activeTab.value === 'settings') await loadSettings();
     if (activeTab.value === 'settings') checkTelegramWebhook(false).catch(() => null);
@@ -11516,6 +11568,7 @@ function closeModal() {
   if (modal.value === 'employeeCompanies') resetEmployeeProfileChat();
   if (modal.value === 'companyModuleEmployeeActivity') companyModuleEmployeeDetail.value = null;
   if (modal.value === 'supportHistory') closeSupportHistory();
+  if (modal.value === 'confirmIdentity') pendingConfirmRow.value = null;
   if (modal.value === 'companyDetail') {
     companyModuleEmployeeDetail.value = null;
     companyDetailCompanyId.value = '';
