@@ -3527,6 +3527,16 @@ body {
   background: rgba(142, 199, 255, .08);
 }
 
+.manager-confirmer-table-wrap table {
+  min-width: 0;
+  width: auto;
+}
+
+.permission-table-wrap {
+  max-height: 440px;
+  overflow-y: auto;
+}
+
 .manager-confirmer-list {
   display: flex;
   flex-wrap: wrap;

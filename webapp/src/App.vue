@@ -1574,7 +1574,7 @@
                     <p class="muted">Faqat belgilangan adminlar "Uyqur Funksiyalari" sahifasida Tasdiqlashni bosa oladi. Hech kim belgilanmasa, cheklovsiz.</p>
                   </div>
                 </div>
-                <div class="table-wrap">
+                <div class="table-wrap manager-confirmer-table-wrap">
                   <table v-if="managerEmployees.length">
                     <thead>
                       <tr>
@@ -1650,7 +1650,7 @@
                   {{ loadingAction === 'saveUyqurPermissions' ? 'Saqlanmoqda...' : 'Saqlash' }}
                 </button>
               </div>
-              <div class="table-wrap">
+              <div class="table-wrap permission-table-wrap">
                 <table v-if="permissionModules.length">
                   <thead>
                     <tr>
@@ -1732,7 +1732,7 @@
                   <p class="muted">Support o‘rgangan funksiyalarni tasdiqlash</p>
                 </div>
               </div>
-              <div class="table-wrap">
+              <div class="table-wrap permission-table-wrap">
                 <table v-if="managerReviewRows.length">
                   <thead>
                     <tr>
