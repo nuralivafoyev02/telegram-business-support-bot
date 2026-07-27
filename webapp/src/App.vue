@@ -94,6 +94,10 @@
                   {{ loadingAction === 'mainStats' ? 'Yuborilmoqda...' : 'Statistika yuborish' }}
                 </button>
                 <button type="button" @click="runHeaderAction(openBroadcast)">Umumiy xabar</button>
+                <button v-if="activeTab === 'uyqurPermissions'" class="danger-menu-item" type="button"
+                  :disabled="loadingAction === 'resetNotifications'" @click="runHeaderAction(resetUyqurNotifications)">
+                  {{ loadingAction === 'resetNotifications' ? 'Tozalanmoqda...' : 'Nolga tushirish' }}
+                </button>
                 <label v-if="activeTab === 'stats'" class="theme-menu-row">
                   <span>Davr</span>
                   <select v-model="selectedStatsPeriod" class="select mini-select" @change="handleStatsPeriodChange">
@@ -1686,10 +1690,6 @@
                 <div>
                   <div class="card-title">Supportlar</div>
                 </div>
-                <button class="btn small danger" type="button" :disabled="loadingAction === 'resetNotifications'"
-                  @click="resetUyqurNotifications">
-                  {{ loadingAction === 'resetNotifications' ? 'Tozalanmoqda...' : 'Nolga tushirish' }}
-                </button>
               </div>
               <div class="table-wrap">
                 <table v-if="supportOverview.length">
@@ -9672,10 +9672,12 @@ async function loadSupportOverview() {
 }
 
 async function resetUyqurNotifications() {
-  const ok = window.confirm('Barcha bildirishnomalar, o‘rganish va tasdiqlash holatlari tozalanadi. Davom etasizmi?');
+  const ok = window.confirm('Barcha funksiyalar (belgilash) va bildirishnomalar tozalanadi. Davom etasizmi?');
   if (!ok) return;
   startLoading('resetNotifications');
   try {
+    await api.saveUyqurPermissions({ selected: [] });
+    permissionSelected.value = [];
     await api.resetUyqurNotifications();
     await Promise.all([loadSupportOverview(), loadManagerReviewQueue(), refreshSupportHistoryIfOpen(selectedSupportId.value)]);
     showToast('Tozalandi');
