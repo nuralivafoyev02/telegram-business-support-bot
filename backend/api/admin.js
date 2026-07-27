@@ -41,7 +41,8 @@ const {
   setManagerConfirmation,
   getManagerConfirmers,
   saveManagerConfirmers,
-  getManagerEmployees
+  getManagerEmployees,
+  resetPermissionNotifications
 } = require('../lib/permission-view');
 const {
   syncCompanyReport,
@@ -6459,6 +6460,7 @@ async function handlePost(action, body, currentAdmin) {
     case 'uyqurMarkLearned': return setEventLearned(body.event_id, body.employee_id, body.learned !== false);
     case 'uyqurConfirmReview': return setManagerConfirmation(body.event_id, body.employee_id, body.confirmed !== false, body.manager_username || '');
     case 'uyqurManagerConfirmersSave': return saveManagerConfirmers(body.usernames);
+    case 'uyqurResetNotifications': return resetPermissionNotifications();
     default: throw new Error(`Unknown POST action: ${action}`);
   }
 }
