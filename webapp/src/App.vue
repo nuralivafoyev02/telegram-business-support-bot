@@ -1729,9 +1729,14 @@
                 <div>
                   <div class="card-title">Menejerlar</div>
                 </div>
+                <select class="select" v-model="selectedManagerReviewSupport">
+                  <option value="">Hammasi</option>
+                  <option v-for="option in managerReviewSupportOptions" :key="option.employee_id"
+                    :value="String(option.employee_id)">{{ option.full_name }}</option>
+                </select>
               </div>
               <div class="table-wrap permission-table-wrap">
-                <table v-if="managerReviewRows.length">
+                <table v-if="filteredManagerReviewRows.length">
                   <thead>
                     <tr>
                       <th>№</th>
@@ -1742,7 +1747,7 @@
                     </tr>
                   </thead>
                   <tbody>
-                    <tr v-for="(row, index) in managerReviewRows" :key="row.event_id + ':' + row.employee_id">
+                    <tr v-for="(row, index) in filteredManagerReviewRows" :key="row.event_id + ':' + row.employee_id">
                       <td>{{ index + 1 }}</td>
                       <td>{{ row.full_name }}</td>
                       <td>{{ row.submodule_name }}</td>
@@ -3637,6 +3642,17 @@ const selectedModuleHistoryRows = computed(() => supportHistoryRows.value.filter
   row => row.module_name === selectedModuleName.value
 ));
 const managerReviewRows = ref([]);
+const selectedManagerReviewSupport = ref('');
+const managerReviewSupportOptions = computed(() => {
+  const options = new Map();
+  managerReviewRows.value.forEach(row => {
+    if (!options.has(row.employee_id)) options.set(row.employee_id, row.full_name);
+  });
+  return [...options.entries()].map(([employee_id, full_name]) => ({ employee_id, full_name }));
+});
+const filteredManagerReviewRows = computed(() => selectedManagerReviewSupport.value
+  ? managerReviewRows.value.filter(row => String(row.employee_id) === selectedManagerReviewSupport.value)
+  : managerReviewRows.value);
 const managerConfirmerUsernames = ref([]);
 const managerEmployees = ref([]);
 const pendingConfirmRow = ref(null);
