@@ -1545,68 +1545,70 @@
                 </section>
               </div>
 
-              <section v-else-if="activeSettingsSection === 'admin'" class="card pad settings-card settings-panel">
-                <div class="settings-head">
-                  <div>
-                    <div class="card-title">Admin profili</div>
+              <div v-else-if="activeSettingsSection === 'admin'" class="settings-stack">
+                <section class="card pad settings-card settings-panel">
+                  <div class="settings-head">
+                    <div>
+                      <div class="card-title">Admin profili</div>
+                    </div>
                   </div>
-                </div>
-                <form class="form settings-form" @submit.prevent="saveAdmin">
-                  <label class="label">Kirish nomi
-                    <input v-model.trim="adminForm.username" class="input" placeholder="admin" />
-                  </label>
-                  <label class="label">Ism
-                    <input v-model.trim="adminForm.full_name" class="input" placeholder="Tizim admini" />
-                  </label>
-                  <label class="label">Yangi parol
-                    <input v-model="adminForm.new_password" class="input" type="password" autocomplete="new-password"
-                      placeholder="Bo‘sh qoldirilsa o‘zgarmaydi" />
-                  </label>
-                  <button class="btn primary" :disabled="loadingAction === 'saveAdmin'">{{ loadingAction === 'saveAdmin'
-                    ? 'Saqlamoqda...' : 'Saqlash' }}</button>
-                </form>
-              </section>
+                  <form class="form settings-form" @submit.prevent="saveAdmin">
+                    <label class="label">Kirish nomi
+                      <input v-model.trim="adminForm.username" class="input" placeholder="admin" />
+                    </label>
+                    <label class="label">Ism
+                      <input v-model.trim="adminForm.full_name" class="input" placeholder="Tizim admini" />
+                    </label>
+                    <label class="label">Yangi parol
+                      <input v-model="adminForm.new_password" class="input" type="password" autocomplete="new-password"
+                        placeholder="Bo‘sh qoldirilsa o‘zgarmaydi" />
+                    </label>
+                    <button class="btn primary" :disabled="loadingAction === 'saveAdmin'">{{ loadingAction === 'saveAdmin'
+                      ? 'Saqlamoqda...' : 'Saqlash' }}</button>
+                  </form>
+                </section>
 
-              <section v-if="activeSettingsSection === 'admin'" class="card pad settings-card settings-panel">
-                <div class="settings-head">
-                  <div>
-                    <div class="card-title">Tasdiqlovchi menejerlar</div>
-                    <p class="muted">Faqat belgilangan adminlar "Uyqur Funksiyalari" sahifasida Tasdiqlashni bosa oladi. Hech kim belgilanmasa, cheklovsiz.</p>
+                <section class="card pad settings-card settings-panel">
+                  <div class="settings-head">
+                    <div>
+                      <div class="card-title">Tasdiqlovchi menejerlar</div>
+                      <p class="muted">Faqat belgilangan adminlar "Uyqur Funksiyalari" sahifasida Tasdiqlashni bosa oladi. Hech kim belgilanmasa, cheklovsiz.</p>
+                    </div>
                   </div>
-                </div>
-                <div class="table-wrap manager-confirmer-table-wrap">
-                  <table v-if="managerEmployees.length">
-                    <thead>
-                      <tr>
-                        <th>Menejer</th>
-                        <th class="select-cell">Tasdiqlovchi</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr v-for="manager in managerEmployees" :key="manager.id">
-                        <td>
-                          <span class="employee-cell">
-                            <span class="employee-avatar fallback">{{ employeeInitials(manager) }}</span>
-                            <span>
-                              <b>{{ manager.full_name || manager.username }}</b><br />
-                              <span class="muted">@{{ manager.username }}</span>
+                  <div class="table-wrap manager-confirmer-table-wrap">
+                    <table v-if="managerEmployees.length">
+                      <thead>
+                        <tr>
+                          <th>Menejer</th>
+                          <th class="select-cell">Tasdiqlovchi</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr v-for="manager in managerEmployees" :key="manager.id">
+                          <td>
+                            <span class="employee-cell">
+                              <span class="employee-avatar fallback">{{ employeeInitials(manager) }}</span>
+                              <span>
+                                <b>{{ manager.full_name || manager.username }}</b><br />
+                                <span class="muted">@{{ manager.username }}</span>
+                              </span>
                             </span>
-                          </span>
-                        </td>
-                        <td class="select-cell">
-                          <input class="row-check" type="checkbox" :checked="isManagerConfirmerChecked(manager.username)"
-                            @change="toggleManagerConfirmerUsername(manager.username, $event.target.checked)" />
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                  <div v-else class="empty">Menejer xodimlar topilmadi</div>
-                </div>
-                <button class="btn primary" type="button" :disabled="loadingAction === 'saveManagerConfirmers'"
-                  @click="saveManagerConfirmers">
-                  {{ loadingAction === 'saveManagerConfirmers' ? 'Saqlanmoqda...' : 'Saqlash' }}
-                </button>
-              </section>
+                          </td>
+                          <td class="select-cell">
+                            <input class="row-check" type="checkbox" :checked="isManagerConfirmerChecked(manager.username)"
+                              @change="toggleManagerConfirmerUsername(manager.username, $event.target.checked)" />
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                    <div v-else class="empty">Menejer xodimlar topilmadi</div>
+                  </div>
+                  <button class="btn primary" type="button" :disabled="loadingAction === 'saveManagerConfirmers'"
+                    @click="saveManagerConfirmers">
+                    {{ loadingAction === 'saveManagerConfirmers' ? 'Saqlanmoqda...' : 'Saqlash' }}
+                  </button>
+                </section>
+              </div>
             </div>
           </template>
 
