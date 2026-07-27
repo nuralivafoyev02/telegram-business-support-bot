@@ -1729,11 +1729,14 @@
                 <div>
                   <div class="card-title">Menejerlar</div>
                 </div>
-                <select class="select" v-model="selectedManagerReviewSupport">
-                  <option value="">Hammasi</option>
-                  <option v-for="option in managerReviewSupportOptions" :key="option.employee_id"
-                    :value="String(option.employee_id)">{{ option.full_name }}</option>
-                </select>
+                <label class="company-module-filter">
+                  <span>Filter</span>
+                  <select class="select mini-select" v-model="selectedManagerReviewSupport">
+                    <option value="">Hammasi</option>
+                    <option v-for="option in managerReviewSupportOptions" :key="option.employee_id"
+                      :value="String(option.employee_id)">{{ option.full_name }}</option>
+                  </select>
+                </label>
               </div>
               <div class="table-wrap permission-table-wrap">
                 <table v-if="filteredManagerReviewRows.length">
