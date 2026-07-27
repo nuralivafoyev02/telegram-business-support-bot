@@ -1574,25 +1574,38 @@
                     <p class="muted">Faqat belgilangan adminlar "Uyqur Funksiyalari" sahifasida Tasdiqlashni bosa oladi. Hech kim belgilanmasa, cheklovsiz.</p>
                   </div>
                 </div>
-                <div class="form settings-form">
-                  <div class="manager-confirmer-list">
-                    <label v-for="manager in managerEmployees" :key="manager.id" class="manager-confirmer-row"
-                      :class="{ checked: isManagerConfirmerChecked(manager.username) }">
-                      <input type="checkbox" :checked="isManagerConfirmerChecked(manager.username)"
-                        @change="toggleManagerConfirmerUsername(manager.username, $event.target.checked)" />
-                      <span class="employee-avatar fallback manager-confirmer-avatar">{{ employeeInitials(manager) }}</span>
-                      <span class="manager-confirmer-info">
-                        <b>{{ manager.full_name || manager.username }}</b>
-                        <span class="muted">@{{ manager.username }}</span>
-                      </span>
-                    </label>
-                  </div>
-                  <div v-if="!managerEmployees.length" class="empty">Menejer xodimlar topilmadi</div>
-                  <button class="btn primary" type="button" :disabled="loadingAction === 'saveManagerConfirmers'"
-                    @click="saveManagerConfirmers">
-                    {{ loadingAction === 'saveManagerConfirmers' ? 'Saqlanmoqda...' : 'Saqlash' }}
-                  </button>
+                <div class="table-wrap">
+                  <table v-if="managerEmployees.length">
+                    <thead>
+                      <tr>
+                        <th>Menejer</th>
+                        <th class="select-cell">Tasdiqlovchi</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="manager in managerEmployees" :key="manager.id">
+                        <td>
+                          <span class="employee-cell">
+                            <span class="employee-avatar fallback">{{ employeeInitials(manager) }}</span>
+                            <span>
+                              <b>{{ manager.full_name || manager.username }}</b><br />
+                              <span class="muted">@{{ manager.username }}</span>
+                            </span>
+                          </span>
+                        </td>
+                        <td class="select-cell">
+                          <input class="row-check" type="checkbox" :checked="isManagerConfirmerChecked(manager.username)"
+                            @change="toggleManagerConfirmerUsername(manager.username, $event.target.checked)" />
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <div v-else class="empty">Menejer xodimlar topilmadi</div>
                 </div>
+                <button class="btn primary" type="button" :disabled="loadingAction === 'saveManagerConfirmers'"
+                  @click="saveManagerConfirmers">
+                  {{ loadingAction === 'saveManagerConfirmers' ? 'Saqlanmoqda...' : 'Saqlash' }}
+                </button>
               </section>
             </div>
           </template>
