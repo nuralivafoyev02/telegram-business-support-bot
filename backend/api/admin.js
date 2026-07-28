@@ -367,6 +367,30 @@ async function resolveEmployeeForAdmin(username) {
 }
 
 const MAX_SUPPORT_RESPONSE_MINUTES = 24 * 60;
+// Uzbekiston UTC+5 da yil bo'yi DST'siz ishlaydi, shuning uchun Toshkent 09:00-18:00
+// UTC 04:00-13:00 ga to'g'ri keladi (kun almashinuvisiz).
+const BUSINESS_HOURS_START_UTC = 4;
+const BUSINESS_HOURS_END_UTC = 13;
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+
+function businessMinutesBetween(start, end) {
+  const startMs = new Date(start).getTime();
+  const endMs = new Date(end).getTime();
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs < startMs) return null;
+
+  let totalMs = 0;
+  let cursor = startMs;
+  while (cursor < endMs) {
+    const dayStartUtc = Math.floor(cursor / ONE_DAY_MS) * ONE_DAY_MS;
+    const windowStart = dayStartUtc + BUSINESS_HOURS_START_UTC * 3600000;
+    const windowEnd = dayStartUtc + BUSINESS_HOURS_END_UTC * 3600000;
+    const segmentStart = Math.max(cursor, windowStart);
+    const segmentEnd = Math.min(endMs, windowEnd);
+    if (segmentEnd > segmentStart) totalMs += segmentEnd - segmentStart;
+    cursor = dayStartUtc + ONE_DAY_MS;
+  }
+  return Math.round(totalMs / 60000);
+}
 
 function normalizeSupportResponseMinutes(value) {
   if (value === null || value === undefined || !Number.isFinite(value)) return null;
@@ -425,7 +449,7 @@ function calculateFirstResponseMinutes(request, messages = [], employeeMaps = bu
     .sort((a, b) => a.time - b.time);
 
   if (employeeMessages.length > 0) {
-    return Math.max(0, Math.round((employeeMessages[0].time - anchorTime) / 60000));
+    return businessMinutesBetween(anchorTime, employeeMessages[0].time);
   }
 
   return null;
@@ -438,7 +462,7 @@ function resolveResponseMinutes(request, messages = [], employeeMaps = buildEmpl
   if (replyMin !== null) return replyMin;
 
   if (request.status === 'closed' && request.closed_at) {
-    return normalizeSupportResponseMinutes(minutesBetween(request.created_at, request.closed_at));
+    return normalizeSupportResponseMinutes(businessMinutesBetween(request.created_at, request.closed_at));
   }
   return null;
 }
@@ -447,7 +471,7 @@ function responseMinutesForPeriodAverage(request, messages = [], employeeMaps = 
   const minutes = resolveResponseMinutes(request, messages, employeeMaps, options);
   if (minutes !== null) return minutes;
   if (request.status === 'open') {
-    return normalizeSupportResponseMinutes(minutesBetween(request.created_at, new Date()));
+    return normalizeSupportResponseMinutes(businessMinutesBetween(request.created_at, new Date()));
   }
   return null;
 }
@@ -660,7 +684,7 @@ function buildEmployeePerformance({
       tgUserId: employee.tg_user_id
     });
     if (minutes === null) {
-      minutes = normalizeSupportResponseMinutes(minutesBetween(request.created_at, new Date()));
+      minutes = normalizeSupportResponseMinutes(businessMinutesBetween(request.created_at, new Date()));
     }
     if (minutes !== null) target[minutesField].push(minutes);
   }
