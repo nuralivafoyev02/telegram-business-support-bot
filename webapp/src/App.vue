@@ -6704,19 +6704,21 @@ const companyMrrScatterRawPoints = computed(() => {
   });
 });
 
-function companyMrrScatterPointRadius(count = 0, maxCount = 1) {
+function companyMrrScatterPointRadius(count = 0, maxCount = 1, mrrAmount = 0, maxMrr = 1) {
   const scale = companyMrrScatterRadiusScale.value;
   const minR = COMPANY_MRR_SCATTER_POINT_MIN_RADIUS * scale;
   const maxR = COMPANY_MRR_SCATTER_POINT_MAX_RADIUS * scale;
-  if (count <= 0 || maxCount <= 1) return Math.round(minR * 10) / 10;
-  const ratio = count / maxCount;
+  const taskRatio = maxCount > 1 ? Math.min(1, count / maxCount) : 0;
+  const mrrRatio = maxMrr > 0 ? Math.min(1, Number(mrrAmount || 0) / maxMrr) : 0;
+  const ratio = (taskRatio + mrrRatio) / 2;
   return Math.round((minR + (maxR - minR) * ratio) * 10) / 10;
 }
 
 const companyMrrScatterPoints = computed(() => {
   const maxCount = Math.max(1, ...companyMrrScatterRawPoints.value.map(point => point.clickup_linked_task_count));
+  const maxMrr = Math.max(1, ...companyMrrScatterRawPoints.value.map(point => Number(point.mrr_amount) || 0));
   return companyMrrScatterRawPoints.value.map(point => {
-    const pointRadius = companyMrrScatterPointRadius(point.clickup_linked_task_count, maxCount);
+    const pointRadius = companyMrrScatterPointRadius(point.clickup_linked_task_count, maxCount, point.mrr_amount, maxMrr);
     const badgeRadius = point.clickup_linked_task_count === 1
       ? Math.round(COMPANY_MRR_SCATTER_BADGE_RADIUS * 0.8 * 10) / 10
       : COMPANY_MRR_SCATTER_BADGE_RADIUS;
