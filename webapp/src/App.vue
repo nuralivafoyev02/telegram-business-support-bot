@@ -1677,8 +1677,9 @@
                           🔔
                           <span v-if="row.unread" class="notif-badge">{{ row.unread }}</span>
                         </span>
-                        <span class="notif-done-badge" title="Tasdiqlanganlar" @click.stop="openSupportHistory(row, 'done')">
-                          ✓ Tugagan <b>{{ row.confirmed || 0 }}</b>
+                        <span class="notif-done" title="Tasdiqlanganlar" @click.stop="openSupportHistory(row, 'done')">
+                          ✅
+                          <span v-if="row.confirmed" class="notif-done-badge">{{ row.confirmed }}</span>
                         </span>
                       </td>
                     </tr>

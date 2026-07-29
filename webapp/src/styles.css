@@ -3495,24 +3495,17 @@ body {
   box-shadow: 0 0 0 3px rgba(250, 204, 21, .24), 0 0 18px rgba(250, 204, 21, .22);
 }
 
-.notif-done-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  margin-left: 20px;
-  padding: 3px 8px;
-  border-radius: 999px;
-  background: rgba(34, 197, 94, .14);
-  color: #16a34a;
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
-}
-
 .notif-bell {
   position: relative;
   overflow: visible;
   cursor: pointer;
+}
+
+.notif-done {
+  position: relative;
+  overflow: visible;
+  cursor: pointer;
+  margin-left: 48px;
 }
 
 .notif-badge {
@@ -3524,6 +3517,22 @@ body {
   padding: 0 4px;
   border-radius: 999px;
   background: #ef4444;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 16px;
+  text-align: center;
+}
+
+.notif-done-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: #22c55e;
   color: #fff;
   font-size: 10px;
   font-weight: 800;
