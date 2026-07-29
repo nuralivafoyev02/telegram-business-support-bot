@@ -3501,11 +3501,19 @@ body {
   cursor: pointer;
 }
 
+.notif-divider {
+  display: inline-block;
+  width: 1px;
+  height: 20px;
+  margin: 0 28px;
+  background: var(--line);
+  vertical-align: middle;
+}
+
 .notif-done {
   position: relative;
   overflow: visible;
   cursor: pointer;
-  margin-left: 72px;
 }
 
 .notif-badge {

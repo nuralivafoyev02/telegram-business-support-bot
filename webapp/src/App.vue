@@ -1677,6 +1677,7 @@
                           🔔
                           <span v-if="row.unread" class="notif-badge">{{ row.unread }}</span>
                         </span>
+                        <span class="notif-divider"></span>
                         <span class="notif-done" title="Tasdiqlanganlar" @click.stop="openSupportHistory(row, 'done')">
                           ✅
                           <span v-if="row.confirmed" class="notif-done-badge">{{ row.confirmed }}</span>
@@ -1730,36 +1731,38 @@
             <div v-else class="empty">Bu supportga hali hech narsa yuborilmagan</div>
           </div>
 
-          <div class="settings-head">
-            <div>
-              <div class="card-title">Funksiyalar bo‘yicha o‘rganish holati</div>
+          <template v-if="supportHistoryFilter !== 'done'">
+            <div class="settings-head">
+              <div>
+                <div class="card-title">Funksiyalar bo‘yicha o‘rganish holati</div>
+              </div>
+              <select class="select" v-model="selectedModuleName">
+                <option v-for="name in supportHistoryModuleNames" :key="name" :value="name">{{ name }}</option>
+              </select>
             </div>
-            <select class="select" v-model="selectedModuleName">
-              <option v-for="name in supportHistoryModuleNames" :key="name" :value="name">{{ name }}</option>
-            </select>
-          </div>
-          <div class="table-wrap">
-            <table v-if="selectedModuleHistoryRows.length">
-              <thead>
-                <tr>
-                  <th>Funksiya</th>
-                  <th>O‘rganildi</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="row in selectedModuleHistoryRows" :key="row.event_id">
-                  <td>{{ row.submodule_name || row.submodule_key }}</td>
-                  <td>
-                    <button class="btn small learn-btn" :class="{ learned: row.learned }" type="button"
-                      @click="toggleLearned(row)">
-                      {{ row.learned ? '✓ O‘rganildi' : 'O‘rganildi' }}
-                    </button>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-            <div v-else class="empty">Hozircha funksiya yoqilmagan</div>
-          </div>
+            <div class="table-wrap">
+              <table v-if="selectedModuleHistoryRows.length">
+                <thead>
+                  <tr>
+                    <th>Funksiya</th>
+                    <th>O‘rganildi</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="row in selectedModuleHistoryRows" :key="row.event_id">
+                    <td>{{ row.submodule_name || row.submodule_key }}</td>
+                    <td>
+                      <button class="btn small learn-btn" :class="{ learned: row.learned }" type="button"
+                        @click="toggleLearned(row)">
+                        {{ row.learned ? '✓ O‘rganildi' : 'O‘rganildi' }}
+                      </button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+              <div v-else class="empty">Hozircha funksiya yoqilmagan</div>
+            </div>
+          </template>
         </section>
       </Modal>
     </Transition>
