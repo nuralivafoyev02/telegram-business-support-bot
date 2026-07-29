@@ -1721,7 +1721,7 @@
                     </span>
                   </td>
                   <td class="select-cell">
-                    <input class="row-check" type="checkbox" :checked="row.confirmed"
+                    <input class="row-check" type="checkbox" :checked="row.confirmed" :disabled="!row.learned"
                       @change="toggleConfirmed({ ...row, employee_id: selectedSupportId })" />
                   </td>
                 </tr>
@@ -3573,9 +3573,9 @@ const filteredSupportHistoryRows = computed(() => {
 });
 const selectedModuleName = ref('');
 const supportHistoryModuleNames = computed(() => [...new Set(
-  supportHistoryRows.value.map(row => row.module_name).filter(Boolean)
+  filteredSupportHistoryRows.value.map(row => row.module_name).filter(Boolean)
 )]);
-const selectedModuleHistoryRows = computed(() => supportHistoryRows.value.filter(
+const selectedModuleHistoryRows = computed(() => filteredSupportHistoryRows.value.filter(
   row => row.module_name === selectedModuleName.value
 ));
 const companyInfo = ref({ summary: {}, companies: [], fetched_at: '', source: '' });
