@@ -1673,6 +1673,9 @@
                       </td>
                       <td>{{ row.percent }}%</td>
                       <td>
+                        <span class="notif-done-badge" title="Tasdiqlangan (ko‘rib chiqilgan)">
+                          ✓ Tugagan <b>{{ row.confirmed || 0 }}</b>
+                        </span>
                         <span class="notif-bell" title="Tasdiqlanmagan bildirishnomalar">
                           🔔
                           <span v-if="row.unread" class="notif-badge">{{ row.unread }}</span>

@@ -203,6 +203,7 @@ async function getSupportOverview() {
       full_name: employee.full_name || employee.username || 'Support',
       username: employee.username || '',
       unread: pending,
+      confirmed: confirmedCount,
       percent
     };
   });
