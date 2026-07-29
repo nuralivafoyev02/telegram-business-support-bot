@@ -1236,10 +1236,6 @@ tbody tr:hover {
   margin: 12px 0 16px;
 }
 
-.company-detail-status-summary .company-detail-nav-item {
-  cursor: default;
-}
-
 .company-detail-panel {
   min-height: 240px;
 }

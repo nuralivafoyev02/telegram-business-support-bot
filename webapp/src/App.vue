@@ -2106,18 +2106,24 @@
                 </div>
               </div>
               <div class="company-detail-navbar company-detail-status-summary">
-                <div class="company-detail-nav-item">
+                <button type="button" class="company-detail-nav-item"
+                  :class="{ active: isCompanyDetailStatusGroupSelected('not_started') }"
+                  @click="selectCompanyDetailStatusGroup('not_started')">
                   <span class="company-detail-nav-label">Boshlanmagan</span>
                   <b class="company-detail-nav-value">{{ fmtNumber(companyDetailClickupStatusCounts.not_started) }}</b>
-                </div>
-                <div class="company-detail-nav-item">
+                </button>
+                <button type="button" class="company-detail-nav-item"
+                  :class="{ active: isCompanyDetailStatusGroupSelected('in_progress') }"
+                  @click="selectCompanyDetailStatusGroup('in_progress')">
                   <span class="company-detail-nav-label">Jarayonda</span>
                   <b class="company-detail-nav-value">{{ fmtNumber(companyDetailClickupStatusCounts.in_progress) }}</b>
-                </div>
-                <div class="company-detail-nav-item">
+                </button>
+                <button type="button" class="company-detail-nav-item"
+                  :class="{ active: isCompanyDetailStatusGroupSelected('done') }"
+                  @click="selectCompanyDetailStatusGroup('done')">
                   <span class="company-detail-nav-label">Tugagan</span>
                   <b class="company-detail-nav-value">{{ fmtNumber(companyDetailClickupStatusCounts.done) }}</b>
-                </div>
+                </button>
               </div>
               <DataTable :columns="clickupCompanyLinkTaskColumns" :rows="companyDetailClickupTasks"
                 empty="Vazifa topilmadi" :page-size="12" :on-cell-action="handleTableCellAction" />
@@ -6956,6 +6962,15 @@ function toggleCompanyDetailClickupStatusFilter(key = '') {
   if (next.has(key)) next.delete(key);
   else next.add(key);
   companyDetailClickupStatusFilter.value = next;
+}
+
+function selectCompanyDetailStatusGroup(key = '') {
+  companyDetailClickupStatusFilter.value = new Set([key]);
+}
+
+function isCompanyDetailStatusGroupSelected(key = '') {
+  const filter = companyDetailClickupStatusFilter.value;
+  return filter.size === 1 && filter.has(key);
 }
 
 const companyDetailClickupStatusFilterLabel = computed(() => {
