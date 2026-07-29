@@ -1601,7 +1601,8 @@
           </template>
 
           <template v-if="activeTab === 'uyqurPermissions'">
-            <section class="card pad settings-card">
+            <div class="uyqur-permissions-layout">
+            <section class="card pad settings-card uyqur-functions-card">
               <div class="settings-head">
                 <div>
                   <div class="card-title">Uyqur Funksiyalari</div>
@@ -1611,7 +1612,7 @@
                   {{ loadingAction === 'saveUyqurPermissions' ? 'Saqlanmoqda...' : 'Saqlash' }}
                 </button>
               </div>
-              <div class="table-wrap permission-table-wrap">
+              <div class="table-wrap permission-table-wrap uyqur-functions-table-wrap">
                 <table v-if="permissionModules.length">
                   <thead>
                     <tr>
@@ -1689,6 +1690,7 @@
                 <div v-else class="empty">Support xodimlar topilmadi</div>
               </div>
             </section>
+            </div>
 
           </template>
         </div>

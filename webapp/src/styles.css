@@ -3573,6 +3573,39 @@ body {
   overflow-y: auto;
 }
 
+.uyqur-permissions-layout {
+  display: flex;
+  align-items: flex-start;
+  gap: 18px;
+}
+
+.uyqur-functions-card {
+  flex: 0 0 460px;
+  max-width: 460px;
+}
+
+.uyqur-permissions-layout .settings-card:not(.uyqur-functions-card) {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.uyqur-functions-table-wrap table {
+  min-width: 0;
+  width: 100%;
+}
+
+@media (max-width: 960px) {
+  .uyqur-permissions-layout {
+    flex-direction: column;
+  }
+
+  .uyqur-functions-card {
+    flex-basis: auto;
+    max-width: none;
+    width: 100%;
+  }
+}
+
 .manager-panel-lock {
   max-width: 320px;
 }
