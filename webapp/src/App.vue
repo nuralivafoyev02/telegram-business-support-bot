@@ -1673,12 +1673,12 @@
                       </td>
                       <td>{{ row.percent }}%</td>
                       <td>
-                        <span class="notif-done-badge" title="Tasdiqlangan (ko‘rib chiqilgan)">
-                          ✓ Tugagan <b>{{ row.confirmed || 0 }}</b>
-                        </span>
-                        <span class="notif-bell" title="Tasdiqlanmagan bildirishnomalar">
+                        <span class="notif-bell" title="Hali tasdiqlanmaganlar" @click.stop="openSupportHistory(row, 'pending')">
                           🔔
                           <span v-if="row.unread" class="notif-badge">{{ row.unread }}</span>
+                        </span>
+                        <span class="notif-done-badge" title="Tasdiqlanganlar" @click.stop="openSupportHistory(row, 'done')">
+                          ✓ Tugagan <b>{{ row.confirmed || 0 }}</b>
                         </span>
                       </td>
                     </tr>
@@ -1757,7 +1757,7 @@
             <div class="card-title">Bildirishnomalar tarixi</div>
           </div>
           <div class="table-wrap permission-table-wrap">
-            <table v-if="supportHistoryRows.length">
+            <table v-if="filteredSupportHistoryRows.length">
               <thead>
                 <tr>
                   <th>Funksiya</th>
@@ -1766,7 +1766,7 @@
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="row in supportHistoryRows" :key="row.event_id">
+                <tr v-for="row in filteredSupportHistoryRows" :key="row.event_id">
                   <td>{{ row.submodule_name || row.submodule_key }}</td>
                   <td>{{ fmtDate(row.created_at) }}</td>
                   <td>
@@ -3615,6 +3615,12 @@ const supportOverview = ref([]);
 const selectedSupportId = ref('');
 const selectedSupportName = ref('');
 const supportHistoryRows = ref([]);
+const supportHistoryFilter = ref('all');
+const filteredSupportHistoryRows = computed(() => {
+  if (supportHistoryFilter.value === 'done') return supportHistoryRows.value.filter(row => row.confirmed);
+  if (supportHistoryFilter.value === 'pending') return supportHistoryRows.value.filter(row => !row.confirmed);
+  return supportHistoryRows.value;
+});
 const selectedModuleName = ref('');
 const supportHistoryModuleNames = computed(() => [...new Set(
   supportHistoryRows.value.map(row => row.module_name).filter(Boolean)
@@ -9654,9 +9660,10 @@ async function resetUyqurNotifications() {
   }
 }
 
-async function openSupportHistory(row) {
+async function openSupportHistory(row, filter = 'all') {
   selectedSupportId.value = String(row.id);
   selectedSupportName.value = row.full_name || 'Support';
+  supportHistoryFilter.value = filter;
   modal.value = 'supportHistory';
   try {
     supportHistoryRows.value = await api.uyqurSupportHistory({ employee_id: row.id });
@@ -9671,6 +9678,7 @@ function closeSupportHistory() {
   selectedSupportName.value = '';
   supportHistoryRows.value = [];
   selectedModuleName.value = '';
+  supportHistoryFilter.value = 'all';
 }
 
 async function loadManagerReviewQueue() {

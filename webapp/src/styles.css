@@ -3499,18 +3499,20 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  margin-right: 14px;
+  margin-left: 20px;
   padding: 3px 8px;
   border-radius: 999px;
   background: rgba(34, 197, 94, .14);
   color: #16a34a;
   font-size: 12px;
   font-weight: 700;
+  cursor: pointer;
 }
 
 .notif-bell {
   position: relative;
   overflow: visible;
+  cursor: pointer;
 }
 
 .notif-badge {
