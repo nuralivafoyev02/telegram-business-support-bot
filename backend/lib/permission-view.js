@@ -317,17 +317,10 @@ async function saveManagerConfirmers(usernames = []) {
   return { usernames: normalized };
 }
 
-async function assertManagerCanConfirm(managerUsername = '') {
-  const { usernames } = await getManagerConfirmerRecord();
-  if (!usernames.length) return;
-  if (!usernames.includes(String(managerUsername || ''))) {
-    throw new Error('Sizda tasdiqlash huquqi yo‘q — bu Sozlamalarda faqat belgilangan menejerlarga ruxsat berilgan');
-  }
-}
-
 async function setManagerConfirmation(eventId, employeeId, confirmed = true, managerName = '') {
   if (!eventId || !employeeId) throw new Error('event_id va employee_id majburiy');
-  await assertManagerCanConfirm(managerName);
+  // "Menejerlar" bo'limi parol bilan himoyalangani uchun, tasdiqlashni kim
+  // bosgani bo'yicha qo'shimcha cheklov qo'llanmaydi — cheklovsiz.
   const record = await getNotificationRecord();
   if (!record.progress[eventId]) record.progress[eventId] = {};
   const current = record.progress[eventId][employeeId] || {};

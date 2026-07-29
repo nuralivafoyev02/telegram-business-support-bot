@@ -1568,46 +1568,6 @@
                       ? 'Saqlamoqda...' : 'Saqlash' }}</button>
                   </form>
                 </section>
-
-                <section class="card pad settings-card settings-panel">
-                  <div class="settings-head">
-                    <div>
-                      <div class="card-title">Tasdiqlovchi menejerlar</div>
-                    </div>
-                  </div>
-                  <div class="table-wrap manager-confirmer-table-wrap">
-                    <table v-if="managerEmployees.length">
-                      <thead>
-                        <tr>
-                          <th>Menejer</th>
-                          <th class="select-cell">Tasdiqlovchi</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr v-for="manager in managerEmployees" :key="manager.id">
-                          <td>
-                            <span class="employee-cell">
-                              <span class="employee-avatar fallback">{{ employeeInitials(manager) }}</span>
-                              <span>
-                                <b>{{ manager.full_name || manager.username }}</b><br />
-                                <span class="muted">@{{ manager.username }}</span>
-                              </span>
-                            </span>
-                          </td>
-                          <td class="select-cell">
-                            <input class="row-check" type="checkbox" :checked="isManagerConfirmerChecked(manager.username)"
-                              @change="toggleManagerConfirmerUsername(manager.username, $event.target.checked)" />
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                    <div v-else class="empty">Menejer xodimlar topilmadi</div>
-                  </div>
-                  <button class="btn primary" type="button" :disabled="loadingAction === 'saveManagerConfirmers'"
-                    @click="saveManagerConfirmers">
-                    {{ loadingAction === 'saveManagerConfirmers' ? 'Saqlanmoqda...' : 'Saqlash' }}
-                  </button>
-                </section>
               </div>
             </div>
           </template>
@@ -1848,23 +1808,6 @@
             <div v-else class="empty">Hozircha funksiya yoqilmagan</div>
           </div>
         </section>
-      </Modal>
-    </Transition>
-
-    <Transition name="modal-fade">
-      <Modal v-if="modal === 'confirmIdentity'" title="Kim sifatida tasdiqlaysiz?" @close="closeModal">
-        <div class="manager-confirmer-list">
-          <button v-for="manager in allowedConfirmerEmployees" :key="manager.id" type="button"
-            class="manager-confirmer-row" @click="chooseConfirmIdentity(manager)">
-            <span class="employee-avatar fallback manager-confirmer-avatar">{{ employeeInitials(manager) }}</span>
-            <span class="manager-confirmer-info">
-              <b>{{ manager.full_name || manager.username }}</b>
-              <span class="muted">@{{ manager.username }}</span>
-            </span>
-          </button>
-          <div v-if="!allowedConfirmerEmployees.length" class="empty">Ruxsat berilgan menejer yo‘q — avval
-            Sozlamalarda belgilang</div>
-        </div>
       </Modal>
     </Transition>
 
@@ -2160,6 +2103,20 @@
                       </div>
                     </Transition>
                   </div>
+                </div>
+              </div>
+              <div class="company-detail-navbar company-detail-status-summary">
+                <div class="company-detail-nav-item">
+                  <span class="company-detail-nav-label">Boshlanmagan</span>
+                  <b class="company-detail-nav-value">{{ fmtNumber(companyDetailClickupStatusCounts.not_started) }}</b>
+                </div>
+                <div class="company-detail-nav-item">
+                  <span class="company-detail-nav-label">Jarayonda</span>
+                  <b class="company-detail-nav-value">{{ fmtNumber(companyDetailClickupStatusCounts.in_progress) }}</b>
+                </div>
+                <div class="company-detail-nav-item">
+                  <span class="company-detail-nav-label">Tugagan</span>
+                  <b class="company-detail-nav-value">{{ fmtNumber(companyDetailClickupStatusCounts.done) }}</b>
                 </div>
               </div>
               <DataTable :columns="clickupCompanyLinkTaskColumns" :rows="companyDetailClickupTasks"
@@ -3671,13 +3628,6 @@ const managerReviewSupportOptions = computed(() => {
 const filteredManagerReviewRows = computed(() => selectedManagerReviewSupport.value
   ? managerReviewRows.value.filter(row => String(row.employee_id) === selectedManagerReviewSupport.value)
   : managerReviewRows.value);
-const managerConfirmerUsernames = ref([]);
-const managerEmployees = ref([]);
-const pendingConfirmRow = ref(null);
-const pendingConfirmValue = ref(true);
-const allowedConfirmerEmployees = computed(() => managerConfirmerUsernames.value.length
-  ? managerEmployees.value.filter(manager => managerConfirmerUsernames.value.includes(String(manager.username)))
-  : managerEmployees.value);
 const companyInfo = ref({ summary: {}, companies: [], fetched_at: '', source: '' });
 const companyModuleReports = ref({ companies: [], report_dates: [], period: 'all' });
 const companyModuleChartSource = ref({ period: 'week', daily_companies: [], report_dates: [] });
@@ -6567,7 +6517,7 @@ const CLICKUP_STATUS_NAME_GROUP_MAP = {
   'in progress': 'in_progress',
   'code review': 'in_progress',
   'in qa': 'in_progress',
-  'deployed must be tested': 'in_progress',
+  'deployed must be tested': 'done',
   blocked: 'in_progress',
   'issue found': 'in_progress',
   closed: 'done',
@@ -7028,6 +6978,15 @@ const companyDetailClickupTasks = computed(() => {
   const filter = companyDetailClickupStatusFilter.value;
   if (!filter.size) return all;
   return all.filter(task => filter.has(clickupStatusGroupForStatus(task.status, task.status_type)));
+});
+
+const companyDetailClickupStatusCounts = computed(() => {
+  const counts = { not_started: 0, in_progress: 0, done: 0 };
+  companyDetailAllClickupTasks.value.forEach(task => {
+    const group = clickupStatusGroupForStatus(task.status, task.status_type);
+    if (counts[group] !== undefined) counts[group] += 1;
+  });
+  return counts;
 });
 
 const companyDetailWeekActivityPercent = ref(null);
@@ -9134,7 +9093,7 @@ async function refresh() {
     if (activeTab.value === 'clickup') await loadClickUpTasks();
     if (activeTab.value === 'knowledgeBase') await loadSettings();
     if (activeTab.value === 'uyqurPermissions') {
-      await Promise.all([loadPermissionView(), loadSupportOverview(), loadManagerReviewQueue(), loadManagerConfirmerConfig()]);
+      await Promise.all([loadPermissionView(), loadSupportOverview(), loadManagerReviewQueue()]);
     }
     if (activeTab.value === 'settings') await loadSettings();
     if (activeTab.value === 'settings') checkTelegramWebhook(false).catch(() => null);
@@ -9522,15 +9481,6 @@ function startCompanyActivitySyncTimer() {
 
 watch(companyModuleCompareEnabled, refreshCompanyModuleReports);
 
-async function loadManagerConfirmerConfig() {
-  const [confirmers, managers] = await Promise.all([
-    api.uyqurManagerConfirmers(),
-    api.uyqurManagerEmployees()
-  ]);
-  managerConfirmerUsernames.value = Array.isArray(confirmers.usernames) ? confirmers.usernames : [];
-  managerEmployees.value = Array.isArray(managers) ? managers : [];
-}
-
 async function loadSettings() {
   const data = await api.settings();
   settingsRaw.value = data;
@@ -9539,7 +9489,6 @@ async function loadSettings() {
     adminForm.username = admin.username || 'admin';
     adminForm.full_name = admin.full_name || 'Tizim admini';
   }
-  loadManagerConfirmerConfig().catch(() => null);
   const ai = data.settings?.find(s => s.key === 'ai_mode')?.value;
   const integration = data.settings?.find(s => s.key === 'ai_integration')?.value;
   const clickupIntegration = data.settings?.find(s => s.key === 'clickup_integration')?.value;
@@ -9747,65 +9696,18 @@ async function toggleLearned(row) {
   }
 }
 
-function isManagerConfirmerChecked(username) {
-  return managerConfirmerUsernames.value.includes(String(username));
-}
-
-function toggleManagerConfirmerUsername(username, checked) {
-  const name = String(username);
-  if (checked) {
-    if (!managerConfirmerUsernames.value.includes(name)) managerConfirmerUsernames.value = [...managerConfirmerUsernames.value, name];
-  } else {
-    managerConfirmerUsernames.value = managerConfirmerUsernames.value.filter(item => item !== name);
-  }
-}
-
-async function saveManagerConfirmers() {
-  startLoading('saveManagerConfirmers');
-  try {
-    const data = await api.saveUyqurManagerConfirmers({ usernames: managerConfirmerUsernames.value });
-    managerConfirmerUsernames.value = Array.isArray(data.usernames) ? data.usernames : managerConfirmerUsernames.value;
-    showToast('Saqlandi');
-  } catch (error) {
-    showToast(error.message);
-  } finally {
-    stopLoading('saveManagerConfirmers');
-  }
-}
-
-async function applyConfirmation(row, confirmed, managerUsername) {
+async function toggleConfirmed(row) {
   try {
     await api.confirmUyqurReview({
       event_id: row.event_id,
       employee_id: row.employee_id,
-      confirmed,
-      manager_username: managerUsername || ''
+      confirmed: !row.confirmed,
+      manager_username: ''
     });
     await Promise.all([loadManagerReviewQueue(), loadSupportOverview(), refreshSupportHistoryIfOpen(row.employee_id)]);
   } catch (error) {
     showToast(error.message);
   }
-}
-
-function toggleConfirmed(row) {
-  const nextValue = !row.confirmed;
-  if (!managerConfirmerUsernames.value.length) {
-    return applyConfirmation(row, nextValue, '');
-  }
-  const candidates = allowedConfirmerEmployees.value;
-  if (candidates.length === 1) {
-    return applyConfirmation(row, nextValue, candidates[0].username);
-  }
-  pendingConfirmRow.value = row;
-  pendingConfirmValue.value = nextValue;
-  modal.value = 'confirmIdentity';
-}
-
-function chooseConfirmIdentity(manager) {
-  const row = pendingConfirmRow.value;
-  const value = pendingConfirmValue.value;
-  closeModal();
-  if (row) applyConfirmation(row, value, manager.username);
 }
 
 function setThemeMode(mode) {
@@ -9927,7 +9829,7 @@ async function setTab(key) {
       managerPanelUnlocked.value = false;
       managerPasswordInput.value = '';
       managerPasswordError.value = '';
-      await Promise.all([loadPermissionView(), loadSupportOverview(), loadManagerReviewQueue(), loadManagerConfirmerConfig()]);
+      await Promise.all([loadPermissionView(), loadSupportOverview(), loadManagerReviewQueue()]);
     }
     if (activeTab.value === 'settings') await loadSettings();
     if (activeTab.value === 'settings') checkTelegramWebhook(false).catch(() => null);
@@ -11628,7 +11530,6 @@ function closeModal() {
   if (modal.value === 'employeeCompanies') resetEmployeeProfileChat();
   if (modal.value === 'companyModuleEmployeeActivity') companyModuleEmployeeDetail.value = null;
   if (modal.value === 'supportHistory') closeSupportHistory();
-  if (modal.value === 'confirmIdentity') pendingConfirmRow.value = null;
   if (modal.value === 'companyDetail') {
     companyModuleEmployeeDetail.value = null;
     companyDetailCompanyId.value = '';
