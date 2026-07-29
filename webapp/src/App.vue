@@ -1689,62 +1689,6 @@
               </div>
             </section>
 
-            <section class="card pad settings-card">
-              <div class="settings-head">
-                <div>
-                  <div class="card-title">Menejerlar</div>
-                </div>
-                <label v-if="managerPanelUnlocked" class="company-module-filter">
-                  <span>Filter</span>
-                  <select class="select mini-select" v-model="selectedManagerReviewSupport">
-                    <option value="">Hammasi</option>
-                    <option v-for="option in managerReviewSupportOptions" :key="option.employee_id"
-                      :value="String(option.employee_id)">{{ option.full_name }}</option>
-                  </select>
-                </label>
-              </div>
-
-              <form v-if="!managerPanelUnlocked" class="form manager-panel-lock" @submit.prevent="unlockManagerPanel">
-                <p class="muted">Bu bo‘lim parol bilan himoyalangan</p>
-                <input v-model="managerPasswordInput" class="input" type="password" autocomplete="current-password"
-                  placeholder="Parol" />
-                <p v-if="managerPasswordError" class="form-error">{{ managerPasswordError }}</p>
-                <button class="btn primary" type="submit" :disabled="loadingAction === 'unlockManagerPanel'">
-                  {{ loadingAction === 'unlockManagerPanel' ? 'Tekshirilmoqda...' : 'Ochish' }}
-                </button>
-              </form>
-
-              <div v-else class="table-wrap permission-table-wrap">
-                <table v-if="filteredManagerReviewRows.length">
-                  <thead>
-                    <tr>
-                      <th>№</th>
-                      <th>Support</th>
-                      <th>Funksiya</th>
-                      <th>O‘rganildi</th>
-                      <th class="select-cell">Tasdiqlash</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="(row, index) in filteredManagerReviewRows" :key="row.event_id + ':' + row.employee_id">
-                      <td>{{ index + 1 }}</td>
-                      <td>{{ row.full_name }}</td>
-                      <td>{{ row.submodule_name }}</td>
-                      <td>
-                        <span class="badge" :class="row.learned_at ? 'green' : 'blue'">
-                          {{ row.learned_at ? '✓ O‘rganildi' : 'O‘rganildi' }}
-                        </span>
-                      </td>
-                      <td class="select-cell">
-                        <input class="row-check" type="checkbox" :checked="row.confirmed"
-                          @change="toggleConfirmed(row)" />
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-                <div v-else class="empty">Tasdiqlash uchun funksiya yo‘q</div>
-              </div>
-            </section>
           </template>
         </div>
       </Transition>
@@ -1764,6 +1708,7 @@
                   <th>Funksiya</th>
                   <th>Yuborilgan</th>
                   <th>Holati</th>
+                  <th class="select-cell">Tasdiqlash</th>
                 </tr>
               </thead>
               <tbody>
@@ -1774,6 +1719,10 @@
                     <span class="badge" :class="row.confirmed ? 'green' : (row.learned ? 'blue' : 'orange')">
                       {{ row.confirmed ? '✓ Qabul qilindi' : (row.learned ? 'O‘rganildi' : 'Kutilmoqda') }}
                     </span>
+                  </td>
+                  <td class="select-cell">
+                    <input class="row-check" type="checkbox" :checked="row.confirmed"
+                      @change="toggleConfirmed({ ...row, employee_id: selectedSupportId })" />
                   </td>
                 </tr>
               </tbody>
@@ -3629,21 +3578,6 @@ const supportHistoryModuleNames = computed(() => [...new Set(
 const selectedModuleHistoryRows = computed(() => supportHistoryRows.value.filter(
   row => row.module_name === selectedModuleName.value
 ));
-const managerReviewRows = ref([]);
-const managerPanelUnlocked = ref(false);
-const managerPasswordInput = ref('');
-const managerPasswordError = ref('');
-const selectedManagerReviewSupport = ref('');
-const managerReviewSupportOptions = computed(() => {
-  const options = new Map();
-  managerReviewRows.value.forEach(row => {
-    if (!options.has(row.employee_id)) options.set(row.employee_id, row.full_name);
-  });
-  return [...options.entries()].map(([employee_id, full_name]) => ({ employee_id, full_name }));
-});
-const filteredManagerReviewRows = computed(() => selectedManagerReviewSupport.value
-  ? managerReviewRows.value.filter(row => String(row.employee_id) === selectedManagerReviewSupport.value)
-  : managerReviewRows.value);
 const companyInfo = ref({ summary: {}, companies: [], fetched_at: '', source: '' });
 const companyModuleReports = ref({ companies: [], report_dates: [], period: 'all' });
 const companyModuleChartSource = ref({ period: 'week', daily_companies: [], report_dates: [] });
@@ -9118,7 +9052,7 @@ async function refresh() {
     if (activeTab.value === 'clickup') await loadClickUpTasks();
     if (activeTab.value === 'knowledgeBase') await loadSettings();
     if (activeTab.value === 'uyqurPermissions') {
-      await Promise.all([loadPermissionView(), loadSupportOverview(), loadManagerReviewQueue()]);
+      await Promise.all([loadPermissionView(), loadSupportOverview()]);
     }
     if (activeTab.value === 'settings') await loadSettings();
     if (activeTab.value === 'settings') checkTelegramWebhook(false).catch(() => null);
@@ -9632,7 +9566,7 @@ async function saveUyqurPermissions() {
     const data = await api.saveUyqurPermissions({ selected: permissionSelected.value });
     permissionSelected.value = Array.isArray(data.selected) ? data.selected.map(String) : permissionSelected.value;
     showToast('Saqlandi');
-    await Promise.all([loadSupportOverview(), loadManagerReviewQueue()]);
+    await loadSupportOverview();
   } catch (error) {
     showToast(error.message);
   } finally {
@@ -9652,7 +9586,7 @@ async function resetUyqurNotifications() {
     await api.saveUyqurPermissions({ selected: [] });
     permissionSelected.value = [];
     await api.resetUyqurNotifications();
-    await Promise.all([loadSupportOverview(), loadManagerReviewQueue(), refreshSupportHistoryIfOpen(selectedSupportId.value)]);
+    await Promise.all([loadSupportOverview(), refreshSupportHistoryIfOpen(selectedSupportId.value)]);
     showToast('Tozalandi');
   } catch (error) {
     showToast(error.message);
@@ -9682,28 +9616,6 @@ function closeSupportHistory() {
   supportHistoryFilter.value = 'all';
 }
 
-async function loadManagerReviewQueue() {
-  managerReviewRows.value = await api.uyqurManagerReviewQueue();
-}
-
-async function unlockManagerPanel() {
-  managerPasswordError.value = '';
-  if (!managerPasswordInput.value) {
-    managerPasswordError.value = 'Parolni kiriting';
-    return;
-  }
-  startLoading('unlockManagerPanel');
-  try {
-    await api.verifyUyqurManagerPassword({ password: managerPasswordInput.value });
-    managerPanelUnlocked.value = true;
-    managerPasswordInput.value = '';
-  } catch (error) {
-    managerPasswordError.value = error.message;
-  } finally {
-    stopLoading('unlockManagerPanel');
-  }
-}
-
 async function refreshSupportHistoryIfOpen(employeeId) {
   if (selectedSupportId.value && selectedSupportId.value === String(employeeId)) {
     supportHistoryRows.value = await api.uyqurSupportHistory({ employee_id: employeeId }).catch(() => supportHistoryRows.value);
@@ -9715,7 +9627,6 @@ async function toggleLearned(row) {
     await api.markUyqurLearned({ event_id: row.event_id, employee_id: selectedSupportId.value, learned: !row.learned });
     await Promise.all([
       refreshSupportHistoryIfOpen(selectedSupportId.value),
-      loadManagerReviewQueue(),
       loadSupportOverview()
     ]);
   } catch (error) {
@@ -9731,7 +9642,7 @@ async function toggleConfirmed(row) {
       confirmed: !row.confirmed,
       manager_username: ''
     });
-    await Promise.all([loadManagerReviewQueue(), loadSupportOverview(), refreshSupportHistoryIfOpen(row.employee_id)]);
+    await Promise.all([loadSupportOverview(), refreshSupportHistoryIfOpen(row.employee_id)]);
   } catch (error) {
     showToast(error.message);
   }
@@ -9853,10 +9764,7 @@ async function setTab(key) {
     if (activeTab.value === 'clickup') await loadClickUpTasks();
     if (activeTab.value === 'knowledgeBase') await loadSettings();
     if (activeTab.value === 'uyqurPermissions') {
-      managerPanelUnlocked.value = false;
-      managerPasswordInput.value = '';
-      managerPasswordError.value = '';
-      await Promise.all([loadPermissionView(), loadSupportOverview(), loadManagerReviewQueue()]);
+      await Promise.all([loadPermissionView(), loadSupportOverview()]);
     }
     if (activeTab.value === 'settings') await loadSettings();
     if (activeTab.value === 'settings') checkTelegramWebhook(false).catch(() => null);
