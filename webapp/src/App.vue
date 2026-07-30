@@ -1603,8 +1603,9 @@
           <template v-if="activeTab === 'uyqurPermissions'">
             <section class="card pad settings-card">
               <div class="settings-head">
-                <div>
+                <div class="uyqur-functions-group-title">
                   <div class="card-title">Uyqur Funksiyalari</div>
+                  <span class="uyqur-functions-percent uyqur-functions-percent-overall">Umumiy {{ overallPermissionPercent }}%</span>
                 </div>
                 <button class="btn primary" :disabled="loadingAction === 'saveUyqurPermissions'"
                   @click="saveUyqurPermissions">
@@ -1612,14 +1613,6 @@
                 </button>
               </div>
               <div class="uyqur-functions-groups" v-if="permissionModules.length">
-                <div class="uyqur-functions-group uyqur-functions-summary">
-                  <div class="uyqur-functions-group-head">
-                    <span class="uyqur-functions-group-title">
-                      <b>Umumiy</b>
-                      <span class="uyqur-functions-percent">{{ overallPermissionPercent }}%</span>
-                    </span>
-                  </div>
-                </div>
                 <div class="uyqur-functions-group" v-for="module in permissionModules.filter(m => m.submodules.length)"
                   :key="'module-' + module.id">
                   <label class="uyqur-functions-group-head">
