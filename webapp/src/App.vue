@@ -817,6 +817,10 @@
               <div class="card-title">Uyqur Funksiyalari</div>
               <span class="uyqur-functions-percent uyqur-functions-percent-overall">Umumiy {{ overallPermissionPercent }}%</span>
             </div>
+            <button class="btn primary" :disabled="loadingAction === 'saveUyqurPermissions'"
+              @click="saveUyqurPermissions">
+              {{ loadingAction === 'saveUyqurPermissions' ? 'Saqlanmoqda...' : 'Saqlash' }}
+            </button>
           </div>
           <div class="uyqur-functions-groups" v-if="permissionModules.length">
             <div class="uyqur-functions-group" v-for="module in permissionModules.filter(m => m.submodules.length)"
@@ -826,12 +830,14 @@
                   <b>{{ module.name || module.key }}</b>
                   <span class="uyqur-functions-percent">{{ permissionModulePercent(module) }}%</span>
                 </span>
-                <input class="row-check" type="checkbox" :checked="isPermissionModuleSelected(module)" disabled />
+                <input class="row-check" type="checkbox" :checked="isPermissionModuleSelected(module)"
+                  @change="togglePermissionModule(module, $event.target.checked)" />
               </label>
               <label class="uyqur-functions-row" v-for="submodule in module.submodules"
                 :key="'all-functions-submodule-' + submodule.id">
                 <span>{{ submodule.name || submodule.key }}</span>
-                <input class="row-check" type="checkbox" :checked="isPermissionSelected(submodule.key)" disabled />
+                <input class="row-check" type="checkbox" :checked="isPermissionSelected(submodule.key)"
+                  @change="togglePermissionSubmodule(submodule.key, $event.target.checked)" />
               </label>
             </div>
           </div>
@@ -10559,7 +10565,7 @@ async function saveUyqurPermissions() {
     const data = await api.saveUyqurPermissions({ selected: permissionSelected.value });
     permissionSelected.value = Array.isArray(data.selected) ? data.selected.map(String) : permissionSelected.value;
     showToast('Saqlandi');
-    await loadSupportOverview();
+    if (account.value?.type === 'admin') await loadSupportOverview();
   } catch (error) {
     showToast(error.message);
   } finally {

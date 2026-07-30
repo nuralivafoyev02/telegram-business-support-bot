@@ -6489,10 +6489,13 @@ const EMPLOYEE_GET_ACTIONS = new Set(['employeeActivity', 'uyqurSupportHistory',
 const EMPLOYEE_POST_ACTIONS = new Set(['uyqurMarkLearned', 'sendMessage', 'replyRequest']);
 
 // "Boshqaruv paneli" (role='management') xodimlari — o'z chatiga emas,
-// balki BUTUN jamoaning bilim-darajasi statistikasiga (faqat o'qish uchun)
-// kirish huquqiga ega. Support'ning employee_id-scoping mantig'i ularga
-// qo'llanmaydi.
+// balki BUTUN jamoaning bilim-darajasi statistikasiga kirish huquqiga ega.
+// Support'ning employee_id-scoping mantig'i ularga qo'llanmaydi. Funksiyalarni
+// yoqish/o'chirish (uyqurPermissionsSave) ham ruxsat etilgan — bu superadmin
+// bilan bitta umumiy ro'yxatni tahrirlaydi va supportlarga xuddi shu bildirishnoma
+// mexanizmi orqali (recordPermissionToggleEvents) xabar boradi.
 const MANAGEMENT_GET_ACTIONS = new Set(['uyqurKnowledgeDashboard', 'uyqurModuleFunctionsDetail', 'uyqurEmployeeKnowledgeProfile', 'uyqurPermissions']);
+const MANAGEMENT_POST_ACTIONS = new Set(['uyqurPermissionsSave']);
 
 function forbiddenForEmployeeSession(action) {
   const error = new Error(`Ushbu amal xodim hisobi uchun ruxsat etilmagan: ${action}`);
@@ -6569,9 +6572,12 @@ async function handleGet(action, query, session) {
 
 async function handlePost(action, body, currentAdmin) {
   if (isEmployeeSession(currentAdmin)) {
-    if (currentAdmin.role === 'management') throw forbiddenForEmployeeSession(action);
-    if (!EMPLOYEE_POST_ACTIONS.has(action)) throw forbiddenForEmployeeSession(action);
-    body = { ...body, employee_id: currentAdmin.employee_id };
+    if (currentAdmin.role === 'management') {
+      if (!MANAGEMENT_POST_ACTIONS.has(action)) throw forbiddenForEmployeeSession(action);
+    } else {
+      if (!EMPLOYEE_POST_ACTIONS.has(action)) throw forbiddenForEmployeeSession(action);
+      body = { ...body, employee_id: currentAdmin.employee_id };
+    }
   }
   switch (action) {
     case 'sendMessage': return sendToChat({ ...body, created_by: currentAdmin.username }, currentAdmin);

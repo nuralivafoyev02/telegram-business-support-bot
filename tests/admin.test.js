@@ -4655,6 +4655,62 @@ async function testManagementTokenCannotAccessSupportActions() {
   assert.strictEqual(sendResult.status, 403);
 }
 
+async function testManagementTokenCanToggleUyqurPermissionsAndNotifiesSupports() {
+  const originalSelect = supabase.select;
+  const originalInsert = supabase.insert;
+  const stored = {
+    modules: [{ id: 1, key: 'kassa', name: 'Kassa', submodules: [{ id: 11, key: 'kassa_qaytarimi', name: 'Kassa qaytarimi', actions: [] }] }],
+    selected: []
+  };
+  const savedRows = [];
+
+  supabase.select = async (table, params = {}) => {
+    if (table === 'bot_settings') {
+      if (params.key === 'eq.uyqur_permission_view_selection') {
+        return [{ key: 'uyqur_permission_view_selection', value: stored }];
+      }
+      if (params.key === 'eq.uyqur_permission_notifications') {
+        return [{ key: 'uyqur_permission_notifications', value: { events: [], progress: {} } }];
+      }
+      return [];
+    }
+    return [];
+  };
+  supabase.insert = async (table, rows) => {
+    if (table === 'bot_settings') savedRows.push(rows[0]);
+    return rows;
+  };
+
+  try {
+    const token = createEmployeeToken({ id: 'mgmt-1', username: 'boshqaruv', role: 'management', tenant_id: 1 });
+    const result = await callWithToken('uyqurPermissionsSave', {
+      method: 'POST',
+      body: { selected: ['kassa_qaytarimi'] },
+      token
+    });
+    assert.strictEqual(result.status, 200);
+    assert.deepStrictEqual(result.payload.data.selected, ['kassa_qaytarimi']);
+
+    const notificationSave = savedRows.find(row => row.key === 'uyqur_permission_notifications');
+    assert.ok(notificationSave, 'yangi yoqilgan funksiya uchun bildirishnoma hodisasi yozilishi kerak');
+    assert.strictEqual(notificationSave.value.events.length, 1);
+    assert.strictEqual(notificationSave.value.events[0].submodule_key, 'kassa_qaytarimi');
+  } finally {
+    supabase.select = originalSelect;
+    supabase.insert = originalInsert;
+  }
+}
+
+async function testSupportTokenCannotToggleUyqurPermissions() {
+  const token = createEmployeeToken({ id: 'emp-1', username: 'aziza', role: 'support', tenant_id: 1 });
+  const result = await callWithToken('uyqurPermissionsSave', {
+    method: 'POST',
+    body: { selected: ['kassa_qaytarimi'] },
+    token
+  });
+  assert.strictEqual(result.status, 403);
+}
+
 async function testSupportTokenCannotAccessManagementActions() {
   const token = createEmployeeToken({ id: 'emp-1', username: 'aziza', role: 'support', tenant_id: 1 });
   const result = await callWithToken('uyqurKnowledgeDashboard', { token });
@@ -4767,6 +4823,8 @@ async function run() {
   await testManagementTokenCannotAccessSupportActions();
   await testSupportTokenCannotAccessManagementActions();
   await testLoginReturnsManagementTypeForValidCredentials();
+  await testManagementTokenCanToggleUyqurPermissionsAndNotifiesSupports();
+  await testSupportTokenCannotToggleUyqurPermissions();
   console.log('Admin tests passed');
 }
 
