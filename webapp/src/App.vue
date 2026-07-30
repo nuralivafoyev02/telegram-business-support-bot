@@ -30,6 +30,334 @@
     </section>
   </main>
 
+  <div v-else-if="isEmployeeAccount" class="app-shell employee-shell">
+    <header class="topbar">
+      <div class="page-title">
+        <h1>{{ account?.full_name || 'Support' }}</h1>
+      </div>
+      <div class="topbar-actions">
+        <button class="btn" type="button" @click="logout">Chiqish</button>
+      </div>
+    </header>
+
+    <div class="page-body">
+      <section class="card pad">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Mening natijalarim</div>
+          </div>
+        </div>
+        <div class="detail-stack">
+          <div class="detail-summary">
+            <div>
+              <span>Guruhlar</span>
+              <b>{{ fmtNumber(employeeActivity.summary?.handled_chats) }}</b>
+            </div>
+            <div>
+              <span>Xabarlar</span>
+              <b>{{ fmtNumber(employeeActivity.summary?.message_count) }}</b>
+            </div>
+            <div>
+              <span>Yopilgan so‘rov</span>
+              <b>{{ fmtNumber(employeeActivity.summary?.closed_requests) }}</b>
+            </div>
+            <div>
+              <span>Mijozlar</span>
+              <b>{{ fmtNumber(employeeActivity.summary?.customer_count) }}</b>
+            </div>
+          </div>
+          <div v-if="employeeActivity.groups?.length" class="drilldown-stack">
+            <section v-for="group in employeeActivity.groups" :key="group.chat_id" class="drilldown-group">
+              <div class="drilldown-head">
+                <div>
+                  <div class="card-title">{{ group.title || group.chat_id }}</div>
+                  <div class="card-note">{{ fmtNumber(group.chat_message_count || group.message_count) }} xabar · {{
+                    fmtNumber(group.closed_count) }} yopilgan · {{ fmtNumber(group.customer_count) }} mijoz</div>
+                </div>
+                <button class="btn small" type="button" @click="loadChatDetail(group)">Chat tafsiloti</button>
+              </div>
+              <div class="drilldown-columns">
+                <div class="drilldown-panel">
+                  <div class="drilldown-label">Javob bergan mijozlar</div>
+                  <div v-if="group.closed_requests?.length" class="mini-list">
+                    <article v-for="request in group.closed_requests" :key="request.id" class="mini-item">
+                      <b>{{ request.customer_name || request.customer_username || 'Mijoz' }}</b>
+                      <p>{{ request.initial_text || 'So‘rov matni yo‘q' }}</p>
+                      <time>{{ fmtDate(request.closed_at) }}</time>
+                    </article>
+                  </div>
+                  <div v-else class="empty compact">Yopilgan so‘rov yo‘q</div>
+                </div>
+                <div class="drilldown-panel">
+                  <div class="drilldown-label">Dialog</div>
+                  <div v-if="groupChatMessages(group).length" class="mini-list">
+                    <article v-for="message in groupChatMessages(group)"
+                      :key="message.id || message.message_id || message.created_at" class="mini-item">
+                      <b>{{ message.from_name || message.actor_name || message.source_label || 'Mijoz' }}</b>
+                      <p>{{ chatMessageText(message) || 'Matn yo‘q' }}</p>
+                      <time>{{ fmtDate(message.created_at) }}</time>
+                    </article>
+                  </div>
+                  <div v-else class="empty compact">Xabar yo‘q</div>
+                </div>
+              </div>
+            </section>
+          </div>
+          <div v-else class="empty">Bu davrda javoblar topilmadi</div>
+        </div>
+      </section>
+
+      <section class="card pad">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Mening bildirishnomalarim</div>
+          </div>
+        </div>
+        <div class="table-wrap permission-table-wrap">
+          <table v-if="filteredSupportHistoryRows.length">
+            <thead>
+              <tr>
+                <th>Funksiya</th>
+                <th>Yuborilgan</th>
+                <th>Holati</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in filteredSupportHistoryRows" :key="row.event_id">
+                <td>{{ row.submodule_name || row.submodule_key }}</td>
+                <td>{{ fmtDate(row.created_at) }}</td>
+                <td><span class="badge" :class="row.confirmed ? 'green' : (row.learned ? 'blue' : 'orange')">{{
+                  row.confirmed ? '✓ Qabul qilindi' : (row.learned ? 'O‘rganildi' : 'Kutilmoqda') }}</span></td>
+              </tr>
+            </tbody>
+          </table>
+          <div v-else class="empty">Hali hech narsa yuborilmagan</div>
+        </div>
+        <template v-if="supportHistoryFilter !== 'done'">
+          <div class="settings-head">
+            <div>
+              <div class="card-title">Funksiyalar bo‘yicha o‘rganish holati</div>
+            </div>
+            <select class="select" v-model="selectedModuleName">
+              <option v-for="name in supportHistoryModuleNames" :key="name" :value="name">{{ name }}</option>
+            </select>
+          </div>
+          <div class="table-wrap">
+            <table v-if="selectedModuleHistoryRows.length">
+              <thead>
+                <tr>
+                  <th>Funksiya</th>
+                  <th>O‘rganildi</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in selectedModuleHistoryRows" :key="row.event_id">
+                  <td>{{ row.submodule_name || row.submodule_key }}</td>
+                  <td><button class="btn small learn-btn" :class="{ learned: row.learned }" type="button"
+                      @click="toggleLearned(row)">{{ row.learned ? '✓ O‘rganildi' : 'O‘rganildi' }}</button></td>
+                </tr>
+              </tbody>
+            </table>
+            <div v-else class="empty">Hozircha funksiya yoqilmagan</div>
+          </div>
+        </template>
+      </section>
+
+      <section class="card pad">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Mening chatlarim</div>
+          </div>
+        </div>
+        <div v-if="myChats.length" class="mini-list">
+          <article v-for="chat in myChats" :key="chat.chat_id" class="mini-item employee-chat-row">
+            <div>
+              <b>{{ chat.title || chat.first_name || chat.username || chat.chat_id }}</b>
+              <p>{{ fmtDate(chat.last_message_at || chat.last_request_at) }}</p>
+            </div>
+            <div class="employee-chat-actions">
+              <button class="btn small" type="button" @click="loadChatDetail(chat)">Tafsilot</button>
+              <button class="btn small" type="button" @click="openSend(chat)">Yozish</button>
+            </div>
+          </article>
+        </div>
+        <div v-else class="empty">Sizga biriktirilgan chat topilmadi</div>
+      </section>
+    </div>
+
+    <Transition name="modal-fade">
+      <Modal v-if="modal === 'send'" title="Xabar yuborish" @close="closeModal">
+        <form class="form" @submit.prevent="sendSingleMessage">
+          <label class="label">Chat
+            <input class="input"
+              :value="selectedTarget?.title || selectedTarget?.name || selectedTarget?.chat_id || 'Tanlanmagan'"
+              disabled />
+          </label>
+          <label class="label">Xabar matni
+            <textarea v-model="messageForm.text" class="textarea" placeholder="Xabar matnini kiriting..."></textarea>
+          </label>
+          <button class="btn primary" :disabled="loadingAction === 'sendSingle'">{{ loadingAction === 'sendSingle' ?
+            'Yuborilmoqda...' : 'Yuborish' }}</button>
+        </form>
+      </Modal>
+    </Transition>
+
+    <Transition name="modal-fade">
+      <Modal v-if="modal === 'chatDetail'" :title="chatDetailTitle" wide xlarge @close="closeModal">
+        <div class="detail-stack">
+          <section class="detail-summary">
+            <div>
+              <span>So‘rovlar</span>
+              <b>{{ fmtNumber(chatDetail.chat?.total_requests) }}</b>
+            </div>
+            <div>
+              <span>Ochiq</span>
+              <b>{{ fmtNumber(chatDetail.chat?.open_requests) }}</b>
+            </div>
+            <div>
+              <span>Yopilgan</span>
+              <b>{{ fmtNumber(chatDetail.chat?.closed_requests) }}</b>
+            </div>
+            <div>
+              <span>Oxirgi aktivlik</span>
+              <b>{{ fmtDate(chatDetail.chat?.last_message_at || chatDetail.chat?.last_request_at) }}</b>
+            </div>
+            <div v-if="chatMembershipLabel(chatDetail.chat)" class="chat-status-summary"
+              :class="chatMembershipTone(chatDetail.chat)">
+              <span>Telegram holati</span>
+              <b>{{ chatMembershipLabel(chatDetail.chat) }}</b>
+            </div>
+          </section>
+
+          <div class="chat-detail-layout">
+            <section class="detail-section ticket-panel">
+              <div class="detail-section-head">
+                <div>
+                  <div class="card-title">So‘rovlar va yechimlar</div>
+                  <div class="card-note">{{ fmtNumber(chatDetail.requests?.length) }} ta yozuv</div>
+                </div>
+                <button class="btn small" type="button" :disabled="!chatDetail.requests?.length"
+                  @click="chatTicketsOpen = !chatTicketsOpen">
+                  {{ ticketToggleLabel(chatTicketsOpen, chatDetail.requests?.length) }}
+                </button>
+              </div>
+              <DataTable v-if="chatTicketsOpen" :columns="chatRequestColumns" :rows="chatDetail.requests || []"
+                empty="Bu chatda so‘rov yo‘q" :on-cell-action="handleTableCellAction" :row-class="requestRowClass">
+                <template #initialText="{ row }">
+                  <button type="button" class="request-preview-btn" :title="row.initial_text || '—'"
+                    @click.stop="focusChatRequest(row)">
+                    {{ previewFirstWords(row.initial_text) }}
+                  </button>
+                </template>
+                <template #requestReply="{ row }">
+                  <button class="btn small" type="button" :disabled="row.status !== 'open'"
+                    @click.stop="focusChatRequest(row)">Javob</button>
+                </template>
+              </DataTable>
+              <div v-else class="empty compact">Ticketlar yashirilgan</div>
+            </section>
+
+            <section class="detail-section dialog-panel">
+              <div class="detail-section-head">
+                <div class="card-title">Dialog</div>
+                <div class="card-note">{{ fmtNumber(chatConversation.length) }} ta xabar</div>
+              </div>
+              <div v-if="chatConversation.length" ref="chatDetailThreadRef" class="telegram-thread">
+                <article v-for="message in chatConversation" :key="chatBubbleKey(message)" class="chat-bubble-row"
+                  :class="{ outbound: message.direction === 'outbound', system: isSystemMessage(message) }">
+                  <div v-if="isSystemMessage(message)" class="chat-system-pill">
+                    <span>{{ message.text }}</span>
+                    <time>{{ fmtChatTime(message.created_at) }}</time>
+                  </div>
+                  <div v-else :id="chatMessageDomId(message)" class="chat-bubble"
+                    :class="{ 'ticket-message': isTicketMessage(message), 'ticket-message-open': isOpenTicketMessage(message), 'ticket-message-closed': isClosedTicketMessage(message), 'chat-bubble-highlight': isChatMessageFocused(message) }">
+                    <div class="chat-bubble-author">{{ message.actor_name || (message.direction === 'outbound' ?
+                      'Xodim' : 'Mijoz') }}</div>
+                    <div v-if="message.media" class="chat-media">
+                      <img v-if="message.media.kind === 'photo' && mediaUrl(message.media)" class="chat-media-image"
+                        :src="mediaUrl(message.media)" alt="" />
+                      <button v-else-if="message.media.kind === 'photo'" type="button"
+                        class="chat-media-placeholder chat-media-open" @click="retryMediaLoad(message.media)">{{
+                          mediaPlaceholder(message.media) }}</button>
+                      <video v-else-if="isVideoMedia(message.media) && mediaUrl(message.media)" class="chat-media-video"
+                        :src="mediaUrl(message.media)" controls playsinline></video>
+                      <button v-else-if="isVideoMedia(message.media)" type="button"
+                        class="chat-media-placeholder chat-media-open"
+                        :title="mediaErrors[message.media.file_id] || undefined"
+                        @click="retryMediaLoad(message.media)">{{
+                          mediaPlaceholder(message.media) }}</button>
+                      <template v-else-if="isAudioMedia(message.media)">
+                        <audio v-if="mediaAudioReady(message.media)" :key="mediaAudioKey(message.media)"
+                          class="chat-media-audio" controls preload="auto" playsinline :src="mediaUrl(message.media)"
+                          @error="onAudioPlaybackError(message.media)" />
+                        <button v-else type="button" class="chat-media-placeholder chat-media-open"
+                          :title="mediaErrors[message.media.file_id] || undefined"
+                          @click="retryMediaLoad(message.media)">{{ mediaPlaceholder(message.media) }}</button>
+                        <button v-if="mediaUrl(message.media)" type="button" class="chat-media-link chat-media-open"
+                          @click="retryMediaLoad(message.media)">Qayta yuklash</button>
+                        <a v-if="mediaUrl(message.media)" class="chat-media-link" :href="mediaUrl(message.media)"
+                          :download="mediaDownloadName(message.media)" target="_blank" rel="noopener noreferrer">{{
+                            mediaOpenLabel(message.media) }}</a>
+                      </template>
+                      <a v-else-if="isDocumentMedia(message.media) && mediaUrl(message.media)" class="chat-media-file"
+                        :href="mediaUrl(message.media)" :download="mediaDownloadName(message.media)" target="_blank"
+                        rel="noopener noreferrer">{{ mediaPlaceholder(message.media) }}</a>
+                      <div v-else class="chat-media-placeholder" :class="{ sticker: message.media.kind === 'sticker' }"
+                        :title="mediaErrors[message.media.file_id] || undefined">
+                        {{ mediaPlaceholder(message.media) }}
+                      </div>
+                      <a v-if="showMediaOpenLink(message.media)" class="chat-media-link" :href="mediaUrl(message.media)"
+                        :download="mediaDownloadName(message.media)" target="_blank" rel="noopener noreferrer">{{
+                          mediaOpenLabel(message.media) }}</a>
+                      <a v-if="showTelegramOpenLink(message)" class="chat-media-link"
+                        :href="telegramMessageLink(message)" target="_blank" rel="noopener noreferrer">Telegramda
+                        ochish</a>
+                    </div>
+                    <div v-if="chatMessageBodyText(message)" class="chat-message-text"
+                      v-html="chatMessageHtml(message)"></div>
+                    <div class="chat-bubble-footer">
+                      <span v-if="isClosedTicketMessage(message)" class="chat-ticket chat-ticket-closed">Yopilgan</span>
+                      <span v-else-if="showMessageStatus(message)" class="badge"
+                        :class="messageStatusBadgeClass(message)">{{ messageStatusLabel(message) }}</span>
+                      <span v-if="showRequestBadge(message)" class="chat-ticket">So‘rov</span>
+                      <span class="chat-source">{{ messageSourceLabel(message) }}</span>
+                      <time>{{ fmtChatTime(message.created_at) }}</time>
+                    </div>
+                  </div>
+                </article>
+              </div>
+              <div v-else class="empty compact">Dialog tarixi yo‘q</div>
+              <div v-if="chatDetailActiveRequest" class="chat-detail-reply-box">
+                <div class="card-note">Javob: {{ previewFirstWords(chatDetailActiveRequest.initial_text, 8) }}</div>
+                <form class="inline-reply-form" @submit.prevent="sendChatDetailRequestReply">
+                  <textarea v-model.trim="inlineReplyForm.text" class="textarea"
+                    placeholder="Javob yozing..."></textarea>
+                  <div>
+                    <button class="btn small" type="button" @click="cancelInlineReply">Bekor</button>
+                    <button class="btn small primary" type="submit" :disabled="loadingAction === 'replyRequest'">
+                      Yuborish
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </section>
+          </div>
+        </div>
+      </Modal>
+    </Transition>
+
+    <Transition name="fade">
+      <div v-if="loading" class="app-loader" role="status" aria-live="polite">
+        <span class="spinner" aria-hidden="true"></span>
+        <span>{{ loadingText }}</span>
+      </div>
+    </Transition>
+
+    <Transition name="toast-pop">
+      <div v-if="toast" class="toast">{{ toast }}</div>
+    </Transition>
+  </div>
+
   <div v-else class="app-shell">
     <aside class="sidebar">
       <div class="brand">
@@ -2201,6 +2529,10 @@
           <label class="label">Telegram username
             <input v-model.trim="employeeForm.username" class="input" placeholder="@username" />
           </label>
+          <label v-if="employeeForm.role === 'support'" class="label">Panel paroli
+            <input v-model="employeeForm.new_password" class="input" type="password" autocomplete="new-password"
+              placeholder="O‘zgartirish uchun kiriting" />
+          </label>
           <label class="label">Telefon
             <input v-model.trim="employeeForm.phone" class="input" placeholder="+998..." />
           </label>
@@ -3433,7 +3765,7 @@
 
 <script setup>
 import { computed, defineComponent, h, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
-import { api, getToken, setToken } from './api';
+import { api, getToken, setToken, getAccount, setAccount } from './api';
 import uyqurLogoUrl from './assets/uyqur-logo.png';
 
 const ACTIVE_TAB_STORAGE_KEY = 'uyqur_support_active_tab';
@@ -3511,6 +3843,8 @@ function applyThemeMode(mode) {
 }
 
 const token = ref(getToken());
+const account = ref(getAccount());
+const isEmployeeAccount = computed(() => account.value?.type === 'employee');
 const activeTab = ref(getStoredActiveTab());
 const loading = ref(false);
 const loadingAction = ref('');
@@ -3551,6 +3885,7 @@ const otherMenuOpen = ref(otherTabKeys.includes(activeTab.value));
 const dashboard = reactive({ summary: {}, employeeStats: [], chatStats: [], openRequests: [], analytics: {} });
 const groups = ref([]);
 const privates = ref([]);
+const myChats = computed(() => [...(groups.value || []), ...(privates.value || [])]);
 const employees = ref([]);
 const clickupTasks = ref([]);
 const permissionModules = ref([]);
@@ -3697,7 +4032,7 @@ const broadcastForm = reactive({ target_type: 'groups', title: 'Yangilik', text:
 const customPeriodForm = reactive({ start: '', end: '', appliedStart: '', appliedEnd: '' });
 const customPeriodError = ref('');
 const companyAssignForm = reactive({ companyKey: '', search: '' });
-const employeeForm = reactive({ id: '', tg_user_id: '', full_name: '', username: '', phone: '', role: 'support', clickup_user_id: '', is_active: true, company_id: '' });
+const employeeForm = reactive({ id: '', tg_user_id: '', full_name: '', username: '', phone: '', role: 'support', clickup_user_id: '', is_active: true, company_id: '', new_password: '' });
 const adminForm = reactive({ username: 'admin', full_name: 'Tizim admini', new_password: '' });
 const integrationForm = reactive({
   enabled: true,
@@ -9633,10 +9968,9 @@ async function refreshSupportHistoryIfOpen(employeeId) {
 async function toggleLearned(row) {
   try {
     await api.markUyqurLearned({ event_id: row.event_id, employee_id: selectedSupportId.value, learned: !row.learned });
-    await Promise.all([
-      refreshSupportHistoryIfOpen(selectedSupportId.value),
-      loadSupportOverview()
-    ]);
+    const tasks = [refreshSupportHistoryIfOpen(selectedSupportId.value)];
+    if (!isEmployeeAccount.value) tasks.push(loadSupportOverview());
+    await Promise.all(tasks);
   } catch (error) {
     showToast(error.message);
   }
@@ -9801,12 +10135,17 @@ async function submitLogin() {
     loginStatusType.value = 'success';
     resetTenantScopedState();
     token.value = data.token;
+    account.value = data.admin || null;
     showToast(data.fallback ? 'Kirdingiz. DB admin yarating yoki parolni o‘zgartiring.' : 'Xush kelibsiz!');
-    loadSettings().catch(error => showToast(error.message));
-    if (activeTab.value === 'stats') await loadSupportPerformance();
-    else if (activeTab.value === 'productAnalytics') await loadProductAnalytics();
-    else await refresh();
-    checkTelegramWebhook(false).catch(() => null);
+    if (isEmployeeAccount.value) {
+      await Promise.all([loadMyActivity(), loadMyNotifications(), loadMyTickets()]);
+    } else {
+      loadSettings().catch(error => showToast(error.message));
+      if (activeTab.value === 'stats') await loadSupportPerformance();
+      else if (activeTab.value === 'productAnalytics') await loadProductAnalytics();
+      else await refresh();
+      checkTelegramWebhook(false).catch(() => null);
+    }
   } catch (error) {
     loginError.value = /login|parol/i.test(error.message)
       ? 'Kirish nomi yoki parol noto‘g‘ri.'
@@ -9833,7 +10172,9 @@ function logout() {
   actionMenuOpen.value = false;
   stopTelegramAutoSync();
   setToken('');
+  setAccount(null);
   token.value = '';
+  account.value = null;
   resetTenantScopedState();
 }
 
@@ -10061,7 +10402,8 @@ function openEmployee(row = null) {
     role: row?.role || 'support',
     clickup_user_id: row?.clickup_user_id || '',
     is_active: row?.is_active ?? true,
-    company_id: row?.company_id || ''
+    company_id: row?.company_id || '',
+    new_password: ''
   });
   modal.value = 'employee';
 }
@@ -10533,6 +10875,43 @@ async function openEmployeeActivity(row = {}) {
     showToast(error.message);
   } finally {
     stopLoading('employeeActivity');
+  }
+}
+
+async function loadMyActivity() {
+  try {
+    const data = await api.employeeActivity({ ...dashboardPeriodQuery() });
+    employeeActivity.value = {
+      employee: data.employee || null,
+      summary: data.summary || {},
+      groups: data.groups || [],
+      closed_requests: data.closed_requests || [],
+      messages: data.messages || []
+    };
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
+async function loadMyNotifications() {
+  selectedSupportId.value = String(account.value?.employee_id || '');
+  selectedSupportName.value = account.value?.full_name || 'Support';
+  supportHistoryFilter.value = 'all';
+  try {
+    supportHistoryRows.value = await api.uyqurSupportHistory({});
+    selectedModuleName.value = supportHistoryModuleNames.value[0] || '';
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
+async function loadMyTickets() {
+  try {
+    const [groupRows, privateRows] = await Promise.all([api.groups(), api.privates()]);
+    groups.value = groupRows || [];
+    privates.value = privateRows || [];
+  } catch (error) {
+    showToast(error.message);
   }
 }
 
@@ -12307,9 +12686,13 @@ onMounted(async () => {
     nowTick.value = Date.now();
   }, 60_000);
   if (token.value) {
-    loadSettings().catch(error => showToast(error.message));
-    await refresh();
-    checkTelegramWebhook(false).catch(() => null);
+    if (isEmployeeAccount.value) {
+      await Promise.all([loadMyActivity(), loadMyNotifications(), loadMyTickets()]);
+    } else {
+      loadSettings().catch(error => showToast(error.message));
+      await refresh();
+      checkTelegramWebhook(false).catch(() => null);
+    }
   }
 });
 

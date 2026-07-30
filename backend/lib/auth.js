@@ -5,6 +5,10 @@ const supabase = require('./supabase');
 const { optionalEnv, requiredEnv } = require('./env');
 const { DEFAULT_TENANT_ID, normalizeTenantId } = require('./tenant');
 
+// v1: faqat 'support' xodimlarga webapp login beriladi. Kengaytirish uchun
+// shu ro'yxatga qo'shish kifoya (masalan 'manager').
+const EMPLOYEE_LOGIN_ROLES = new Set(['support']);
+
 function base64url(input) {
   return Buffer.from(input).toString('base64url');
 }
@@ -40,6 +44,27 @@ function createToken(admin) {
   return `${body}.${sign(body, secret)}`;
 }
 
+function createEmployeeToken(employee) {
+  const secret = requiredEnv('ADMIN_JWT_SECRET');
+  const header = base64url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
+  const payload = base64url(JSON.stringify({
+    sub: String(employee.id),
+    type: 'employee',
+    employee_id: String(employee.id),
+    username: employee.username || '',
+    role: employee.role || 'support',
+    tenant_id: normalizeTenantId(employee.tenant_id),
+    iat: Math.floor(Date.now() / 1000),
+    exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7
+  }));
+  const body = `${header}.${payload}`;
+  return `${body}.${sign(body, secret)}`;
+}
+
+function isEmployeeSession(session) {
+  return Boolean(session && session.type === 'employee');
+}
+
 function verifyToken(token) {
   const secret = requiredEnv('ADMIN_JWT_SECRET');
   if (!token || !token.includes('.')) throw new Error('Token required');
@@ -56,6 +81,22 @@ function verifyToken(token) {
   return decoded;
 }
 
+async function loginEmployee(username, password) {
+  const rows = await supabase.select('employees', {
+    select: 'id,tg_user_id,full_name,username,role,is_active,password_hash,tenant_id',
+    username: supabase.eq(username),
+    limit: '1'
+  }).catch(() => []);
+
+  const employee = rows && rows[0];
+  if (!employee || !employee.is_active || !employee.password_hash) return null;
+  if (!EMPLOYEE_LOGIN_ROLES.has(String(employee.role || ''))) return null;
+  if (!verifyPassword(password, employee.password_hash)) return null;
+
+  await supabase.patch('employees', { id: supabase.eq(employee.id) }, { last_login_at: new Date().toISOString() }).catch(() => null);
+  return employee;
+}
+
 async function login(username, password) {
   const admins = await supabase.select('admins', {
     select: 'id,username,password_hash,full_name,role,is_active,tenant_id',
@@ -67,6 +108,11 @@ async function login(username, password) {
   if (admin && admin.is_active && verifyPassword(password, admin.password_hash)) {
     await supabase.patch('admins', { id: supabase.eq(admin.id) }, { last_login_at: new Date().toISOString() }).catch(() => null);
     return { token: createToken(admin), admin: sanitizeAdmin(admin) };
+  }
+
+  const employee = await loginEmployee(username, password);
+  if (employee) {
+    return { token: createEmployeeToken(employee), admin: sanitizeEmployeeAccount(employee) };
   }
 
   const fallbackUser = optionalEnv('ADMIN_USERNAME', 'admin');
@@ -92,7 +138,20 @@ function sanitizeAdmin(admin) {
     username: admin.username,
     full_name: admin.full_name || 'Admin',
     role: admin.role || 'owner',
-    tenant_id: normalizeTenantId(admin.tenant_id)
+    tenant_id: normalizeTenantId(admin.tenant_id),
+    type: 'admin'
+  };
+}
+
+function sanitizeEmployeeAccount(employee) {
+  return {
+    id: employee.id,
+    employee_id: employee.id,
+    username: employee.username || '',
+    full_name: employee.full_name || 'Support',
+    role: employee.role || 'support',
+    tenant_id: normalizeTenantId(employee.tenant_id),
+    type: 'employee'
   };
 }
 
@@ -106,4 +165,15 @@ function requireAdmin(req) {
   return verifyToken(getBearer(req));
 }
 
-module.exports = { hashPassword, verifyPassword, createToken, verifyToken, login, requireAdmin, sanitizeAdmin };
+module.exports = {
+  hashPassword,
+  verifyPassword,
+  createToken,
+  createEmployeeToken,
+  isEmployeeSession,
+  verifyToken,
+  login,
+  requireAdmin,
+  sanitizeAdmin,
+  sanitizeEmployeeAccount
+};

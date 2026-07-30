@@ -8,7 +8,7 @@ const { streamStorageObject, uploadStorageObject, buildStoragePath, contentTypeF
 
 const TELEGRAM_FILE_PROXY_MAX_BYTES = 20 * 1024 * 1024;
 const { allowCors, sendJson, readBody, getQuery } = require('../lib/http');
-const { login, requireAdmin, hashPassword } = require('../lib/auth');
+const { login, requireAdmin, hashPassword, isEmployeeSession } = require('../lib/auth');
 const { DEFAULT_TENANT_ID, runWithTenant, normalizeTenantId, getCurrentTenantId, shouldAttachTenantQuery } = require('../lib/tenant');
 const { sendMessage, sendBusinessMessage, getWebhookInfo, setWebhook, deleteWebhook, getUpdates, getMe, getFile, getFileWithToken, getUserProfilePhotos, downloadFile, downloadFileWithToken, resolveBotToken, tgUserName, escapeHtml } = require('../lib/telegram');
 const { optionalEnv } = require('../lib/env');
@@ -4426,6 +4426,43 @@ async function loadEmployeeOpenRequestCandidates(employee = {}, {
   return rows;
 }
 
+// Xodim (support) sessiyasi uchun: shu xodimga tegishli chat_id'lar to'plami.
+// Ikki manbadan yig'iladi: (1) kompaniya support-username moslashuvi orqali
+// biriktirilgan guruh chatlari (collectSupportChatIdsForEmployee), (2) shu
+// xodim assigned_to/opened_by/closed_by bo'lgan support_requests'larning
+// chat_id'lari (shaxsiy/business chatlarni ham qamrab olish uchun).
+async function resolveEmployeeChatScope(employee) {
+  const [companyInfoCache, localCompanies, companyMembers] = await Promise.all([
+    getCachedCompanyInfo().catch(() => null),
+    supabase.select('companies', { select: 'id,name,legal_name,phone,notes,is_active,created_at', limit: '2000' }).catch(() => []),
+    supabase.select('company_members', { select: 'company_id,employee_id,member_type,is_active', limit: '5000' }).catch(() => [])
+  ]);
+  const companyInfoCompanies = mergeCompanyDirectoryRows(localCompanies, resolveCachedCompanyInfoCompanies(companyInfoCache));
+  const employeeMaps = buildEmployeeMaps([employee]);
+  const groupChatIds = collectSupportChatIdsForEmployee(employee, companyInfoCompanies, employeeMaps);
+
+  const requestSelect = 'chat_id';
+  const [byAssigned, byOpened, byClosed] = await Promise.all([
+    selectPaged('support_requests', { select: requestSelect, assigned_to_employee_id: supabase.eq(employee.id) }, { maxRows: 20000 }),
+    selectPaged('support_requests', { select: requestSelect, opened_by_employee_id: supabase.eq(employee.id) }, { maxRows: 20000 }),
+    selectPaged('support_requests', { select: requestSelect, closed_by_employee_id: supabase.eq(employee.id) }, { maxRows: 20000 })
+  ]);
+  const requestChatIds = [...byAssigned, ...byOpened, ...byClosed].map(row => row.chat_id);
+
+  return new Set([...groupChatIds, ...requestChatIds].map(telegramIdKey).filter(Boolean));
+}
+
+async function getEmployeeChatScopeForSession(session) {
+  const rows = await supabase.select('employees', {
+    select: 'id,tg_user_id,full_name,username,role,is_active',
+    id: supabase.eq(session.employee_id),
+    limit: '1'
+  }).catch(() => []);
+  const employee = rows[0];
+  if (!employee) return new Set();
+  return resolveEmployeeChatScope(employee);
+}
+
 async function getEmployeeActivity(query = {}) {
   const periodContext = queryPeriodContext(query);
   const periodKey = periodContext.period;
@@ -5517,6 +5554,10 @@ async function syncTelegramUpdates(body = {}) {
 
 async function sendToChat(body, currentAdmin = {}) {
   if (!body.chat_id || !body.text) throw new Error('chat_id va text majburiy');
+  if (isEmployeeSession(currentAdmin)) {
+    const scope = await getEmployeeChatScopeForSession(currentAdmin);
+    if (!scope.has(telegramIdKey(body.chat_id))) throw forbiddenForEmployeeSession('sendMessage');
+  }
   const chats = await supabase.select('tg_chats', {
     select: 'chat_id,title,source_type,business_connection_id',
     chat_id: supabase.eq(body.chat_id),
@@ -5595,6 +5636,10 @@ async function replyToRequest(body, currentAdmin = {}) {
   });
   const request = requests[0];
   if (!request) throw new Error('So‘rov topilmadi');
+  if (isEmployeeSession(currentAdmin)) {
+    const scope = await getEmployeeChatScopeForSession(currentAdmin);
+    if (!scope.has(telegramIdKey(request.chat_id))) throw forbiddenForEmployeeSession('replyRequest');
+  }
   if (request.status !== 'open') throw new Error('Bu so‘rov allaqachon yopilgan');
 
   const chats = await supabase.select('tg_chats', {
@@ -5852,6 +5897,7 @@ async function upsertEmployee(body) {
   };
   if (!values.full_name) throw new Error('Xodim ismi majburiy');
   if (tgUserId) values.tg_user_id = tgUserId;
+  if (body.new_password) values.password_hash = hashPassword(body.new_password);
 
   if (tgUserId) {
     const existingTgUsers = await supabase.select('tg_users', {
@@ -6432,15 +6478,55 @@ async function updateAdmin(body, currentAdmin) {
   return rows[0];
 }
 
-async function handleGet(action, query) {
+// Xodim (support) sessiyasi uchun ruxsat etilgan action'lar ro'yxati —
+// boshqa hamma narsa 403 bilan rad etiladi. employee_id/tg_user_id/id har
+// doim sessiyaning o'z employee_id'si bilan majburan almashtiriladi, mijoz
+// tomonidan yuborilgan qiymat hech qachon ishonilmaydi.
+const EMPLOYEE_GET_ACTIONS = new Set(['employeeActivity', 'uyqurSupportHistory', 'groups', 'privates', 'requests', 'chatDetail']);
+const EMPLOYEE_POST_ACTIONS = new Set(['uyqurMarkLearned', 'sendMessage', 'replyRequest']);
+
+function forbiddenForEmployeeSession(action) {
+  const error = new Error(`Ushbu amal xodim hisobi uchun ruxsat etilmagan: ${action}`);
+  error.status = 403;
+  return error;
+}
+
+async function handleGet(action, query, session) {
+  if (isEmployeeSession(session)) {
+    if (!EMPLOYEE_GET_ACTIONS.has(action)) throw forbiddenForEmployeeSession(action);
+    query = { ...query, employee_id: session.employee_id };
+    delete query.tg_user_id;
+    delete query.id;
+  }
   switch (action) {
     case 'health': return { ok: true, service: 'admin-api' };
     case 'dashboard': return getDashboard(query);
     case 'stats': return getDashboard(query);
-    case 'groups': return listGroups(query);
-    case 'privates': return listPrivateChats(query);
-    case 'requests': return listRequests(query);
-    case 'chatDetail': return getChatDetail(query);
+    case 'groups': {
+      const rows = await listGroups(query);
+      if (!isEmployeeSession(session)) return rows;
+      const scope = await getEmployeeChatScopeForSession(session);
+      return rows.filter(row => scope.has(telegramIdKey(row.chat_id)));
+    }
+    case 'privates': {
+      const rows = await listPrivateChats(query);
+      if (!isEmployeeSession(session)) return rows;
+      const scope = await getEmployeeChatScopeForSession(session);
+      return rows.filter(row => scope.has(telegramIdKey(row.chat_id)));
+    }
+    case 'requests': {
+      const rows = await listRequests(query);
+      if (!isEmployeeSession(session)) return rows;
+      const scope = await getEmployeeChatScopeForSession(session);
+      return rows.filter(row => scope.has(telegramIdKey(row.chat_id)));
+    }
+    case 'chatDetail': {
+      if (isEmployeeSession(session)) {
+        const scope = await getEmployeeChatScopeForSession(session);
+        if (!scope.has(telegramIdKey(query.chat_id))) throw forbiddenForEmployeeSession(action);
+      }
+      return getChatDetail(query);
+    }
     case 'companyGroupActivity': return getCompanyGroupActivity(query);
     case 'companies': return listCompanies(query);
     case 'companyInfo': return getCompanyInfo(query);
@@ -6466,6 +6552,10 @@ async function handleGet(action, query) {
 }
 
 async function handlePost(action, body, currentAdmin) {
+  if (isEmployeeSession(currentAdmin)) {
+    if (!EMPLOYEE_POST_ACTIONS.has(action)) throw forbiddenForEmployeeSession(action);
+    body = { ...body, employee_id: currentAdmin.employee_id };
+  }
   switch (action) {
     case 'sendMessage': return sendToChat({ ...body, created_by: currentAdmin.username }, currentAdmin);
     case 'replyRequest': return replyToRequest(body, currentAdmin);
@@ -6515,23 +6605,25 @@ async function handler(req, res) {
     const tenantId = normalizeTenantId(currentAdmin.tenant_id);
 
     if (req.method === 'GET') {
-      return runWithTenant(tenantId, async () => {
+      return await runWithTenant(tenantId, async () => {
         if (action === 'telegramFile') {
+          if (isEmployeeSession(currentAdmin)) throw forbiddenForEmployeeSession(action);
           await sendTelegramFile(query, res);
           return;
         }
         if (action === 'telegramProfilePhoto') {
+          if (isEmployeeSession(currentAdmin)) throw forbiddenForEmployeeSession(action);
           await sendTelegramProfilePhoto(query, res);
           return;
         }
-        const data = await handleGet(action, query);
+        const data = await handleGet(action, query, currentAdmin);
         return sendJson(res, 200, { ok: true, data });
       });
     }
 
     if (req.method === 'POST') {
       const body = await readBody(req);
-      return runWithTenant(tenantId, async () => {
+      return await runWithTenant(tenantId, async () => {
         const data = await handlePost(action, body, currentAdmin);
         return sendJson(res, 200, { ok: true, data });
       });
@@ -6550,9 +6642,9 @@ async function handler(req, res) {
     }
     console.error('[admin:error]', error);
     notifyOperationalError('admin:error', error, { action, method: req.method }).catch(logError => console.error('[admin:notify-log:error]', logError));
-    const status = error.code === 'AI_CONNECTION_FAILED'
-      ? 400
-      : (/token|login|parol|authorization/i.test(error.message) ? 401 : 400);
+    const status = Number(error.status) > 0
+      ? Number(error.status)
+      : (error.code === 'AI_CONNECTION_FAILED' ? 400 : (/token|login|parol|authorization/i.test(error.message) ? 401 : 400));
     return sendJson(res, status, { ok: false, error: error.message });
   }
 }

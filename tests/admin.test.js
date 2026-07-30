@@ -10,7 +10,7 @@ process.env.SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY ||
 
 const supabase = require('../backend/lib/supabase');
 const stats = require('../backend/lib/stats');
-const { createToken } = require('../backend/lib/auth');
+const { createToken, createEmployeeToken, hashPassword, login: authLogin } = require('../backend/lib/auth');
 const { clearBotSettingsCache } = require('../backend/lib/bot-settings');
 const botHandler = require('../backend/api/bot');
 const handler = require('../backend/api/admin');
@@ -75,6 +75,12 @@ async function callAdminRaw(action, { method = 'GET', query = {}, body = null } 
   const token = createToken({ id: 'admin-1', username: 'admin', role: 'owner' });
   await handler(createAdminReq({ action, method, query, body, token }), res);
   return res;
+}
+
+async function callWithToken(action, { method = 'GET', query = {}, body = null, token } = {}) {
+  const res = createRes();
+  await handler(createAdminReq({ action, method, query, body, token }), res);
+  return { status: res.statusCode, payload: JSON.parse(res.body) };
 }
 
 async function testAiModeEnableSendsMainGroupNotice() {
@@ -4441,6 +4447,158 @@ async function testCompanyGroupActivityUsesCompanyInfoGroupMapping() {
   }
 }
 
+async function testEmployeeTokenIgnoresSpoofedEmployeeIdOnActivity() {
+  const originalSelect = supabase.select;
+  const employees = [
+    { id: 'emp-1', tg_user_id: 777, full_name: 'Mirshod', username: 'mirshod', role: 'support', is_active: true },
+    { id: 'emp-2', tg_user_id: 888, full_name: 'Ozodbek', username: 'ozodbek', role: 'support', is_active: true }
+  ];
+  let queriedEmployeeId = null;
+
+  supabase.select = async (table, params = {}) => {
+    if (table === 'employees') {
+      queriedEmployeeId = params.id;
+      const id = String(params.id || '').replace('eq.', '');
+      return employees.filter(row => row.id === id);
+    }
+    return [];
+  };
+
+  try {
+    const token = createEmployeeToken({ id: 'emp-1', username: 'mirshod', role: 'support', tenant_id: 1 });
+    const result = await callWithToken('employeeActivity', {
+      query: { employee_id: 'emp-2', tg_user_id: '888', period: 'all' },
+      token
+    });
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(queriedEmployeeId, 'eq.emp-1');
+    assert.strictEqual(result.payload.data.employee.id, 'emp-1');
+  } finally {
+    supabase.select = originalSelect;
+  }
+}
+
+async function testEmployeeTokenForbiddenActionsReturn403() {
+  const token = createEmployeeToken({ id: 'emp-1', username: 'mirshod', role: 'support', tenant_id: 1 });
+
+  const companiesResult = await callWithToken('companies', { token });
+  assert.strictEqual(companiesResult.status, 403);
+  assert.strictEqual(companiesResult.payload.ok, false);
+
+  const settingsResult = await callWithToken('settings', { token });
+  assert.strictEqual(settingsResult.status, 403);
+
+  const confirmResult = await callWithToken('uyqurConfirmReview', {
+    method: 'POST',
+    body: { event_id: 'evt-1', employee_id: 'emp-1', confirmed: true },
+    token
+  });
+  assert.strictEqual(confirmResult.status, 403);
+}
+
+async function testEmployeeTokenSendMessageRestrictedToOwnChatScope() {
+  const originalSelect = supabase.select;
+  const originalInsert = supabase.insert;
+  const originalFetch = global.fetch;
+  const employee = { id: 'emp-1', tg_user_id: 777, full_name: 'Mirshod', username: 'mirshod', role: 'support', is_active: true };
+
+  supabase.select = async (table, params = {}) => {
+    if (table === 'employees') return [employee];
+    if (table === 'companies') return [];
+    if (table === 'company_members') return [];
+    if (table === 'bot_settings') return [];
+    if (table === 'support_requests') {
+      if (params.closed_by_employee_id) return [{ chat_id: 555 }];
+      return [];
+    }
+    if (table === 'tg_chats') return [{ chat_id: 555, title: 'Mijoz chat', source_type: 'private', business_connection_id: null }];
+    return [];
+  };
+  supabase.insert = async (table, rows) => rows;
+  global.fetch = async () => ({ ok: true, json: async () => ({ ok: true, result: { message_id: 9001 } }) });
+
+  try {
+    const token = createEmployeeToken({ ...employee, tenant_id: 1 });
+
+    const forbidden = await callWithToken('sendMessage', {
+      method: 'POST',
+      body: { chat_id: 999, text: 'Salom' },
+      token
+    });
+    assert.strictEqual(forbidden.status, 403);
+
+    const allowed = await callWithToken('sendMessage', {
+      method: 'POST',
+      body: { chat_id: 555, text: 'Salom' },
+      token
+    });
+    assert.strictEqual(allowed.status, 200);
+    assert.strictEqual(allowed.payload.data.sent, true);
+  } finally {
+    supabase.select = originalSelect;
+    supabase.insert = originalInsert;
+    global.fetch = originalFetch;
+  }
+}
+
+async function testLegacyAdminTokenUnaffectedByEmployeeGuards() {
+  const originalSelect = supabase.select;
+  supabase.select = async (table) => {
+    if (table === 'employees') return [{ id: 'emp-1', full_name: 'Mirshod', username: 'mirshod', role: 'support', is_active: true }];
+    return [];
+  };
+
+  try {
+    const result = await callAdmin('employees');
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.data[0].full_name, 'Mirshod');
+  } finally {
+    supabase.select = originalSelect;
+  }
+}
+
+async function testLoginReturnsEmployeeTypeForValidSupportCredentials() {
+  const originalSelect = supabase.select;
+  const originalPatch = supabase.patch;
+  const passwordHash = hashPassword('Secret123');
+
+  supabase.select = async (table) => {
+    if (table === 'admins') return [];
+    if (table === 'employees') {
+      return [{ id: 'emp-1', tg_user_id: 777, full_name: 'Mirshod', username: 'mirshod', role: 'support', is_active: true, password_hash: passwordHash, tenant_id: 1 }];
+    }
+    return [];
+  };
+  supabase.patch = async (table, query, values) => [{ ...values }];
+
+  try {
+    const result = await authLogin('mirshod', 'Secret123');
+    assert.strictEqual(result.admin.type, 'employee');
+    assert.strictEqual(result.admin.employee_id, 'emp-1');
+    assert.ok(result.token);
+  } finally {
+    supabase.select = originalSelect;
+    supabase.patch = originalPatch;
+  }
+}
+
+async function testLoginRejectsNonSupportEmployeeRole() {
+  const originalSelect = supabase.select;
+  supabase.select = async (table) => {
+    if (table === 'admins') return [];
+    if (table === 'employees') {
+      return [{ id: 'emp-2', tg_user_id: 888, full_name: 'Manager', username: 'manager1', role: 'manager', is_active: true, password_hash: hashPassword('Secret123'), tenant_id: 1 }];
+    }
+    return [];
+  };
+
+  try {
+    await assert.rejects(() => authLogin('manager1', 'Secret123'));
+  } finally {
+    supabase.select = originalSelect;
+  }
+}
+
 async function run() {
   await testAiModeEnableSendsMainGroupNotice();
   await testAiModeDisableSendsMainGroupNotice();
@@ -4512,6 +4670,12 @@ async function run() {
   await testDashboardCompanyTicketsNoFallbackForTicketUsingCompany();
   await testCompanyGroupActivityFiltersByPeriod();
   await testCompanyGroupActivityUsesCompanyInfoGroupMapping();
+  await testEmployeeTokenIgnoresSpoofedEmployeeIdOnActivity();
+  await testEmployeeTokenForbiddenActionsReturn403();
+  await testEmployeeTokenSendMessageRestrictedToOwnChatScope();
+  await testLegacyAdminTokenUnaffectedByEmployeeGuards();
+  await testLoginReturnsEmployeeTypeForValidSupportCredentials();
+  await testLoginRejectsNonSupportEmployeeRole();
   console.log('Admin tests passed');
 }
 

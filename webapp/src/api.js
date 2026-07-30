@@ -1,4 +1,5 @@
 const TOKEN_KEY = 'bsb_admin_token';
+const ACCOUNT_KEY = 'bsb_admin_account';
 
 export function getToken() {
   return localStorage.getItem(TOKEN_KEY) || '';
@@ -7,6 +8,19 @@ export function getToken() {
 export function setToken(token) {
   if (token) localStorage.setItem(TOKEN_KEY, token);
   else localStorage.removeItem(TOKEN_KEY);
+}
+
+export function getAccount() {
+  try {
+    return JSON.parse(localStorage.getItem(ACCOUNT_KEY) || 'null');
+  } catch (_error) {
+    return null;
+  }
+}
+
+export function setAccount(account) {
+  if (account) localStorage.setItem(ACCOUNT_KEY, JSON.stringify(account));
+  else localStorage.removeItem(ACCOUNT_KEY);
 }
 
 function safeQuery(query = {}) {
@@ -107,6 +121,7 @@ export const api = {
   async login(username, password) {
     const data = await request('login', { method: 'POST', body: { username, password } });
     setToken(data.token);
+    setAccount(data.admin || null);
     return data;
   },
   dashboard: (query = {}) => request('dashboard', { query }).then(r => r.data),
