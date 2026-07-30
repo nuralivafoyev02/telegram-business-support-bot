@@ -31,159 +31,232 @@
   </main>
 
   <div v-else-if="isEmployeeAccount" class="app-shell employee-shell">
-    <header class="topbar">
-      <div class="page-title">
-        <h1>{{ account?.full_name || 'Support' }}</h1>
+    <aside class="sidebar">
+      <div class="brand">
+        <img class="logo" :src="uyqurLogoUrl" alt="Uyqur" width="42" height="42" />
+        <div class="brand-wrapper">
+          <div class="brand-title">Uyqur Yordam</div>
+        </div>
       </div>
-      <div class="topbar-actions">
-        <button class="btn" type="button" @click="logout">Chiqish</button>
-      </div>
-    </header>
 
-    <div class="page-body">
-      <section class="card pad">
-        <div class="card-header">
-          <div>
-            <div class="card-title">Mening natijalarim</div>
-          </div>
-        </div>
-        <div class="detail-stack">
-          <div class="detail-summary">
-            <div>
-              <span>Guruhlar</span>
-              <b>{{ fmtNumber(employeeActivity.summary?.handled_chats) }}</b>
-            </div>
-            <div>
-              <span>Xabarlar</span>
-              <b>{{ fmtNumber(employeeActivity.summary?.message_count) }}</b>
-            </div>
-            <div>
-              <span>Yopilgan so‘rov</span>
-              <b>{{ fmtNumber(employeeActivity.summary?.closed_requests) }}</b>
-            </div>
-            <div>
-              <span>Mijozlar</span>
-              <b>{{ fmtNumber(employeeActivity.summary?.customer_count) }}</b>
-            </div>
-          </div>
-          <div v-if="employeeActivity.groups?.length" class="drilldown-stack">
-            <section v-for="group in employeeActivity.groups" :key="group.chat_id" class="drilldown-group">
-              <div class="drilldown-head">
-                <div>
-                  <div class="card-title">{{ group.title || group.chat_id }}</div>
-                  <div class="card-note">{{ fmtNumber(group.chat_message_count || group.message_count) }} xabar · {{
-                    fmtNumber(group.closed_count) }} yopilgan · {{ fmtNumber(group.customer_count) }} mijoz</div>
-                </div>
-                <button class="btn small" type="button" @click="loadChatDetail(group)">Chat tafsiloti</button>
-              </div>
-              <div class="drilldown-columns">
-                <div class="drilldown-panel">
-                  <div class="drilldown-label">Javob bergan mijozlar</div>
-                  <div v-if="group.closed_requests?.length" class="mini-list">
-                    <article v-for="request in group.closed_requests" :key="request.id" class="mini-item">
-                      <b>{{ request.customer_name || request.customer_username || 'Mijoz' }}</b>
-                      <p>{{ request.initial_text || 'So‘rov matni yo‘q' }}</p>
-                      <time>{{ fmtDate(request.closed_at) }}</time>
-                    </article>
-                  </div>
-                  <div v-else class="empty compact">Yopilgan so‘rov yo‘q</div>
-                </div>
-                <div class="drilldown-panel">
-                  <div class="drilldown-label">Dialog</div>
-                  <div v-if="groupChatMessages(group).length" class="mini-list">
-                    <article v-for="message in groupChatMessages(group)"
-                      :key="message.id || message.message_id || message.created_at" class="mini-item">
-                      <b>{{ message.from_name || message.actor_name || message.source_label || 'Mijoz' }}</b>
-                      <p>{{ chatMessageText(message) || 'Matn yo‘q' }}</p>
-                      <time>{{ fmtDate(message.created_at) }}</time>
-                    </article>
-                  </div>
-                  <div v-else class="empty compact">Xabar yo‘q</div>
-                </div>
-              </div>
-            </section>
-          </div>
-          <div v-else class="empty">Bu davrda javoblar topilmadi</div>
-        </div>
-      </section>
+      <nav class="nav">
+        <button v-for="item in employeeTabs" :key="item.key" :class="{ active: employeeActiveTab === item.key }"
+          @click="employeeActiveTab = item.key">
+          <b>{{ item.label }}</b>
+        </button>
+      </nav>
+    </aside>
 
-      <section class="card pad">
-        <div class="card-header">
-          <div>
-            <div class="card-title">Mening bildirishnomalarim</div>
+    <section class="main">
+      <header class="topbar">
+        <div class="page-title">
+          <h1>{{ employeeCurrentTitle }}</h1>
+        </div>
+        <div class="topbar-actions">
+          <button class="btn topbar-refresh" type="button" :disabled="loadingAction === 'employeeRefresh'"
+            @click="refreshMyDashboard">
+            {{ loadingAction === 'employeeRefresh' ? 'Yangilanmoqda...' : 'Yangilash' }}
+          </button>
+          <button class="btn" type="button" @click="logout">Chiqish</button>
+        </div>
+      </header>
+
+      <div class="page-body">
+        <template v-if="employeeActiveTab === 'performance'">
+          <div class="support-summary-grid">
+            <article class="card support-summary-card">
+              <div class="support-summary-content">
+                <div class="support-summary-title">Guruhlar</div>
+                <div class="support-summary-value-row">
+                  <div class="support-summary-value">{{ fmtNumber(employeeActivity.summary?.handled_chats) }}</div>
+                </div>
+                <div class="support-summary-note">Faol chatlar soni</div>
+              </div>
+            </article>
+            <article class="card support-summary-card">
+              <div class="support-summary-content">
+                <div class="support-summary-title">Xabarlar</div>
+                <div class="support-summary-value-row">
+                  <div class="support-summary-value">{{ fmtNumber(employeeActivity.summary?.message_count) }}</div>
+                </div>
+                <div class="support-summary-note">Yuborilgan xabarlar</div>
+              </div>
+            </article>
+            <article class="card support-summary-card">
+              <div class="support-summary-content">
+                <div class="support-summary-title">Yopilgan so‘rov</div>
+                <div class="support-summary-value-row">
+                  <div class="support-summary-value">{{ fmtNumber(employeeActivity.summary?.closed_requests) }}</div>
+                </div>
+                <div class="support-summary-note">Hal qilingan so‘rovlar</div>
+              </div>
+            </article>
+            <article class="card support-summary-card">
+              <div class="support-summary-content">
+                <div class="support-summary-title">Mijozlar</div>
+                <div class="support-summary-value-row">
+                  <div class="support-summary-value">{{ fmtNumber(employeeActivity.summary?.customer_count) }}</div>
+                </div>
+                <div class="support-summary-note">Javob berilgan mijozlar</div>
+              </div>
+            </article>
           </div>
-        </div>
-        <div class="table-wrap permission-table-wrap">
-          <table v-if="filteredSupportHistoryRows.length">
-            <thead>
-              <tr>
-                <th>Funksiya</th>
-                <th>Yuborilgan</th>
-                <th>Holati</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="row in filteredSupportHistoryRows" :key="row.event_id">
-                <td>{{ row.submodule_name || row.submodule_key }}</td>
-                <td>{{ fmtDate(row.created_at) }}</td>
-                <td><span class="badge" :class="row.confirmed ? 'green' : (row.learned ? 'blue' : 'orange')">{{
-                  row.confirmed ? '✓ Qabul qilindi' : (row.learned ? 'O‘rganildi' : 'Kutilmoqda') }}</span></td>
-              </tr>
-            </tbody>
-          </table>
-          <div v-else class="empty">Hali hech narsa yuborilmagan</div>
-        </div>
-        <template v-if="supportHistoryFilter !== 'done'">
-          <div class="settings-head">
-            <div>
-              <div class="card-title">Funksiyalar bo‘yicha o‘rganish holati</div>
+
+          <section class="card pad">
+            <div class="card-header">
+              <div>
+                <div class="card-title">Natijalarim</div>
+              </div>
             </div>
-            <select class="select" v-model="selectedModuleName">
-              <option v-for="name in supportHistoryModuleNames" :key="name" :value="name">{{ name }}</option>
-            </select>
-          </div>
-          <div class="table-wrap">
-            <table v-if="selectedModuleHistoryRows.length">
-              <thead>
-                <tr>
-                  <th>Funksiya</th>
-                  <th>O‘rganildi</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="row in selectedModuleHistoryRows" :key="row.event_id">
-                  <td>{{ row.submodule_name || row.submodule_key }}</td>
-                  <td><button class="btn small learn-btn" :class="{ learned: row.learned }" type="button"
-                      @click="toggleLearned(row)">{{ row.learned ? '✓ O‘rganildi' : 'O‘rganildi' }}</button></td>
-                </tr>
-              </tbody>
-            </table>
-            <div v-else class="empty">Hozircha funksiya yoqilmagan</div>
-          </div>
+            <div class="detail-stack">
+              <div v-if="employeeActivity.groups?.length" class="drilldown-stack">
+                <section v-for="group in employeeActivity.groups" :key="group.chat_id" class="drilldown-group">
+                  <div class="drilldown-head">
+                    <div>
+                      <div class="card-title">{{ group.title || group.chat_id }}</div>
+                      <div class="card-note">{{ fmtNumber(group.chat_message_count || group.message_count) }} xabar ·
+                        {{ fmtNumber(group.closed_count) }} yopilgan · {{ fmtNumber(group.customer_count) }} mijoz
+                      </div>
+                    </div>
+                    <button class="btn small" type="button" @click="loadChatDetail(group)">Chat tafsiloti</button>
+                  </div>
+                  <div class="drilldown-columns">
+                    <div class="drilldown-panel">
+                      <div class="drilldown-label">Javob bergan mijozlar</div>
+                      <div v-if="group.closed_requests?.length" class="mini-list">
+                        <article v-for="request in group.closed_requests" :key="request.id" class="mini-item">
+                          <b>{{ request.customer_name || request.customer_username || 'Mijoz' }}</b>
+                          <p>{{ request.initial_text || 'So‘rov matni yo‘q' }}</p>
+                          <time>{{ fmtDate(request.closed_at) }}</time>
+                        </article>
+                      </div>
+                      <div v-else class="empty compact">Yopilgan so‘rov yo‘q</div>
+                    </div>
+                    <div class="drilldown-panel">
+                      <div class="drilldown-label">Dialog</div>
+                      <div v-if="groupChatMessages(group).length" class="mini-list">
+                        <article v-for="message in groupChatMessages(group)"
+                          :key="message.id || message.message_id || message.created_at" class="mini-item">
+                          <b>{{ message.from_name || message.actor_name || message.source_label || 'Mijoz' }}</b>
+                          <p>{{ chatMessageText(message) || 'Matn yo‘q' }}</p>
+                          <time>{{ fmtDate(message.created_at) }}</time>
+                        </article>
+                      </div>
+                      <div v-else class="empty compact">Xabar yo‘q</div>
+                    </div>
+                  </div>
+                </section>
+              </div>
+              <div v-else class="empty">Bu davrda javoblar topilmadi</div>
+            </div>
+          </section>
         </template>
-      </section>
 
-      <section class="card pad">
-        <div class="card-header">
-          <div>
-            <div class="card-title">Mening chatlarim</div>
-          </div>
-        </div>
-        <div v-if="myChats.length" class="mini-list">
-          <article v-for="chat in myChats" :key="chat.chat_id" class="mini-item employee-chat-row">
-            <div>
-              <b>{{ chat.title || chat.first_name || chat.username || chat.chat_id }}</b>
-              <p>{{ fmtDate(chat.last_message_at || chat.last_request_at) }}</p>
+        <template v-else-if="employeeActiveTab === 'groups'">
+          <section class="card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">Bot ulangan guruhlar</div>
+              </div>
             </div>
-            <div class="employee-chat-actions">
-              <button class="btn small" type="button" @click="loadChatDetail(chat)">Tafsilot</button>
-              <button class="btn small" type="button" @click="openSend(chat)">Yozish</button>
+            <div v-if="groups.length" class="mini-list">
+              <article v-for="chat in groups" :key="chat.chat_id" class="mini-item employee-chat-row">
+                <div>
+                  <b>{{ chat.title || chat.chat_id }}</b>
+                  <p>{{ fmtDate(chat.last_message_at || chat.last_request_at) }}</p>
+                </div>
+                <div class="employee-chat-actions">
+                  <button class="btn small" type="button" @click="loadChatDetail(chat)">Tafsilot</button>
+                  <button class="btn small" type="button" @click="openSend(chat)">Yozish</button>
+                </div>
+              </article>
             </div>
-          </article>
-        </div>
-        <div v-else class="empty">Sizga biriktirilgan chat topilmadi</div>
-      </section>
-    </div>
+            <div v-else class="empty">Sizga biriktirilgan guruh topilmadi</div>
+          </section>
+        </template>
+
+        <template v-else-if="employeeActiveTab === 'privates'">
+          <section class="card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">Mijozlar</div>
+              </div>
+            </div>
+            <div v-if="privates.length" class="mini-list">
+              <article v-for="chat in privates" :key="chat.chat_id" class="mini-item employee-chat-row">
+                <div>
+                  <b>{{ chat.title || chat.first_name || chat.username || chat.chat_id }}</b>
+                  <p>{{ fmtDate(chat.last_message_at || chat.last_request_at) }}</p>
+                </div>
+                <div class="employee-chat-actions">
+                  <button class="btn small" type="button" @click="loadChatDetail(chat)">Tafsilot</button>
+                  <button class="btn small" type="button" @click="openSend(chat)">Yozish</button>
+                </div>
+              </article>
+            </div>
+            <div v-else class="empty">Sizga biriktirilgan mijoz chati topilmadi</div>
+          </section>
+        </template>
+
+        <template v-else-if="employeeActiveTab === 'notifications'">
+          <section class="card pad">
+            <div class="card-header">
+              <div>
+                <div class="card-title">Bildirishnomalarim</div>
+              </div>
+            </div>
+            <div class="table-wrap permission-table-wrap">
+              <table v-if="filteredSupportHistoryRows.length">
+                <thead>
+                  <tr>
+                    <th>Funksiya</th>
+                    <th>Yuborilgan</th>
+                    <th>Holati</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="row in filteredSupportHistoryRows" :key="row.event_id">
+                    <td>{{ row.submodule_name || row.submodule_key }}</td>
+                    <td>{{ fmtDate(row.created_at) }}</td>
+                    <td><span class="badge" :class="row.confirmed ? 'green' : (row.learned ? 'blue' : 'orange')">{{
+                      row.confirmed ? '✓ Qabul qilindi' : (row.learned ? 'O‘rganildi' : 'Kutilmoqda') }}</span></td>
+                  </tr>
+                </tbody>
+              </table>
+              <div v-else class="empty">Hali hech narsa yuborilmagan</div>
+            </div>
+            <template v-if="supportHistoryFilter !== 'done'">
+              <div class="settings-head">
+                <div>
+                  <div class="card-title">Funksiyalar bo‘yicha o‘rganish holati</div>
+                </div>
+                <select class="select" v-model="selectedModuleName">
+                  <option v-for="name in supportHistoryModuleNames" :key="name" :value="name">{{ name }}</option>
+                </select>
+              </div>
+              <div class="table-wrap">
+                <table v-if="selectedModuleHistoryRows.length">
+                  <thead>
+                    <tr>
+                      <th>Funksiya</th>
+                      <th>O‘rganildi</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="row in selectedModuleHistoryRows" :key="row.event_id">
+                      <td>{{ row.submodule_name || row.submodule_key }}</td>
+                      <td><button class="btn small learn-btn" :class="{ learned: row.learned }" type="button"
+                          @click="toggleLearned(row)">{{ row.learned ? '✓ O‘rganildi' : 'O‘rganildi' }}</button></td>
+                    </tr>
+                  </tbody>
+                </table>
+                <div v-else class="empty">Hozircha funksiya yoqilmagan</div>
+              </div>
+            </template>
+          </section>
+        </template>
+      </div>
+    </section>
 
     <Transition name="modal-fade">
       <Modal v-if="modal === 'send'" title="Xabar yuborish" @close="closeModal">
@@ -3845,6 +3918,14 @@ function applyThemeMode(mode) {
 const token = ref(getToken());
 const account = ref(getAccount());
 const isEmployeeAccount = computed(() => account.value?.type === 'employee');
+const employeeTabs = [
+  { key: 'performance', label: 'Natijalarim', icon: '📊' },
+  { key: 'groups', label: 'Bot ulangan guruhlar', icon: '👥' },
+  { key: 'privates', label: 'Mijozlar', icon: '💬' },
+  { key: 'notifications', label: 'Uyqur Funksiyalari', icon: '🧩' }
+];
+const employeeActiveTab = ref('performance');
+const employeeCurrentTitle = computed(() => employeeTabs.find(tab => tab.key === employeeActiveTab.value)?.label || 'Natijalarim');
 const activeTab = ref(getStoredActiveTab());
 const loading = ref(false);
 const loadingAction = ref('');
@@ -3885,7 +3966,6 @@ const otherMenuOpen = ref(otherTabKeys.includes(activeTab.value));
 const dashboard = reactive({ summary: {}, employeeStats: [], chatStats: [], openRequests: [], analytics: {} });
 const groups = ref([]);
 const privates = ref([]);
-const myChats = computed(() => [...(groups.value || []), ...(privates.value || [])]);
 const employees = ref([]);
 const clickupTasks = ref([]);
 const permissionModules = ref([]);
@@ -10138,7 +10218,7 @@ async function submitLogin() {
     account.value = data.admin || null;
     showToast(data.fallback ? 'Kirdingiz. DB admin yarating yoki parolni o‘zgartiring.' : 'Xush kelibsiz!');
     if (isEmployeeAccount.value) {
-      await Promise.all([loadMyActivity(), loadMyNotifications(), loadMyTickets()]);
+      await refreshMyDashboard();
     } else {
       loadSettings().catch(error => showToast(error.message));
       if (activeTab.value === 'stats') await loadSupportPerformance();
@@ -10912,6 +10992,15 @@ async function loadMyTickets() {
     privates.value = privateRows || [];
   } catch (error) {
     showToast(error.message);
+  }
+}
+
+async function refreshMyDashboard() {
+  startLoading('employeeRefresh');
+  try {
+    await Promise.all([loadMyActivity(), loadMyNotifications(), loadMyTickets()]);
+  } finally {
+    stopLoading('employeeRefresh');
   }
 }
 
@@ -12687,7 +12776,7 @@ onMounted(async () => {
   }, 60_000);
   if (token.value) {
     if (isEmployeeAccount.value) {
-      await Promise.all([loadMyActivity(), loadMyNotifications(), loadMyTickets()]);
+      await refreshMyDashboard();
     } else {
       loadSettings().catch(error => showToast(error.message));
       await refresh();
