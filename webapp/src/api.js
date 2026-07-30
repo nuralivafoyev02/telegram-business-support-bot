@@ -178,5 +178,6 @@ export const api = {
   confirmUyqurReview: payload => request('uyqurConfirmReview', { method: 'POST', body: payload }).then(r => r.data),
   knowledgeDashboard: (query = {}) => request('uyqurKnowledgeDashboard', { query }).then(r => r.data),
   moduleFunctionsDetail: (query = {}) => request('uyqurModuleFunctionsDetail', { query }).then(r => r.data),
-  employeeKnowledgeProfile: (query = {}) => request('uyqurEmployeeKnowledgeProfile', { query }).then(r => r.data)
+  employeeKnowledgeProfile: (query = {}) => request('uyqurEmployeeKnowledgeProfile', { query }).then(r => r.data),
+  saveManagementProfile: payload => request('managementProfile', { method: 'POST', body: payload }).then(r => r.data)
 };

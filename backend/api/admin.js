@@ -8,7 +8,7 @@ const { streamStorageObject, uploadStorageObject, buildStoragePath, contentTypeF
 
 const TELEGRAM_FILE_PROXY_MAX_BYTES = 20 * 1024 * 1024;
 const { allowCors, sendJson, readBody, getQuery } = require('../lib/http');
-const { login, requireAdmin, hashPassword, isEmployeeSession } = require('../lib/auth');
+const { login, requireAdmin, hashPassword, isEmployeeSession, sanitizeEmployeeAccount } = require('../lib/auth');
 const { DEFAULT_TENANT_ID, runWithTenant, normalizeTenantId, getCurrentTenantId, shouldAttachTenantQuery } = require('../lib/tenant');
 const { sendMessage, sendBusinessMessage, getWebhookInfo, setWebhook, deleteWebhook, getUpdates, getMe, getFile, getFileWithToken, getUserProfilePhotos, downloadFile, downloadFileWithToken, resolveBotToken, tgUserName, escapeHtml } = require('../lib/telegram');
 const { optionalEnv } = require('../lib/env');
@@ -6495,7 +6495,22 @@ const EMPLOYEE_POST_ACTIONS = new Set(['uyqurMarkLearned', 'sendMessage', 'reply
 // bilan bitta umumiy ro'yxatni tahrirlaydi va supportlarga xuddi shu bildirishnoma
 // mexanizmi orqali (recordPermissionToggleEvents) xabar boradi.
 const MANAGEMENT_GET_ACTIONS = new Set(['uyqurKnowledgeDashboard', 'uyqurModuleFunctionsDetail', 'uyqurEmployeeKnowledgeProfile', 'uyqurPermissions']);
-const MANAGEMENT_POST_ACTIONS = new Set(['uyqurPermissionsSave']);
+const MANAGEMENT_POST_ACTIONS = new Set(['uyqurPermissionsSave', 'managementProfile']);
+
+// "Boshqaruv paneli" (role='management') hisobi o'zining username/parolini
+// o'zgartirishi uchun — updateAdmin()ga o'xshash, lekin employees jadvalidagi
+// o'z (session.employee_id) qatorini yangilaydi.
+async function updateManagementProfile(body, currentAdmin) {
+  const values = {};
+  if (body.full_name) values.full_name = body.full_name;
+  if (body.username) values.username = String(body.username).replace(/^@/, '');
+  if (body.new_password) values.password_hash = hashPassword(body.new_password);
+  if (!Object.keys(values).length) throw new Error('Yangilanadigan maydon topilmadi');
+  const rows = await supabase.patch('employees', { id: supabase.eq(currentAdmin.employee_id) }, values);
+  const employee = rows[0];
+  if (!employee) throw new Error('Xodim topilmadi');
+  return sanitizeEmployeeAccount(employee);
+}
 
 function forbiddenForEmployeeSession(action) {
   const error = new Error(`Ushbu amal xodim hisobi uchun ruxsat etilmagan: ${action}`);
@@ -6601,6 +6616,7 @@ async function handlePost(action, body, currentAdmin) {
     case 'syncTelegramUpdates': return syncTelegramUpdates(body);
     case 'clickupCompanyLinksSync': return syncClickUpCompanyLinks();
     case 'uyqurPermissionsSave': return savePermissionSelection(body.selected);
+    case 'managementProfile': return updateManagementProfile(body, currentAdmin);
     case 'uyqurMarkLearned': return setEventLearned(body.event_id, body.employee_id, body.learned !== false);
     case 'uyqurConfirmReview': return setManagerConfirmation(body.event_id, body.employee_id, body.confirmed !== false, body.manager_username || '');
     case 'uyqurManagerConfirmersSave': return saveManagerConfirmers(body.usernames);

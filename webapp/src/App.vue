@@ -613,14 +613,23 @@
             @click="loadKnowledgeDashboard">
             {{ loadingAction === 'knowledgeDashboard' ? 'Yangilanmoqda...' : 'Yangilash' }}
           </button>
-          <span class="profile-action" style="cursor:default;">
-            <span class="profile-avatar">{{ managementInitials }}</span>
-            <span>
-              <b style="display:block;">{{ account?.full_name || 'Boshqaruv' }}</b>
-              <small style="color:var(--muted,#6b7280);">Boshqaruv paneli</small>
-            </span>
-          </span>
-          <button class="btn" type="button" @click="logout">Chiqish</button>
+          <div class="top-actions-menu" ref="managementMenuRef">
+            <button class="profile-action" type="button" :aria-expanded="managementMenuOpen"
+              @click="managementMenuOpen = !managementMenuOpen">
+              <span class="profile-avatar">{{ managementInitials }}</span>
+              <span>
+                <b style="display:block;">{{ account?.full_name || 'Boshqaruv' }}</b>
+                <small style="color:var(--muted,#6b7280);">Boshqaruv paneli</small>
+              </span>
+              <b>⌄</b>
+            </button>
+            <Transition name="fade">
+              <div v-if="managementMenuOpen" class="actions-dropdown">
+                <button type="button" @click="openManagementProfile">Profilni tahrirlash</button>
+                <button class="danger-menu-item" type="button" @click="logout">Chiqish</button>
+              </div>
+            </Transition>
+          </div>
         </div>
       </header>
 
@@ -644,10 +653,9 @@
           <div class="support-summary-content">
             <div class="support-summary-title">Xodimlar soni</div>
             <div class="support-summary-value-row">
-              <div class="support-summary-value">{{ fmtNumber(knowledgeDashboard.kpis.employees_total) }} / {{
-                fmtNumber(knowledgeDashboard.kpis.employees_new) }}</div>
+              <div class="support-summary-value">{{ fmtNumber(knowledgeDashboard.kpis.employees_total) }}</div>
             </div>
-            <div class="support-summary-note">jami / yangi xodimlar</div>
+            <div class="support-summary-note">jami support xodimlar</div>
           </div>
         </article>
         <article class="card support-summary-card">
@@ -971,6 +979,26 @@
             </div>
           </div>
         </div>
+      </Modal>
+    </Transition>
+
+    <Transition name="modal-fade">
+      <Modal v-if="managementModal === 'profile'" title="Profilni tahrirlash" @close="closeManagementModal">
+        <form class="form" @submit.prevent="saveManagementProfile">
+          <label class="label">Ism
+            <input v-model.trim="managementProfileForm.full_name" class="input" placeholder="Ism familiya" />
+          </label>
+          <label class="label">Kirish nomi
+            <input v-model.trim="managementProfileForm.username" class="input" placeholder="username" />
+          </label>
+          <label class="label">Yangi parol
+            <input v-model="managementProfileForm.new_password" class="input" type="password"
+              autocomplete="new-password" placeholder="O‘zgartirish uchun kiriting" />
+          </label>
+          <button class="btn primary" :disabled="loadingAction === 'saveManagementProfile'">
+            {{ loadingAction === 'saveManagementProfile' ? 'Saqlanmoqda...' : 'Saqlash' }}
+          </button>
+        </form>
       </Modal>
     </Transition>
 
@@ -4512,6 +4540,9 @@ const selectedStatsPeriod = ref('week');
 const previousStatsPeriod = ref('week');
 const actionMenuOpen = ref(false);
 const actionMenuRef = ref(null);
+const managementMenuOpen = ref(false);
+const managementMenuRef = ref(null);
+const managementProfileForm = reactive({ full_name: '', username: '', new_password: '' });
 const rankingMenuOpen = ref(false);
 const rankingMenuRef = ref(null);
 const moduleCompareMenuOpen = ref(false);
@@ -5669,6 +5700,10 @@ function handleDocumentPointerDown(event) {
   if (actionMenuOpen.value) {
     const root = actionMenuRef.value;
     if (!root || !root.contains(event.target)) actionMenuOpen.value = false;
+  }
+  if (managementMenuOpen.value) {
+    const root = managementMenuRef.value;
+    if (!root || !root.contains(event.target)) managementMenuOpen.value = false;
   }
   if (rankingMenuOpen.value) {
     const root = rankingMenuRef.value;
@@ -11659,6 +11694,29 @@ async function openEmployeeKnowledgeProfile(employeeId) {
 
 function closeManagementModal() {
   managementModal.value = '';
+}
+
+function openManagementProfile() {
+  managementProfileForm.full_name = account.value?.full_name || '';
+  managementProfileForm.username = account.value?.username || '';
+  managementProfileForm.new_password = '';
+  managementMenuOpen.value = false;
+  managementModal.value = 'profile';
+}
+
+async function saveManagementProfile() {
+  startLoading('saveManagementProfile');
+  try {
+    const data = await api.saveManagementProfile({ ...managementProfileForm });
+    account.value = { ...account.value, ...data };
+    setAccount(account.value);
+    showToast('Profil saqlandi');
+    closeManagementModal();
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    stopLoading('saveManagementProfile');
+  }
 }
 
 function csvCell(value) {

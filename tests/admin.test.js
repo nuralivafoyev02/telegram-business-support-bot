@@ -4711,6 +4711,48 @@ async function testSupportTokenCannotToggleUyqurPermissions() {
   assert.strictEqual(result.status, 403);
 }
 
+async function testManagementTokenCanUpdateOwnProfile() {
+  const originalSelect = supabase.select;
+  const originalPatch = supabase.patch;
+  let patchedValues = null;
+
+  supabase.select = async () => [];
+  supabase.patch = async (table, query, values) => {
+    if (table === 'employees') {
+      patchedValues = values;
+      return [{ id: 'mgmt-1', username: values.username || 'boshqaruv', full_name: values.full_name || 'Boshqaruv', role: 'management', tenant_id: 1 }];
+    }
+    return [];
+  };
+
+  try {
+    const token = createEmployeeToken({ id: 'mgmt-1', username: 'boshqaruv', role: 'management', tenant_id: 1 });
+    const result = await callWithToken('managementProfile', {
+      method: 'POST',
+      body: { full_name: 'Ibrohim Yangi', new_password: 'NewSecret123' },
+      token
+    });
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.payload.data.type, 'employee');
+    assert.strictEqual(result.payload.data.full_name, 'Ibrohim Yangi');
+    assert.ok(patchedValues.password_hash);
+    assert.strictEqual(patchedValues.full_name, 'Ibrohim Yangi');
+  } finally {
+    supabase.select = originalSelect;
+    supabase.patch = originalPatch;
+  }
+}
+
+async function testSupportTokenCannotUpdateManagementProfile() {
+  const token = createEmployeeToken({ id: 'emp-1', username: 'aziza', role: 'support', tenant_id: 1 });
+  const result = await callWithToken('managementProfile', {
+    method: 'POST',
+    body: { full_name: 'Hack' },
+    token
+  });
+  assert.strictEqual(result.status, 403);
+}
+
 async function testSupportTokenCannotAccessManagementActions() {
   const token = createEmployeeToken({ id: 'emp-1', username: 'aziza', role: 'support', tenant_id: 1 });
   const result = await callWithToken('uyqurKnowledgeDashboard', { token });
@@ -4825,6 +4867,8 @@ async function run() {
   await testLoginReturnsManagementTypeForValidCredentials();
   await testManagementTokenCanToggleUyqurPermissionsAndNotifiesSupports();
   await testSupportTokenCannotToggleUyqurPermissions();
+  await testManagementTokenCanUpdateOwnProfile();
+  await testSupportTokenCannotUpdateManagementProfile();
   console.log('Admin tests passed');
 }
 
