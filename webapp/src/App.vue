@@ -106,11 +106,42 @@
             <div class="card-header">
               <div>
                 <div class="card-title">Natijalarim</div>
+                <div class="card-note">Davr: {{ selectedPeriodLabel }}</div>
               </div>
             </div>
+            <div class="employee-profile-mini-stats">
+              <span>
+                <small>Yopilgan</small>
+                <b>{{ fmtNumber(employeeActivity.summary?.closed_requests) }}</b>
+              </span>
+              <span>
+                <small>Ochiq</small>
+                <b>{{ fmtNumber(employeeActivity.summary?.open_requests) }}</b>
+              </span>
+              <span>
+                <small>Kompaniya</small>
+                <b>{{ fmtNumber(employeeActivity.summary?.company_total) }}</b>
+              </span>
+              <span>
+                <small>O‘rtacha</small>
+                <b>{{ fmtMinutes(employeeActivity.summary?.avg_close_minutes) }}</b>
+              </span>
+            </div>
+            <div class="employee-profile-pills">
+              <span class="profile-pill">🛡️ SLA <b>{{ fmtPercent(myCloseRate) }}</b></span>
+              <span class="profile-pill">✅ Yopish foizi <b>{{ fmtPercent(myCloseRate) }}</b></span>
+            </div>
+            <div class="employee-chat-tabs">
+              <button type="button" :class="{ active: myProfileTab === 'group' }" @click="myProfileTab = 'group'">
+                Guruhlar <span>{{ fmtNumber(myGroupChats.length) }}</span>
+              </button>
+              <button type="button" :class="{ active: myProfileTab === 'private' }" @click="myProfileTab = 'private'">
+                Lichka <span>{{ fmtNumber(myPrivateChats.length) }}</span>
+              </button>
+            </div>
             <div class="detail-stack">
-              <div v-if="employeeActivity.groups?.length" class="drilldown-stack">
-                <section v-for="group in employeeActivity.groups" :key="group.chat_id" class="drilldown-group">
+              <div v-if="myVisibleChats.length" class="drilldown-stack">
+                <section v-for="group in myVisibleChats" :key="group.chat_id" class="drilldown-group">
                   <div class="drilldown-head">
                     <div>
                       <div class="card-title">{{ group.title || group.chat_id }}</div>
@@ -3926,6 +3957,16 @@ const employeeTabs = [
 ];
 const employeeActiveTab = ref('performance');
 const employeeCurrentTitle = computed(() => employeeTabs.find(tab => tab.key === employeeActiveTab.value)?.label || 'Natijalarim');
+const myProfileTab = ref('group');
+const myGroupChats = computed(() => (employeeActivity.value.groups || []).filter(group => group.source_type === 'group'));
+const myPrivateChats = computed(() => (employeeActivity.value.groups || []).filter(group => group.source_type !== 'group'));
+const myVisibleChats = computed(() => myProfileTab.value === 'group' ? myGroupChats.value : myPrivateChats.value);
+const myCloseRate = computed(() => {
+  const closed = Number(employeeActivity.value.summary?.closed_requests || 0);
+  const open = Number(employeeActivity.value.summary?.open_requests || 0);
+  const total = closed + open;
+  return total ? Math.round((closed / total) * 1000) / 10 : 0;
+});
 const activeTab = ref(getStoredActiveTab());
 const loading = ref(false);
 const loadingAction = ref('');
