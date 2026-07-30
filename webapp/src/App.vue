@@ -664,17 +664,17 @@
           <div class="card-header">
             <div class="card-title">Modullar bo‘yicha bilim darajasi</div>
           </div>
-          <div style="display:flex; flex-direction:column; gap:12px; max-height:300px; overflow-y:auto;">
+          <div style="display:flex; flex-direction:column; gap:16px; max-height:300px; overflow-y:auto;">
             <div v-for="module in knowledgeDashboard.module_bars" :key="module.module_name"
-              style="display:flex; align-items:center; gap:10px; cursor:pointer;"
+              style="display:flex; align-items:center; gap:12px; cursor:pointer;"
               @click="openModuleFunctionsDetail(module.module_name)">
-              <span style="width:100px; flex-shrink:0; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+              <span style="width:120px; flex-shrink:0; font-size:15px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
                 {{ moduleIcon(module.module_name) }} {{ module.module_name }}
               </span>
-              <div style="flex:1; height:8px; border-radius:4px; background:#f1f5f9; overflow:hidden;">
-                <div :style="{ width: module.percent + '%', height: '100%', borderRadius: '4px', background: module.percent >= 70 ? '#16a34a' : (module.percent >= 40 ? '#f59e0b' : '#dc2626') }"></div>
+              <div style="flex:1; height:10px; border-radius:5px; background:#f1f5f9; overflow:hidden;">
+                <div :style="{ width: module.percent + '%', height: '100%', borderRadius: '5px', background: module.percent >= 70 ? '#16a34a' : (module.percent >= 40 ? '#f59e0b' : '#dc2626') }"></div>
               </div>
-              <span style="width:40px; text-align:right; font-size:13px; font-weight:600;">{{ module.percent }}%</span>
+              <span style="width:48px; text-align:right; font-size:15px; font-weight:600;">{{ module.percent }}%</span>
             </div>
             <div v-if="!knowledgeDashboard.module_bars.length" class="empty compact">Modul ma’lumoti yo‘q</div>
           </div>
