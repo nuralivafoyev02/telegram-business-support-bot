@@ -1601,8 +1601,7 @@
           </template>
 
           <template v-if="activeTab === 'uyqurPermissions'">
-            <div class="uyqur-permissions-layout">
-            <section class="card pad settings-card uyqur-functions-card">
+            <section class="card pad settings-card">
               <div class="settings-head">
                 <div>
                   <div class="card-title">Uyqur Funksiyalari</div>
@@ -1612,35 +1611,22 @@
                   {{ loadingAction === 'saveUyqurPermissions' ? 'Saqlanmoqda...' : 'Saqlash' }}
                 </button>
               </div>
-              <div class="table-wrap permission-table-wrap uyqur-functions-table-wrap">
-                <table v-if="permissionModules.length">
-                  <thead>
-                    <tr>
-                      <th>Funksiya</th>
-                      <th class="select-cell">Belgilash</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <template v-for="module in permissionModules" :key="'module-' + module.id">
-                      <tr>
-                        <td><b>{{ module.name || module.key }}</b></td>
-                        <td class="select-cell">
-                          <input class="row-check" type="checkbox" :checked="isPermissionModuleSelected(module)"
-                            @change="togglePermissionModule(module, $event.target.checked)" />
-                        </td>
-                      </tr>
-                      <tr v-for="submodule in module.submodules" :key="'submodule-' + submodule.id">
-                        <td>- {{ submodule.name || submodule.key }}</td>
-                        <td class="select-cell">
-                          <input class="row-check" type="checkbox" :checked="isPermissionSelected(submodule.key)"
-                            @change="togglePermissionSubmodule(submodule.key, $event.target.checked)" />
-                        </td>
-                      </tr>
-                    </template>
-                  </tbody>
-                </table>
-                <div v-else class="empty">{{ loadingAction === 'tab' ? 'Yuklanmoqda...' : 'Funksiyalar topilmadi' }}</div>
+              <div class="uyqur-functions-groups" v-if="permissionModules.length">
+                <div class="uyqur-functions-group" v-for="module in permissionModules" :key="'module-' + module.id">
+                  <label class="uyqur-functions-group-head">
+                    <b>{{ module.name || module.key }}</b>
+                    <input class="row-check" type="checkbox" :checked="isPermissionModuleSelected(module)"
+                      @change="togglePermissionModule(module, $event.target.checked)" />
+                  </label>
+                  <label class="uyqur-functions-row" v-for="submodule in module.submodules"
+                    :key="'submodule-' + submodule.id">
+                    <span>{{ submodule.name || submodule.key }}</span>
+                    <input class="row-check" type="checkbox" :checked="isPermissionSelected(submodule.key)"
+                      @change="togglePermissionSubmodule(submodule.key, $event.target.checked)" />
+                  </label>
+                </div>
               </div>
+              <div v-else class="empty">{{ loadingAction === 'tab' ? 'Yuklanmoqda...' : 'Funksiyalar topilmadi' }}</div>
             </section>
 
             <section class="card pad settings-card">
@@ -1690,8 +1676,6 @@
                 <div v-else class="empty">Support xodimlar topilmadi</div>
               </div>
             </section>
-            </div>
-
           </template>
         </div>
       </Transition>

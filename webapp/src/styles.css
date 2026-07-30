@@ -3573,37 +3573,59 @@ body {
   overflow-y: auto;
 }
 
-.uyqur-permissions-layout {
+.uyqur-functions-groups {
   display: flex;
   align-items: flex-start;
-  gap: 18px;
+  gap: 0;
+  overflow-x: auto;
+  padding-bottom: 8px;
 }
 
-.uyqur-functions-card {
-  flex: 0 0 460px;
-  max-width: 460px;
+.uyqur-functions-group {
+  flex: 0 0 auto;
+  min-width: 190px;
+  padding: 0 16px;
+  border-right: 1px solid var(--line);
 }
 
-.uyqur-permissions-layout .settings-card:not(.uyqur-functions-card) {
-  flex: 1 1 auto;
-  min-width: 0;
+.uyqur-functions-group:first-child {
+  padding-left: 0;
 }
 
-.uyqur-functions-table-wrap table {
-  min-width: 0;
-  width: 100%;
+.uyqur-functions-group:last-child {
+  border-right: none;
 }
 
-@media (max-width: 960px) {
-  .uyqur-permissions-layout {
-    flex-direction: column;
-  }
+.uyqur-functions-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-bottom: 8px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+}
 
-  .uyqur-functions-card {
-    flex-basis: auto;
-    max-width: none;
-    width: 100%;
-  }
+.uyqur-functions-group-head b {
+  color: var(--text);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.uyqur-functions-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 0;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--muted-strong);
+}
+
+.uyqur-functions-row + .uyqur-functions-row {
+  border-top: 1px solid rgba(255, 255, 255, .05);
 }
 
 .manager-panel-lock {
