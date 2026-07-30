@@ -6607,12 +6607,31 @@ async function handler(req, res) {
     if (req.method === 'GET') {
       return await runWithTenant(tenantId, async () => {
         if (action === 'telegramFile') {
-          if (isEmployeeSession(currentAdmin)) throw forbiddenForEmployeeSession(action);
+          // file_id/storage_path Telegram tomonidan generatsiya qilingan uzun, taxmin qilib
+          // bo'lmaydigan token — xodim uni faqat o'ziga scoping qilingan javoblardan (masalan
+          // employeeActivity/chatDetail) oladi, shuning uchun bu action xodim uchun ochiq.
           await sendTelegramFile(query, res);
           return;
         }
         if (action === 'telegramProfilePhoto') {
-          if (isEmployeeSession(currentAdmin)) throw forbiddenForEmployeeSession(action);
+          if (isEmployeeSession(currentAdmin)) {
+            const [scope, employeeRows] = await Promise.all([
+              getEmployeeChatScopeForSession(currentAdmin),
+              supabase.select('employees', {
+                select: 'tg_user_id',
+                id: supabase.eq(currentAdmin.employee_id),
+                limit: '1'
+              }).catch(() => [])
+            ]);
+            const ownTgId = telegramIdKey(employeeRows[0]?.tg_user_id);
+            const requestedTgId = telegramIdKey(query.tg_user_id);
+            // tg_user_id (Telegram raqami) taxmin qilinishi mumkin bo'lgani uchun, faqat
+            // xodimning o'zi yoki o'ziga tegishli (shaxsiy/biznes) chat orqali tekshiriladi —
+            // bunday chatlarda chat_id aynan mijozning tg_user_id'siga teng bo'ladi.
+            if (!requestedTgId || (requestedTgId !== ownTgId && !scope.has(requestedTgId))) {
+              throw forbiddenForEmployeeSession(action);
+            }
+          }
           await sendTelegramProfilePhoto(query, res);
           return;
         }
