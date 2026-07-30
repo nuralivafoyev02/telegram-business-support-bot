@@ -581,16 +581,34 @@
     </Transition>
   </div>
 
-  <div v-else-if="isManagementAccount" style="min-height:100vh;">
-    <div style="max-width:1400px; margin:0 auto; padding:24px;">
+  <div v-else-if="isManagementAccount" class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <img class="logo" :src="uyqurLogoUrl" alt="Uyqur" width="42" height="42" />
+        <div class="brand-wrapper">
+          <div class="brand-title">Uyqur Yordam</div>
+        </div>
+      </div>
+
+      <nav class="nav">
+        <button v-for="item in managementTabs" :key="item.key" :class="{ active: managementActiveTab === item.key }"
+          @click="managementActiveTab = item.key">
+          <b>{{ item.label }}</b>
+        </button>
+      </nav>
+    </aside>
+
+    <section class="main">
       <header class="topbar" style="margin-bottom:20px;">
         <div class="page-title">
-          <h1>Boshqaruv paneli</h1>
+          <h1>{{ managementActiveTab === 'functions' ? 'Barcha funksiyalar' : 'Boshqaruv paneli' }}</h1>
         </div>
         <div class="topbar-actions">
-          <select class="select" v-model="knowledgePeriodDays" @change="changeKnowledgePeriod(knowledgePeriodDays)">
-            <option v-for="option in knowledgePeriodOptions" :key="option.key" :value="option.key">{{ option.label }}</option>
-          </select>
+          <template v-if="managementActiveTab === 'dashboard'">
+            <select class="select" v-model="knowledgePeriodDays" @change="changeKnowledgePeriod(knowledgePeriodDays)">
+              <option v-for="option in knowledgePeriodOptions" :key="option.key" :value="option.key">{{ option.label }}</option>
+            </select>
+          </template>
           <button class="btn topbar-refresh" type="button" :disabled="loadingAction === 'knowledgeDashboard'"
             @click="loadKnowledgeDashboard">
             {{ loadingAction === 'knowledgeDashboard' ? 'Yangilanmoqda...' : 'Yangilash' }}
@@ -606,6 +624,8 @@
         </div>
       </header>
 
+      <div class="page-body">
+      <template v-if="managementActiveTab === 'dashboard'">
       <div class="support-summary-grid">
         <article class="card support-summary-card">
           <div class="support-summary-content">
@@ -788,7 +808,41 @@
           </div>
         </section>
       </div>
-    </div>
+      </template>
+
+      <template v-else-if="managementActiveTab === 'functions'">
+        <section class="card pad">
+          <div class="card-header">
+            <div class="card-title">Barcha funksiyalar</div>
+            <div class="card-note">Uyqur tizimidagi barcha modul va funksiyalar ro‘yxati</div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Modul</th>
+                  <th>Funksiya</th>
+                  <th>Holati</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in allFunctionsRows" :key="`${row.module_name}-${row.submodule_name}`">
+                  <td>{{ row.module_name }}</td>
+                  <td>{{ row.submodule_name }}</td>
+                  <td>
+                    <span class="badge" :class="row.tracked ? 'green' : 'orange'">
+                      {{ row.tracked ? 'Kuzatilmoqda' : 'Kuzatilmayapti' }}
+                    </span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <div v-if="!allFunctionsRows.length" class="empty">Funksiya ma’lumoti topilmadi</div>
+          </div>
+        </section>
+      </template>
+      </div>
+    </section>
 
     <Transition name="modal-fade">
       <Modal v-if="managementModal === 'moduleDetail' && moduleFunctionsDetail"
@@ -4427,6 +4481,24 @@ const employeeActiveTab = ref('performance');
 const employeeCurrentTitle = computed(() => employeeTabs.find(tab => tab.key === employeeActiveTab.value)?.label || 'Natijalarim');
 const knowledgeDashboard = ref({ kpis: {}, module_bars: [], employee_ranking: [], daily_dynamics: { days: [], series: [] }, quadrant_points: [], function_status: [], period_days: 7 });
 const knowledgePeriodDays = ref(7);
+const managementTabs = [
+  { key: 'dashboard', label: 'Bosh sahifa', icon: '📊' },
+  { key: 'functions', label: 'Barcha funksiyalar', icon: '🧩' }
+];
+const managementActiveTab = ref('dashboard');
+const allFunctionsRows = computed(() => {
+  const rows = [];
+  (permissionModules.value || []).forEach(module => {
+    (module.submodules || []).forEach(submodule => {
+      rows.push({
+        module_name: module.name || module.key,
+        submodule_name: submodule.name || submodule.key,
+        tracked: isPermissionSelected(submodule.key)
+      });
+    });
+  });
+  return rows;
+});
 const knowledgePeriodOptions = [
   { key: 7, label: '7 kun' },
   { key: 14, label: '14 kun' },
@@ -11552,7 +11624,11 @@ async function refreshMyDashboard() {
 async function loadKnowledgeDashboard() {
   startLoading('knowledgeDashboard');
   try {
-    knowledgeDashboard.value = await api.knowledgeDashboard({ days: knowledgePeriodDays.value });
+    const [dashboard] = await Promise.all([
+      api.knowledgeDashboard({ days: knowledgePeriodDays.value }),
+      loadPermissionView()
+    ]);
+    knowledgeDashboard.value = dashboard;
   } catch (error) {
     showToast(error.message);
   } finally {

@@ -6492,7 +6492,7 @@ const EMPLOYEE_POST_ACTIONS = new Set(['uyqurMarkLearned', 'sendMessage', 'reply
 // balki BUTUN jamoaning bilim-darajasi statistikasiga (faqat o'qish uchun)
 // kirish huquqiga ega. Support'ning employee_id-scoping mantig'i ularga
 // qo'llanmaydi.
-const MANAGEMENT_GET_ACTIONS = new Set(['uyqurKnowledgeDashboard', 'uyqurModuleFunctionsDetail', 'uyqurEmployeeKnowledgeProfile']);
+const MANAGEMENT_GET_ACTIONS = new Set(['uyqurKnowledgeDashboard', 'uyqurModuleFunctionsDetail', 'uyqurEmployeeKnowledgeProfile', 'uyqurPermissions']);
 
 function forbiddenForEmployeeSession(action) {
   const error = new Error(`Ushbu amal xodim hisobi uchun ruxsat etilmagan: ${action}`);
