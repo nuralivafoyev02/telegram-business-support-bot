@@ -581,6 +581,333 @@
     </Transition>
   </div>
 
+  <div v-else-if="isManagementAccount" style="min-height:100vh;">
+    <div style="max-width:1400px; margin:0 auto; padding:24px;">
+      <header class="topbar" style="margin-bottom:20px;">
+        <div class="page-title">
+          <h1>Boshqaruv paneli</h1>
+          <p class="card-note">Support jamoasi bilim darajasi va faoliyat ko‘rsatkichlari</p>
+        </div>
+        <div class="topbar-actions">
+          <select class="select" v-model.number="knowledgePeriodDays" @change="changeKnowledgePeriod(knowledgePeriodDays)">
+            <option v-for="option in knowledgePeriodOptions" :key="option.key" :value="option.key">{{ option.label }}</option>
+          </select>
+          <button class="btn topbar-refresh" type="button" :disabled="loadingAction === 'knowledgeDashboard'"
+            @click="loadKnowledgeDashboard">
+            {{ loadingAction === 'knowledgeDashboard' ? 'Yangilanmoqda...' : 'Yangilash' }}
+          </button>
+          <button class="btn" type="button" @click="logout">Chiqish</button>
+        </div>
+      </header>
+
+      <div class="support-summary-grid">
+        <article class="card support-summary-card">
+          <div class="support-summary-content">
+            <div class="support-summary-title">O‘rtacha umumiy bilim darajasi</div>
+            <div class="support-summary-value-row">
+              <div class="support-summary-value">{{ fmtPercent(knowledgeDashboard.kpis.avg_knowledge_pct) }}</div>
+            </div>
+            <div class="support-summary-note">
+              {{ (knowledgeDashboard.kpis.avg_knowledge_change_pct || 0) >= 0 ? '↑' : '↓' }}
+              {{ fmtNumber(Math.abs(knowledgeDashboard.kpis.avg_knowledge_change_pct || 0)) }}% davr boshiga nisbatan
+            </div>
+          </div>
+        </article>
+        <article class="card support-summary-card">
+          <div class="support-summary-content">
+            <div class="support-summary-title">Xodimlar soni</div>
+            <div class="support-summary-value-row">
+              <div class="support-summary-value">{{ fmtNumber(knowledgeDashboard.kpis.employees_total) }} / {{
+                fmtNumber(knowledgeDashboard.kpis.employees_new) }}</div>
+            </div>
+            <div class="support-summary-note">jami / yangi xodimlar</div>
+          </div>
+        </article>
+        <article class="card support-summary-card">
+          <div class="support-summary-content">
+            <div class="support-summary-title">Oxirgi {{ knowledgePeriodDays }} kunda yangi funksiyalar</div>
+            <div class="support-summary-value-row">
+              <div class="support-summary-value">{{ fmtNumber(knowledgeDashboard.kpis.new_functions_period) }} / {{
+                fmtNumber(knowledgeDashboard.kpis.new_functions_learned_period) }}</div>
+            </div>
+            <div class="support-summary-note">{{ fmtNumber(knowledgeDashboard.kpis.new_functions_period) }} ta yangi
+              funksiya, {{ fmtNumber(knowledgeDashboard.kpis.new_functions_learned_period) }} tasi butun jamoa
+              tomonidan o‘rganilgan</div>
+          </div>
+        </article>
+        <article class="card support-summary-card">
+          <div class="support-summary-content">
+            <div class="support-summary-title">Yangi funksiyalar o‘zlashtirilishi</div>
+            <div style="display:flex; align-items:center; gap:12px; margin-top:8px;">
+              <DonutChart :segments="[
+                { value: knowledgeDashboard.kpis.donut?.learned_pct || 0, color: '#16a34a' },
+                { value: knowledgeDashboard.kpis.donut?.in_progress_pct || 0, color: '#f59e0b' },
+                { value: knowledgeDashboard.kpis.donut?.not_learned_pct || 0, color: '#dc2626' }
+              ]" :size="76" />
+              <div style="font-size:12px; line-height:1.7;">
+                <div><span style="color:#16a34a;">●</span> O‘rganilgan {{ fmtPercent(knowledgeDashboard.kpis.donut?.learned_pct) }}</div>
+                <div><span style="color:#f59e0b;">●</span> Jarayonda {{ fmtPercent(knowledgeDashboard.kpis.donut?.in_progress_pct) }}</div>
+                <div><span style="color:#dc2626;">●</span> O‘rganilmagan {{ fmtPercent(knowledgeDashboard.kpis.donut?.not_learned_pct) }}</div>
+              </div>
+            </div>
+          </div>
+        </article>
+      </div>
+
+      <div style="display:grid; grid-template-columns: 1fr 1.3fr 1.3fr; gap:16px; margin-top:16px; align-items:start;">
+        <section class="card pad">
+          <div class="card-header">
+            <div class="card-title">Modullar bo‘yicha bilim darajasi</div>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:12px;">
+            <div v-for="module in knowledgeDashboard.module_bars" :key="module.module_name"
+              style="display:flex; align-items:center; gap:10px; cursor:pointer;"
+              @click="openModuleFunctionsDetail(module.module_name)">
+              <span style="width:80px; flex-shrink:0; font-size:13px;">{{ module.module_name }}</span>
+              <div style="flex:1; height:8px; border-radius:4px; background:#f1f5f9; overflow:hidden;">
+                <div :style="{ width: module.percent + '%', height: '100%', borderRadius: '4px', background: module.percent >= 70 ? '#16a34a' : (module.percent >= 40 ? '#f59e0b' : '#dc2626') }"></div>
+              </div>
+              <span style="width:40px; text-align:right; font-size:13px; font-weight:600;">{{ module.percent }}%</span>
+            </div>
+            <div v-if="!knowledgeDashboard.module_bars.length" class="empty compact">Modul ma’lumoti yo‘q</div>
+          </div>
+        </section>
+
+        <section class="card pad">
+          <div class="card-header">
+            <div class="card-title">Xodimlar reytingi</div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Xodim</th>
+                  <th>Bilim darajasi</th>
+                  <th>O‘zgarish</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(row, index) in knowledgeDashboard.employee_ranking" :key="row.employee_id"
+                  style="cursor:pointer;" @click="openEmployeeKnowledgeProfile(row.employee_id)">
+                  <td>{{ index + 1 }}</td>
+                  <td>{{ row.full_name }}</td>
+                  <td>{{ row.percent }}%</td>
+                  <td>
+                    <span :style="{ color: row.change_pct >= 0 ? '#16a34a' : '#dc2626' }">
+                      {{ row.change_pct >= 0 ? '↑' : '↓' }} {{ fmtNumber(Math.abs(row.change_pct)) }}%
+                    </span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <div v-if="!knowledgeDashboard.employee_ranking.length" class="empty">Support xodim topilmadi</div>
+          </div>
+        </section>
+
+        <section class="card pad">
+          <div class="card-header">
+            <div class="card-title">Modullar bo‘yicha bilim darajasi dinamikasi</div>
+          </div>
+          <svg :viewBox="`0 0 ${KNOWLEDGE_TREND_VIEW.width} ${KNOWLEDGE_TREND_VIEW.height}`" role="img"
+            aria-label="Bilim darajasi dinamikasi" style="width:100%; height:auto;">
+            <line v-for="tick in knowledgeTrendYTicks" :key="`kt-y-${tick.value}`" :x1="KNOWLEDGE_TREND_DIMS.left"
+              :x2="KNOWLEDGE_TREND_DIMS.right" :y1="tick.y" :y2="tick.y" stroke="#f1f5f9" />
+            <text v-for="tick in knowledgeTrendYTicks" :key="`kt-yl-${tick.value}`" x="42" :y="tick.y + 4"
+              text-anchor="end" font-size="10" fill="#9ca3af">{{ tick.value }}</text>
+            <g v-for="line in knowledgeTrendLines" :key="line.key">
+              <path v-if="line.path" :d="line.path" fill="none" :stroke="line.color" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round" />
+              <circle v-for="(point, pointIndex) in line.points" :key="`kt-dot-${line.key}-${pointIndex}`"
+                :cx="point.x" :cy="point.y" r="2.5" :fill="line.color" />
+            </g>
+            <text v-for="tick in knowledgeTrendXTicks" :key="`kt-x-${tick.date_key}`" :x="tick.x"
+              :y="KNOWLEDGE_TREND_DIMS.bottom + 16" text-anchor="middle" font-size="10" fill="#9ca3af">{{ tick.label
+              }}</text>
+          </svg>
+          <div style="display:flex; flex-wrap:wrap; gap:10px; margin-top:8px;">
+            <span v-for="line in knowledgeTrendLines" :key="`legend-${line.key}`"
+              style="display:flex; align-items:center; gap:5px; font-size:11px;">
+              <span :style="{ width: '8px', height: '8px', borderRadius: '50%', display: 'inline-block', background: line.color }"></span>
+              {{ line.full_name }}
+            </span>
+          </div>
+        </section>
+      </div>
+
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-top:16px; align-items:start;">
+        <section class="card pad">
+          <div class="card-header">
+            <div class="card-title">Yangi funksiyalar o‘zlashtirilishi</div>
+          </div>
+          <svg :viewBox="`0 0 ${KNOWLEDGE_QUADRANT_VIEW.width} ${KNOWLEDGE_QUADRANT_VIEW.height}`" role="img"
+            aria-label="Yangi funksiyalar o‘zlashtirilishi" style="width:100%; height:auto;">
+            <line v-for="tick in knowledgeQuadrantYTicks" :key="`kq-y-${tick.value}`" :x1="KNOWLEDGE_QUADRANT_DIMS.left"
+              :x2="KNOWLEDGE_QUADRANT_DIMS.right" :y1="tick.y" :y2="tick.y" stroke="#f8fafc" />
+            <text v-for="tick in knowledgeQuadrantYTicks" :key="`kq-yl-${tick.value}`" x="42" :y="tick.y + 4"
+              text-anchor="end" font-size="10" fill="#9ca3af">{{ tick.value }}%</text>
+            <circle v-for="point in knowledgeQuadrantPoints" :key="point.event_id" :cx="point.x" :cy="point.y" r="6"
+              :fill="point.color" fill-opacity="0.85" style="cursor:pointer;"
+              @click="openModuleFunctionsDetail(point.module_name)">
+              <title>{{ point.submodule_name }} — {{ point.percent }}%</title>
+            </circle>
+            <text v-for="tick in knowledgeQuadrantXTicks" :key="`kq-x-${tick.label}`" :x="tick.x"
+              :y="KNOWLEDGE_QUADRANT_DIMS.bottom + 16" text-anchor="middle" font-size="10" fill="#9ca3af">{{
+              tick.label }}</text>
+          </svg>
+          <div v-if="!knowledgeQuadrantPoints.length" class="empty compact">Hozircha funksiya yo‘q</div>
+        </section>
+
+        <section class="card pad">
+          <div class="card-header">
+            <div class="card-title">Yangi funksiyalar holati</div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Funksiya nomi</th>
+                  <th>O‘rganmagan xodimlar</th>
+                  <th>Funksiya chiqqaniga</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in knowledgeDashboard.function_status" :key="row.event_id" style="cursor:pointer;"
+                  @click="openModuleFunctionsDetail(row.module_name)">
+                  <td>{{ row.submodule_name }}</td>
+                  <td>{{ row.not_learned_count }} xodim</td>
+                  <td>{{ row.days_since_launch }} kun</td>
+                </tr>
+              </tbody>
+            </table>
+            <div v-if="!knowledgeDashboard.function_status.length" class="empty">Hozircha funksiya yo‘q</div>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <Transition name="modal-fade">
+      <Modal v-if="managementModal === 'moduleDetail' && moduleFunctionsDetail"
+        :title="`${moduleFunctionsDetail.module_name} moduli — yangi funksiyalar ro‘yxati`" wide xlarge
+        @close="closeManagementModal">
+        <div class="detail-summary">
+          <div><span>Jami fichalar</span><b>{{ fmtNumber(moduleFunctionsDetail.total_functions) }}</b></div>
+          <div><span>O‘rganilmagan fichalar</span><b>{{ fmtNumber(moduleFunctionsDetail.not_learned_total) }}</b></div>
+          <div><span>O‘rtacha o‘rganish vaqti</span><b>{{ moduleFunctionsDetail.avg_days_to_learn }} kun</b></div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Yangi funksiya nomi</th>
+                <th>Chiqqan sana</th>
+                <th>O‘rgangan xodimlar</th>
+                <th>O‘rganmagan xodimlar</th>
+                <th>Chiqqaniga</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(fn, index) in moduleFunctionsDetail.functions" :key="fn.event_id">
+                <td>{{ index + 1 }}</td>
+                <td>{{ fn.submodule_name }}</td>
+                <td>{{ fmtDate(fn.created_at) }}</td>
+                <td>{{ fn.learned_employees.length }} xodim — {{ fn.learned_employees.map(row => row.full_name).join(', ') || '—' }}</td>
+                <td>{{ fn.not_learned_employees.length }} xodim — {{ fn.not_learned_employees.map(row => row.full_name).join(', ') || '—' }}</td>
+                <td>{{ fn.days_since_launch }} kun</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
+          <button class="btn" type="button" @click="exportModuleFunctionsCsv">Excelga eksport qilish</button>
+          <button class="btn primary" type="button" @click="closeManagementModal">Yopish</button>
+        </div>
+      </Modal>
+    </Transition>
+
+    <Transition name="modal-fade">
+      <Modal v-if="managementModal === 'employeeProfile' && employeeKnowledgeProfile"
+        :title="employeeKnowledgeProfile.employee.full_name" wide @close="closeManagementModal">
+        <div class="employee-profile-mini-stats">
+          <span>
+            <small>Bilim progresi</small>
+            <b>{{ employeeKnowledgeProfile.overall_percent }}%</b>
+          </span>
+          <span>
+            <small>Biladigan funksiyalar</small>
+            <b>{{ employeeKnowledgeProfile.learned_functions.length }}</b>
+          </span>
+          <span>
+            <small>Bilmaydigan funksiyalar</small>
+            <b>{{ employeeKnowledgeProfile.not_learned_functions.length }}</b>
+          </span>
+        </div>
+        <p class="card-note">Lavozim: Support mutaxassisi · Jamoa: {{ employeeKnowledgeProfile.employee.team || '—' }}
+          · Ishga kirgan sanasi: {{ fmtDate(employeeKnowledgeProfile.employee.created_at) }}</p>
+        <div style="display:flex; justify-content:center; margin:16px 0;">
+          <RadarChart
+            :axes="employeeKnowledgeProfile.module_percents.map(module => ({ label: module.module_name, value: module.percent }))"
+            :size="260" />
+        </div>
+        <div class="drilldown-columns">
+          <div class="drilldown-panel">
+            <div class="drilldown-label">O‘rganilgan funksiyalar</div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Funksiya nomi</th>
+                    <th>Chiqqan sana</th>
+                    <th>O‘rganish vaqti</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="fn in employeeKnowledgeProfile.learned_functions" :key="fn.submodule_name + fn.learned_at">
+                    <td>{{ fn.submodule_name }}</td>
+                    <td>{{ fmtDate(fn.created_at) }}</td>
+                    <td>{{ fn.days_to_learn }} kun</td>
+                  </tr>
+                </tbody>
+              </table>
+              <div v-if="!employeeKnowledgeProfile.learned_functions.length" class="empty compact">Hali yo‘q</div>
+            </div>
+          </div>
+          <div class="drilldown-panel">
+            <div class="drilldown-label">O‘rganilmagan funksiyalar</div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Funksiya nomi</th>
+                    <th>Chiqqaniga (kun)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="fn in employeeKnowledgeProfile.not_learned_functions" :key="fn.submodule_name">
+                    <td>{{ fn.submodule_name }}</td>
+                    <td>{{ fn.days_since_launch }}</td>
+                  </tr>
+                </tbody>
+              </table>
+              <div v-if="!employeeKnowledgeProfile.not_learned_functions.length" class="empty compact">Yo‘q</div>
+            </div>
+          </div>
+        </div>
+      </Modal>
+    </Transition>
+
+    <Transition name="fade">
+      <div v-if="loading" class="app-loader" role="status" aria-live="polite">
+        <span class="spinner" aria-hidden="true"></span>
+        <span>{{ loadingText }}</span>
+      </div>
+    </Transition>
+    <Transition name="toast-pop">
+      <div v-if="toast" class="toast">{{ toast }}</div>
+    </Transition>
+  </div>
+
   <div v-else class="app-shell">
     <aside class="sidebar">
       <div class="brand">
@@ -2752,7 +3079,7 @@
           <label class="label">Telegram username
             <input v-model.trim="employeeForm.username" class="input" placeholder="@username" />
           </label>
-          <label v-if="employeeForm.role === 'support'" class="label">Panel paroli
+          <label v-if="['support', 'management'].includes(employeeForm.role)" class="label">Panel paroli
             <input v-model="employeeForm.new_password" class="input" type="password" autocomplete="new-password"
               placeholder="O‘zgartirish uchun kiriting" />
           </label>
@@ -2766,6 +3093,7 @@
             <select v-model="employeeForm.role" class="select">
               <option value="support">Texnik yordam</option>
               <option value="manager">Menejer</option>
+              <option value="management">Boshqaruv paneli</option>
               <option value="owner">Ega</option>
               <option value="admin">Bot admin</option>
             </select>
@@ -4067,7 +4395,8 @@ function applyThemeMode(mode) {
 
 const token = ref(getToken());
 const account = ref(getAccount());
-const isEmployeeAccount = computed(() => account.value?.type === 'employee');
+const isEmployeeAccount = computed(() => account.value?.type === 'employee' && account.value?.role !== 'management');
+const isManagementAccount = computed(() => account.value?.type === 'employee' && account.value?.role === 'management');
 const employeeTabs = [
   { key: 'performance', label: 'Natijalarim', icon: '📊' },
   { key: 'groups', label: 'Bot ulangan guruhlar', icon: '👥' },
@@ -4076,6 +4405,16 @@ const employeeTabs = [
 ];
 const employeeActiveTab = ref('performance');
 const employeeCurrentTitle = computed(() => employeeTabs.find(tab => tab.key === employeeActiveTab.value)?.label || 'Natijalarim');
+const knowledgeDashboard = ref({ kpis: {}, module_bars: [], employee_ranking: [], daily_dynamics: { days: [], series: [] }, quadrant_points: [], function_status: [], period_days: 7 });
+const knowledgePeriodDays = ref(7);
+const knowledgePeriodOptions = [
+  { key: 7, label: '7 kun' },
+  { key: 14, label: '14 kun' },
+  { key: 30, label: '30 kun' }
+];
+const moduleFunctionsDetail = ref(null);
+const employeeKnowledgeProfile = ref(null);
+const managementModal = ref('');
 const activeTab = ref(getStoredActiveTab());
 const loading = ref(false);
 const loadingAction = ref('');
@@ -10369,6 +10708,8 @@ async function submitLogin() {
     showToast(data.fallback ? 'Kirdingiz. DB admin yarating yoki parolni o‘zgartiring.' : 'Xush kelibsiz!');
     if (isEmployeeAccount.value) {
       await refreshMyDashboard();
+    } else if (isManagementAccount.value) {
+      await loadKnowledgeDashboard();
     } else {
       loadSettings().catch(error => showToast(error.message));
       if (activeTab.value === 'stats') await loadSupportPerformance();
@@ -11182,6 +11523,150 @@ async function refreshMyDashboard() {
     stopLoading('employeeRefresh');
   }
 }
+
+async function loadKnowledgeDashboard() {
+  startLoading('knowledgeDashboard');
+  try {
+    knowledgeDashboard.value = await api.knowledgeDashboard({ days: knowledgePeriodDays.value });
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    stopLoading('knowledgeDashboard');
+  }
+}
+
+async function changeKnowledgePeriod(days) {
+  knowledgePeriodDays.value = Number(days);
+  await loadKnowledgeDashboard();
+}
+
+async function openModuleFunctionsDetail(moduleName) {
+  if (!moduleName) return;
+  startLoading('moduleFunctionsDetail');
+  try {
+    moduleFunctionsDetail.value = await api.moduleFunctionsDetail({ module_name: moduleName });
+    managementModal.value = 'moduleDetail';
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    stopLoading('moduleFunctionsDetail');
+  }
+}
+
+async function openEmployeeKnowledgeProfile(employeeId) {
+  if (!employeeId) return;
+  startLoading('employeeKnowledgeProfile');
+  try {
+    employeeKnowledgeProfile.value = await api.employeeKnowledgeProfile({ employee_id: employeeId });
+    managementModal.value = 'employeeProfile';
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    stopLoading('employeeKnowledgeProfile');
+  }
+}
+
+function closeManagementModal() {
+  managementModal.value = '';
+}
+
+function csvCell(value) {
+  return `"${String(value ?? '').replace(/"/g, '""')}"`;
+}
+
+function exportModuleFunctionsCsv() {
+  const detail = moduleFunctionsDetail.value;
+  if (!detail || !detail.functions?.length) return showToast('Eksport qilish uchun ma’lumot yo‘q');
+  const rows = [['Funksiya nomi', 'Chiqqan sana', 'O‘rgangan xodimlar', 'O‘rganmagan xodimlar', 'Chiqqaniga (kun)']];
+  detail.functions.forEach(fn => {
+    rows.push([
+      fn.submodule_name,
+      fmtDate(fn.created_at),
+      fn.learned_employees.map(row => row.full_name).join('; '),
+      fn.not_learned_employees.map(row => row.full_name).join('; '),
+      String(fn.days_since_launch)
+    ]);
+  });
+  const csv = rows.map(row => row.map(csvCell).join(',')).join('\n');
+  const blob = new Blob([`﻿${csv}`], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `${detail.module_name}-funksiyalar.csv`;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+const KNOWLEDGE_TREND_VIEW = Object.freeze({ width: 820, height: 320 });
+const KNOWLEDGE_TREND_DIMS = Object.freeze({ left: 50, right: 780, top: 30, bottom: 280 });
+const KNOWLEDGE_TREND_COLORS = ['#7c3aed', '#2563eb', '#16a34a', '#f59e0b', '#dc2626', '#0891b2'];
+
+const knowledgeTrendLines = computed(() => {
+  const series = knowledgeDashboard.value.daily_dynamics?.series || [];
+  return series.map((line, index) => {
+    const rows = (line.points || []).map(value => ({ value }));
+    const points = lineChartPoints(rows, 100, KNOWLEDGE_TREND_DIMS);
+    return {
+      key: line.employee_id,
+      full_name: line.full_name,
+      color: KNOWLEDGE_TREND_COLORS[index % KNOWLEDGE_TREND_COLORS.length],
+      points,
+      path: smoothLinePath(points)
+    };
+  });
+});
+const knowledgeTrendYTicks = computed(() => moduleChartYTicks(100, KNOWLEDGE_TREND_DIMS, 25));
+const knowledgeTrendXTicks = computed(() => {
+  const days = knowledgeDashboard.value.daily_dynamics?.days || [];
+  const width = KNOWLEDGE_TREND_DIMS.right - KNOWLEDGE_TREND_DIMS.left;
+  const step = days.length > 1 ? width / (days.length - 1) : 0;
+  return days.map((day, index) => ({
+    date_key: day,
+    label: day.slice(5).replace('-', '.'),
+    x: days.length > 1 ? KNOWLEDGE_TREND_DIMS.left + step * index : KNOWLEDGE_TREND_DIMS.left + width / 2
+  }));
+});
+
+const KNOWLEDGE_QUADRANT_VIEW = Object.freeze({ width: 820, height: 360 });
+const KNOWLEDGE_QUADRANT_DIMS = Object.freeze({ left: 60, right: 780, top: 30, bottom: 300 });
+
+function quadrantPointColor(percent) {
+  if (percent >= 70) return '#16a34a';
+  if (percent >= 40) return '#f59e0b';
+  return '#dc2626';
+}
+
+const knowledgeQuadrantPoints = computed(() => {
+  const points = knowledgeDashboard.value.quadrant_points || [];
+  if (!points.length) return [];
+  const dims = KNOWLEDGE_QUADRANT_DIMS;
+  const width = dims.right - dims.left;
+  const height = dims.bottom - dims.top;
+  const times = points.map(point => new Date(point.created_at).getTime()).filter(Number.isFinite);
+  const minTime = times.length ? Math.min(...times) : 0;
+  const maxTime = times.length ? Math.max(...times) : 0;
+  const span = Math.max(maxTime - minTime, 1);
+  return points.map(point => {
+    const time = new Date(point.created_at).getTime();
+    const xRatio = Number.isFinite(time) ? (time - minTime) / span : 0.5;
+    const x = dims.left + xRatio * width;
+    const y = dims.bottom - (Math.max(0, Math.min(100, point.percent)) / 100) * height;
+    return {
+      ...point,
+      x: Math.round(x * 10) / 10,
+      y: Math.round(y * 10) / 10,
+      color: quadrantPointColor(point.percent)
+    };
+  });
+});
+const knowledgeQuadrantXTicks = computed(() => {
+  const points = knowledgeQuadrantPoints.value;
+  if (!points.length) return [];
+  const sorted = [...points].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+  const step = Math.max(1, Math.floor(sorted.length / 5));
+  return sorted.filter((_, index) => index % step === 0).map(point => ({ x: point.x, label: fmtDate(point.created_at).slice(0, 5) }));
+});
+const knowledgeQuadrantYTicks = computed(() => moduleChartYTicks(100, KNOWLEDGE_QUADRANT_DIMS, 25));
 
 function openEmployeeOpenRequests(row = {}) {
   employeeDrilldown.value = row;
@@ -12956,6 +13441,8 @@ onMounted(async () => {
   if (token.value) {
     if (isEmployeeAccount.value) {
       await refreshMyDashboard();
+    } else if (isManagementAccount.value) {
+      await loadKnowledgeDashboard();
     } else {
       loadSettings().catch(error => showToast(error.message));
       await refresh();
@@ -13056,6 +13543,98 @@ const MetricBar = defineComponent({
         h('span', { class: 'metric-bar-track', 'aria-hidden': 'true' }, [
           h('span', { class: 'metric-bar-fill', style: { width: `${value}%` } })
         ])
+      ]);
+    };
+  }
+});
+
+const DonutChart = defineComponent({
+  props: { segments: { type: Array, default: () => [] }, size: { type: Number, default: 120 } },
+  setup(props) {
+    return () => {
+      const size = props.size;
+      const radius = size / 2 - 10;
+      const center = size / 2;
+      const circumference = 2 * Math.PI * radius;
+      const total = props.segments.reduce((sum, segment) => sum + Math.max(0, Number(segment.value) || 0), 0);
+      let offset = 0;
+      const arcs = props.segments.map((segment, index) => {
+        const value = Math.max(0, Number(segment.value) || 0);
+        const fraction = total ? value / total : 0;
+        const dash = fraction * circumference;
+        const arc = h('circle', {
+          key: index,
+          cx: center,
+          cy: center,
+          r: radius,
+          fill: 'none',
+          stroke: segment.color,
+          'stroke-width': 14,
+          'stroke-dasharray': `${dash} ${Math.max(circumference - dash, 0)}`,
+          'stroke-dashoffset': -offset,
+          transform: `rotate(-90 ${center} ${center})`
+        });
+        offset += dash;
+        return arc;
+      });
+      return h('svg', { viewBox: `0 0 ${size} ${size}`, width: size, height: size }, arcs);
+    };
+  }
+});
+
+const RadarChart = defineComponent({
+  props: { axes: { type: Array, default: () => [] }, size: { type: Number, default: 220 } },
+  setup(props) {
+    return () => {
+      const size = props.size;
+      const center = size / 2;
+      const radius = size / 2 - 34;
+      const count = props.axes.length;
+      if (!count) return h('svg', { viewBox: `0 0 ${size} ${size}`, width: size, height: size });
+      const angleStep = (2 * Math.PI) / count;
+      const pointFor = (index, ratio) => {
+        const angle = -Math.PI / 2 + angleStep * index;
+        return { x: center + Math.cos(angle) * radius * ratio, y: center + Math.sin(angle) * radius * ratio };
+      };
+      const rings = [0.25, 0.5, 0.75, 1].map((ratio, ringIndex) => {
+        const points = Array.from({ length: count }, (_, index) => pointFor(index, ratio));
+        return h('polygon', {
+          key: `ring-${ringIndex}`,
+          points: points.map(point => `${point.x},${point.y}`).join(' '),
+          fill: 'none',
+          stroke: '#e5e7eb',
+          'stroke-width': 1
+        });
+      });
+      const axisLines = props.axes.map((axis, index) => {
+        const point = pointFor(index, 1);
+        return h('line', { key: `axis-${index}`, x1: center, y1: center, x2: point.x, y2: point.y, stroke: '#e5e7eb', 'stroke-width': 1 });
+      });
+      const labels = props.axes.map((axis, index) => {
+        const point = pointFor(index, 1.24);
+        return h('text', {
+          key: `label-${index}`,
+          x: point.x,
+          y: point.y,
+          'text-anchor': 'middle',
+          'font-size': 11,
+          fill: '#374151'
+        }, `${axis.label} ${Math.round(Number(axis.value) || 0)}%`);
+      });
+      const valuePoints = props.axes.map((axis, index) => pointFor(index, Math.max(0, Math.min(100, Number(axis.value) || 0)) / 100));
+      const valuePolygon = h('polygon', {
+        points: valuePoints.map(point => `${point.x},${point.y}`).join(' '),
+        fill: 'rgba(124,58,237,0.25)',
+        stroke: '#7c3aed',
+        'stroke-width': 2
+      });
+      const valueDots = valuePoints.map((point, index) => h('circle', { key: `dot-${index}`, cx: point.x, cy: point.y, r: 3, fill: '#7c3aed' }));
+      return h('svg', { viewBox: `0 0 ${size} ${size}`, width: size, height: size }, [
+        ...rings,
+        ...axisLines,
+        valuePolygon,
+        ...valueDots,
+        ...labels
       ]);
     };
   }

@@ -170,7 +170,7 @@ async function savePermissionSelection(selected = []) {
 
 async function getSupportEmployees() {
   return supabase.select('employees', {
-    select: 'id,username,full_name,role,is_active',
+    select: 'id,username,full_name,role,is_active,created_at',
     role: supabase.eq('support'),
     is_active: supabase.eq(true),
     limit: '200'
@@ -354,6 +354,261 @@ async function getPermissionView() {
   }
 }
 
+const KNOWLEDGE_DASHBOARD_PERIOD_DAYS = new Set([7, 14, 30]);
+const NEW_EMPLOYEE_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+// "Bilim darajasi %" = shu doiradagi hodisalardan qanchasi "O'rganildi" deb
+// belgilanganligi (learned_at bor-yo'qligi) — menejer tasdiqlashi (confirmed_at)
+// bu hisobga kirmaydi, chunki bu xodimning o'z bilimini aks ettiradi.
+async function getKnowledgeDashboard({ days = 7 } = {}) {
+  const periodDays = KNOWLEDGE_DASHBOARD_PERIOD_DAYS.has(Number(days)) ? Number(days) : 7;
+  const [employees, record] = await Promise.all([getSupportEmployees(), getNotificationRecord()]);
+  const events = record.events;
+  const now = Date.now();
+  const periodStartMs = now - periodDays * DAY_MS;
+
+  function percentAsOf(employeeId, cutoffMs) {
+    const relevant = events.filter(event => new Date(event.created_at).getTime() <= cutoffMs);
+    if (!relevant.length) return 0;
+    const learned = relevant.filter(event => {
+      const progress = progressFor(record, event.id, employeeId);
+      return progress.learned_at && new Date(progress.learned_at).getTime() <= cutoffMs;
+    }).length;
+    return Math.round((learned / relevant.length) * 100);
+  }
+
+  const employeeRanking = employees.map(employee => {
+    const percent = percentAsOf(employee.id, now);
+    const previousPercent = percentAsOf(employee.id, periodStartMs);
+    return {
+      employee_id: employee.id,
+      full_name: employee.full_name || employee.username || 'Xodim',
+      username: employee.username || '',
+      percent,
+      change_pct: percent - previousPercent
+    };
+  }).sort((a, b) => b.percent - a.percent);
+
+  const avgKnowledgePct = employeeRanking.length
+    ? Math.round(employeeRanking.reduce((sum, row) => sum + row.percent, 0) / employeeRanking.length)
+    : 0;
+  const avgKnowledgeChangePct = employeeRanking.length
+    ? Math.round(employeeRanking.reduce((sum, row) => sum + row.change_pct, 0) / employeeRanking.length)
+    : 0;
+
+  const newEmployeesCount = employees.filter(employee => {
+    if (!employee.created_at) return false;
+    return now - new Date(employee.created_at).getTime() <= NEW_EMPLOYEE_WINDOW_MS;
+  }).length;
+
+  const periodEvents = events.filter(event => new Date(event.created_at).getTime() >= periodStartMs);
+  // "O'rganilgan" = shu davrda chiqqan funksiyani BARCHA faol support'lar o'rgangan.
+  const periodFullyLearnedCount = periodEvents.filter(event => employees.length > 0
+    && employees.every(employee => Boolean(progressFor(record, event.id, employee.id).learned_at))).length;
+
+  let learnedPairs = 0;
+  let inProgressPairs = 0;
+  let notLearnedPairs = 0;
+  events.forEach(event => {
+    employees.forEach(employee => {
+      const progress = progressFor(record, event.id, employee.id);
+      if (progress.confirmed_at) learnedPairs += 1;
+      else if (progress.learned_at) inProgressPairs += 1;
+      else notLearnedPairs += 1;
+    });
+  });
+  const totalPairs = events.length * employees.length;
+  const donut = {
+    learned_pct: totalPairs ? Math.round((learnedPairs / totalPairs) * 100) : 0,
+    in_progress_pct: totalPairs ? Math.round((inProgressPairs / totalPairs) * 100) : 0,
+    not_learned_pct: totalPairs ? Math.round((notLearnedPairs / totalPairs) * 100) : 0
+  };
+
+  const moduleNames = [...new Set(events.map(event => event.module_name).filter(Boolean))];
+  const moduleBars = moduleNames.map(moduleName => {
+    const moduleEvents = events.filter(event => event.module_name === moduleName);
+    let moduleLearnedPairs = 0;
+    moduleEvents.forEach(event => {
+      employees.forEach(employee => {
+        if (progressFor(record, event.id, employee.id).learned_at) moduleLearnedPairs += 1;
+      });
+    });
+    const moduleTotalPairs = moduleEvents.length * employees.length;
+    return {
+      module_name: moduleName,
+      percent: moduleTotalPairs ? Math.round((moduleLearnedPairs / moduleTotalPairs) * 100) : 0
+    };
+  }).sort((a, b) => b.percent - a.percent);
+
+  const days_ = [];
+  for (let i = periodDays - 1; i >= 0; i -= 1) {
+    days_.push(new Date(now - i * DAY_MS).toISOString().slice(0, 10));
+  }
+  const topEmployees = employeeRanking.slice(0, 4);
+  const dailyDynamics = {
+    days: days_,
+    series: topEmployees.map(row => ({
+      employee_id: row.employee_id,
+      full_name: row.full_name,
+      points: days_.map(dayKey => percentAsOf(row.employee_id, new Date(`${dayKey}T23:59:59.999Z`).getTime()))
+    }))
+  };
+
+  const quadrantPoints = events.map(event => {
+    const learnedCount = employees.filter(employee => Boolean(progressFor(record, event.id, employee.id).learned_at)).length;
+    return {
+      event_id: event.id,
+      submodule_name: event.submodule_name,
+      module_name: event.module_name,
+      created_at: event.created_at,
+      percent: employees.length ? Math.round((learnedCount / employees.length) * 100) : 0
+    };
+  });
+
+  const functionStatus = events.map(event => {
+    const notLearnedCount = employees.filter(employee => !progressFor(record, event.id, employee.id).learned_at).length;
+    return {
+      event_id: event.id,
+      submodule_name: event.submodule_name,
+      module_name: event.module_name,
+      created_at: event.created_at,
+      not_learned_count: notLearnedCount,
+      days_since_launch: Math.floor((now - new Date(event.created_at).getTime()) / DAY_MS)
+    };
+  }).sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
+
+  return {
+    kpis: {
+      avg_knowledge_pct: avgKnowledgePct,
+      avg_knowledge_change_pct: avgKnowledgeChangePct,
+      employees_total: employees.length,
+      employees_new: newEmployeesCount,
+      new_functions_period: periodEvents.length,
+      new_functions_learned_period: periodFullyLearnedCount,
+      donut
+    },
+    module_bars: moduleBars,
+    employee_ranking: employeeRanking,
+    daily_dynamics: dailyDynamics,
+    quadrant_points: quadrantPoints,
+    function_status: functionStatus,
+    period_days: periodDays
+  };
+}
+
+async function getModuleFunctionsDetail(moduleName) {
+  if (!moduleName) throw new Error('module_name majburiy');
+  const [employees, record] = await Promise.all([getSupportEmployees(), getNotificationRecord()]);
+  const now = Date.now();
+  const moduleEvents = record.events.filter(event => event.module_name === moduleName);
+
+  const functions = moduleEvents.map(event => {
+    const learnedEmployees = [];
+    const notLearnedEmployees = [];
+    employees.forEach(employee => {
+      const progress = progressFor(record, event.id, employee.id);
+      const row = { id: employee.id, full_name: employee.full_name || employee.username || 'Xodim' };
+      if (progress.learned_at) learnedEmployees.push(row);
+      else notLearnedEmployees.push(row);
+    });
+    return {
+      event_id: event.id,
+      submodule_name: event.submodule_name,
+      created_at: event.created_at,
+      days_since_launch: Math.floor((now - new Date(event.created_at).getTime()) / DAY_MS),
+      learned_employees: learnedEmployees,
+      not_learned_employees: notLearnedEmployees
+    };
+  }).sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
+
+  const learnDurations = [];
+  moduleEvents.forEach(event => {
+    employees.forEach(employee => {
+      const progress = progressFor(record, event.id, employee.id);
+      if (!progress.learned_at) return;
+      const durationDays = (new Date(progress.learned_at).getTime() - new Date(event.created_at).getTime()) / DAY_MS;
+      if (Number.isFinite(durationDays) && durationDays >= 0) learnDurations.push(durationDays);
+    });
+  });
+  const avgDaysToLearn = learnDurations.length
+    ? Math.round((learnDurations.reduce((sum, value) => sum + value, 0) / learnDurations.length) * 10) / 10
+    : 0;
+
+  return {
+    module_name: moduleName,
+    total_functions: functions.length,
+    not_learned_total: functions.reduce((sum, fn) => sum + fn.not_learned_employees.length, 0),
+    avg_days_to_learn: avgDaysToLearn,
+    functions
+  };
+}
+
+async function getEmployeeKnowledgeProfile(employeeId) {
+  if (!employeeId) throw new Error('employee_id majburiy');
+  const [employees, record] = await Promise.all([getSupportEmployees(), getNotificationRecord()]);
+  const employee = employees.find(row => String(row.id) === String(employeeId));
+  if (!employee) throw new Error('Xodim topilmadi');
+  const events = record.events;
+
+  const moduleNames = [...new Set(events.map(event => event.module_name).filter(Boolean))];
+  const modulePercents = moduleNames.map(moduleName => {
+    const moduleEvents = events.filter(event => event.module_name === moduleName);
+    const learnedCount = moduleEvents.filter(event => Boolean(progressFor(record, event.id, employee.id).learned_at)).length;
+    return {
+      module_name: moduleName,
+      percent: moduleEvents.length ? Math.round((learnedCount / moduleEvents.length) * 100) : 0,
+      event_count: moduleEvents.length
+    };
+  });
+
+  const overallPercent = events.length
+    ? Math.round((events.filter(event => Boolean(progressFor(record, event.id, employee.id).learned_at)).length / events.length) * 100)
+    : 0;
+
+  // "Jamoa" uchun alohida ustun yo'q — xodim eng ko'p ishlagan (eng ko'p
+  // hodisaga ega) moduli asosida chiqariladi.
+  const team = modulePercents.slice().sort((a, b) => b.event_count - a.event_count)[0]?.module_name || '';
+
+  const learnedFunctions = [];
+  const notLearnedFunctions = [];
+  events.forEach(event => {
+    const progress = progressFor(record, event.id, employee.id);
+    if (progress.learned_at) {
+      const daysToLearn = (new Date(progress.learned_at).getTime() - new Date(event.created_at).getTime()) / DAY_MS;
+      learnedFunctions.push({
+        submodule_name: event.submodule_name,
+        module_name: event.module_name,
+        created_at: event.created_at,
+        learned_at: progress.learned_at,
+        days_to_learn: Number.isFinite(daysToLearn) ? Math.round(daysToLearn * 10) / 10 : null
+      });
+    } else {
+      notLearnedFunctions.push({
+        submodule_name: event.submodule_name,
+        module_name: event.module_name,
+        created_at: event.created_at,
+        days_since_launch: Math.floor((Date.now() - new Date(event.created_at).getTime()) / DAY_MS)
+      });
+    }
+  });
+
+  return {
+    employee: {
+      id: employee.id,
+      full_name: employee.full_name || employee.username || 'Xodim',
+      username: employee.username || '',
+      role: employee.role || 'support',
+      created_at: employee.created_at || null,
+      team
+    },
+    overall_percent: overallPercent,
+    module_percents: modulePercents,
+    learned_functions: learnedFunctions.sort((a, b) => String(b.learned_at || '').localeCompare(String(a.learned_at || ''))),
+    not_learned_functions: notLearnedFunctions.sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))
+  };
+}
+
 module.exports = {
   fetchPermissionView,
   getPermissionView,
@@ -368,5 +623,8 @@ module.exports = {
   getManagerConfirmers,
   saveManagerConfirmers,
   getManagerEmployees,
-  resetPermissionNotifications
+  resetPermissionNotifications,
+  getKnowledgeDashboard,
+  getModuleFunctionsDetail,
+  getEmployeeKnowledgeProfile
 };

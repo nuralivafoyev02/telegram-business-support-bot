@@ -5,9 +5,9 @@ const supabase = require('./supabase');
 const { optionalEnv, requiredEnv } = require('./env');
 const { DEFAULT_TENANT_ID, normalizeTenantId } = require('./tenant');
 
-// v1: faqat 'support' xodimlarga webapp login beriladi. Kengaytirish uchun
-// shu ro'yxatga qo'shish kifoya (masalan 'manager').
-const EMPLOYEE_LOGIN_ROLES = new Set(['support']);
+// v1: 'support' va 'management' (Boshqaruv paneli) xodimlarga webapp login
+// beriladi. Kengaytirish uchun shu ro'yxatga qo'shish kifoya.
+const EMPLOYEE_LOGIN_ROLES = new Set(['support', 'management']);
 
 function base64url(input) {
   return Buffer.from(input).toString('base64url');

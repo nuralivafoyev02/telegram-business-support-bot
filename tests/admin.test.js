@@ -4599,6 +4599,93 @@ async function testLoginRejectsNonSupportEmployeeRole() {
   }
 }
 
+async function testManagementTokenCanAccessKnowledgeDashboard() {
+  const originalSelect = supabase.select;
+  const now = Date.now();
+  const DAY = 24 * 60 * 60 * 1000;
+  const events = [
+    { id: 'e1', submodule_key: 'kassa_qaytarimi', submodule_name: 'Kassa qaytarimi', module_name: 'Kassa', created_at: new Date(now - 2 * DAY).toISOString() }
+  ];
+  const employees = [
+    { id: 'emp-1', username: 'aziza', full_name: 'Aziza', role: 'support', is_active: true, created_at: new Date(now - 100 * DAY).toISOString() }
+  ];
+  const progress = { e1: { 'emp-1': { learned_at: new Date(now - 1 * DAY).toISOString(), confirmed_at: null } } };
+
+  supabase.select = async (table, params = {}) => {
+    if (table === 'employees') return employees;
+    if (table === 'bot_settings') {
+      if (params.key === 'eq.uyqur_permission_notifications') {
+        return [{ key: 'uyqur_permission_notifications', value: { events, progress } }];
+      }
+      return [];
+    }
+    return [];
+  };
+
+  try {
+    const token = createEmployeeToken({ id: 'mgmt-1', username: 'boshqaruv', role: 'management', tenant_id: 1 });
+
+    const dashboardResult = await callWithToken('uyqurKnowledgeDashboard', { query: { days: 7 }, token });
+    assert.strictEqual(dashboardResult.status, 200);
+    assert.strictEqual(dashboardResult.payload.data.employee_ranking.length, 1);
+    assert.strictEqual(dashboardResult.payload.data.employee_ranking[0].full_name, 'Aziza');
+
+    const moduleDetailResult = await callWithToken('uyqurModuleFunctionsDetail', { query: { module_name: 'Kassa' }, token });
+    assert.strictEqual(moduleDetailResult.status, 200);
+    assert.strictEqual(moduleDetailResult.payload.data.total_functions, 1);
+
+    const profileResult = await callWithToken('uyqurEmployeeKnowledgeProfile', { query: { employee_id: 'emp-1' }, token });
+    assert.strictEqual(profileResult.status, 200);
+    assert.strictEqual(profileResult.payload.data.employee.full_name, 'Aziza');
+  } finally {
+    supabase.select = originalSelect;
+  }
+}
+
+async function testManagementTokenCannotAccessSupportActions() {
+  const token = createEmployeeToken({ id: 'mgmt-1', username: 'boshqaruv', role: 'management', tenant_id: 1 });
+
+  const groupsResult = await callWithToken('groups', { token });
+  assert.strictEqual(groupsResult.status, 403);
+
+  const activityResult = await callWithToken('employeeActivity', { token });
+  assert.strictEqual(activityResult.status, 403);
+
+  const sendResult = await callWithToken('sendMessage', { method: 'POST', body: { chat_id: 1, text: 'salom' }, token });
+  assert.strictEqual(sendResult.status, 403);
+}
+
+async function testSupportTokenCannotAccessManagementActions() {
+  const token = createEmployeeToken({ id: 'emp-1', username: 'aziza', role: 'support', tenant_id: 1 });
+  const result = await callWithToken('uyqurKnowledgeDashboard', { token });
+  assert.strictEqual(result.status, 403);
+}
+
+async function testLoginReturnsManagementTypeForValidCredentials() {
+  const originalSelect = supabase.select;
+  const originalPatch = supabase.patch;
+  const passwordHash = hashPassword('Secret123');
+
+  supabase.select = async (table) => {
+    if (table === 'admins') return [];
+    if (table === 'employees') {
+      return [{ id: 'mgmt-1', tg_user_id: null, full_name: 'Boshqaruv', username: 'boshqaruv', role: 'management', is_active: true, password_hash: passwordHash, tenant_id: 1 }];
+    }
+    return [];
+  };
+  supabase.patch = async (table, query, values) => [{ ...values }];
+
+  try {
+    const result = await authLogin('boshqaruv', 'Secret123');
+    assert.strictEqual(result.admin.type, 'employee');
+    assert.strictEqual(result.admin.role, 'management');
+    assert.ok(result.token);
+  } finally {
+    supabase.select = originalSelect;
+    supabase.patch = originalPatch;
+  }
+}
+
 async function run() {
   await testAiModeEnableSendsMainGroupNotice();
   await testAiModeDisableSendsMainGroupNotice();
@@ -4676,6 +4763,10 @@ async function run() {
   await testLegacyAdminTokenUnaffectedByEmployeeGuards();
   await testLoginReturnsEmployeeTypeForValidSupportCredentials();
   await testLoginRejectsNonSupportEmployeeRole();
+  await testManagementTokenCanAccessKnowledgeDashboard();
+  await testManagementTokenCannotAccessSupportActions();
+  await testSupportTokenCannotAccessManagementActions();
+  await testLoginReturnsManagementTypeForValidCredentials();
   console.log('Admin tests passed');
 }
 

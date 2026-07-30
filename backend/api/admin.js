@@ -42,7 +42,10 @@ const {
   getManagerConfirmers,
   saveManagerConfirmers,
   getManagerEmployees,
-  resetPermissionNotifications
+  resetPermissionNotifications,
+  getKnowledgeDashboard,
+  getModuleFunctionsDetail,
+  getEmployeeKnowledgeProfile
 } = require('../lib/permission-view');
 const {
   syncCompanyReport,
@@ -6485,6 +6488,12 @@ async function updateAdmin(body, currentAdmin) {
 const EMPLOYEE_GET_ACTIONS = new Set(['employeeActivity', 'uyqurSupportHistory', 'groups', 'privates', 'requests', 'chatDetail']);
 const EMPLOYEE_POST_ACTIONS = new Set(['uyqurMarkLearned', 'sendMessage', 'replyRequest']);
 
+// "Boshqaruv paneli" (role='management') xodimlari — o'z chatiga emas,
+// balki BUTUN jamoaning bilim-darajasi statistikasiga (faqat o'qish uchun)
+// kirish huquqiga ega. Support'ning employee_id-scoping mantig'i ularga
+// qo'llanmaydi.
+const MANAGEMENT_GET_ACTIONS = new Set(['uyqurKnowledgeDashboard', 'uyqurModuleFunctionsDetail', 'uyqurEmployeeKnowledgeProfile']);
+
 function forbiddenForEmployeeSession(action) {
   const error = new Error(`Ushbu amal xodim hisobi uchun ruxsat etilmagan: ${action}`);
   error.status = 403;
@@ -6493,10 +6502,14 @@ function forbiddenForEmployeeSession(action) {
 
 async function handleGet(action, query, session) {
   if (isEmployeeSession(session)) {
-    if (!EMPLOYEE_GET_ACTIONS.has(action)) throw forbiddenForEmployeeSession(action);
-    query = { ...query, employee_id: session.employee_id };
-    delete query.tg_user_id;
-    delete query.id;
+    if (session.role === 'management') {
+      if (!MANAGEMENT_GET_ACTIONS.has(action)) throw forbiddenForEmployeeSession(action);
+    } else {
+      if (!EMPLOYEE_GET_ACTIONS.has(action)) throw forbiddenForEmployeeSession(action);
+      query = { ...query, employee_id: session.employee_id };
+      delete query.tg_user_id;
+      delete query.id;
+    }
   }
   switch (action) {
     case 'health': return { ok: true, service: 'admin-api' };
@@ -6547,12 +6560,16 @@ async function handleGet(action, query, session) {
     case 'uyqurManagerReviewQueue': return getManagerReviewQueue();
     case 'uyqurManagerConfirmers': return getManagerConfirmers();
     case 'uyqurManagerEmployees': return getManagerEmployees();
+    case 'uyqurKnowledgeDashboard': return getKnowledgeDashboard({ days: query.days });
+    case 'uyqurModuleFunctionsDetail': return getModuleFunctionsDetail(query.module_name);
+    case 'uyqurEmployeeKnowledgeProfile': return getEmployeeKnowledgeProfile(query.employee_id);
     default: throw new Error(`Unknown GET action: ${action}`);
   }
 }
 
 async function handlePost(action, body, currentAdmin) {
   if (isEmployeeSession(currentAdmin)) {
+    if (currentAdmin.role === 'management') throw forbiddenForEmployeeSession(action);
     if (!EMPLOYEE_POST_ACTIONS.has(action)) throw forbiddenForEmployeeSession(action);
     body = { ...body, employee_id: currentAdmin.employee_id };
   }
