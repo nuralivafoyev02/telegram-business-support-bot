@@ -455,7 +455,9 @@ async function getKnowledgeDashboard({ days = 7 } = {}) {
     }))
   };
 
-  const quadrantPoints = events.map(event => {
+  // "Yangi funksiyalar" — faqat tanlangan davr ichida chiqqan (periodEvents),
+  // butun tarixdagi hodisalar emas.
+  const quadrantPoints = periodEvents.map(event => {
     const learnedCount = employees.filter(employee => Boolean(progressFor(record, event.id, employee.id).learned_at)).length;
     return {
       event_id: event.id,
@@ -466,7 +468,7 @@ async function getKnowledgeDashboard({ days = 7 } = {}) {
     };
   });
 
-  const functionStatus = events.map(event => {
+  const functionStatus = periodEvents.map(event => {
     const notLearnedCount = employees.filter(employee => !progressFor(record, event.id, employee.id).learned_at).length;
     return {
       event_id: event.id,

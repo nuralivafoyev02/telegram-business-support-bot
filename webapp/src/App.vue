@@ -771,24 +771,19 @@
           <div class="card-header">
             <div class="card-title">Yangi funksiyalar holati</div>
           </div>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Funksiya nomi</th>
-                  <th>O‘rganmagan xodimlar</th>
-                  <th>Funksiya chiqqaniga</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="row in knowledgeDashboard.function_status" :key="row.event_id" style="cursor:pointer;"
-                  @click="openModuleFunctionsDetail(row.module_name)">
-                  <td>{{ row.submodule_name }}</td>
-                  <td>{{ row.not_learned_count }} xodim</td>
-                  <td>{{ row.days_since_launch }} kun</td>
-                </tr>
-              </tbody>
-            </table>
+          <div style="display:flex; flex-direction:column; max-height:340px; overflow-y:auto;">
+            <div style="display:flex; align-items:center; gap:8px; padding:6px 0; font-size:11px; text-transform:uppercase; color:#9ca3af; border-bottom:1px solid #f1f5f9;">
+              <span style="flex:1;">Funksiya nomi</span>
+              <span style="width:130px; text-align:right; flex-shrink:0;">O‘rganmagan xodimlar</span>
+              <span style="width:110px; text-align:right; flex-shrink:0;">Chiqqaniga</span>
+            </div>
+            <div v-for="row in knowledgeDashboard.function_status" :key="row.event_id"
+              style="display:flex; align-items:center; gap:8px; padding:8px 0; border-bottom:1px solid #f8fafc; cursor:pointer;"
+              @click="openModuleFunctionsDetail(row.module_name)">
+              <span style="flex:1; min-width:0; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ row.submodule_name }}</span>
+              <span style="width:130px; text-align:right; flex-shrink:0; font-size:14px;">{{ row.not_learned_count }} xodim</span>
+              <span style="width:110px; text-align:right; flex-shrink:0; font-size:14px;">{{ row.days_since_launch }} kun</span>
+            </div>
             <div v-if="!knowledgeDashboard.function_status.length" class="empty">Hozircha funksiya yo‘q</div>
           </div>
         </section>
