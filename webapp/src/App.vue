@@ -588,7 +588,7 @@
           <h1>Boshqaruv paneli</h1>
         </div>
         <div class="topbar-actions">
-          <select class="select" v-model.number="knowledgePeriodDays" @change="changeKnowledgePeriod(knowledgePeriodDays)">
+          <select class="select" v-model="knowledgePeriodDays" @change="changeKnowledgePeriod(knowledgePeriodDays)">
             <option v-for="option in knowledgePeriodOptions" :key="option.key" :value="option.key">{{ option.label }}</option>
           </select>
           <button class="btn topbar-refresh" type="button" :disabled="loadingAction === 'knowledgeDashboard'"
@@ -632,7 +632,7 @@
         </article>
         <article class="card support-summary-card">
           <div class="support-summary-content">
-            <div class="support-summary-title">Oxirgi {{ knowledgePeriodDays }} kunda yangi funksiyalar</div>
+            <div class="support-summary-title">{{ knowledgePeriodDays === 'all' ? 'Barcha vaqtda yangi funksiyalar' : `Oxirgi ${knowledgePeriodDays} kunda yangi funksiyalar` }}</div>
             <div class="support-summary-value-row">
               <div class="support-summary-value">{{ fmtNumber(knowledgeDashboard.kpis.new_functions_period) }} / {{
                 fmtNumber(knowledgeDashboard.kpis.new_functions_learned_period) }}</div>
@@ -4430,7 +4430,8 @@ const knowledgePeriodDays = ref(7);
 const knowledgePeriodOptions = [
   { key: 7, label: '7 kun' },
   { key: 14, label: '14 kun' },
-  { key: 30, label: '30 kun' }
+  { key: 30, label: '30 kun' },
+  { key: 'all', label: 'Hammasi' }
 ];
 const moduleFunctionsDetail = ref(null);
 const employeeKnowledgeProfile = ref(null);
@@ -11560,7 +11561,7 @@ async function loadKnowledgeDashboard() {
 }
 
 async function changeKnowledgePeriod(days) {
-  knowledgePeriodDays.value = Number(days);
+  knowledgePeriodDays.value = days === 'all' ? 'all' : Number(days);
   await loadKnowledgeDashboard();
 }
 

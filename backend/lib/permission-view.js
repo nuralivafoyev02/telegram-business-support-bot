@@ -357,16 +357,20 @@ async function getPermissionView() {
 const KNOWLEDGE_DASHBOARD_PERIOD_DAYS = new Set([7, 14, 30]);
 const NEW_EMPLOYEE_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
+const MAX_DYNAMICS_DAYS = 60;
 
 // "Bilim darajasi %" = shu doiradagi hodisalardan qanchasi "O'rganildi" deb
 // belgilanganligi (learned_at bor-yo'qligi) — menejer tasdiqlashi (confirmed_at)
 // bu hisobga kirmaydi, chunki bu xodimning o'z bilimini aks ettiradi.
 async function getKnowledgeDashboard({ days = 7 } = {}) {
-  const periodDays = KNOWLEDGE_DASHBOARD_PERIOD_DAYS.has(Number(days)) ? Number(days) : 7;
+  const isAllTime = String(days) === 'all';
+  const periodDays = !isAllTime && KNOWLEDGE_DASHBOARD_PERIOD_DAYS.has(Number(days)) ? Number(days) : 7;
   const [employees, record] = await Promise.all([getSupportEmployees(), getNotificationRecord()]);
   const events = record.events;
   const now = Date.now();
-  const periodStartMs = now - periodDays * DAY_MS;
+  // "Hammasi" tanlansa, davr boshlanishi hodisalar tarixining eng boshigacha
+  // cho'ziladi (0), ya'ni hech qanday vaqt bo'yicha filtrlash qo'llanmaydi.
+  const periodStartMs = isAllTime ? 0 : now - periodDays * DAY_MS;
 
   function percentAsOf(employeeId, cutoffMs) {
     const relevant = events.filter(event => new Date(event.created_at).getTime() <= cutoffMs);
@@ -441,8 +445,15 @@ async function getKnowledgeDashboard({ days = 7 } = {}) {
     };
   }).sort((a, b) => b.percent - a.percent);
 
+  let dynamicsDayCount = periodDays;
+  if (isAllTime) {
+    const earliestMs = events.length
+      ? Math.min(...events.map(event => new Date(event.created_at).getTime()))
+      : now;
+    dynamicsDayCount = Math.min(MAX_DYNAMICS_DAYS, Math.max(1, Math.ceil((now - earliestMs) / DAY_MS) + 1));
+  }
   const days_ = [];
-  for (let i = periodDays - 1; i >= 0; i -= 1) {
+  for (let i = dynamicsDayCount - 1; i >= 0; i -= 1) {
     days_.push(new Date(now - i * DAY_MS).toISOString().slice(0, 10));
   }
   const topEmployees = employeeRanking.slice(0, 4);
@@ -495,7 +506,7 @@ async function getKnowledgeDashboard({ days = 7 } = {}) {
     daily_dynamics: dailyDynamics,
     quadrant_points: quadrantPoints,
     function_status: functionStatus,
-    period_days: periodDays
+    period_days: isAllTime ? 'all' : periodDays
   };
 }
 
