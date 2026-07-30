@@ -811,34 +811,31 @@
       </template>
 
       <template v-else-if="managementActiveTab === 'functions'">
-        <section class="card pad">
-          <div class="card-header">
-            <div class="card-title">Barcha funksiyalar</div>
-            <div class="card-note">Uyqur tizimidagi barcha modul va funksiyalar ro‘yxati</div>
+        <section class="card pad settings-card">
+          <div class="settings-head">
+            <div class="uyqur-functions-group-title">
+              <div class="card-title">Uyqur Funksiyalari</div>
+              <span class="uyqur-functions-percent uyqur-functions-percent-overall">Umumiy {{ overallPermissionPercent }}%</span>
+            </div>
           </div>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Modul</th>
-                  <th>Funksiya</th>
-                  <th>Holati</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="row in allFunctionsRows" :key="`${row.module_name}-${row.submodule_name}`">
-                  <td>{{ row.module_name }}</td>
-                  <td>{{ row.submodule_name }}</td>
-                  <td>
-                    <span class="badge" :class="row.tracked ? 'green' : 'orange'">
-                      {{ row.tracked ? 'Kuzatilmoqda' : 'Kuzatilmayapti' }}
-                    </span>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-            <div v-if="!allFunctionsRows.length" class="empty">Funksiya ma’lumoti topilmadi</div>
+          <div class="uyqur-functions-groups" v-if="permissionModules.length">
+            <div class="uyqur-functions-group" v-for="module in permissionModules.filter(m => m.submodules.length)"
+              :key="'all-functions-module-' + module.id">
+              <label class="uyqur-functions-group-head">
+                <span class="uyqur-functions-group-title">
+                  <b>{{ module.name || module.key }}</b>
+                  <span class="uyqur-functions-percent">{{ permissionModulePercent(module) }}%</span>
+                </span>
+                <input class="row-check" type="checkbox" :checked="isPermissionModuleSelected(module)" disabled />
+              </label>
+              <label class="uyqur-functions-row" v-for="submodule in module.submodules"
+                :key="'all-functions-submodule-' + submodule.id">
+                <span>{{ submodule.name || submodule.key }}</span>
+                <input class="row-check" type="checkbox" :checked="isPermissionSelected(submodule.key)" disabled />
+              </label>
+            </div>
           </div>
+          <div v-else class="empty">{{ loadingAction === 'knowledgeDashboard' ? 'Yuklanmoqda...' : 'Funksiyalar topilmadi' }}</div>
         </section>
       </template>
       </div>
@@ -4486,19 +4483,6 @@ const managementTabs = [
   { key: 'functions', label: 'Barcha funksiyalar', icon: '🧩' }
 ];
 const managementActiveTab = ref('dashboard');
-const allFunctionsRows = computed(() => {
-  const rows = [];
-  (permissionModules.value || []).forEach(module => {
-    (module.submodules || []).forEach(submodule => {
-      rows.push({
-        module_name: module.name || module.key,
-        submodule_name: submodule.name || submodule.key,
-        tracked: isPermissionSelected(submodule.key)
-      });
-    });
-  });
-  return rows;
-});
 const knowledgePeriodOptions = [
   { key: 7, label: '7 kun' },
   { key: 14, label: '14 kun' },
