@@ -1612,9 +1612,13 @@
                 </button>
               </div>
               <div class="uyqur-functions-groups" v-if="permissionModules.length">
-                <div class="uyqur-functions-group" v-for="module in permissionModules" :key="'module-' + module.id">
+                <div class="uyqur-functions-group" v-for="module in permissionModules.filter(m => m.submodules.length)"
+                  :key="'module-' + module.id">
                   <label class="uyqur-functions-group-head">
-                    <b>{{ module.name || module.key }}</b>
+                    <span class="uyqur-functions-group-title">
+                      <b>{{ module.name || module.key }}</b>
+                      <span class="uyqur-functions-percent">{{ permissionModulePercent(module) }}%</span>
+                    </span>
                     <input class="row-check" type="checkbox" :checked="isPermissionModuleSelected(module)"
                       @change="togglePermissionModule(module, $event.target.checked)" />
                   </label>
@@ -9538,6 +9542,13 @@ function togglePermissionSubmodule(key, checked) {
 function isPermissionModuleSelected(module) {
   const keys = (module.submodules || []).map(submodule => String(submodule.key));
   return keys.length > 0 && keys.every(key => permissionSelected.value.includes(key));
+}
+
+function permissionModulePercent(module) {
+  const keys = (module.submodules || []).map(submodule => String(submodule.key));
+  if (!keys.length) return 0;
+  const checked = keys.filter(key => permissionSelected.value.includes(key)).length;
+  return Math.round((checked / keys.length) * 100);
 }
 
 function togglePermissionModule(module, checked) {
