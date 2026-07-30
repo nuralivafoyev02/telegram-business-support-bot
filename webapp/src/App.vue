@@ -1612,6 +1612,14 @@
                 </button>
               </div>
               <div class="uyqur-functions-groups" v-if="permissionModules.length">
+                <div class="uyqur-functions-group uyqur-functions-summary">
+                  <div class="uyqur-functions-group-head">
+                    <span class="uyqur-functions-group-title">
+                      <b>Umumiy</b>
+                      <span class="uyqur-functions-percent">{{ overallPermissionPercent }}%</span>
+                    </span>
+                  </div>
+                </div>
                 <div class="uyqur-functions-group" v-for="module in permissionModules.filter(m => m.submodules.length)"
                   :key="'module-' + module.id">
                   <label class="uyqur-functions-group-head">
@@ -9550,6 +9558,13 @@ function permissionModulePercent(module) {
   const checked = keys.filter(key => permissionSelected.value.includes(key)).length;
   return Math.round((checked / keys.length) * 100);
 }
+
+const overallPermissionPercent = computed(() => {
+  const keys = permissionModules.value.flatMap(module => (module.submodules || []).map(submodule => String(submodule.key)));
+  if (!keys.length) return 0;
+  const checked = keys.filter(key => permissionSelected.value.includes(key)).length;
+  return Math.round((checked / keys.length) * 100);
+});
 
 function togglePermissionModule(module, checked) {
   const keys = (module.submodules || []).map(submodule => String(submodule.key));

@@ -3596,6 +3596,15 @@ body {
   border-right: none;
 }
 
+.uyqur-functions-summary {
+  min-width: 130px;
+}
+
+.uyqur-functions-summary .uyqur-functions-percent {
+  background: rgba(34, 197, 94, .16);
+  color: #16a34a;
+}
+
 .uyqur-functions-group-head {
   display: flex;
   align-items: center;
