@@ -596,6 +596,13 @@
             @click="loadKnowledgeDashboard">
             {{ loadingAction === 'knowledgeDashboard' ? 'Yangilanmoqda...' : 'Yangilash' }}
           </button>
+          <span class="profile-action" style="cursor:default;">
+            <span class="profile-avatar">{{ managementInitials }}</span>
+            <span>
+              <b style="display:block;">{{ account?.full_name || 'Boshqaruv' }}</b>
+              <small style="color:var(--muted,#6b7280);">Boshqaruv paneli</small>
+            </span>
+          </span>
           <button class="btn" type="button" @click="logout">Chiqish</button>
         </div>
       </header>
@@ -606,11 +613,12 @@
             <div class="support-summary-title">O‘rtacha umumiy bilim darajasi</div>
             <div class="support-summary-value-row">
               <div class="support-summary-value">{{ fmtPercent(knowledgeDashboard.kpis.avg_knowledge_pct) }}</div>
+              <span class="trend-label" :class="(knowledgeDashboard.kpis.avg_knowledge_change_pct || 0) >= 0 ? 'good' : 'bad'">
+                {{ (knowledgeDashboard.kpis.avg_knowledge_change_pct || 0) >= 0 ? '↑' : '↓' }}
+                {{ fmtNumber(Math.abs(knowledgeDashboard.kpis.avg_knowledge_change_pct || 0)) }}%
+              </span>
             </div>
-            <div class="support-summary-note">
-              {{ (knowledgeDashboard.kpis.avg_knowledge_change_pct || 0) >= 0 ? '↑' : '↓' }}
-              {{ fmtNumber(Math.abs(knowledgeDashboard.kpis.avg_knowledge_change_pct || 0)) }}% davr boshiga nisbatan
-            </div>
+            <div class="support-summary-note">davr boshiga nisbatan</div>
           </div>
         </article>
         <article class="card support-summary-card">
@@ -654,7 +662,7 @@
         </article>
       </div>
 
-      <div style="display:grid; grid-template-columns: 1fr 1.3fr 1.3fr; gap:16px; margin-top:16px; align-items:start;">
+      <div style="display:grid; grid-template-columns: 1fr 1.5fr 1.5fr; gap:16px; margin-top:16px; align-items:start;">
         <section class="card pad">
           <div class="card-header">
             <div class="card-title">Modullar bo‘yicha bilim darajasi</div>
@@ -663,7 +671,9 @@
             <div v-for="module in knowledgeDashboard.module_bars" :key="module.module_name"
               style="display:flex; align-items:center; gap:10px; cursor:pointer;"
               @click="openModuleFunctionsDetail(module.module_name)">
-              <span style="width:80px; flex-shrink:0; font-size:13px;">{{ module.module_name }}</span>
+              <span style="width:100px; flex-shrink:0; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                {{ moduleIcon(module.module_name) }} {{ module.module_name }}
+              </span>
               <div style="flex:1; height:8px; border-radius:4px; background:#f1f5f9; overflow:hidden;">
                 <div :style="{ width: module.percent + '%', height: '100%', borderRadius: '4px', background: module.percent >= 70 ? '#16a34a' : (module.percent >= 40 ? '#f59e0b' : '#dc2626') }"></div>
               </div>
@@ -677,8 +687,8 @@
           <div class="card-header">
             <div class="card-title">Xodimlar reytingi</div>
           </div>
-          <div class="table-wrap">
-            <table>
+          <div class="table-wrap" style="overflow-x:auto;">
+            <table style="font-size:13px;">
               <thead>
                 <tr>
                   <th>#</th>
@@ -691,10 +701,13 @@
                 <tr v-for="(row, index) in knowledgeDashboard.employee_ranking" :key="row.employee_id"
                   style="cursor:pointer;" @click="openEmployeeKnowledgeProfile(row.employee_id)">
                   <td>{{ index + 1 }}</td>
-                  <td>{{ row.full_name }}</td>
+                  <td>
+                    <span class="profile-avatar" style="width:24px; height:24px; font-size:11px; margin-right:6px; vertical-align:middle;">{{ initialsFromText(row.full_name) }}</span>
+                    {{ row.full_name }}
+                  </td>
                   <td>{{ row.percent }}%</td>
                   <td>
-                    <span :style="{ color: row.change_pct >= 0 ? '#16a34a' : '#dc2626' }">
+                    <span class="trend-label" :class="row.change_pct >= 0 ? 'good' : 'bad'">
                       {{ row.change_pct >= 0 ? '↑' : '↓' }} {{ fmtNumber(Math.abs(row.change_pct)) }}%
                     </span>
                   </td>
@@ -709,11 +722,12 @@
           <div class="card-header">
             <div class="card-title">Modullar bo‘yicha bilim darajasi dinamikasi</div>
           </div>
+          <div style="overflow-x:auto;">
           <svg :viewBox="`0 0 ${KNOWLEDGE_TREND_VIEW.width} ${KNOWLEDGE_TREND_VIEW.height}`" role="img"
-            aria-label="Bilim darajasi dinamikasi" style="width:100%; height:auto;">
+            aria-label="Bilim darajasi dinamikasi" style="width:100%; height:auto; min-width:320px;">
             <line v-for="tick in knowledgeTrendYTicks" :key="`kt-y-${tick.value}`" :x1="KNOWLEDGE_TREND_DIMS.left"
               :x2="KNOWLEDGE_TREND_DIMS.right" :y1="tick.y" :y2="tick.y" stroke="#f1f5f9" />
-            <text v-for="tick in knowledgeTrendYTicks" :key="`kt-yl-${tick.value}`" x="42" :y="tick.y + 4"
+            <text v-for="tick in knowledgeTrendYTicks" :key="`kt-yl-${tick.value}`" x="44" :y="tick.y + 4"
               text-anchor="end" font-size="10" fill="#9ca3af">{{ tick.value }}</text>
             <g v-for="line in knowledgeTrendLines" :key="line.key">
               <path v-if="line.path" :d="line.path" fill="none" :stroke="line.color" stroke-width="2"
@@ -725,6 +739,7 @@
               :y="KNOWLEDGE_TREND_DIMS.bottom + 16" text-anchor="middle" font-size="10" fill="#9ca3af">{{ tick.label
               }}</text>
           </svg>
+          </div>
           <div style="display:flex; flex-wrap:wrap; gap:10px; margin-top:8px;">
             <span v-for="line in knowledgeTrendLines" :key="`legend-${line.key}`"
               style="display:flex; align-items:center; gap:5px; font-size:11px;">
@@ -740,11 +755,12 @@
           <div class="card-header">
             <div class="card-title">Yangi funksiyalar o‘zlashtirilishi</div>
           </div>
+          <div style="overflow-x:auto;">
           <svg :viewBox="`0 0 ${KNOWLEDGE_QUADRANT_VIEW.width} ${KNOWLEDGE_QUADRANT_VIEW.height}`" role="img"
-            aria-label="Yangi funksiyalar o‘zlashtirilishi" style="width:100%; height:auto;">
+            aria-label="Yangi funksiyalar o‘zlashtirilishi" style="width:100%; height:auto; min-width:320px;">
             <line v-for="tick in knowledgeQuadrantYTicks" :key="`kq-y-${tick.value}`" :x1="KNOWLEDGE_QUADRANT_DIMS.left"
               :x2="KNOWLEDGE_QUADRANT_DIMS.right" :y1="tick.y" :y2="tick.y" stroke="#f8fafc" />
-            <text v-for="tick in knowledgeQuadrantYTicks" :key="`kq-yl-${tick.value}`" x="42" :y="tick.y + 4"
+            <text v-for="tick in knowledgeQuadrantYTicks" :key="`kq-yl-${tick.value}`" x="44" :y="tick.y + 4"
               text-anchor="end" font-size="10" fill="#9ca3af">{{ tick.value }}%</text>
             <circle v-for="point in knowledgeQuadrantPoints" :key="point.event_id" :cx="point.x" :cy="point.y" r="6"
               :fill="point.color" fill-opacity="0.85" style="cursor:pointer;"
@@ -755,6 +771,7 @@
               :y="KNOWLEDGE_QUADRANT_DIMS.bottom + 16" text-anchor="middle" font-size="10" fill="#9ca3af">{{
               tick.label }}</text>
           </svg>
+          </div>
           <div v-if="!knowledgeQuadrantPoints.length" class="empty compact">Hozircha funksiya yo‘q</div>
         </section>
 
@@ -812,8 +829,24 @@
                 <td>{{ index + 1 }}</td>
                 <td>{{ fn.submodule_name }}</td>
                 <td>{{ fmtDate(fn.created_at) }}</td>
-                <td>{{ fn.learned_employees.length }} xodim — {{ fn.learned_employees.map(row => row.full_name).join(', ') || '—' }}</td>
-                <td>{{ fn.not_learned_employees.length }} xodim — {{ fn.not_learned_employees.map(row => row.full_name).join(', ') || '—' }}</td>
+                <td>
+                  <span style="display:inline-flex; align-items:center;">
+                    <span v-for="person in fn.learned_employees.slice(0, 4)" :key="`learned-${fn.event_id}-${person.id}`"
+                      class="profile-avatar" :title="person.full_name"
+                      style="width:22px; height:22px; font-size:10px; margin-left:-6px; border:2px solid #fff;">{{ initialsFromText(person.full_name) }}</span>
+                    <b v-if="fn.learned_employees.length > 4" style="margin-left:6px; font-size:12px;">+{{ fn.learned_employees.length - 4 }}</b>
+                    <span v-if="!fn.learned_employees.length" class="empty compact" style="padding:0;">—</span>
+                  </span>
+                </td>
+                <td>
+                  <span style="display:inline-flex; align-items:center;">
+                    <span v-for="person in fn.not_learned_employees.slice(0, 4)" :key="`not-learned-${fn.event_id}-${person.id}`"
+                      class="profile-avatar" :title="person.full_name"
+                      style="width:22px; height:22px; font-size:10px; margin-left:-6px; border:2px solid #fff; background:#fee2e2; color:#dc2626;">{{ initialsFromText(person.full_name) }}</span>
+                    <b v-if="fn.not_learned_employees.length > 4" style="margin-left:6px; font-size:12px;">+{{ fn.not_learned_employees.length - 4 }}</b>
+                    <span v-if="!fn.not_learned_employees.length" class="empty compact" style="padding:0;">—</span>
+                  </span>
+                </td>
                 <td>{{ fn.days_since_launch }} kun</td>
               </tr>
             </tbody>
@@ -4648,6 +4681,10 @@ const settingsSections = [
 const userInitials = computed(() => {
   const source = adminForm.full_name || adminForm.username || 'Uyqur';
   return String(source).split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]?.toUpperCase()).join('') || 'UQ';
+});
+const managementInitials = computed(() => {
+  const source = account.value?.full_name || account.value?.username || 'Boshqaruv';
+  return String(source).split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]?.toUpperCase()).join('') || 'BP';
 });
 const loginFeedback = computed(() => loginError.value || loginStatus.value);
 const loginButtonText = computed(() => loadingAction.value === 'login' ? 'Tekshirilmoqda...' : 'Kirish');
@@ -11629,6 +11666,24 @@ const knowledgeTrendXTicks = computed(() => {
 
 const KNOWLEDGE_QUADRANT_VIEW = Object.freeze({ width: 820, height: 360 });
 const KNOWLEDGE_QUADRANT_DIMS = Object.freeze({ left: 60, right: 780, top: 30, bottom: 300 });
+
+const MODULE_ICONS = {
+  kassa: '💰',
+  ombor: '📦',
+  omborxona: '📦',
+  taminot: '🛒',
+  monitoring: '📊',
+  sotuv: '🛍️',
+  moliya: '💵',
+  hrm: '👥',
+  kontragent: '🤝',
+  loyiha: '📁'
+};
+
+function moduleIcon(name = '') {
+  const key = String(name).toLowerCase().replace(/[^a-zʻʼ']/gi, '');
+  return MODULE_ICONS[key] || '🧩';
+}
 
 function quadrantPointColor(percent) {
   if (percent >= 70) return '#16a34a';
