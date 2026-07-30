@@ -586,7 +586,6 @@
       <header class="topbar" style="margin-bottom:20px;">
         <div class="page-title">
           <h1>Boshqaruv paneli</h1>
-          <p class="card-note">Support jamoasi bilim darajasi va faoliyat ko‘rsatkichlari</p>
         </div>
         <div class="topbar-actions">
           <select class="select" v-model.number="knowledgePeriodDays" @change="changeKnowledgePeriod(knowledgePeriodDays)">
@@ -665,7 +664,7 @@
           <div class="card-header">
             <div class="card-title">Modullar bo‘yicha bilim darajasi</div>
           </div>
-          <div style="display:flex; flex-direction:column; gap:12px;">
+          <div style="display:flex; flex-direction:column; gap:12px; max-height:300px; overflow-y:auto;">
             <div v-for="module in knowledgeDashboard.module_bars" :key="module.module_name"
               style="display:flex; align-items:center; gap:10px; cursor:pointer;"
               @click="openModuleFunctionsDetail(module.module_name)">
@@ -685,41 +684,28 @@
           <div class="card-header">
             <div class="card-title">Xodimlar reytingi</div>
           </div>
-          <div class="table-wrap">
-            <table style="font-size:13px; table-layout:fixed; width:100%;">
-              <colgroup>
-                <col style="width:24px;">
-                <col>
-                <col style="width:58px;">
-                <col style="width:64px;">
-              </colgroup>
-              <thead>
-                <tr>
-                  <th>#</th>
-                  <th>Xodim</th>
-                  <th>Daraja</th>
-                  <th>O‘zgarish</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="(row, index) in knowledgeDashboard.employee_ranking" :key="row.employee_id"
-                  style="cursor:pointer;" @click="openEmployeeKnowledgeProfile(row.employee_id)">
-                  <td>{{ index + 1 }}</td>
-                  <td style="overflow:hidden;">
-                    <span style="display:flex; align-items:center; gap:6px; min-width:0;">
-                      <span class="profile-avatar" style="width:22px; height:22px; font-size:10px; flex-shrink:0;">{{ initialsFromText(row.full_name) }}</span>
-                      <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0;">{{ row.full_name }}</span>
-                    </span>
-                  </td>
-                  <td>{{ row.percent }}%</td>
-                  <td>
-                    <span class="trend-label" :class="row.change_pct >= 0 ? 'good' : 'bad'" style="white-space:nowrap;">
-                      {{ row.change_pct >= 0 ? '↑' : '↓' }}{{ fmtNumber(Math.abs(row.change_pct)) }}%
-                    </span>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+          <div style="display:flex; flex-direction:column; max-height:300px; overflow-y:auto;">
+            <div style="display:flex; align-items:center; gap:8px; padding:6px 0; font-size:11px; text-transform:uppercase; color:#9ca3af; border-bottom:1px solid #f1f5f9;">
+              <span style="width:20px; flex-shrink:0;">#</span>
+              <span style="flex:1;">Xodim</span>
+              <span style="width:44px; text-align:right; flex-shrink:0;">Daraja</span>
+              <span style="width:56px; text-align:right; flex-shrink:0;">O‘zgarish</span>
+            </div>
+            <div v-for="(row, index) in knowledgeDashboard.employee_ranking" :key="row.employee_id"
+              style="display:flex; align-items:center; gap:8px; padding:8px 0; border-bottom:1px solid #f8fafc; cursor:pointer;"
+              @click="openEmployeeKnowledgeProfile(row.employee_id)">
+              <span style="width:20px; flex-shrink:0; font-size:13px;">{{ index + 1 }}</span>
+              <span style="flex:1; display:flex; align-items:center; gap:6px; min-width:0;">
+                <span class="profile-avatar" style="width:22px; height:22px; font-size:10px; flex-shrink:0;">{{ initialsFromText(row.full_name) }}</span>
+                <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; font-size:13px;">{{ row.full_name }}</span>
+              </span>
+              <span style="width:44px; text-align:right; flex-shrink:0; font-size:13px; font-weight:600;">{{ row.percent }}%</span>
+              <span style="width:56px; text-align:right; flex-shrink:0;">
+                <span class="trend-label" :class="row.change_pct >= 0 ? 'good' : 'bad'" style="white-space:nowrap;">
+                  {{ row.change_pct >= 0 ? '↑' : '↓' }}{{ fmtNumber(Math.abs(row.change_pct)) }}%
+                </span>
+              </span>
+            </div>
             <div v-if="!knowledgeDashboard.employee_ranking.length" class="empty">Support xodim topilmadi</div>
           </div>
         </section>
