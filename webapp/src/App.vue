@@ -638,9 +638,7 @@
               <div class="support-summary-value">{{ fmtNumber(knowledgeDashboard.kpis.new_functions_period) }} / {{
                 fmtNumber(knowledgeDashboard.kpis.new_functions_learned_period) }}</div>
             </div>
-            <div class="support-summary-note">{{ fmtNumber(knowledgeDashboard.kpis.new_functions_period) }} ta yangi
-              funksiya, {{ fmtNumber(knowledgeDashboard.kpis.new_functions_learned_period) }} tasi butun jamoa
-              tomonidan o‘rganilgan</div>
+            <div class="support-summary-note">jami / butun jamoa o‘rgangan</div>
           </div>
         </article>
         <article class="card support-summary-card">
@@ -662,7 +660,7 @@
         </article>
       </div>
 
-      <div style="display:grid; grid-template-columns: 1fr 1.5fr 1.5fr; gap:16px; margin-top:16px; align-items:start;">
+      <div style="display:grid; grid-template-columns: 1fr 1.6fr 1.3fr; gap:16px; margin-top:16px; align-items:stretch;">
         <section class="card pad">
           <div class="card-header">
             <div class="card-title">Modullar bo‘yicha bilim darajasi</div>
@@ -687,13 +685,19 @@
           <div class="card-header">
             <div class="card-title">Xodimlar reytingi</div>
           </div>
-          <div class="table-wrap" style="overflow-x:auto;">
-            <table style="font-size:13px;">
+          <div class="table-wrap">
+            <table style="font-size:13px; table-layout:fixed; width:100%;">
+              <colgroup>
+                <col style="width:24px;">
+                <col>
+                <col style="width:58px;">
+                <col style="width:64px;">
+              </colgroup>
               <thead>
                 <tr>
                   <th>#</th>
                   <th>Xodim</th>
-                  <th>Bilim darajasi</th>
+                  <th>Daraja</th>
                   <th>O‘zgarish</th>
                 </tr>
               </thead>
@@ -701,14 +705,16 @@
                 <tr v-for="(row, index) in knowledgeDashboard.employee_ranking" :key="row.employee_id"
                   style="cursor:pointer;" @click="openEmployeeKnowledgeProfile(row.employee_id)">
                   <td>{{ index + 1 }}</td>
-                  <td>
-                    <span class="profile-avatar" style="width:24px; height:24px; font-size:11px; margin-right:6px; vertical-align:middle;">{{ initialsFromText(row.full_name) }}</span>
-                    {{ row.full_name }}
+                  <td style="overflow:hidden;">
+                    <span style="display:flex; align-items:center; gap:6px; min-width:0;">
+                      <span class="profile-avatar" style="width:22px; height:22px; font-size:10px; flex-shrink:0;">{{ initialsFromText(row.full_name) }}</span>
+                      <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0;">{{ row.full_name }}</span>
+                    </span>
                   </td>
                   <td>{{ row.percent }}%</td>
                   <td>
-                    <span class="trend-label" :class="row.change_pct >= 0 ? 'good' : 'bad'">
-                      {{ row.change_pct >= 0 ? '↑' : '↓' }} {{ fmtNumber(Math.abs(row.change_pct)) }}%
+                    <span class="trend-label" :class="row.change_pct >= 0 ? 'good' : 'bad'" style="white-space:nowrap;">
+                      {{ row.change_pct >= 0 ? '↑' : '↓' }}{{ fmtNumber(Math.abs(row.change_pct)) }}%
                     </span>
                   </td>
                 </tr>
@@ -750,7 +756,7 @@
         </section>
       </div>
 
-      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-top:16px; align-items:start;">
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-top:16px; align-items:stretch;">
         <section class="card pad">
           <div class="card-header">
             <div class="card-title">Yangi funksiyalar o‘zlashtirilishi</div>
