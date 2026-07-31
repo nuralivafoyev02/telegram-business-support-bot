@@ -650,35 +650,32 @@
           <b>{{ item.label }}</b>
         </button>
       </nav>
+
+      <div class="top-actions-menu sidebar-profile-menu" style="margin-top:auto; width:100%;" ref="managementMenuRef">
+        <button class="profile-action" type="button" style="width:100%;" :aria-expanded="managementMenuOpen"
+          @click="managementMenuOpen = !managementMenuOpen">
+          <img v-if="managementAvatarUrl" :src="managementAvatarUrl" alt="" class="profile-avatar"
+            style="object-fit:cover; border-radius:50%;" />
+          <span v-else class="profile-avatar" style="border-radius:50%;">{{ managementInitials }}</span>
+          <span>
+            <b style="display:block;">{{ account?.full_name || 'Boshqaruv' }}</b>
+            <small style="color:var(--muted,#6b7280);">Boshqaruv paneli</small>
+          </span>
+          <b>⌄</b>
+        </button>
+        <Transition name="fade">
+          <div v-if="managementMenuOpen" class="actions-dropdown">
+            <button type="button" @click="openManagementProfile">Profilni tahrirlash</button>
+            <button class="danger-menu-item" type="button" @click="logout">Chiqish</button>
+          </div>
+        </Transition>
+      </div>
     </aside>
 
     <section class="main">
       <header class="topbar" style="margin-bottom:20px;">
         <div class="page-title">
           <h1>{{ managementActiveTab === 'functions' ? 'Barcha funksiyalar' : 'Boshqaruv paneli' }}</h1>
-        </div>
-        <div class="topbar-actions">
-          <button class="btn topbar-refresh" type="button" :disabled="loadingAction === 'knowledgeDashboard'"
-            @click="loadKnowledgeDashboard">
-            {{ loadingAction === 'knowledgeDashboard' ? 'Yangilanmoqda...' : 'Yangilash' }}
-          </button>
-          <div class="top-actions-menu" ref="managementMenuRef">
-            <button class="profile-action" type="button" :aria-expanded="managementMenuOpen"
-              @click="managementMenuOpen = !managementMenuOpen">
-              <span class="profile-avatar">{{ managementInitials }}</span>
-              <span>
-                <b style="display:block;">{{ account?.full_name || 'Boshqaruv' }}</b>
-                <small style="color:var(--muted,#6b7280);">Boshqaruv paneli</small>
-              </span>
-              <b>⌄</b>
-            </button>
-            <Transition name="fade">
-              <div v-if="managementMenuOpen" class="actions-dropdown">
-                <button type="button" @click="openManagementProfile">Profilni tahrirlash</button>
-                <button class="danger-menu-item" type="button" @click="logout">Chiqish</button>
-              </div>
-            </Transition>
-          </div>
         </div>
       </header>
 
@@ -10860,6 +10857,7 @@ async function submitLogin() {
       await refreshMyDashboard();
     } else if (isManagementAccount.value) {
       await loadKnowledgeDashboard();
+      loadManagementAvatarPreview();
     } else {
       loadSettings().catch(error => showToast(error.message));
       if (activeTab.value === 'stats') await loadSupportPerformance();
@@ -13664,6 +13662,7 @@ onMounted(async () => {
       await refreshMyDashboard();
     } else if (isManagementAccount.value) {
       await loadKnowledgeDashboard();
+      loadManagementAvatarPreview();
     } else {
       loadSettings().catch(error => showToast(error.message));
       await refresh();

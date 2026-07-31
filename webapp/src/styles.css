@@ -2707,6 +2707,18 @@ body {
   box-shadow: var(--shadow);
 }
 
+.sidebar-profile-menu {
+  position: relative;
+}
+
+.sidebar-profile-menu .actions-dropdown {
+  top: auto;
+  bottom: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  width: auto;
+}
+
 .actions-dropdown button,
 .theme-menu-row {
   display: flex;
