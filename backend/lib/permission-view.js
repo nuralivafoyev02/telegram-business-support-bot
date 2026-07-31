@@ -451,15 +451,31 @@ async function getKnowledgeDashboard({ days = 7 } = {}) {
   const periodFullyLearnedCount = periodEvents.filter(event => employees.length > 0
     && employees.every(employee => Boolean(progressFor(record, event.id, employee.id).learned_at))).length;
 
-  // "O'rganilgan/Jarayonda/Boshlanmagan funksiyalar" — "Xodimlar reytingi"
-  // jadvalidagi har bir qatorning O'rgangan/Jarayonda/Boshlamagan sonlari
-  // yig'indisi (xodim x funksiya juftliklari bo'yicha). Shu sababli yuqoridagi
-  // kartochkalar har doim reytingdagi ustunlar yig'indisiga teng bo'ladi —
-  // ikkalasi bir xil hisoblash asosidan kelib chiqadi.
-  const learnedFunctionsCount = employeeRanking.reduce((sum, row) => sum + row.learned_count, 0);
-  const inProgressFunctionsCount = employeeRanking.reduce((sum, row) => sum + row.in_progress_count, 0);
-  const notStartedFunctionsCount = employeeRanking.reduce((sum, row) => sum + row.not_started_count, 0);
-  const totalFunctionsCount = allSubmodules.length * (employees.length || 0);
+  // "O'rganilgan/Jarayonda/Boshlanmagan funksiyalar" — "Barcha funksiyalar"
+  // bo'limidagi jami songa teng bo'lishi uchun, har bir funksiya (submodule)
+  // FAQAT BITTA marta hisoblanadi (xodim x funksiya juftliklari emas):
+  //  - tanlanmagan yoki hali hodisasi yo'q — "boshlanmagan";
+  //  - hodisasi bor-у hech kim tegmagan (hech kimda learned_at yo'q) — "boshlanmagan";
+  //  - kamida bitta xodim o'rgangan, lekin hech kim tasdiqlamagan — "jarayonda";
+  //  - kamida bitta faol support tasdiqlagan — "o'rganilgan". ("BARCHASI
+  //    tasdiqlashi" shart qilinmaydi — 4+ kishilik jamoada bu deyarli hech
+  //    qachon bajarilmaydi va "0" degan noto'g'ri taassurot beradi.)
+  let learnedFunctionsCount = 0;
+  let inProgressFunctionsCount = 0;
+  let notStartedFunctionsCount = 0;
+  allSubmodules.forEach(key => {
+    const event = selectedKeys.has(key) ? eventBySubmoduleKey.get(key) : null;
+    if (!event) {
+      notStartedFunctionsCount += 1;
+      return;
+    }
+    const confirmedByAny = employees.some(employee => Boolean(progressFor(record, event.id, employee.id).confirmed_at));
+    const learnedByAny = employees.some(employee => Boolean(progressFor(record, event.id, employee.id).learned_at));
+    if (confirmedByAny) learnedFunctionsCount += 1;
+    else if (learnedByAny) inProgressFunctionsCount += 1;
+    else notStartedFunctionsCount += 1;
+  });
+  const totalFunctionsCount = allSubmodules.length;
   const donut = {
     learned_pct: totalFunctionsCount ? Math.round((learnedFunctionsCount / totalFunctionsCount) * 100) : 0,
     in_progress_pct: totalFunctionsCount ? Math.round((inProgressFunctionsCount / totalFunctionsCount) * 100) : 0,
