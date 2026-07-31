@@ -795,13 +795,22 @@
               <div class="card-title">Uyqur Funksiyalari</div>
               <span class="uyqur-functions-percent uyqur-functions-percent-overall">Umumiy {{ overallPermissionPercent }}%</span>
             </div>
+            <div class="company-module-chart-metric-tabs">
+              <button type="button" class="company-module-chart-metric-btn"
+                :class="{ active: permissionDateFilter === 'all' }" @click="permissionDateFilter = 'all'">Hammasi</button>
+              <button type="button" class="company-module-chart-metric-btn"
+                :class="{ active: permissionDateFilter === 'old' }" @click="permissionDateFilter = 'old'">Eski</button>
+              <button type="button" class="company-module-chart-metric-btn"
+                :class="{ active: permissionDateFilter === 'new' }" @click="permissionDateFilter = 'new'">Yangi</button>
+            </div>
             <button class="btn primary" :disabled="loadingAction === 'saveUyqurPermissions'"
               @click="saveUyqurPermissions">
               {{ loadingAction === 'saveUyqurPermissions' ? 'Saqlanmoqda...' : 'Saqlash' }}
             </button>
           </div>
           <div class="uyqur-functions-groups" v-if="permissionModules.length">
-            <div class="uyqur-functions-group" v-for="module in permissionModules.filter(m => m.submodules.length)"
+            <div class="uyqur-functions-group"
+              v-for="module in permissionModules.filter(m => m.submodules.filter(submoduleMatchesDateFilter).length)"
               :key="'all-functions-module-' + module.id">
               <label class="uyqur-functions-group-head">
                 <span class="uyqur-functions-group-title">
@@ -811,7 +820,7 @@
                 <input class="row-check" type="checkbox" :checked="isPermissionModuleSelected(module)"
                   @change="togglePermissionModule(module, $event.target.checked)" />
               </label>
-              <label class="uyqur-functions-row" v-for="submodule in module.submodules"
+              <label class="uyqur-functions-row" v-for="submodule in module.submodules.filter(submoduleMatchesDateFilter)"
                 :key="'all-functions-submodule-' + submodule.id">
                 <span>{{ submodule.name || submodule.key }}</span>
                 <input class="row-check" type="checkbox" :checked="isPermissionSelected(submodule.key)"
@@ -4551,6 +4560,7 @@ const employees = ref([]);
 const clickupTasks = ref([]);
 const permissionModules = ref([]);
 const permissionSelected = ref([]);
+const permissionDateFilter = ref('all');
 const supportOverview = ref([]);
 const selectedSupportId = ref('');
 const selectedSupportName = ref('');
@@ -10558,6 +10568,17 @@ async function loadPermissionView() {
   const data = await api.uyqurPermissions();
   permissionModules.value = Array.isArray(data.modules) ? data.modules : [];
   permissionSelected.value = Array.isArray(data.selected) ? data.selected.map(String) : [];
+}
+
+// Funksiya belgilangan (qo'shilgan) zahoti xodimlarga xabar yuboriladi va
+// shu zahoti "eski" hisoblanadi — kutish yo'q. Shuning uchun: "Eski" = hozir
+// belgilangan (allaqachon qo'shib, xabar yuborilgan) funksiyalar; "Yangi" =
+// hali birorta ham marta belgilanmagan (hali qo'shilmagan/xabar yuborilmagan).
+function submoduleMatchesDateFilter(submodule = {}) {
+  const filter = permissionDateFilter.value;
+  if (filter === 'all') return true;
+  const isOld = isPermissionSelected(submodule.key);
+  return filter === 'old' ? isOld : !isOld;
 }
 
 function isPermissionSelected(key) {
