@@ -731,38 +731,6 @@
         </section>
       </div>
 
-      <section class="card pad" style="margin-top:32px;">
-        <div class="card-header">
-          <div class="card-title">Modullar bo‘yicha bilim darajasi dinamikasi</div>
-        </div>
-        <div style="display:flex; flex-wrap:wrap; gap:10px; margin-bottom:8px;">
-          <span v-for="line in knowledgeTrendLines" :key="`legend-${line.key}`"
-            style="display:flex; align-items:center; gap:5px; font-size:12px;">
-            <span :style="{ width: '8px', height: '8px', borderRadius: '50%', display: 'inline-block', background: line.color }"></span>
-            {{ line.full_name }}
-          </span>
-        </div>
-        <div style="overflow-x:auto;">
-          <svg :viewBox="`0 0 ${KNOWLEDGE_TREND_VIEW.width} ${KNOWLEDGE_TREND_VIEW.height}`" role="img"
-            aria-label="Bilim darajasi dinamikasi" style="width:100%; height:auto; min-width:320px;">
-            <line v-for="tick in knowledgeTrendYTicks" :key="`kt-y-${tick.value}`" :x1="KNOWLEDGE_TREND_DIMS.left"
-              :x2="KNOWLEDGE_TREND_DIMS.right" :y1="tick.y" :y2="tick.y" stroke="#f1f5f9" />
-            <text v-for="tick in knowledgeTrendYTicks" :key="`kt-yl-${tick.value}`" x="44" :y="tick.y + 4"
-              text-anchor="end" font-size="10" fill="#9ca3af">{{ tick.value }}</text>
-            <g v-for="line in knowledgeTrendLines" :key="line.key">
-              <path v-if="line.path" :d="line.path" fill="none" :stroke="line.color" stroke-width="2"
-                stroke-linecap="round" stroke-linejoin="round" />
-              <circle v-for="(point, pointIndex) in line.points" :key="`kt-dot-${line.key}-${pointIndex}`"
-                :cx="point.x" :cy="point.y" r="2.5" :fill="line.color" />
-            </g>
-            <text v-for="tick in knowledgeTrendXTicks" :key="`kt-x-${tick.date_key}`" :x="tick.x"
-              :y="KNOWLEDGE_TREND_DIMS.bottom + 16" text-anchor="middle" font-size="10" fill="#9ca3af">{{ tick.label
-              }}</text>
-          </svg>
-        </div>
-        <div v-if="!knowledgeTrendLines.length" class="empty compact">Dinamika ma’lumoti yo‘q</div>
-      </section>
-
       </template>
 
       <template v-else-if="managementActiveTab === 'functions'">
@@ -11684,36 +11652,6 @@ function exportModuleFunctionsCsv() {
   link.click();
   URL.revokeObjectURL(url);
 }
-
-const KNOWLEDGE_TREND_VIEW = Object.freeze({ width: 820, height: 320 });
-const KNOWLEDGE_TREND_DIMS = Object.freeze({ left: 50, right: 780, top: 30, bottom: 280 });
-const KNOWLEDGE_TREND_COLORS = ['#7c3aed', '#2563eb', '#16a34a', '#f59e0b', '#dc2626', '#0891b2'];
-
-const knowledgeTrendLines = computed(() => {
-  const series = knowledgeDashboard.value.daily_dynamics?.series || [];
-  return series.map((line, index) => {
-    const rows = (line.points || []).map(value => ({ value }));
-    const points = lineChartPoints(rows, 100, KNOWLEDGE_TREND_DIMS);
-    return {
-      key: line.employee_id,
-      full_name: line.full_name,
-      color: KNOWLEDGE_TREND_COLORS[index % KNOWLEDGE_TREND_COLORS.length],
-      points,
-      path: smoothLinePath(points)
-    };
-  });
-});
-const knowledgeTrendYTicks = computed(() => moduleChartYTicks(100, KNOWLEDGE_TREND_DIMS, 25));
-const knowledgeTrendXTicks = computed(() => {
-  const days = knowledgeDashboard.value.daily_dynamics?.days || [];
-  const width = KNOWLEDGE_TREND_DIMS.right - KNOWLEDGE_TREND_DIMS.left;
-  const step = days.length > 1 ? width / (days.length - 1) : 0;
-  return days.map((day, index) => ({
-    date_key: day,
-    label: day.slice(5).replace('-', '.'),
-    x: days.length > 1 ? KNOWLEDGE_TREND_DIMS.left + step * index : KNOWLEDGE_TREND_DIMS.left + width / 2
-  }));
-});
 
 const MODULE_ICON_META = {
   kassa: { icon: '💰', bg: '#fef3c7', color: '#d97706' },
