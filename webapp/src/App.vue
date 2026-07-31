@@ -791,7 +791,6 @@
           <div class="settings-head">
             <div class="uyqur-functions-group-title">
               <div class="card-title">Uyqur Funksiyalari</div>
-              <span class="uyqur-functions-percent uyqur-functions-percent-overall">Umumiy {{ overallPermissionPercent }}%</span>
             </div>
           </div>
           <div class="uyqur-functions-groups" v-if="permissionModulesMerged.length">
@@ -2571,7 +2570,6 @@
               <div class="settings-head">
                 <div class="uyqur-functions-group-title">
                   <div class="card-title">Uyqur Funksiyalari</div>
-                  <span class="uyqur-functions-percent uyqur-functions-percent-overall">Umumiy {{ overallPermissionPercent }}%</span>
                 </div>
                 <button class="btn primary" :disabled="loadingAction === 'saveUyqurPermissions'"
                   @click="saveUyqurPermissions">
@@ -10589,15 +10587,10 @@ function mergeContragentBalance(modules = []) {
 
 const permissionModulesMerged = computed(() => mergeContragentBalance(permissionModules.value));
 
-// Modul o'zida hali "Yuborilmadi" (yangi) funksiyasi bo'lsa — ochiq holatda
-// boshlanadi, aks holda yopiq holatda.
+// Har bir modul default holatda yopiq (yon tomonga, tor ustun) bo'lib
+// boshlanadi — kerak bo'lganda foydalanuvchi o'zi bosib ochadi.
 function computeDefaultExpandedModules() {
-  const expanded = new Set();
-  mergeContragentBalance(permissionModules.value).forEach(module => {
-    const hasPending = (module.submodules || []).some(submodule => !permissionSavedSelected.value.includes(String(submodule.key)));
-    if (hasPending) expanded.add(permissionModuleKey(module));
-  });
-  permissionExpandedModules.value = expanded;
+  permissionExpandedModules.value = new Set();
 }
 
 async function loadPermissionView() {

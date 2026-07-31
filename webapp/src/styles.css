@@ -3613,6 +3613,8 @@ body {
   min-width: 190px;
   padding: 0 16px;
   border-right: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
 }
 
 .uyqur-functions-group:first-child {
@@ -3627,8 +3629,8 @@ body {
    yig'iladi (tepaga emas): butun balandlikni egallaydi, nomi vertikal yozuvda. */
 .uyqur-functions-group.collapsed {
   min-width: 0;
-  width: 44px;
-  padding: 12px 0;
+  width: 64px;
+  padding: 18px 0;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3636,6 +3638,15 @@ body {
 
 .uyqur-functions-group.collapsed:first-child {
   padding-left: 0;
+}
+
+.uyqur-functions-group.collapsed .uyqur-functions-group-head b {
+  font-size: 16px;
+}
+
+.uyqur-functions-group.collapsed .uyqur-functions-percent {
+  font-size: 14px;
+  padding: 4px 10px;
 }
 
 .uyqur-functions-group-head {
@@ -3646,6 +3657,7 @@ body {
   margin-bottom: 6px;
   border-bottom: 1px solid var(--line);
   cursor: pointer;
+  flex-shrink: 0;
 }
 
 .uyqur-functions-group.collapsed .uyqur-functions-group-head {
@@ -3702,8 +3714,10 @@ body {
 .uyqur-functions-card-list {
   display: flex;
   flex-direction: column;
+  align-content: flex-start;
   gap: 6px;
   padding-top: 4px;
+  flex: 1;
 }
 
 .uyqur-functions-card {
