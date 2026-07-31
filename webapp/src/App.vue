@@ -793,44 +793,22 @@
               <div class="card-title">Uyqur Funksiyalari</div>
               <span class="uyqur-functions-percent uyqur-functions-percent-overall">Umumiy {{ overallPermissionPercent }}%</span>
             </div>
-            <div class="card-header-actions" ref="permissionFilterMenuRef">
-              <button class="btn-icon mini-icon" type="button" @click="permissionFilterMenuOpen = !permissionFilterMenuOpen"
-                title="Filtr">
-                <span>☰</span>
-              </button>
-              <Transition name="fade">
-                <div v-if="permissionFilterMenuOpen" class="actions-dropdown mini-dropdown right-align">
-                  <button type="button" @click="permissionDateFilter = 'all'; permissionFilterMenuOpen = false">
-                    <span>{{ permissionDateFilter === 'all' ? '✓ ' : '' }}Hammasi</span>
-                  </button>
-                  <button type="button" @click="permissionDateFilter = 'old'; permissionFilterMenuOpen = false">
-                    <span>{{ permissionDateFilter === 'old' ? '✓ ' : '' }}Yuborildi</span>
-                  </button>
-                  <button type="button" @click="permissionDateFilter = 'new'; permissionFilterMenuOpen = false">
-                    <span>{{ permissionDateFilter === 'new' ? '✓ ' : '' }}Yuborilmadi</span>
-                  </button>
-                </div>
-              </Transition>
-            </div>
           </div>
-          <div class="uyqur-functions-groups" v-if="permissionModules.length">
-            <div class="uyqur-functions-group"
-              v-for="module in permissionModules.filter(m => m.submodules.filter(submoduleMatchesDateFilter).length)"
+          <div class="uyqur-functions-groups" v-if="permissionModulesMerged.length">
+            <div class="uyqur-functions-group" :class="{ collapsed: !isPermissionModuleExpanded(module) }"
+              v-for="module in permissionModulesMerged.filter(m => m.submodules.length)"
               :key="'all-functions-module-' + module.id">
               <div class="uyqur-functions-group-head" @click="togglePermissionModuleExpanded(module)">
+                <span class="uyqur-functions-collapse-icon">›</span>
                 <span class="uyqur-functions-group-title">
                   <b>{{ module.name || module.key }}</b>
                   <span class="uyqur-functions-percent">{{ permissionModulePercent(module) }}%</span>
                 </span>
-                <span class="uyqur-functions-collapse-icon" :class="{ open: isPermissionModuleExpanded(module) }">›</span>
               </div>
               <div class="uyqur-functions-card-list" v-if="isPermissionModuleExpanded(module)">
-                <div class="uyqur-functions-card" v-for="submodule in module.submodules.filter(submoduleMatchesDateFilter)"
+                <div class="uyqur-functions-card" v-for="submodule in module.submodules"
                   :key="'all-functions-submodule-' + submodule.id">
                   <span>{{ submodule.name || submodule.key }}</span>
-                  <span class="uyqur-functions-status-badge" :class="isPermissionSubmoduleSent(submodule) ? 'sent' : 'pending'">
-                    {{ isPermissionSubmoduleSent(submodule) ? 'Yuborildi' : 'Yuborilmadi' }}
-                  </span>
                 </div>
               </div>
             </div>
@@ -2600,22 +2578,19 @@
                   {{ loadingAction === 'saveUyqurPermissions' ? 'Saqlanmoqda...' : 'Saqlash' }}
                 </button>
               </div>
-              <div class="uyqur-functions-groups" v-if="permissionModules.length">
-                <div class="uyqur-functions-group" v-for="module in permissionModules.filter(m => m.submodules.length)"
-                  :key="'module-' + module.id">
+              <div class="uyqur-functions-groups" v-if="permissionModulesMerged.length">
+                <div class="uyqur-functions-group" :class="{ collapsed: !isPermissionModuleExpanded(module) }"
+                  v-for="module in permissionModulesMerged.filter(m => m.submodules.length)" :key="'module-' + module.id">
                   <div class="uyqur-functions-group-head" @click="togglePermissionModuleExpanded(module)">
+                    <span class="uyqur-functions-collapse-icon">›</span>
                     <span class="uyqur-functions-group-title">
                       <b>{{ module.name || module.key }}</b>
                       <span class="uyqur-functions-percent">{{ permissionModulePercent(module) }}%</span>
                     </span>
-                    <span class="uyqur-functions-collapse-icon" :class="{ open: isPermissionModuleExpanded(module) }">›</span>
                   </div>
                   <div class="uyqur-functions-card-list" v-if="isPermissionModuleExpanded(module)">
                     <div class="uyqur-functions-card" v-for="submodule in module.submodules" :key="'submodule-' + submodule.id">
                       <span>{{ submodule.name || submodule.key }}</span>
-                      <span class="uyqur-functions-status-badge" :class="isPermissionSubmoduleSent(submodule) ? 'sent' : 'pending'">
-                        {{ isPermissionSubmoduleSent(submodule) ? 'Yuborildi' : 'Yuborilmadi' }}
-                      </span>
                     </div>
                   </div>
                 </div>
@@ -4579,15 +4554,11 @@ const employees = ref([]);
 const clickupTasks = ref([]);
 const permissionModules = ref([]);
 // Backendga "Saqlash" orqali yozilgan (demak supportlarga bildirishnoma
-// ketgan) funksiyalar to'plami — "Yuborildi/Yuborilmadi" filtri va har bir
-// funksiyaning holat belgisi shunga qarab aniqlanadi. Checkbox yo'q — bu
-// ro'yxat faqat holatni ko'rsatadi, "Saqlash" esa hozirgi daraxtdagi
-// BARCHA funksiyalarni birdaniga yuboradi.
+// ketgan) funksiyalar to'plami — har bir modulning % ko'rsatkichi va
+// standart ochiq/yopiq holati shunga qarab aniqlanadi. Checkbox yo'q —
+// "Saqlash" hozirgi daraxtdagi BARCHA funksiyalarni birdaniga yuboradi.
 const permissionSavedSelected = ref([]);
 const permissionExpandedModules = ref(new Set());
-const permissionDateFilter = ref('new');
-const permissionFilterMenuOpen = ref(false);
-const permissionFilterMenuRef = ref(null);
 const supportOverview = ref([]);
 const selectedSupportId = ref('');
 const selectedSupportName = ref('');
@@ -5728,10 +5699,6 @@ function handleDocumentPointerDown(event) {
     const root = rankingMenuRef.value;
     if (!root || !root.contains(event.target)) rankingMenuOpen.value = false;
   }
-  if (permissionFilterMenuOpen.value) {
-    const root = permissionFilterMenuRef.value;
-    if (!root || !root.contains(event.target)) permissionFilterMenuOpen.value = false;
-  }
   if (moduleCompareMenuOpen.value) {
     const root = moduleCompareMenuRef.value;
     if (!root || !root.contains(event.target)) moduleCompareMenuOpen.value = false;
@@ -5762,7 +5729,6 @@ function handleDocumentKeydown(event) {
   if (event.key === 'Escape') {
     actionMenuOpen.value = false;
     rankingMenuOpen.value = false;
-    permissionFilterMenuOpen.value = false;
     moduleCompareMenuOpen.value = false;
     closeCompanyModuleFilterMenu();
     closeCompanyMrrFilterMenu();
@@ -10605,11 +10571,29 @@ function permissionModuleKey(module = {}) {
   return String(module.key || module.id || '');
 }
 
+// "Kontragent balansi" alohida ustun sifatida ko'rsatilmaydi — uning
+// funksiyalari "Kontragent" ustuniga qo'shib yuboriladi, nomi esa faqat
+// "Kontragent" bo'lib qoladi (faqat ko'rinish uchun — backendga yuborilganda
+// asl kalitlar o'zgarmaydi).
+function mergeContragentBalance(modules = []) {
+  const normalizeKey = value => String(value || '').toLowerCase().replace(/[^a-z]/gi, '');
+  const balansModule = modules.find(module => normalizeKey(module.name || module.key) === 'kontragentbalansi');
+  const hasKontragent = modules.some(module => normalizeKey(module.name || module.key) === 'kontragent');
+  if (!balansModule || !hasKontragent) return modules;
+  return modules
+    .filter(module => module !== balansModule)
+    .map(module => normalizeKey(module.name || module.key) === 'kontragent'
+      ? { ...module, submodules: [...(module.submodules || []), ...(balansModule.submodules || [])] }
+      : module);
+}
+
+const permissionModulesMerged = computed(() => mergeContragentBalance(permissionModules.value));
+
 // Modul o'zida hali "Yuborilmadi" (yangi) funksiyasi bo'lsa — ochiq holatda
 // boshlanadi, aks holda yopiq holatda.
 function computeDefaultExpandedModules() {
   const expanded = new Set();
-  permissionModules.value.forEach(module => {
+  mergeContragentBalance(permissionModules.value).forEach(module => {
     const hasPending = (module.submodules || []).some(submodule => !permissionSavedSelected.value.includes(String(submodule.key)));
     if (hasPending) expanded.add(permissionModuleKey(module));
   });
@@ -10621,20 +10605,6 @@ async function loadPermissionView() {
   permissionModules.value = Array.isArray(data.modules) ? data.modules : [];
   permissionSavedSelected.value = Array.isArray(data.selected) ? data.selected.map(String) : [];
   computeDefaultExpandedModules();
-}
-
-// "Saqlash" bosilib backendga yozilgan (shu bilan xodimlarga bildirishnoma
-// ketgan) funksiya — shu zahoti "Yuborildi" hisoblanadi, qolganlari
-// "Yuborilmadi"da qoladi (checkbox yo'q — bu ro'yxat faqat holatni ko'rsatadi).
-function submoduleMatchesDateFilter(submodule = {}) {
-  const filter = permissionDateFilter.value;
-  if (filter === 'all') return true;
-  const isSent = permissionSavedSelected.value.includes(String(submodule.key));
-  return filter === 'old' ? isSent : !isSent;
-}
-
-function isPermissionSubmoduleSent(submodule = {}) {
-  return permissionSavedSelected.value.includes(String(submodule.key));
 }
 
 function isPermissionModuleExpanded(module = {}) {
