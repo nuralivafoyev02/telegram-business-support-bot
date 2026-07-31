@@ -679,7 +679,7 @@
         </article>
       </div>
 
-      <div style="display:grid; grid-template-columns: 1fr 1.6fr 1.3fr; gap:16px; margin-top:16px; align-items:stretch;">
+      <div style="display:grid; grid-template-columns: 1fr 1.5fr; gap:16px; margin-top:16px; align-items:stretch;">
         <section class="card pad">
           <div class="card-header">
             <div class="card-title">Modullar bo‘yicha bilim darajasi</div>
@@ -688,8 +688,11 @@
             <div v-for="module in knowledgeDashboard.module_bars" :key="module.module_name"
               style="display:flex; align-items:center; gap:12px; cursor:pointer;"
               @click="openModuleFunctionsDetail(module.module_name)">
-              <span style="width:120px; flex-shrink:0; font-size:15px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-                {{ moduleIcon(module.module_name) }} {{ module.module_name }}
+              <span style="display:flex; align-items:center; gap:10px; width:150px; flex-shrink:0;">
+                <span :style="{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', borderRadius: '8px', fontSize: '14px', flexShrink: 0, background: moduleIconMeta(module.module_name).bg, color: moduleIconMeta(module.module_name).color }">
+                  {{ moduleIconMeta(module.module_name).icon }}
+                </span>
+                <span style="font-size:15px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ module.module_name }}</span>
               </span>
               <div style="flex:1; height:10px; border-radius:5px; background:#f1f5f9; overflow:hidden;">
                 <div :style="{ width: module.percent + '%', height: '100%', borderRadius: '5px', background: module.percent >= 70 ? '#16a34a' : (module.percent >= 40 ? '#f59e0b' : '#dc2626') }"></div>
@@ -729,85 +732,8 @@
             <div v-if="!knowledgeDashboard.employee_ranking.length" class="empty">Support xodim topilmadi</div>
           </div>
         </section>
-
-        <section class="card pad">
-          <div class="card-header">
-            <div class="card-title">Modullar bo‘yicha bilim darajasi dinamikasi</div>
-          </div>
-          <div style="overflow-x:auto;">
-          <svg :viewBox="`0 0 ${KNOWLEDGE_TREND_VIEW.width} ${KNOWLEDGE_TREND_VIEW.height}`" role="img"
-            aria-label="Bilim darajasi dinamikasi" style="width:100%; height:auto; min-width:320px;">
-            <line v-for="tick in knowledgeTrendYTicks" :key="`kt-y-${tick.value}`" :x1="KNOWLEDGE_TREND_DIMS.left"
-              :x2="KNOWLEDGE_TREND_DIMS.right" :y1="tick.y" :y2="tick.y" stroke="#f1f5f9" />
-            <text v-for="tick in knowledgeTrendYTicks" :key="`kt-yl-${tick.value}`" x="44" :y="tick.y + 4"
-              text-anchor="end" font-size="10" fill="#9ca3af">{{ tick.value }}</text>
-            <g v-for="line in knowledgeTrendLines" :key="line.key">
-              <path v-if="line.path" :d="line.path" fill="none" :stroke="line.color" stroke-width="2"
-                stroke-linecap="round" stroke-linejoin="round" />
-              <circle v-for="(point, pointIndex) in line.points" :key="`kt-dot-${line.key}-${pointIndex}`"
-                :cx="point.x" :cy="point.y" r="2.5" :fill="line.color" />
-            </g>
-            <text v-for="tick in knowledgeTrendXTicks" :key="`kt-x-${tick.date_key}`" :x="tick.x"
-              :y="KNOWLEDGE_TREND_DIMS.bottom + 16" text-anchor="middle" font-size="10" fill="#9ca3af">{{ tick.label
-              }}</text>
-          </svg>
-          </div>
-          <div style="display:flex; flex-wrap:wrap; gap:10px; margin-top:8px;">
-            <span v-for="line in knowledgeTrendLines" :key="`legend-${line.key}`"
-              style="display:flex; align-items:center; gap:5px; font-size:11px;">
-              <span :style="{ width: '8px', height: '8px', borderRadius: '50%', display: 'inline-block', background: line.color }"></span>
-              {{ line.full_name }}
-            </span>
-          </div>
-        </section>
       </div>
 
-      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-top:16px; align-items:stretch;">
-        <section class="card pad">
-          <div class="card-header">
-            <div class="card-title">Yangi funksiyalar o‘zlashtirilishi</div>
-          </div>
-          <div style="overflow-x:auto;">
-          <svg :viewBox="`0 0 ${KNOWLEDGE_QUADRANT_VIEW.width} ${KNOWLEDGE_QUADRANT_VIEW.height}`" role="img"
-            aria-label="Yangi funksiyalar o‘zlashtirilishi" style="width:100%; height:auto; min-width:320px;">
-            <line v-for="tick in knowledgeQuadrantYTicks" :key="`kq-y-${tick.value}`" :x1="KNOWLEDGE_QUADRANT_DIMS.left"
-              :x2="KNOWLEDGE_QUADRANT_DIMS.right" :y1="tick.y" :y2="tick.y" stroke="#f8fafc" />
-            <text v-for="tick in knowledgeQuadrantYTicks" :key="`kq-yl-${tick.value}`" x="44" :y="tick.y + 4"
-              text-anchor="end" font-size="10" fill="#9ca3af">{{ tick.value }}%</text>
-            <circle v-for="point in knowledgeQuadrantPoints" :key="point.event_id" :cx="point.x" :cy="point.y" r="6"
-              :fill="point.color" fill-opacity="0.85" style="cursor:pointer;"
-              @click="openModuleFunctionsDetail(point.module_name)">
-              <title>{{ point.submodule_name }} — {{ point.percent }}%</title>
-            </circle>
-            <text v-for="tick in knowledgeQuadrantXTicks" :key="`kq-x-${tick.label}`" :x="tick.x"
-              :y="KNOWLEDGE_QUADRANT_DIMS.bottom + 16" text-anchor="middle" font-size="10" fill="#9ca3af">{{
-              tick.label }}</text>
-          </svg>
-          </div>
-          <div v-if="!knowledgeQuadrantPoints.length" class="empty compact">Hozircha funksiya yo‘q</div>
-        </section>
-
-        <section class="card pad">
-          <div class="card-header">
-            <div class="card-title">Yangi funksiyalar holati</div>
-          </div>
-          <div style="display:flex; flex-direction:column; max-height:340px; overflow-y:auto;">
-            <div style="display:flex; align-items:center; gap:8px; padding:6px 0; font-size:11px; text-transform:uppercase; color:#9ca3af; border-bottom:1px solid #f1f5f9;">
-              <span style="flex:1;">Funksiya nomi</span>
-              <span style="width:130px; text-align:right; flex-shrink:0;">O‘rganmagan xodimlar</span>
-              <span style="width:110px; text-align:right; flex-shrink:0;">Chiqqaniga</span>
-            </div>
-            <div v-for="row in knowledgeDashboard.function_status" :key="row.event_id"
-              style="display:flex; align-items:center; gap:8px; padding:8px 0; border-bottom:1px solid #f8fafc; cursor:pointer;"
-              @click="openModuleFunctionsDetail(row.module_name)">
-              <span style="flex:1; min-width:0; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ row.submodule_name }}</span>
-              <span style="width:130px; text-align:right; flex-shrink:0; font-size:14px;">{{ row.not_learned_count }} xodim</span>
-              <span style="width:110px; text-align:right; flex-shrink:0; font-size:14px;">{{ row.days_since_launch }} kun</span>
-            </div>
-            <div v-if="!knowledgeDashboard.function_status.length" class="empty">Hozircha funksiya yo‘q</div>
-          </div>
-        </section>
-      </div>
       </template>
 
       <template v-else-if="managementActiveTab === 'functions'">
@@ -11738,94 +11664,24 @@ function exportModuleFunctionsCsv() {
   URL.revokeObjectURL(url);
 }
 
-const KNOWLEDGE_TREND_VIEW = Object.freeze({ width: 820, height: 320 });
-const KNOWLEDGE_TREND_DIMS = Object.freeze({ left: 50, right: 780, top: 30, bottom: 280 });
-const KNOWLEDGE_TREND_COLORS = ['#7c3aed', '#2563eb', '#16a34a', '#f59e0b', '#dc2626', '#0891b2'];
-
-const knowledgeTrendLines = computed(() => {
-  const series = knowledgeDashboard.value.daily_dynamics?.series || [];
-  return series.map((line, index) => {
-    const rows = (line.points || []).map(value => ({ value }));
-    const points = lineChartPoints(rows, 100, KNOWLEDGE_TREND_DIMS);
-    return {
-      key: line.employee_id,
-      full_name: line.full_name,
-      color: KNOWLEDGE_TREND_COLORS[index % KNOWLEDGE_TREND_COLORS.length],
-      points,
-      path: smoothLinePath(points)
-    };
-  });
-});
-const knowledgeTrendYTicks = computed(() => moduleChartYTicks(100, KNOWLEDGE_TREND_DIMS, 25));
-const knowledgeTrendXTicks = computed(() => {
-  const days = knowledgeDashboard.value.daily_dynamics?.days || [];
-  const width = KNOWLEDGE_TREND_DIMS.right - KNOWLEDGE_TREND_DIMS.left;
-  const step = days.length > 1 ? width / (days.length - 1) : 0;
-  return days.map((day, index) => ({
-    date_key: day,
-    label: day.slice(5).replace('-', '.'),
-    x: days.length > 1 ? KNOWLEDGE_TREND_DIMS.left + step * index : KNOWLEDGE_TREND_DIMS.left + width / 2
-  }));
-});
-
-const KNOWLEDGE_QUADRANT_VIEW = Object.freeze({ width: 820, height: 360 });
-const KNOWLEDGE_QUADRANT_DIMS = Object.freeze({ left: 60, right: 780, top: 30, bottom: 300 });
-
-const MODULE_ICONS = {
-  kassa: '💰',
-  ombor: '📦',
-  omborxona: '📦',
-  taminot: '🛒',
-  monitoring: '📊',
-  sotuv: '🛍️',
-  moliya: '💵',
-  hrm: '👥',
-  kontragent: '🤝',
-  loyiha: '📁'
+const MODULE_ICON_META = {
+  kassa: { icon: '💰', bg: '#fef3c7', color: '#d97706' },
+  ombor: { icon: '📦', bg: '#ede9fe', color: '#7c3aed' },
+  omborxona: { icon: '📦', bg: '#ede9fe', color: '#7c3aed' },
+  taminot: { icon: '🛒', bg: '#dbeafe', color: '#2563eb' },
+  monitoring: { icon: '🖥️', bg: '#cffafe', color: '#0891b2' },
+  sotuv: { icon: '🛍️', bg: '#fce7f3', color: '#db2777' },
+  moliya: { icon: '💵', bg: '#d1fae5', color: '#059669' },
+  hrm: { icon: '👥', bg: '#e5e7eb', color: '#4b5563' },
+  kontragent: { icon: '🤝', bg: '#ffedd5', color: '#ea580c' },
+  loyiha: { icon: '📁', bg: '#fef9c3', color: '#ca8a04' }
 };
+const MODULE_ICON_DEFAULT = { icon: '🧩', bg: '#f3f4f6', color: '#6b7280' };
 
-function moduleIcon(name = '') {
+function moduleIconMeta(name = '') {
   const key = String(name).toLowerCase().replace(/[^a-zʻʼ']/gi, '');
-  return MODULE_ICONS[key] || '🧩';
+  return MODULE_ICON_META[key] || MODULE_ICON_DEFAULT;
 }
-
-function quadrantPointColor(percent) {
-  if (percent >= 70) return '#16a34a';
-  if (percent >= 40) return '#f59e0b';
-  return '#dc2626';
-}
-
-const knowledgeQuadrantPoints = computed(() => {
-  const points = knowledgeDashboard.value.quadrant_points || [];
-  if (!points.length) return [];
-  const dims = KNOWLEDGE_QUADRANT_DIMS;
-  const width = dims.right - dims.left;
-  const height = dims.bottom - dims.top;
-  const times = points.map(point => new Date(point.created_at).getTime()).filter(Number.isFinite);
-  const minTime = times.length ? Math.min(...times) : 0;
-  const maxTime = times.length ? Math.max(...times) : 0;
-  const span = Math.max(maxTime - minTime, 1);
-  return points.map(point => {
-    const time = new Date(point.created_at).getTime();
-    const xRatio = Number.isFinite(time) ? (time - minTime) / span : 0.5;
-    const x = dims.left + xRatio * width;
-    const y = dims.bottom - (Math.max(0, Math.min(100, point.percent)) / 100) * height;
-    return {
-      ...point,
-      x: Math.round(x * 10) / 10,
-      y: Math.round(y * 10) / 10,
-      color: quadrantPointColor(point.percent)
-    };
-  });
-});
-const knowledgeQuadrantXTicks = computed(() => {
-  const points = knowledgeQuadrantPoints.value;
-  if (!points.length) return [];
-  const sorted = [...points].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-  const step = Math.max(1, Math.floor(sorted.length / 5));
-  return sorted.filter((_, index) => index % step === 0).map(point => ({ x: point.x, label: fmtDate(point.created_at).slice(0, 5) }));
-});
-const knowledgeQuadrantYTicks = computed(() => moduleChartYTicks(100, KNOWLEDGE_QUADRANT_DIMS, 25));
 
 function openEmployeeOpenRequests(row = {}) {
   employeeDrilldown.value = row;
