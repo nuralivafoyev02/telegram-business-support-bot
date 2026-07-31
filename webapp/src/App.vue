@@ -600,7 +600,6 @@
             </div>
             <div style="display:flex; flex-direction:column; gap:6px;">
               <div style="font-size:14px; font-weight:700; color:#1f2937;">Profil rasmi</div>
-              <div style="font-size:12px; color:#8a94a6;">JPG, PNG yoki WEBP · 8&nbsp;MB gacha</div>
               <div style="display:flex; gap:8px;">
                 <button type="button" class="btn" style="padding:6px 14px; font-size:12px;"
                   :disabled="managementAvatarUploading" @click="managementAvatarInputRef?.click()">
@@ -925,7 +924,7 @@
             <b>{{ employeeKnowledgeProfile.not_learned_functions.length }}</b>
           </span>
         </div>
-        <div style="display:flex; align-items:center; justify-content:center; gap:24px; margin:16px 0; flex-wrap:wrap;">
+        <div style="display:flex; align-items:center; justify-content:center; gap:64px; margin:16px 0; flex-wrap:wrap;">
           <RadarChart
             :axes="employeeKnowledgeProfile.module_percents.map(module => ({ label: module.module_name, value: module.percent }))"
             :size="260" />
@@ -974,7 +973,6 @@
             </div>
             <div style="display:flex; flex-direction:column; gap:6px;">
               <div style="font-size:14px; font-weight:700; color:#1f2937;">Profil rasmi</div>
-              <div style="font-size:12px; color:#8a94a6;">JPG, PNG yoki WEBP · 8&nbsp;MB gacha</div>
               <div style="display:flex; gap:8px;">
                 <button type="button" class="btn" style="padding:6px 14px; font-size:12px;"
                   :disabled="managementAvatarUploading" @click="managementAvatarInputRef?.click()">
@@ -4578,6 +4576,11 @@ const employees = ref([]);
 const clickupTasks = ref([]);
 const permissionModules = ref([]);
 const permissionSelected = ref([]);
+// Faqat "Saqlash" bosilib, backendga yozilgan (demak supportlarga bildirishnoma
+// ketgan) tanlovning suratini saqlaydi — "Yuborildi/Yuborilmadi" filtri
+// shunga qarab ishlaydi, hozir checkbox'da belgilangan-u hali saqlanmagan
+// (bildirishnoma ketmagan) o'zgarishlarga qarab emas.
+const permissionSavedSelected = ref([]);
 const permissionDateFilter = ref('new');
 const permissionFilterMenuOpen = ref(false);
 const permissionFilterMenuRef = ref(null);
@@ -10598,17 +10601,18 @@ async function loadPermissionView() {
   const data = await api.uyqurPermissions();
   permissionModules.value = Array.isArray(data.modules) ? data.modules : [];
   permissionSelected.value = Array.isArray(data.selected) ? data.selected.map(String) : [];
+  permissionSavedSelected.value = [...permissionSelected.value];
 }
 
-// Funksiya belgilangan (qo'shilgan) zahoti xodimlarga xabar yuboriladi va
-// shu zahoti "eski" hisoblanadi — kutish yo'q. Shuning uchun: "Eski" = hozir
-// belgilangan (allaqachon qo'shib, xabar yuborilgan) funksiyalar; "Yangi" =
-// hali birorta ham marta belgilanmagan (hali qo'shilmagan/xabar yuborilmagan).
+// "Saqlash" bosilib backendga yozilgan (shu bilan xodimlarga bildirishnoma
+// ketgan) funksiya — shu zahoti "Yuborildi" hisoblanadi. Checkbox hozir
+// belgilangan-u hali "Saqlash" bosilmagan bo'lsa, bildirishnoma hali
+// ketmagani uchun u hamon "Yuborilmadi"da qoladi.
 function submoduleMatchesDateFilter(submodule = {}) {
   const filter = permissionDateFilter.value;
   if (filter === 'all') return true;
-  const isOld = isPermissionSelected(submodule.key);
-  return filter === 'old' ? isOld : !isOld;
+  const isSent = permissionSavedSelected.value.includes(String(submodule.key));
+  return filter === 'old' ? isSent : !isSent;
 }
 
 function isPermissionSelected(key) {
@@ -10657,6 +10661,7 @@ async function saveUyqurPermissions() {
   try {
     const data = await api.saveUyqurPermissions({ selected: permissionSelected.value });
     permissionSelected.value = Array.isArray(data.selected) ? data.selected.map(String) : permissionSelected.value;
+    permissionSavedSelected.value = [...permissionSelected.value];
     showToast('Saqlandi');
     if (account.value?.type === 'admin') await loadSupportOverview();
   } catch (error) {
