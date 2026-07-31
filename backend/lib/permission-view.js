@@ -577,15 +577,36 @@ async function getModuleFunctionsDetail(moduleName) {
   const now = Date.now();
   const moduleEvents = record.events.filter(event => event.module_name === moduleName);
 
+  // "O'rganilgan/Jarayonda/Boshlanmagan fichalar" — donut hisoblagichi bilan
+  // bir xil qoida (getKnowledgeDashboard'dagi kabi), lekin faqat shu modul
+  // fichalariga cheklangan: barcha faol support tasdiqlagan — o'rganilgan;
+  // kamida bittasi o'rgangan-u hammasi tasdiqlamagan — jarayonda; aks holda
+  // boshlanmagan.
+  let learnedTotal = 0;
+  let inProgressTotal = 0;
+  let notStartedTotal = 0;
+
   const functions = moduleEvents.map(event => {
     const learnedEmployees = [];
     const notLearnedEmployees = [];
     employees.forEach(employee => {
       const progress = progressFor(record, event.id, employee.id);
-      const row = { id: employee.id, full_name: employee.full_name || employee.username || 'Xodim' };
+      const row = {
+        id: employee.id,
+        full_name: employee.full_name || employee.username || 'Xodim',
+        tg_user_id: employee.tg_user_id || null,
+        learned_at: progress.learned_at || null
+      };
       if (progress.learned_at) learnedEmployees.push(row);
       else notLearnedEmployees.push(row);
     });
+
+    const confirmedByAll = employees.length > 0
+      && employees.every(employee => Boolean(progressFor(record, event.id, employee.id).confirmed_at));
+    if (confirmedByAll) learnedTotal += 1;
+    else if (learnedEmployees.length > 0) inProgressTotal += 1;
+    else notStartedTotal += 1;
+
     return {
       event_id: event.id,
       submodule_name: event.submodule_name,
@@ -612,7 +633,9 @@ async function getModuleFunctionsDetail(moduleName) {
   return {
     module_name: moduleName,
     total_functions: functions.length,
-    not_learned_total: functions.reduce((sum, fn) => sum + fn.not_learned_employees.length, 0),
+    learned_total: learnedTotal,
+    in_progress_total: inProgressTotal,
+    not_started_total: notStartedTotal,
     avg_days_to_learn: avgDaysToLearn,
     functions
   };
