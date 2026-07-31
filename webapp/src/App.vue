@@ -604,11 +604,6 @@
           <h1>{{ managementActiveTab === 'functions' ? 'Barcha funksiyalar' : 'Boshqaruv paneli' }}</h1>
         </div>
         <div class="topbar-actions">
-          <template v-if="managementActiveTab === 'dashboard'">
-            <select class="select" v-model="knowledgePeriodDays" @change="changeKnowledgePeriod(knowledgePeriodDays)">
-              <option v-for="option in knowledgePeriodOptions" :key="option.key" :value="option.key">{{ option.label }}</option>
-            </select>
-          </template>
           <button class="btn topbar-refresh" type="button" :disabled="loadingAction === 'knowledgeDashboard'"
             @click="loadKnowledgeDashboard">
             {{ loadingAction === 'knowledgeDashboard' ? 'Yangilanmoqda...' : 'Yangilash' }}
@@ -684,7 +679,7 @@
           <div class="card-header">
             <div class="card-title">Modullar bo‘yicha bilim darajasi</div>
           </div>
-          <div style="display:flex; flex-direction:column; gap:16px; max-height:300px; overflow-y:auto;">
+          <div style="display:flex; flex-direction:column; gap:16px;">
             <div v-for="module in knowledgeDashboard.module_bars" :key="module.module_name"
               style="display:flex; align-items:center; gap:12px; cursor:pointer;"
               @click="openModuleFunctionsDetail(module.module_name)">
@@ -711,19 +706,21 @@
             <div style="display:flex; align-items:center; gap:8px; padding:6px 0; font-size:11px; text-transform:uppercase; color:#9ca3af; border-bottom:1px solid #f1f5f9;">
               <span style="width:20px; flex-shrink:0;">#</span>
               <span style="flex:1;">Xodim</span>
-              <span style="width:44px; text-align:right; flex-shrink:0;">Daraja</span>
-              <span style="width:56px; text-align:right; flex-shrink:0;">O‘zgarish</span>
+              <span style="width:56px; text-align:right; flex-shrink:0;">Daraja</span>
+              <span style="width:80px; text-align:right; flex-shrink:0; margin-left:24px;">O‘zgarish</span>
             </div>
             <div v-for="(row, index) in knowledgeDashboard.employee_ranking" :key="row.employee_id"
-              style="display:flex; align-items:center; gap:8px; padding:8px 0; border-bottom:1px solid #f8fafc; cursor:pointer;"
+              style="display:flex; align-items:center; gap:8px; padding:10px 0; border-bottom:1px solid #f8fafc; cursor:pointer;"
               @click="openEmployeeKnowledgeProfile(row.employee_id)">
               <span style="width:20px; flex-shrink:0; font-size:13px;">{{ index + 1 }}</span>
-              <span style="flex:1; display:flex; align-items:center; gap:6px; min-width:0;">
-                <span class="profile-avatar" style="width:22px; height:22px; font-size:10px; flex-shrink:0;">{{ initialsFromText(row.full_name) }}</span>
-                <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; font-size:13px;">{{ row.full_name }}</span>
+              <span style="flex:1; display:flex; align-items:center; gap:8px; min-width:0;">
+                <img v-if="employeeAvatarUrl(row)" :src="employeeAvatarUrl(row)" alt=""
+                  style="width:30px; height:30px; border-radius:50%; object-fit:cover; flex-shrink:0;" />
+                <span v-else class="profile-avatar" style="width:30px; height:30px; font-size:12px; flex-shrink:0;">{{ initialsFromText(row.full_name) }}</span>
+                <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; font-size:15px;">{{ row.full_name }}</span>
               </span>
-              <span style="width:44px; text-align:right; flex-shrink:0; font-size:13px; font-weight:600;">{{ row.percent }}%</span>
-              <span style="width:56px; text-align:right; flex-shrink:0;">
+              <span style="width:56px; text-align:right; flex-shrink:0; font-size:14px; font-weight:600;">{{ row.percent }}%</span>
+              <span style="width:80px; text-align:right; flex-shrink:0; margin-left:24px;">
                 <span class="trend-label" :class="row.change_pct >= 0 ? 'good' : 'bad'" style="white-space:nowrap;">
                   {{ row.change_pct >= 0 ? '↑' : '↓' }}{{ fmtNumber(Math.abs(row.change_pct)) }}%
                 </span>
@@ -4435,12 +4432,6 @@ const managementTabs = [
   { key: 'functions', label: 'Barcha funksiyalar', icon: '🧩' }
 ];
 const managementActiveTab = ref('dashboard');
-const knowledgePeriodOptions = [
-  { key: 7, label: '7 kun' },
-  { key: 14, label: '14 kun' },
-  { key: 30, label: '30 kun' },
-  { key: 'all', label: 'Hammasi' }
-];
 const moduleFunctionsDetail = ref(null);
 const employeeKnowledgeProfile = ref(null);
 const managementModal = ref('');
@@ -9036,6 +9027,9 @@ watch(companyGroupRows, rows => {
 watch(employeeProfileVisibleChats, rows => {
   rows.slice(0, 40).forEach(row => loadChatAvatar(row));
 }, { immediate: true });
+watch(() => knowledgeDashboard.value.employee_ranking, rows => {
+  (rows || []).forEach(row => loadEmployeeAvatar(row));
+}, { immediate: true });
 const selectedEmployeeProfileChat = computed(() => {
   const rows = employeeProfileVisibleChats.value;
   if (!rows.length) return null;
@@ -11577,11 +11571,6 @@ async function loadKnowledgeDashboard() {
   } finally {
     stopLoading('knowledgeDashboard');
   }
-}
-
-async function changeKnowledgePeriod(days) {
-  knowledgePeriodDays.value = days === 'all' ? 'all' : Number(days);
-  await loadKnowledgeDashboard();
 }
 
 async function openModuleFunctionsDetail(moduleName) {

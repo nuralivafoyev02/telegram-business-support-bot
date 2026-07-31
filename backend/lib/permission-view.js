@@ -170,7 +170,7 @@ async function savePermissionSelection(selected = []) {
 
 async function getSupportEmployees() {
   return supabase.select('employees', {
-    select: 'id,username,full_name,role,is_active,created_at',
+    select: 'id,username,full_name,role,is_active,created_at,tg_user_id',
     role: supabase.eq('support'),
     is_active: supabase.eq(true),
     limit: '200'
@@ -393,6 +393,7 @@ async function getKnowledgeDashboard({ days = 7 } = {}) {
       employee_id: employee.id,
       full_name: employee.full_name || employee.username || 'Xodim',
       username: employee.username || '',
+      tg_user_id: employee.tg_user_id || null,
       percent,
       change_pct: percent - previousPercent
     };

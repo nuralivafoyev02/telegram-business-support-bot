@@ -6653,7 +6653,11 @@ async function handler(req, res) {
           return;
         }
         if (action === 'telegramProfilePhoto') {
-          if (isEmployeeSession(currentAdmin)) {
+          // "Boshqaruv paneli" (management) butun jamoaning bilim-darajasi
+          // statistikasini ko'radi, shu jumladan xodimlar reytingidagi profil
+          // rasmlarini — shu sababli support'ning o'z-chatiga cheklangan
+          // scoping tekshiruvi ularga qo'llanmaydi.
+          if (isEmployeeSession(currentAdmin) && currentAdmin.role !== 'management') {
             const [scope, employeeRows] = await Promise.all([
               getEmployeeChatScopeForSession(currentAdmin),
               supabase.select('employees', {
