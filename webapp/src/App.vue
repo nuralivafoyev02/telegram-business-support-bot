@@ -706,8 +706,10 @@
             <div style="display:flex; align-items:center; gap:8px; padding:6px 0; font-size:11px; text-transform:uppercase; color:#9ca3af; border-bottom:1px solid #f1f5f9;">
               <span style="width:20px; flex-shrink:0;">#</span>
               <span style="flex:1;">Xodim</span>
+              <span style="width:70px; text-align:right; flex-shrink:0;">O‘rgangan</span>
+              <span style="width:70px; text-align:right; flex-shrink:0;">Jarayonda</span>
+              <span style="width:80px; text-align:right; flex-shrink:0;">Boshlamagan</span>
               <span style="width:56px; text-align:right; flex-shrink:0;">Daraja</span>
-              <span style="width:80px; text-align:right; flex-shrink:0; margin-left:24px;">O‘zgarish</span>
             </div>
             <div v-for="(row, index) in knowledgeDashboard.employee_ranking" :key="row.employee_id"
               style="display:flex; align-items:center; gap:8px; padding:10px 0; border-bottom:1px solid #f8fafc; cursor:pointer;"
@@ -719,12 +721,10 @@
                 <span v-else class="profile-avatar" style="width:30px; height:30px; font-size:12px; flex-shrink:0;">{{ initialsFromText(row.full_name) }}</span>
                 <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; font-size:15px;">{{ row.full_name }}</span>
               </span>
+              <span style="width:70px; text-align:right; flex-shrink:0; font-size:14px; font-weight:600; color:#16a34a;">{{ row.learned_count }}</span>
+              <span style="width:70px; text-align:right; flex-shrink:0; font-size:14px; font-weight:600; color:#f59e0b;">{{ row.in_progress_count }}</span>
+              <span style="width:80px; text-align:right; flex-shrink:0; font-size:14px; font-weight:600; color:#dc2626;">{{ row.not_started_count }}</span>
               <span style="width:56px; text-align:right; flex-shrink:0; font-size:14px; font-weight:600;">{{ row.percent }}%</span>
-              <span style="width:80px; text-align:right; flex-shrink:0; margin-left:24px;">
-                <span class="trend-label" :class="row.change_pct >= 0 ? 'good' : 'bad'" style="white-space:nowrap;">
-                  {{ row.change_pct >= 0 ? '↑' : '↓' }}{{ fmtNumber(Math.abs(row.change_pct)) }}%
-                </span>
-              </span>
             </div>
             <div v-if="!knowledgeDashboard.employee_ranking.length" class="empty">Support xodim topilmadi</div>
           </div>

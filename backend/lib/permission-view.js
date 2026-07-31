@@ -386,16 +386,50 @@ async function getKnowledgeDashboard({ days = 7 } = {}) {
     return Math.round((learned / relevant.length) * 100);
   }
 
+  // "Barcha funksiyalar"dagi BUTUN daraxt (tanlangan + tanlanmagan) — xodimlar
+  // reytingidagi va umumiy KPI'dagi o'rgangan/jarayonda/boshlanmagan sonlari
+  // shu ro'yxatga nisbatan hisoblanadi.
+  const allSubmodules = [];
+  (Array.isArray(permissionRecord.modules) ? permissionRecord.modules : []).forEach(module => {
+    (module.submodules || []).forEach(submodule => {
+      allSubmodules.push(String(submodule.key));
+    });
+  });
+  const selectedKeys = new Set((Array.isArray(permissionRecord.selected) ? permissionRecord.selected : []).map(String));
+  const eventBySubmoduleKey = new Map(events.map(event => [String(event.submodule_key), event]));
+
+  function employeeFunctionCounts(employeeId) {
+    let learned = 0;
+    let inProgress = 0;
+    let notStarted = 0;
+    allSubmodules.forEach(key => {
+      const event = selectedKeys.has(key) ? eventBySubmoduleKey.get(key) : null;
+      if (!event) {
+        notStarted += 1;
+        return;
+      }
+      const progress = progressFor(record, event.id, employeeId);
+      if (progress.confirmed_at) learned += 1;
+      else if (progress.learned_at) inProgress += 1;
+      else notStarted += 1;
+    });
+    return { learned, inProgress, notStarted };
+  }
+
   const employeeRanking = employees.map(employee => {
     const percent = percentAsOf(employee.id, now);
     const previousPercent = percentAsOf(employee.id, periodStartMs);
+    const counts = employeeFunctionCounts(employee.id);
     return {
       employee_id: employee.id,
       full_name: employee.full_name || employee.username || 'Xodim',
       username: employee.username || '',
       tg_user_id: employee.tg_user_id || null,
       percent,
-      change_pct: percent - previousPercent
+      change_pct: percent - previousPercent,
+      learned_count: counts.learned,
+      in_progress_count: counts.inProgress,
+      not_started_count: counts.notStarted
     };
   }).sort((a, b) => b.percent - a.percent);
 
@@ -423,15 +457,6 @@ async function getKnowledgeDashboard({ days = 7 } = {}) {
   //  - hodisasi bor-у hech kim o'rganmagan — "boshlanmagan";
   //  - kamida bitta xodim o'rgangan/tasdiqlagan, lekin BARCHASI tasdiqlamagan — "jarayonda";
   //  - BARCHA faol support'lar tasdiqlagan — "o'rganilgan".
-  const allSubmodules = [];
-  (Array.isArray(permissionRecord.modules) ? permissionRecord.modules : []).forEach(module => {
-    (module.submodules || []).forEach(submodule => {
-      allSubmodules.push(String(submodule.key));
-    });
-  });
-  const selectedKeys = new Set((Array.isArray(permissionRecord.selected) ? permissionRecord.selected : []).map(String));
-  const eventBySubmoduleKey = new Map(events.map(event => [String(event.submodule_key), event]));
-
   let learnedFunctionsCount = 0;
   let inProgressFunctionsCount = 0;
   let notStartedFunctionsCount = 0;
