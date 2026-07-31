@@ -904,8 +904,6 @@
             <b>{{ employeeKnowledgeProfile.not_learned_functions.length }}</b>
           </span>
         </div>
-        <p class="card-note">Lavozim: Support mutaxassisi · Jamoa: {{ employeeKnowledgeProfile.employee.team || '—' }}
-          · Ishga kirgan sanasi: {{ fmtDate(employeeKnowledgeProfile.employee.created_at) }}</p>
         <div style="display:flex; justify-content:center; margin:16px 0;">
           <RadarChart
             :axes="employeeKnowledgeProfile.module_percents.map(module => ({ label: module.module_name, value: module.percent }))"
@@ -914,45 +912,13 @@
         <div class="drilldown-columns">
           <div class="drilldown-panel">
             <div class="drilldown-label">O‘rganilgan funksiyalar</div>
-            <div class="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Funksiya nomi</th>
-                    <th>Chiqqan sana</th>
-                    <th>O‘rganish vaqti</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="fn in employeeKnowledgeProfile.learned_functions" :key="fn.submodule_name + fn.learned_at">
-                    <td>{{ fn.submodule_name }}</td>
-                    <td>{{ fmtDate(fn.created_at) }}</td>
-                    <td>{{ fn.days_to_learn }} kun</td>
-                  </tr>
-                </tbody>
-              </table>
-              <div v-if="!employeeKnowledgeProfile.learned_functions.length" class="empty compact">Hali yo‘q</div>
-            </div>
+            <DataTable :columns="employeeLearnedFunctionColumns" :rows="employeeKnowledgeProfile.learned_functions"
+              empty="Hali yo‘q" :page-size="10" />
           </div>
           <div class="drilldown-panel">
             <div class="drilldown-label">O‘rganilmagan funksiyalar</div>
-            <div class="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Funksiya nomi</th>
-                    <th>Chiqqaniga (kun)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="fn in employeeKnowledgeProfile.not_learned_functions" :key="fn.submodule_name">
-                    <td>{{ fn.submodule_name }}</td>
-                    <td>{{ fn.days_since_launch }}</td>
-                  </tr>
-                </tbody>
-              </table>
-              <div v-if="!employeeKnowledgeProfile.not_learned_functions.length" class="empty compact">Yo‘q</div>
-            </div>
+            <DataTable :columns="employeeNotLearnedFunctionColumns" :rows="employeeKnowledgeProfile.not_learned_functions"
+              empty="Yo‘q" :page-size="10" />
           </div>
         </div>
       </Modal>
@@ -9384,6 +9350,17 @@ const managerMemberColumns = [
   { key: 'handled_chats', label: 'Guruh/chat', format: fmtNumber },
   { key: 'avg_close_minutes', label: 'O‘rtacha vaqt', format: fmtMinutes },
   { key: 'sla', label: 'SLA', format: fmtPercent }
+];
+
+const employeeLearnedFunctionColumns = [
+  { key: 'submodule_name', label: 'Funksiya nomi' },
+  { key: 'created_at', label: 'Chiqqan sana', format: fmtDate },
+  { key: 'days_to_learn', label: 'O‘rganish vaqti', format: value => `${fmtNumber(value)} kun` }
+];
+
+const employeeNotLearnedFunctionColumns = [
+  { key: 'submodule_name', label: 'Funksiya nomi' },
+  { key: 'days_since_launch', label: 'Chiqqaniga (kun)', format: fmtNumber }
 ];
 
 const employeeColumns = [
