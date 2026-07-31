@@ -793,15 +793,15 @@
               <div class="card-title">Uyqur Funksiyalari</div>
             </div>
           </div>
-          <div class="uyqur-functions-groups" v-if="permissionModulesMerged.length">
+          <div class="uyqur-functions-groups" ref="permissionGroupsRef" v-if="permissionModulesMerged.length">
             <div class="uyqur-functions-group" :class="{ collapsed: !isPermissionModuleExpanded(module) }"
+              :style="permissionGroupMinHeight ? { minHeight: permissionGroupMinHeight + 'px' } : null"
               v-for="module in permissionModulesMerged.filter(m => m.submodules.length)"
               :key="'all-functions-module-' + module.id">
               <div class="uyqur-functions-group-head" @click="togglePermissionModuleExpanded(module)">
                 <span class="uyqur-functions-collapse-icon">›</span>
                 <span class="uyqur-functions-group-title">
                   <b>{{ module.name || module.key }}</b>
-                  <span class="uyqur-functions-percent">{{ permissionModulePercent(module) }}%</span>
                 </span>
               </div>
               <div class="uyqur-functions-card-list" v-if="isPermissionModuleExpanded(module)">
@@ -2576,14 +2576,14 @@
                   {{ loadingAction === 'saveUyqurPermissions' ? 'Saqlanmoqda...' : 'Saqlash' }}
                 </button>
               </div>
-              <div class="uyqur-functions-groups" v-if="permissionModulesMerged.length">
+              <div class="uyqur-functions-groups" ref="permissionGroupsRef" v-if="permissionModulesMerged.length">
                 <div class="uyqur-functions-group" :class="{ collapsed: !isPermissionModuleExpanded(module) }"
+                  :style="permissionGroupMinHeight ? { minHeight: permissionGroupMinHeight + 'px' } : null"
                   v-for="module in permissionModulesMerged.filter(m => m.submodules.length)" :key="'module-' + module.id">
                   <div class="uyqur-functions-group-head" @click="togglePermissionModuleExpanded(module)">
                     <span class="uyqur-functions-collapse-icon">›</span>
                     <span class="uyqur-functions-group-title">
                       <b>{{ module.name || module.key }}</b>
-                      <span class="uyqur-functions-percent">{{ permissionModulePercent(module) }}%</span>
                     </span>
                   </div>
                   <div class="uyqur-functions-card-list" v-if="isPermissionModuleExpanded(module)">
@@ -4557,6 +4557,12 @@ const permissionModules = ref([]);
 // "Saqlash" hozirgi daraxtdagi BARCHA funksiyalarni birdaniga yuboradi.
 const permissionSavedSelected = ref([]);
 const permissionExpandedModules = ref(new Set());
+const permissionGroupsRef = ref(null);
+// Yopiq (yon tomonga tor) ustunlar ochiq ustunlar bilan bir xil balandlikda
+// bo'lishi uchun — CSS stretch yozuv yo'nalishi (writing-mode) bilan
+// ishonchli ishlamagani uchun, eng uzun ochiq ustunning haqiqiy balandligi
+// JS orqali o'lchanib, hammasiga min-height sifatida qo'yiladi.
+const permissionGroupMinHeight = ref(0);
 const supportOverview = ref([]);
 const selectedSupportId = ref('');
 const selectedSupportName = ref('');
@@ -10593,11 +10599,22 @@ function computeDefaultExpandedModules() {
   permissionExpandedModules.value = new Set();
 }
 
+async function recalcPermissionGroupHeight() {
+  await nextTick();
+  const root = permissionGroupsRef.value;
+  if (!root) return;
+  const openGroups = root.querySelectorAll('.uyqur-functions-group:not(.collapsed)');
+  let max = 0;
+  openGroups.forEach(el => { max = Math.max(max, el.scrollHeight); });
+  permissionGroupMinHeight.value = max;
+}
+
 async function loadPermissionView() {
   const data = await api.uyqurPermissions();
   permissionModules.value = Array.isArray(data.modules) ? data.modules : [];
   permissionSavedSelected.value = Array.isArray(data.selected) ? data.selected.map(String) : [];
   computeDefaultExpandedModules();
+  recalcPermissionGroupHeight();
 }
 
 function isPermissionModuleExpanded(module = {}) {
@@ -10610,21 +10627,8 @@ function togglePermissionModuleExpanded(module = {}) {
   if (next.has(key)) next.delete(key);
   else next.add(key);
   permissionExpandedModules.value = next;
+  recalcPermissionGroupHeight();
 }
-
-function permissionModulePercent(module) {
-  const keys = (module.submodules || []).map(submodule => String(submodule.key));
-  if (!keys.length) return 0;
-  const sent = keys.filter(key => permissionSavedSelected.value.includes(key)).length;
-  return Math.round((sent / keys.length) * 100);
-}
-
-const overallPermissionPercent = computed(() => {
-  const keys = permissionModules.value.flatMap(module => (module.submodules || []).map(submodule => String(submodule.key)));
-  if (!keys.length) return 0;
-  const sent = keys.filter(key => permissionSavedSelected.value.includes(key)).length;
-  return Math.round((sent / keys.length) * 100);
-});
 
 // Checkbox yo'q — "Saqlash" hozir daraxtdagi BARCHA funksiyalarni yuboradi
 // (avval hali yuborilmagan — "Yuborilmadi" — bo'lganlar uchun supportlarga
