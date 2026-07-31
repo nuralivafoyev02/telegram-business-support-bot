@@ -451,30 +451,15 @@ async function getKnowledgeDashboard({ days = 7 } = {}) {
   const periodFullyLearnedCount = periodEvents.filter(event => employees.length > 0
     && employees.every(employee => Boolean(progressFor(record, event.id, employee.id).learned_at))).length;
 
-  // "O'rganilgan/Jarayonda/Boshlanmagan funksiyalar" — "Barcha funksiyalar"dagi
-  // BUTUN daraxt (tanlangan + tanlanmagan) bo'yicha, har bir funksiya faqat bitta
-  // marta hisoblanadi (xodim x funksiya juftliklari emas):
-  //  - tanlanmagan yoki hali hodisasi yo'q — "boshlanmagan";
-  //  - hodisasi bor-у hech kim o'rganmagan — "boshlanmagan";
-  //  - kamida bitta xodim o'rgangan/tasdiqlagan, lekin BARCHASI tasdiqlamagan — "jarayonda";
-  //  - BARCHA faol support'lar tasdiqlagan — "o'rganilgan".
-  let learnedFunctionsCount = 0;
-  let inProgressFunctionsCount = 0;
-  let notStartedFunctionsCount = 0;
-  allSubmodules.forEach(key => {
-    const event = selectedKeys.has(key) ? eventBySubmoduleKey.get(key) : null;
-    if (!event) {
-      notStartedFunctionsCount += 1;
-      return;
-    }
-    const learnedByAny = employees.some(employee => Boolean(progressFor(record, event.id, employee.id).learned_at));
-    const confirmedByAll = employees.length > 0
-      && employees.every(employee => Boolean(progressFor(record, event.id, employee.id).confirmed_at));
-    if (confirmedByAll) learnedFunctionsCount += 1;
-    else if (learnedByAny) inProgressFunctionsCount += 1;
-    else notStartedFunctionsCount += 1;
-  });
-  const totalFunctionsCount = allSubmodules.length;
+  // "O'rganilgan/Jarayonda/Boshlanmagan funksiyalar" — "Xodimlar reytingi"
+  // jadvalidagi har bir qatorning O'rgangan/Jarayonda/Boshlamagan sonlari
+  // yig'indisi (xodim x funksiya juftliklari bo'yicha). Shu sababli yuqoridagi
+  // kartochkalar har doim reytingdagi ustunlar yig'indisiga teng bo'ladi —
+  // ikkalasi bir xil hisoblash asosidan kelib chiqadi.
+  const learnedFunctionsCount = employeeRanking.reduce((sum, row) => sum + row.learned_count, 0);
+  const inProgressFunctionsCount = employeeRanking.reduce((sum, row) => sum + row.in_progress_count, 0);
+  const notStartedFunctionsCount = employeeRanking.reduce((sum, row) => sum + row.not_started_count, 0);
+  const totalFunctionsCount = allSubmodules.length * (employees.length || 0);
   const donut = {
     learned_pct: totalFunctionsCount ? Math.round((learnedFunctionsCount / totalFunctionsCount) * 100) : 0,
     in_progress_pct: totalFunctionsCount ? Math.round((inProgressFunctionsCount / totalFunctionsCount) * 100) : 0,
