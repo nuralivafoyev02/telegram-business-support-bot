@@ -4107,6 +4107,14 @@ td,
   align-items: flex-start;
 }
 
+.company-module-chart-fetched-at {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted, #8a94a6);
+  font-size: 11px;
+  font-weight: 500;
+}
+
 .ticket-trend-chart {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
