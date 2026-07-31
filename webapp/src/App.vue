@@ -2,7 +2,7 @@
   <main v-if="!token" class="login-screen">
     <section class="card login-card">
       <img class="logo login-logo" :src="uyqurLogoUrl" alt="Uyqur" width="48" height="48" />
-      <h1>Uyqur Yordam</h1>
+      <h1>Uyqur Admin</h1>
       <form class="form" @submit.prevent="submitLogin">
         <label class="label">Kirish nomi
           <input v-model.trim="loginForm.username" class="input" autocomplete="username" placeholder="admin"
@@ -35,7 +35,7 @@
       <div class="brand">
         <img class="logo" :src="uyqurLogoUrl" alt="Uyqur" width="42" height="42" />
         <div class="brand-wrapper">
-          <div class="brand-title">Uyqur Yordam</div>
+          <div class="brand-title">Uyqur Admin</div>
         </div>
       </div>
 
@@ -640,7 +640,7 @@
       <div class="brand">
         <img class="logo" :src="uyqurLogoUrl" alt="Uyqur" width="42" height="42" />
         <div class="brand-wrapper">
-          <div class="brand-title">Uyqur Yordam</div>
+          <div class="brand-title">Uyqur Admin</div>
         </div>
       </div>
 
@@ -692,7 +692,6 @@
                 {{ fmtNumber(Math.abs(knowledgeDashboard.kpis.avg_knowledge_change_pct || 0)) }}%
               </span>
             </div>
-            <div class="support-summary-note">davr boshiga nisbatan</div>
             <div class="support-summary-note">👥 {{ fmtNumber(knowledgeDashboard.kpis.employees_total) }} support xodim</div>
           </div>
         </article>
@@ -702,7 +701,6 @@
             <div class="support-summary-value-row">
               <div class="support-summary-value" style="color:#16a34a;">{{ fmtNumber(knowledgeDashboard.kpis.donut?.learned_count) }}</div>
             </div>
-            <div class="support-summary-note">jami holatning {{ fmtPercent(knowledgeDashboard.kpis.donut?.learned_pct) }} i</div>
           </div>
         </article>
         <article class="card support-summary-card">
@@ -711,7 +709,6 @@
             <div class="support-summary-value-row">
               <div class="support-summary-value" style="color:#f59e0b;">{{ fmtNumber(knowledgeDashboard.kpis.donut?.in_progress_count) }}</div>
             </div>
-            <div class="support-summary-note">jami holatning {{ fmtPercent(knowledgeDashboard.kpis.donut?.in_progress_pct) }} i</div>
           </div>
         </article>
         <article class="card support-summary-card">
@@ -720,7 +717,6 @@
             <div class="support-summary-value-row">
               <div class="support-summary-value" style="color:#dc2626;">{{ fmtNumber(knowledgeDashboard.kpis.donut?.not_learned_count) }}</div>
             </div>
-            <div class="support-summary-note">jami holatning {{ fmtPercent(knowledgeDashboard.kpis.donut?.not_learned_pct) }} i</div>
           </div>
         </article>
       </div>
@@ -803,10 +799,10 @@
                     <span>{{ permissionDateFilter === 'all' ? '✓ ' : '' }}Hammasi</span>
                   </button>
                   <button type="button" @click="permissionDateFilter = 'old'; permissionFilterMenuOpen = false">
-                    <span>{{ permissionDateFilter === 'old' ? '✓ ' : '' }}Eski</span>
+                    <span>{{ permissionDateFilter === 'old' ? '✓ ' : '' }}Yuborildi</span>
                   </button>
                   <button type="button" @click="permissionDateFilter = 'new'; permissionFilterMenuOpen = false">
-                    <span>{{ permissionDateFilter === 'new' ? '✓ ' : '' }}Yangi</span>
+                    <span>{{ permissionDateFilter === 'new' ? '✓ ' : '' }}Yuborilmadi</span>
                   </button>
                 </div>
               </Transition>
@@ -1012,7 +1008,7 @@
       <div class="brand">
         <img class="logo" :src="uyqurLogoUrl" alt="Uyqur" width="42" height="42" />
         <div class="brand-wrapper">
-          <div class="brand-title">Uyqur Yordam</div>
+          <div class="brand-title">Uyqur Admin</div>
         </div>
       </div>
 
@@ -4570,7 +4566,7 @@ const employees = ref([]);
 const clickupTasks = ref([]);
 const permissionModules = ref([]);
 const permissionSelected = ref([]);
-const permissionDateFilter = ref('all');
+const permissionDateFilter = ref('new');
 const permissionFilterMenuOpen = ref(false);
 const permissionFilterMenuRef = ref(null);
 const supportOverview = ref([]);
