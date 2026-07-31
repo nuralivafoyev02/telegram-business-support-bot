@@ -4562,7 +4562,7 @@ const permissionGroupsRef = ref(null);
 // bo'lishi uchun — CSS stretch yozuv yo'nalishi (writing-mode) bilan
 // ishonchli ishlamagani uchun, eng uzun ochiq ustunning haqiqiy balandligi
 // JS orqali o'lchanib, hammasiga min-height sifatida qo'yiladi.
-const permissionGroupMinHeight = ref(0);
+const permissionGroupMinHeight = ref(320);
 const supportOverview = ref([]);
 const selectedSupportId = ref('');
 const selectedSupportName = ref('');
@@ -10604,7 +10604,9 @@ async function recalcPermissionGroupHeight() {
   const root = permissionGroupsRef.value;
   if (!root) return;
   const openGroups = root.querySelectorAll('.uyqur-functions-group:not(.collapsed)');
-  let max = 0;
+  // Hech qaysi modul ochiq bo'lmasa ham (hammasi yopiq/tor holatda), ustunlar
+  // juda qisqarib qolmasligi uchun eng kam balandlik belgilangan.
+  let max = 320;
   openGroups.forEach(el => { max = Math.max(max, el.scrollHeight); });
   permissionGroupMinHeight.value = max;
 }
