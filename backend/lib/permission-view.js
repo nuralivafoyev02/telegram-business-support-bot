@@ -426,7 +426,10 @@ async function getKnowledgeDashboard({ days = 7 } = {}) {
   const donut = {
     learned_pct: totalPairs ? Math.round((learnedPairs / totalPairs) * 100) : 0,
     in_progress_pct: totalPairs ? Math.round((inProgressPairs / totalPairs) * 100) : 0,
-    not_learned_pct: totalPairs ? Math.round((notLearnedPairs / totalPairs) * 100) : 0
+    not_learned_pct: totalPairs ? Math.round((notLearnedPairs / totalPairs) * 100) : 0,
+    learned_count: learnedPairs,
+    in_progress_count: inProgressPairs,
+    not_learned_count: notLearnedPairs
   };
 
   const moduleNames = [...new Set(events.map(event => event.module_name).filter(Boolean))];

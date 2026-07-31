@@ -647,42 +647,34 @@
               </span>
             </div>
             <div class="support-summary-note">davr boshiga nisbatan</div>
+            <div class="support-summary-note">👥 {{ fmtNumber(knowledgeDashboard.kpis.employees_total) }} support xodim</div>
           </div>
         </article>
         <article class="card support-summary-card">
           <div class="support-summary-content">
-            <div class="support-summary-title">Xodimlar soni</div>
+            <div class="support-summary-title">O‘rganilgan funksiyalar</div>
             <div class="support-summary-value-row">
-              <div class="support-summary-value">{{ fmtNumber(knowledgeDashboard.kpis.employees_total) }}</div>
+              <div class="support-summary-value" style="color:#16a34a;">{{ fmtNumber(knowledgeDashboard.kpis.donut?.learned_count) }}</div>
             </div>
-            <div class="support-summary-note">jami support xodimlar</div>
+            <div class="support-summary-note">jami holatning {{ fmtPercent(knowledgeDashboard.kpis.donut?.learned_pct) }} i</div>
           </div>
         </article>
         <article class="card support-summary-card">
           <div class="support-summary-content">
-            <div class="support-summary-title">{{ knowledgePeriodDays === 'all' ? 'Barcha vaqtda yangi funksiyalar' : `Oxirgi ${knowledgePeriodDays} kunda yangi funksiyalar` }}</div>
+            <div class="support-summary-title">Jarayondagi funksiyalar</div>
             <div class="support-summary-value-row">
-              <div class="support-summary-value">{{ fmtNumber(knowledgeDashboard.kpis.new_functions_period) }} / {{
-                fmtNumber(knowledgeDashboard.kpis.new_functions_learned_period) }}</div>
+              <div class="support-summary-value" style="color:#f59e0b;">{{ fmtNumber(knowledgeDashboard.kpis.donut?.in_progress_count) }}</div>
             </div>
-            <div class="support-summary-note">jami / butun jamoa o‘rgangan</div>
+            <div class="support-summary-note">jami holatning {{ fmtPercent(knowledgeDashboard.kpis.donut?.in_progress_pct) }} i</div>
           </div>
         </article>
         <article class="card support-summary-card">
           <div class="support-summary-content">
-            <div class="support-summary-title">Yangi funksiyalar o‘zlashtirilishi</div>
-            <div style="display:flex; align-items:center; gap:12px; margin-top:8px;">
-              <DonutChart :segments="[
-                { value: knowledgeDashboard.kpis.donut?.learned_pct || 0, color: '#16a34a' },
-                { value: knowledgeDashboard.kpis.donut?.in_progress_pct || 0, color: '#f59e0b' },
-                { value: knowledgeDashboard.kpis.donut?.not_learned_pct || 0, color: '#dc2626' }
-              ]" :size="76" />
-              <div style="font-size:12px; line-height:1.7;">
-                <div><span style="color:#16a34a;">●</span> O‘rganilgan {{ fmtPercent(knowledgeDashboard.kpis.donut?.learned_pct) }}</div>
-                <div><span style="color:#f59e0b;">●</span> Jarayonda {{ fmtPercent(knowledgeDashboard.kpis.donut?.in_progress_pct) }}</div>
-                <div><span style="color:#dc2626;">●</span> O‘rganilmagan {{ fmtPercent(knowledgeDashboard.kpis.donut?.not_learned_pct) }}</div>
-              </div>
+            <div class="support-summary-title">Boshlanmagan funksiyalar</div>
+            <div class="support-summary-value-row">
+              <div class="support-summary-value" style="color:#dc2626;">{{ fmtNumber(knowledgeDashboard.kpis.donut?.not_learned_count) }}</div>
             </div>
+            <div class="support-summary-note">jami holatning {{ fmtPercent(knowledgeDashboard.kpis.donut?.not_learned_pct) }} i</div>
           </div>
         </article>
       </div>
