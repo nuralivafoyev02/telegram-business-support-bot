@@ -2689,6 +2689,7 @@ body {
   color: var(--muted);
   font-size: 16px;
   line-height: 1;
+  font-weight: 600;
 }
 
 .actions-dropdown {
