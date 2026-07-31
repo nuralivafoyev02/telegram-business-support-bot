@@ -179,5 +179,8 @@ export const api = {
   knowledgeDashboard: (query = {}) => request('uyqurKnowledgeDashboard', { query }).then(r => r.data),
   moduleFunctionsDetail: (query = {}) => request('uyqurModuleFunctionsDetail', { query }).then(r => r.data),
   employeeKnowledgeProfile: (query = {}) => request('uyqurEmployeeKnowledgeProfile', { query }).then(r => r.data),
-  saveManagementProfile: payload => request('managementProfile', { method: 'POST', body: payload }).then(r => r.data)
+  saveManagementProfile: payload => request('managementProfile', { method: 'POST', body: payload }).then(r => r.data),
+  managementAvatar: () => requestBlob('managementAvatar', {}),
+  saveManagementAvatar: imageDataUrl => request('managementAvatarUpload', { method: 'POST', body: { image: imageDataUrl } }).then(r => r.data),
+  removeManagementAvatar: () => request('managementAvatarRemove', { method: 'POST', body: {} }).then(r => r.data)
 };

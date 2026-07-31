@@ -5368,6 +5368,27 @@ async function sendTelegramProfilePhoto(query, res) {
   await sendTelegramFile({ file_id: photo.file_id }, res);
 }
 
+// "Boshqaruv paneli" hisobining o'zi yuklagan profil rasmini qaytaradi —
+// faqat hisobning o'ziga (query.employee_id yo'q bo'lsa ham) cheklanadi.
+async function sendManagementAvatar(query, currentAdmin, res) {
+  const employeeId = query.employee_id || currentAdmin.employee_id;
+  if (!employeeId || String(employeeId) !== String(currentAdmin.employee_id)) {
+    throw forbiddenForEmployeeSession('managementAvatar');
+  }
+  const rows = await supabase.select('employees', {
+    select: 'avatar_bucket,avatar_path',
+    id: supabase.eq(employeeId),
+    limit: '1'
+  }).catch(() => []);
+  const row = rows[0];
+  if (!row || !row.avatar_path) {
+    res.statusCode = 204;
+    res.end();
+    return;
+  }
+  await streamStorageObject(row.avatar_bucket, row.avatar_path, res, { cacheControl: 'private, max-age=3600' });
+}
+
 async function getTelegramWebhookStatus() {
   const [info, me] = await Promise.all([
     getWebhookInfo(),
@@ -6495,7 +6516,12 @@ const EMPLOYEE_POST_ACTIONS = new Set(['uyqurMarkLearned', 'sendMessage', 'reply
 // bilan bitta umumiy ro'yxatni tahrirlaydi va supportlarga xuddi shu bildirishnoma
 // mexanizmi orqali (recordPermissionToggleEvents) xabar boradi.
 const MANAGEMENT_GET_ACTIONS = new Set(['uyqurKnowledgeDashboard', 'uyqurModuleFunctionsDetail', 'uyqurEmployeeKnowledgeProfile', 'uyqurPermissions']);
-const MANAGEMENT_POST_ACTIONS = new Set(['uyqurPermissionsSave', 'managementProfile']);
+const MANAGEMENT_POST_ACTIONS = new Set(['uyqurPermissionsSave', 'managementProfile', 'managementAvatarUpload', 'managementAvatarRemove']);
+
+// Profil rasmi uchun ruxsat etilgan formatlar va hajm chegarasi — base64
+// belgilar soni (~4/3 nisbat), taxminan 2 MB rasm faylga to'g'ri keladi.
+const MANAGEMENT_AVATAR_MAX_BASE64_CHARS = 2_800_000;
+const MANAGEMENT_AVATAR_DATA_URL_RE = /^data:image\/(png|jpe?g|webp);base64,([a-z0-9+/=]+)$/i;
 
 // "Boshqaruv paneli" (role='management') hisobi o'zining username/parolini
 // o'zgartirishi uchun — updateAdmin()ga o'xshash, lekin employees jadvalidagi
@@ -6507,6 +6533,42 @@ async function updateManagementProfile(body, currentAdmin) {
   if (body.new_password) values.password_hash = hashPassword(body.new_password);
   if (!Object.keys(values).length) throw new Error('Yangilanadigan maydon topilmadi');
   const rows = await supabase.patch('employees', { id: supabase.eq(currentAdmin.employee_id) }, values);
+  const employee = rows[0];
+  if (!employee) throw new Error('Xodim topilmadi');
+  return sanitizeEmployeeAccount(employee);
+}
+
+// "Boshqaruv paneli" hisobi o'z profil rasmini yuklaydi — rasm dataURL
+// (base64) shaklida keladi, Supabase Storage'ga yoziladi, employees
+// qatoriga esa faqat bucket/path/vaqt saqlanadi.
+async function uploadManagementAvatar(body, currentAdmin) {
+  const dataUrl = String(body.image || '').trim();
+  const match = MANAGEMENT_AVATAR_DATA_URL_RE.exec(dataUrl);
+  if (!match) throw new Error('Rasm formati noto‘g‘ri (PNG, JPEG yoki WEBP bo‘lishi kerak)');
+  const base64 = match[2];
+  if (base64.length > MANAGEMENT_AVATAR_MAX_BASE64_CHARS) throw new Error('Rasm hajmi juda katta (2 MB dan oshmasin)');
+  const ext = match[1].toLowerCase() === 'jpg' ? 'jpeg' : match[1].toLowerCase();
+  const contentType = `image/${ext}`;
+  const buffer = Buffer.from(base64, 'base64');
+  const bucket = getBucketName();
+  const path = `avatar/${currentAdmin.employee_id}/${Date.now()}.${ext === 'jpeg' ? 'jpg' : ext}`;
+  await uploadStorageObject(bucket, path, buffer, contentType);
+  const rows = await supabase.patch('employees', { id: supabase.eq(currentAdmin.employee_id) }, {
+    avatar_bucket: bucket,
+    avatar_path: path,
+    avatar_updated_at: new Date().toISOString()
+  });
+  const employee = rows[0];
+  if (!employee) throw new Error('Xodim topilmadi');
+  return sanitizeEmployeeAccount(employee);
+}
+
+async function removeManagementAvatar(body, currentAdmin) {
+  const rows = await supabase.patch('employees', { id: supabase.eq(currentAdmin.employee_id) }, {
+    avatar_bucket: null,
+    avatar_path: null,
+    avatar_updated_at: null
+  });
   const employee = rows[0];
   if (!employee) throw new Error('Xodim topilmadi');
   return sanitizeEmployeeAccount(employee);
@@ -6617,6 +6679,8 @@ async function handlePost(action, body, currentAdmin) {
     case 'clickupCompanyLinksSync': return syncClickUpCompanyLinks();
     case 'uyqurPermissionsSave': return savePermissionSelection(body.selected);
     case 'managementProfile': return updateManagementProfile(body, currentAdmin);
+    case 'managementAvatarUpload': return uploadManagementAvatar(body, currentAdmin);
+    case 'managementAvatarRemove': return removeManagementAvatar(body, currentAdmin);
     case 'uyqurMarkLearned': return setEventLearned(body.event_id, body.employee_id, body.learned !== false);
     case 'uyqurConfirmReview': return setManagerConfirmation(body.event_id, body.employee_id, body.confirmed !== false, body.manager_username || '');
     case 'uyqurManagerConfirmersSave': return saveManagerConfirmers(body.usernames);
@@ -6676,6 +6740,10 @@ async function handler(req, res) {
             }
           }
           await sendTelegramProfilePhoto(query, res);
+          return;
+        }
+        if (action === 'managementAvatar') {
+          await sendManagementAvatar(query, currentAdmin, res);
           return;
         }
         const data = await handleGet(action, query, currentAdmin);

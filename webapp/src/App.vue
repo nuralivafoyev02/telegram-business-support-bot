@@ -901,6 +901,39 @@
     <Transition name="modal-fade">
       <Modal v-if="managementModal === 'profile'" title="Profilni tahrirlash" @close="closeManagementModal">
         <form class="form" @submit.prevent="saveManagementProfile">
+          <div style="display:flex; align-items:center; gap:16px; padding-bottom:16px; margin-bottom:4px; border-bottom:1px solid #eef1f6;">
+            <div style="position:relative; width:84px; height:84px; flex-shrink:0;">
+              <img v-if="managementAvatarUrl" :src="managementAvatarUrl" alt=""
+                style="width:84px; height:84px; border-radius:50%; object-fit:cover; border:2px solid #eef1f6; display:block;" />
+              <span v-else style="width:84px; height:84px; border-radius:50%; border:2px solid #eef1f6; display:flex; align-items:center; justify-content:center; background:#eff6ff; color:#2563eb; font-size:28px; font-weight:800;">
+                {{ managementInitials }}
+              </span>
+              <button type="button"
+                style="position:absolute; right:-2px; bottom:-2px; width:30px; height:30px; border-radius:50%; background:#2563eb; color:#fff; border:2px solid #fff; display:flex; align-items:center; justify-content:center; cursor:pointer; box-shadow:0 2px 6px rgba(15,23,42,.22); padding:0;"
+                :disabled="managementAvatarUploading" @click="managementAvatarInputRef?.click()" title="Rasm yuklash">
+                <span v-if="managementAvatarUploading" class="spinner" style="width:14px; height:14px; border-radius:50%;" aria-hidden="true"></span>
+                <svg v-else viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M4 13.5V17a1 1 0 0 0 1 1h3.5L18.9 7.6a1.4 1.4 0 0 0 0-2L17 3.7a1.4 1.4 0 0 0-2 0L4.6 14.1z" />
+                  <path d="M13.3 5.7 16 8.4" />
+                </svg>
+              </button>
+              <input ref="managementAvatarInputRef" type="file" accept="image/png,image/jpeg,image/webp" style="display:none;" @change="onManagementAvatarSelected" />
+            </div>
+            <div style="display:flex; flex-direction:column; gap:6px;">
+              <div style="font-size:14px; font-weight:700; color:#1f2937;">Profil rasmi</div>
+              <div style="font-size:12px; color:#8a94a6;">JPG, PNG yoki WEBP · 8&nbsp;MB gacha</div>
+              <div style="display:flex; gap:8px;">
+                <button type="button" class="btn" style="padding:6px 14px; font-size:12px;"
+                  :disabled="managementAvatarUploading" @click="managementAvatarInputRef?.click()">
+                  {{ managementAvatarUploading ? 'Yuklanmoqda...' : (managementAvatarUrl ? 'Almashtirish' : 'Rasm yuklash') }}
+                </button>
+                <button v-if="managementAvatarUrl" type="button" class="btn" style="padding:6px 14px; font-size:12px; color:#dc2626;"
+                  :disabled="managementAvatarUploading" @click="removeManagementAvatarPhoto">
+                  O‘chirish
+                </button>
+              </div>
+            </div>
+          </div>
           <label class="label">Ism
             <input v-model.trim="managementProfileForm.full_name" class="input" placeholder="Ism familiya" />
           </label>
@@ -4453,6 +4486,9 @@ const actionMenuRef = ref(null);
 const managementMenuOpen = ref(false);
 const managementMenuRef = ref(null);
 const managementProfileForm = reactive({ full_name: '', username: '', new_password: '' });
+const managementAvatarUrl = ref('');
+const managementAvatarUploading = ref(false);
+const managementAvatarInputRef = ref(null);
 const rankingMenuOpen = ref(false);
 const rankingMenuRef = ref(null);
 const moduleCompareMenuOpen = ref(false);
@@ -11610,6 +11646,7 @@ function openManagementProfile() {
   managementProfileForm.new_password = '';
   managementMenuOpen.value = false;
   managementModal.value = 'profile';
+  loadManagementAvatarPreview();
 }
 
 async function saveManagementProfile() {
@@ -11624,6 +11661,89 @@ async function saveManagementProfile() {
     showToast(error.message);
   } finally {
     stopLoading('saveManagementProfile');
+  }
+}
+
+function revokeManagementAvatarUrl() {
+  if (managementAvatarUrl.value) URL.revokeObjectURL(managementAvatarUrl.value);
+  managementAvatarUrl.value = '';
+}
+
+async function loadManagementAvatarPreview() {
+  revokeManagementAvatarUrl();
+  if (!account.value?.has_avatar) return;
+  try {
+    const blob = await api.managementAvatar();
+    managementAvatarUrl.value = URL.createObjectURL(blob);
+  } catch (_error) {
+    managementAvatarUrl.value = '';
+  }
+}
+
+// Yuklashdan oldin rasmni brauzerda kichraytiramiz — bu 8 MB'gacha bo'lgan
+// telefon kamerasi fayllarini ham serverning ~2 MB chegarasiga moslaydi.
+function resizeAvatarImage(file, maxSize = 480, quality = 0.85) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Faylni o‘qib bo‘lmadi'));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('Rasmni ochib bo‘lmadi'));
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > height && width > maxSize) {
+          height = Math.round(height * (maxSize / width));
+          width = maxSize;
+        } else if (height >= width && height > maxSize) {
+          width = Math.round(width * (maxSize / height));
+          height = maxSize;
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.src = String(reader.result || '');
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+async function onManagementAvatarSelected(event) {
+  const file = event.target?.files?.[0];
+  if (event.target) event.target.value = '';
+  if (!file) return;
+  if (!/^image\//.test(file.type)) return showToast('Faqat rasm fayli tanlang (JPG, PNG, WEBP)');
+  if (file.size > 8 * 1024 * 1024) return showToast('Rasm hajmi juda katta (8 MB dan oshmasin)');
+  managementAvatarUploading.value = true;
+  try {
+    const dataUrl = await resizeAvatarImage(file);
+    const data = await api.saveManagementAvatar(dataUrl);
+    account.value = { ...account.value, ...data };
+    setAccount(account.value);
+    await loadManagementAvatarPreview();
+    showToast('Profil rasmi yangilandi');
+  } catch (error) {
+    showToast(error.message || 'Rasmni yuklab bo‘lmadi');
+  } finally {
+    managementAvatarUploading.value = false;
+  }
+}
+
+async function removeManagementAvatarPhoto() {
+  managementAvatarUploading.value = true;
+  try {
+    const data = await api.removeManagementAvatar();
+    account.value = { ...account.value, ...data };
+    setAccount(account.value);
+    revokeManagementAvatarUrl();
+    showToast('Profil rasmi o‘chirildi');
+  } catch (error) {
+    showToast(error.message || 'O‘chirib bo‘lmadi');
+  } finally {
+    managementAvatarUploading.value = false;
   }
 }
 
@@ -13513,6 +13633,7 @@ onUnmounted(() => {
   setModalScrollLock(false);
   Object.values(employeeAvatarUrls.value).filter(Boolean).forEach(url => URL.revokeObjectURL(url));
   Object.values(chatAvatarUrls.value).filter(Boolean).forEach(url => URL.revokeObjectURL(url));
+  revokeManagementAvatarUrl();
 });
 
 const SearchField = defineComponent({

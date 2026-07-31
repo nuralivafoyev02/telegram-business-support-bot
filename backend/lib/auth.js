@@ -83,7 +83,7 @@ function verifyToken(token) {
 
 async function loginEmployee(username, password) {
   const rows = await supabase.select('employees', {
-    select: 'id,tg_user_id,full_name,username,role,is_active,password_hash,tenant_id',
+    select: 'id,tg_user_id,full_name,username,role,is_active,password_hash,tenant_id,avatar_path,avatar_updated_at',
     username: supabase.eq(username),
     limit: '1'
   }).catch(() => []);
@@ -151,7 +151,9 @@ function sanitizeEmployeeAccount(employee) {
     full_name: employee.full_name || 'Support',
     role: employee.role || 'support',
     tenant_id: normalizeTenantId(employee.tenant_id),
-    type: 'employee'
+    type: 'employee',
+    has_avatar: !!employee.avatar_path,
+    avatar_updated_at: employee.avatar_updated_at || null
   };
 }
 
