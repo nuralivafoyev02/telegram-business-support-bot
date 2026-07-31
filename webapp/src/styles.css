@@ -3664,19 +3664,57 @@ body {
   font-size: 12px;
 }
 
-.uyqur-functions-row {
+.uyqur-functions-collapse-icon {
+  flex: 0 0 auto;
+  display: inline-flex;
+  color: var(--muted);
+  font-size: 16px;
+  transform: rotate(90deg);
+  transition: transform .14s ease;
+}
+
+.uyqur-functions-collapse-icon.open {
+  transform: rotate(-90deg);
+}
+
+.uyqur-functions-card-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 4px;
+}
+
+.uyqur-functions-card {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 6px 0;
-  cursor: pointer;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
   font-size: 13px;
   color: var(--muted-strong);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .04);
 }
 
-.uyqur-functions-row + .uyqur-functions-row {
-  border-top: 1px solid rgba(255, 255, 255, .05);
+.uyqur-functions-status-badge {
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.uyqur-functions-status-badge.sent {
+  background: rgba(34, 197, 94, .16);
+  color: #16a34a;
+}
+
+.uyqur-functions-status-badge.pending {
+  background: rgba(245, 158, 11, .16);
+  color: #b45309;
 }
 
 .manager-panel-lock {

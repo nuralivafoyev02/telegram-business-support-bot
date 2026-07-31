@@ -817,20 +817,22 @@
             <div class="uyqur-functions-group"
               v-for="module in permissionModules.filter(m => m.submodules.filter(submoduleMatchesDateFilter).length)"
               :key="'all-functions-module-' + module.id">
-              <label class="uyqur-functions-group-head">
+              <div class="uyqur-functions-group-head" @click="togglePermissionModuleExpanded(module)">
                 <span class="uyqur-functions-group-title">
                   <b>{{ module.name || module.key }}</b>
                   <span class="uyqur-functions-percent">{{ permissionModulePercent(module) }}%</span>
                 </span>
-                <input class="row-check" type="checkbox" :checked="isPermissionModuleSelected(module)"
-                  @change="togglePermissionModule(module, $event.target.checked)" />
-              </label>
-              <label class="uyqur-functions-row" v-for="submodule in module.submodules.filter(submoduleMatchesDateFilter)"
-                :key="'all-functions-submodule-' + submodule.id">
-                <span>{{ submodule.name || submodule.key }}</span>
-                <input class="row-check" type="checkbox" :checked="isPermissionSelected(submodule.key)"
-                  @change="togglePermissionSubmodule(submodule.key, $event.target.checked)" />
-              </label>
+                <span class="uyqur-functions-collapse-icon" :class="{ open: isPermissionModuleExpanded(module) }">›</span>
+              </div>
+              <div class="uyqur-functions-card-list" v-if="isPermissionModuleExpanded(module)">
+                <div class="uyqur-functions-card" v-for="submodule in module.submodules.filter(submoduleMatchesDateFilter)"
+                  :key="'all-functions-submodule-' + submodule.id">
+                  <span>{{ submodule.name || submodule.key }}</span>
+                  <span class="uyqur-functions-status-badge" :class="isPermissionSubmoduleSent(submodule) ? 'sent' : 'pending'">
+                    {{ isPermissionSubmoduleSent(submodule) ? 'Yuborildi' : 'Yuborilmadi' }}
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
           <div v-else class="empty">{{ loadingAction === 'knowledgeDashboard' ? 'Yuklanmoqda...' : 'Funksiyalar topilmadi' }}</div>
@@ -2601,20 +2603,21 @@
               <div class="uyqur-functions-groups" v-if="permissionModules.length">
                 <div class="uyqur-functions-group" v-for="module in permissionModules.filter(m => m.submodules.length)"
                   :key="'module-' + module.id">
-                  <label class="uyqur-functions-group-head">
+                  <div class="uyqur-functions-group-head" @click="togglePermissionModuleExpanded(module)">
                     <span class="uyqur-functions-group-title">
                       <b>{{ module.name || module.key }}</b>
                       <span class="uyqur-functions-percent">{{ permissionModulePercent(module) }}%</span>
                     </span>
-                    <input class="row-check" type="checkbox" :checked="isPermissionModuleSelected(module)"
-                      @change="togglePermissionModule(module, $event.target.checked)" />
-                  </label>
-                  <label class="uyqur-functions-row" v-for="submodule in module.submodules"
-                    :key="'submodule-' + submodule.id">
-                    <span>{{ submodule.name || submodule.key }}</span>
-                    <input class="row-check" type="checkbox" :checked="isPermissionSelected(submodule.key)"
-                      @change="togglePermissionSubmodule(submodule.key, $event.target.checked)" />
-                  </label>
+                    <span class="uyqur-functions-collapse-icon" :class="{ open: isPermissionModuleExpanded(module) }">›</span>
+                  </div>
+                  <div class="uyqur-functions-card-list" v-if="isPermissionModuleExpanded(module)">
+                    <div class="uyqur-functions-card" v-for="submodule in module.submodules" :key="'submodule-' + submodule.id">
+                      <span>{{ submodule.name || submodule.key }}</span>
+                      <span class="uyqur-functions-status-badge" :class="isPermissionSubmoduleSent(submodule) ? 'sent' : 'pending'">
+                        {{ isPermissionSubmoduleSent(submodule) ? 'Yuborildi' : 'Yuborilmadi' }}
+                      </span>
+                    </div>
+                  </div>
                 </div>
               </div>
               <div v-else class="empty">{{ loadingAction === 'tab' ? 'Yuklanmoqda...' : 'Funksiyalar topilmadi' }}</div>
@@ -4575,12 +4578,13 @@ const privates = ref([]);
 const employees = ref([]);
 const clickupTasks = ref([]);
 const permissionModules = ref([]);
-const permissionSelected = ref([]);
-// Faqat "Saqlash" bosilib, backendga yozilgan (demak supportlarga bildirishnoma
-// ketgan) tanlovning suratini saqlaydi — "Yuborildi/Yuborilmadi" filtri
-// shunga qarab ishlaydi, hozir checkbox'da belgilangan-u hali saqlanmagan
-// (bildirishnoma ketmagan) o'zgarishlarga qarab emas.
+// Backendga "Saqlash" orqali yozilgan (demak supportlarga bildirishnoma
+// ketgan) funksiyalar to'plami — "Yuborildi/Yuborilmadi" filtri va har bir
+// funksiyaning holat belgisi shunga qarab aniqlanadi. Checkbox yo'q — bu
+// ro'yxat faqat holatni ko'rsatadi, "Saqlash" esa hozirgi daraxtdagi
+// BARCHA funksiyalarni birdaniga yuboradi.
 const permissionSavedSelected = ref([]);
+const permissionExpandedModules = ref(new Set());
 const permissionDateFilter = ref('new');
 const permissionFilterMenuOpen = ref(false);
 const permissionFilterMenuRef = ref(null);
@@ -10597,17 +10601,31 @@ async function loadClickUpTasks() {
   clickupTasks.value = await api.clickupTasks({ limit: 200 });
 }
 
+function permissionModuleKey(module = {}) {
+  return String(module.key || module.id || '');
+}
+
+// Modul o'zida hali "Yuborilmadi" (yangi) funksiyasi bo'lsa — ochiq holatda
+// boshlanadi, aks holda yopiq holatda.
+function computeDefaultExpandedModules() {
+  const expanded = new Set();
+  permissionModules.value.forEach(module => {
+    const hasPending = (module.submodules || []).some(submodule => !permissionSavedSelected.value.includes(String(submodule.key)));
+    if (hasPending) expanded.add(permissionModuleKey(module));
+  });
+  permissionExpandedModules.value = expanded;
+}
+
 async function loadPermissionView() {
   const data = await api.uyqurPermissions();
   permissionModules.value = Array.isArray(data.modules) ? data.modules : [];
-  permissionSelected.value = Array.isArray(data.selected) ? data.selected.map(String) : [];
-  permissionSavedSelected.value = [...permissionSelected.value];
+  permissionSavedSelected.value = Array.isArray(data.selected) ? data.selected.map(String) : [];
+  computeDefaultExpandedModules();
 }
 
 // "Saqlash" bosilib backendga yozilgan (shu bilan xodimlarga bildirishnoma
-// ketgan) funksiya — shu zahoti "Yuborildi" hisoblanadi. Checkbox hozir
-// belgilangan-u hali "Saqlash" bosilmagan bo'lsa, bildirishnoma hali
-// ketmagani uchun u hamon "Yuborilmadi"da qoladi.
+// ketgan) funksiya — shu zahoti "Yuborildi" hisoblanadi, qolganlari
+// "Yuborilmadi"da qoladi (checkbox yo'q — bu ro'yxat faqat holatni ko'rsatadi).
 function submoduleMatchesDateFilter(submodule = {}) {
   const filter = permissionDateFilter.value;
   if (filter === 'all') return true;
@@ -10615,53 +10633,46 @@ function submoduleMatchesDateFilter(submodule = {}) {
   return filter === 'old' ? isSent : !isSent;
 }
 
-function isPermissionSelected(key) {
-  return permissionSelected.value.includes(String(key));
+function isPermissionSubmoduleSent(submodule = {}) {
+  return permissionSavedSelected.value.includes(String(submodule.key));
 }
 
-function togglePermissionSubmodule(key, checked) {
-  const stringKey = String(key);
-  if (checked) {
-    if (!permissionSelected.value.includes(stringKey)) permissionSelected.value = [...permissionSelected.value, stringKey];
-  } else {
-    permissionSelected.value = permissionSelected.value.filter(item => item !== stringKey);
-  }
+function isPermissionModuleExpanded(module = {}) {
+  return permissionExpandedModules.value.has(permissionModuleKey(module));
 }
 
-function isPermissionModuleSelected(module) {
-  const keys = (module.submodules || []).map(submodule => String(submodule.key));
-  return keys.length > 0 && keys.every(key => permissionSelected.value.includes(key));
+function togglePermissionModuleExpanded(module = {}) {
+  const key = permissionModuleKey(module);
+  const next = new Set(permissionExpandedModules.value);
+  if (next.has(key)) next.delete(key);
+  else next.add(key);
+  permissionExpandedModules.value = next;
 }
 
 function permissionModulePercent(module) {
   const keys = (module.submodules || []).map(submodule => String(submodule.key));
   if (!keys.length) return 0;
-  const checked = keys.filter(key => permissionSelected.value.includes(key)).length;
-  return Math.round((checked / keys.length) * 100);
+  const sent = keys.filter(key => permissionSavedSelected.value.includes(key)).length;
+  return Math.round((sent / keys.length) * 100);
 }
 
 const overallPermissionPercent = computed(() => {
   const keys = permissionModules.value.flatMap(module => (module.submodules || []).map(submodule => String(submodule.key)));
   if (!keys.length) return 0;
-  const checked = keys.filter(key => permissionSelected.value.includes(key)).length;
-  return Math.round((checked / keys.length) * 100);
+  const sent = keys.filter(key => permissionSavedSelected.value.includes(key)).length;
+  return Math.round((sent / keys.length) * 100);
 });
 
-function togglePermissionModule(module, checked) {
-  const keys = (module.submodules || []).map(submodule => String(submodule.key));
-  if (checked) {
-    permissionSelected.value = Array.from(new Set([...permissionSelected.value, ...keys]));
-  } else {
-    permissionSelected.value = permissionSelected.value.filter(item => !keys.includes(item));
-  }
-}
-
+// Checkbox yo'q — "Saqlash" hozir daraxtdagi BARCHA funksiyalarni yuboradi
+// (avval hali yuborilmagan — "Yuborilmadi" — bo'lganlar uchun supportlarga
+// bildirishnoma hodisasi yaratiladi, allaqachon yuborilganlar qayta
+// yuborilmaydi — backend faqat farqni hisoblaydi).
 async function saveUyqurPermissions() {
   startLoading('saveUyqurPermissions');
   try {
-    const data = await api.saveUyqurPermissions({ selected: permissionSelected.value });
-    permissionSelected.value = Array.isArray(data.selected) ? data.selected.map(String) : permissionSelected.value;
-    permissionSavedSelected.value = [...permissionSelected.value];
+    const allKeys = permissionModules.value.flatMap(module => (module.submodules || []).map(submodule => String(submodule.key)));
+    const data = await api.saveUyqurPermissions({ selected: allKeys });
+    permissionSavedSelected.value = Array.isArray(data.selected) ? data.selected.map(String) : allKeys;
     showToast('Saqlandi');
     if (account.value?.type === 'admin') await loadSupportOverview();
   } catch (error) {
@@ -10681,7 +10692,7 @@ async function resetUyqurNotifications() {
   startLoading('resetNotifications');
   try {
     await api.saveUyqurPermissions({ selected: [] });
-    permissionSelected.value = [];
+    permissionSavedSelected.value = [];
     await api.resetUyqurNotifications();
     await Promise.all([loadSupportOverview(), refreshSupportHistoryIfOpen(selectedSupportId.value)]);
     showToast('Tozalandi');
