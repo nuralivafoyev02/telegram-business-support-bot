@@ -677,6 +677,12 @@
         <div class="page-title">
           <h1>{{ managementActiveTab === 'functions' ? 'Barcha funksiyalar' : 'Boshqaruv paneli' }}</h1>
         </div>
+        <button type="button" title="Profilni tahrirlash" @click="openManagementProfile"
+          style="border:0; background:transparent; padding:0; cursor:pointer; flex-shrink:0;">
+          <img v-if="managementAvatarUrl" :src="managementAvatarUrl" alt=""
+            style="width:36px; height:36px; border-radius:50%; object-fit:cover; display:block;" />
+          <span v-else class="profile-avatar" style="width:36px; height:36px; border-radius:50%;">{{ managementInitials }}</span>
+        </button>
       </header>
 
       <div class="page-body">
