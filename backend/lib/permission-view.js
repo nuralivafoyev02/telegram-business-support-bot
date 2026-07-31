@@ -458,7 +458,13 @@ async function getKnowledgeDashboard({ days = 7 } = {}) {
     total_count: totalFunctionsCount
   };
 
-  const moduleNames = [...new Set(events.map(event => event.module_name).filter(Boolean))];
+  // "Barcha funksiyalar"dagi BUTUN modul daraxti asos qilib olinadi — hodisasi
+  // (kuzatilayotgan funksiyasi) yo'q modullar ham 0% bilan ro'yxatga kiradi.
+  const treeModuleNames = (Array.isArray(permissionRecord.modules) ? permissionRecord.modules : [])
+    .map(module => module.name || module.key)
+    .filter(Boolean);
+  const eventModuleNames = events.map(event => event.module_name).filter(Boolean);
+  const moduleNames = [...new Set([...treeModuleNames, ...eventModuleNames])];
   const moduleBars = moduleNames.map(moduleName => {
     const moduleEvents = events.filter(event => event.module_name === moduleName);
     let moduleLearnedPairs = 0;
