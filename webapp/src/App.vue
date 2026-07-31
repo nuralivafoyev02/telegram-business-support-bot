@@ -5304,9 +5304,13 @@ const supportPerformanceRows = computed(() => {
     ...topEmployeeRows.value
       .filter(row => Number(row.open_requests || 0) > 0 || Number(row.closed_requests || 0) > 0)
       .map(supportRowKey),
-    ...visibleCompanyInfoRows.value.filter(hasCompanySupport).map(c =>
-      supportRowKey({ username: c.uyqur_support_username, phone: c.uyqur_support_phone })
-    )
+    // Kompaniyaga biriktirilgan support kaliti faqat hozir mavjud xodimga
+    // tegishli bo'lsagina hisobga olinadi — aks holda o'chirilgan xodimning
+    // eski kompaniya biriktiruvi "reyting"da qayta paydo bo'lib qoladi.
+    ...visibleCompanyInfoRows.value
+      .filter(hasCompanySupport)
+      .map(c => supportRowKey({ username: c.uyqur_support_username, phone: c.uyqur_support_phone }))
+      .filter(key => employees.value.some(employee => supportRowKey(employee) === key))
   ].filter(Boolean));
 
   employees.value
