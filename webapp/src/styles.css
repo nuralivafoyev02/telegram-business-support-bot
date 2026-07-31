@@ -1610,6 +1610,16 @@ tbody tr:hover {
   min-width: 0;
 }
 
+.drilldown-panel .data-table {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.drilldown-panel .table-wrap {
+  flex: 1;
+}
+
 .drilldown-label {
   margin-bottom: 8px;
   color: #9fb5cf;

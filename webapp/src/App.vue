@@ -925,11 +925,11 @@
             <b>{{ employeeKnowledgeProfile.not_learned_functions.length }}</b>
           </span>
         </div>
-        <div style="display:flex; align-items:center; gap:24px; margin:16px 0; flex-wrap:wrap;">
+        <div style="display:flex; align-items:center; justify-content:center; gap:24px; margin:16px 0; flex-wrap:wrap;">
           <RadarChart
             :axes="employeeKnowledgeProfile.module_percents.map(module => ({ label: module.module_name, value: module.percent }))"
             :size="260" />
-          <div style="flex:1; min-width:320px;">
+          <div style="min-width:320px;">
             <div class="drilldown-label">Bilim darajasi dinamikasi</div>
             <LineChart
               :points="employeeKnowledgeProfile.daily_progress.map(day => ({ label: fmtShortDayMonth(day.date), value: day.percent }))"
