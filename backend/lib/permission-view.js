@@ -365,7 +365,11 @@ const MAX_DYNAMICS_DAYS = 60;
 async function getKnowledgeDashboard({ days = 7 } = {}) {
   const isAllTime = String(days) === 'all';
   const periodDays = !isAllTime && KNOWLEDGE_DASHBOARD_PERIOD_DAYS.has(Number(days)) ? Number(days) : 7;
-  const [employees, record] = await Promise.all([getSupportEmployees(), getNotificationRecord()]);
+  const [employees, record, permissionRecord] = await Promise.all([
+    getSupportEmployees(),
+    getNotificationRecord(),
+    getPermissionViewRecord()
+  ]);
   const events = record.events;
   const now = Date.now();
   // "Hammasi" tanlansa, davr boshlanishi hodisalar tarixining eng boshigacha
@@ -411,25 +415,47 @@ async function getKnowledgeDashboard({ days = 7 } = {}) {
   const periodFullyLearnedCount = periodEvents.filter(event => employees.length > 0
     && employees.every(employee => Boolean(progressFor(record, event.id, employee.id).learned_at))).length;
 
-  let learnedPairs = 0;
-  let inProgressPairs = 0;
-  let notLearnedPairs = 0;
-  events.forEach(event => {
-    employees.forEach(employee => {
-      const progress = progressFor(record, event.id, employee.id);
-      if (progress.confirmed_at) learnedPairs += 1;
-      else if (progress.learned_at) inProgressPairs += 1;
-      else notLearnedPairs += 1;
+  // "O'rganilgan/Jarayonda/Boshlanmagan funksiyalar" — "Barcha funksiyalar"dagi
+  // BUTUN daraxt (tanlangan + tanlanmagan) bo'yicha, har bir funksiya faqat bitta
+  // marta hisoblanadi (xodim x funksiya juftliklari emas):
+  //  - tanlanmagan yoki hali hodisasi yo'q — "boshlanmagan";
+  //  - hodisasi bor-у hech kim o'rganmagan — "boshlanmagan";
+  //  - kamida bitta xodim o'rgangan/tasdiqlagan, lekin BARCHASI tasdiqlamagan — "jarayonda";
+  //  - BARCHA faol support'lar tasdiqlagan — "o'rganilgan".
+  const allSubmodules = [];
+  (Array.isArray(permissionRecord.modules) ? permissionRecord.modules : []).forEach(module => {
+    (module.submodules || []).forEach(submodule => {
+      allSubmodules.push(String(submodule.key));
     });
   });
-  const totalPairs = events.length * employees.length;
+  const selectedKeys = new Set((Array.isArray(permissionRecord.selected) ? permissionRecord.selected : []).map(String));
+  const eventBySubmoduleKey = new Map(events.map(event => [String(event.submodule_key), event]));
+
+  let learnedFunctionsCount = 0;
+  let inProgressFunctionsCount = 0;
+  let notStartedFunctionsCount = 0;
+  allSubmodules.forEach(key => {
+    const event = selectedKeys.has(key) ? eventBySubmoduleKey.get(key) : null;
+    if (!event) {
+      notStartedFunctionsCount += 1;
+      return;
+    }
+    const learnedByAny = employees.some(employee => Boolean(progressFor(record, event.id, employee.id).learned_at));
+    const confirmedByAll = employees.length > 0
+      && employees.every(employee => Boolean(progressFor(record, event.id, employee.id).confirmed_at));
+    if (confirmedByAll) learnedFunctionsCount += 1;
+    else if (learnedByAny) inProgressFunctionsCount += 1;
+    else notStartedFunctionsCount += 1;
+  });
+  const totalFunctionsCount = allSubmodules.length;
   const donut = {
-    learned_pct: totalPairs ? Math.round((learnedPairs / totalPairs) * 100) : 0,
-    in_progress_pct: totalPairs ? Math.round((inProgressPairs / totalPairs) * 100) : 0,
-    not_learned_pct: totalPairs ? Math.round((notLearnedPairs / totalPairs) * 100) : 0,
-    learned_count: learnedPairs,
-    in_progress_count: inProgressPairs,
-    not_learned_count: notLearnedPairs
+    learned_pct: totalFunctionsCount ? Math.round((learnedFunctionsCount / totalFunctionsCount) * 100) : 0,
+    in_progress_pct: totalFunctionsCount ? Math.round((inProgressFunctionsCount / totalFunctionsCount) * 100) : 0,
+    not_learned_pct: totalFunctionsCount ? Math.round((notStartedFunctionsCount / totalFunctionsCount) * 100) : 0,
+    learned_count: learnedFunctionsCount,
+    in_progress_count: inProgressFunctionsCount,
+    not_learned_count: notStartedFunctionsCount,
+    total_count: totalFunctionsCount
   };
 
   const moduleNames = [...new Set(events.map(event => event.module_name).filter(Boolean))];
