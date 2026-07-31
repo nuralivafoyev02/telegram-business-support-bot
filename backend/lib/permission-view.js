@@ -673,6 +673,29 @@ async function getEmployeeKnowledgeProfile(employeeId) {
   // hodisaga ega) moduli asosida chiqariladi.
   const team = modulePercents.slice().sort((a, b) => b.event_count - a.event_count)[0]?.module_name || '';
 
+  // Xodimning umumiy bilim % ko'rsatkichi kunlar kesimida qanday o'zgarib
+  // borganini ko'rsatadigan chiziqli grafik uchun — eng birinchi hodisadan
+  // bugungacha (ko'pi bilan MAX_DYNAMICS_DAYS kun), har kun uchun "shu kunga
+  // qadar chiqqan funksiyalardan qanchasini o'rgangan" foizi hisoblanadi.
+  const nowMs = Date.now();
+  const earliestEventMs = events.length
+    ? Math.min(...events.map(event => new Date(event.created_at).getTime()))
+    : nowMs;
+  const progressDayCount = Math.min(MAX_DYNAMICS_DAYS, Math.max(1, Math.ceil((nowMs - earliestEventMs) / DAY_MS) + 1));
+  const progressDays = [];
+  for (let i = progressDayCount - 1; i >= 0; i -= 1) {
+    progressDays.push(new Date(nowMs - i * DAY_MS).toISOString().slice(0, 10));
+  }
+  const dailyProgress = progressDays.map(dayKey => {
+    const cutoffMs = new Date(`${dayKey}T23:59:59.999Z`).getTime();
+    const relevant = events.filter(event => new Date(event.created_at).getTime() <= cutoffMs);
+    const learned = relevant.filter(event => {
+      const progress = progressFor(record, event.id, employee.id);
+      return progress.learned_at && new Date(progress.learned_at).getTime() <= cutoffMs;
+    }).length;
+    return { date: dayKey, percent: relevant.length ? Math.round((learned / relevant.length) * 100) : 0 };
+  });
+
   const learnedFunctions = [];
   const notLearnedFunctions = [];
   events.forEach(event => {
@@ -707,6 +730,7 @@ async function getEmployeeKnowledgeProfile(employeeId) {
     },
     overall_percent: overallPercent,
     module_percents: modulePercents,
+    daily_progress: dailyProgress,
     learned_functions: learnedFunctions.sort((a, b) => String(b.learned_at || '').localeCompare(String(a.learned_at || ''))),
     not_learned_functions: notLearnedFunctions.sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))
   };

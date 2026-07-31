@@ -925,10 +925,16 @@
             <b>{{ employeeKnowledgeProfile.not_learned_functions.length }}</b>
           </span>
         </div>
-        <div style="display:flex; justify-content:center; margin:16px 0;">
+        <div style="display:flex; align-items:center; gap:24px; margin:16px 0; flex-wrap:wrap;">
           <RadarChart
             :axes="employeeKnowledgeProfile.module_percents.map(module => ({ label: module.module_name, value: module.percent }))"
             :size="260" />
+          <div style="flex:1; min-width:320px;">
+            <div class="drilldown-label">Bilim darajasi dinamikasi</div>
+            <LineChart
+              :points="employeeKnowledgeProfile.daily_progress.map(day => ({ label: fmtShortDayMonth(day.date), value: day.percent }))"
+              :width="420" :height="220" />
+          </div>
         </div>
         <div class="drilldown-columns">
           <div class="drilldown-panel">
@@ -5834,6 +5840,11 @@ function fmtDate(value) {
 function dateInputLabel(value = '') {
   const [year, month, day] = String(value || '').split('-');
   return year && month && day ? `${day}.${month}.${year}` : value || '—';
+}
+
+function fmtShortDayMonth(value = '') {
+  const [, month, day] = String(value || '').split('-');
+  return month && day ? `${day}.${month}` : value || '—';
 }
 
 function dateInputValue(date = new Date()) {
@@ -13878,6 +13889,65 @@ const RadarChart = defineComponent({
         valuePolygon,
         ...valueDots,
         ...labels
+      ]);
+    };
+  }
+});
+
+const LineChart = defineComponent({
+  props: {
+    points: { type: Array, default: () => [] },
+    width: { type: Number, default: 420 },
+    height: { type: Number, default: 220 },
+    maxLabels: { type: Number, default: 6 }
+  },
+  setup(props) {
+    return () => {
+      const width = props.width;
+      const height = props.height;
+      const dims = { left: 34, right: 10, top: 10, bottom: 26 };
+      const points = props.points;
+      if (!points.length) {
+        return h('svg', { viewBox: `0 0 ${width} ${height}`, width, height });
+      }
+      const plotWidth = width - dims.left - dims.right;
+      const plotHeight = height - dims.top - dims.bottom;
+      const xFor = index => dims.left + (points.length > 1 ? (plotWidth * index) / (points.length - 1) : plotWidth / 2);
+      const yFor = value => dims.top + plotHeight - (Math.max(0, Math.min(100, Number(value) || 0)) / 100) * plotHeight;
+
+      const gridLines = [0, 25, 50, 75, 100].map(tick => h('g', { key: `grid-${tick}` }, [
+        h('line', {
+          x1: dims.left, x2: width - dims.right, y1: yFor(tick), y2: yFor(tick),
+          stroke: '#e5e7eb', 'stroke-width': 1, 'stroke-dasharray': tick === 0 ? '' : '4 4'
+        }),
+        h('text', { x: dims.left - 8, y: yFor(tick) + 4, 'text-anchor': 'end', 'font-size': 10, fill: '#94a3b8' }, String(tick))
+      ]));
+
+      const linePoints = points.map((point, index) => `${xFor(index)},${yFor(point.value)}`).join(' ');
+      const labelStep = Math.max(1, Math.ceil(points.length / props.maxLabels));
+      const xLabels = points.map((point, index) => {
+        if (index !== 0 && index !== points.length - 1 && index % labelStep !== 0) return null;
+        return h('text', {
+          key: `x-${index}`,
+          x: xFor(index),
+          y: height - 6,
+          'text-anchor': 'middle',
+          'font-size': 10,
+          fill: '#94a3b8'
+        }, point.label);
+      }).filter(Boolean);
+
+      const dots = points.length <= 31
+        ? points.map((point, index) => h('circle', {
+          key: `dot-${index}`, cx: xFor(index), cy: yFor(point.value), r: 2.5, fill: '#7c3aed'
+        }))
+        : [];
+
+      return h('svg', { viewBox: `0 0 ${width} ${height}`, width, height }, [
+        ...gridLines,
+        h('polyline', { points: linePoints, fill: 'none', stroke: '#7c3aed', 'stroke-width': 2 }),
+        ...dots,
+        ...xLabels
       ]);
     };
   }
