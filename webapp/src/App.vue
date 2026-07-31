@@ -792,18 +792,25 @@
               <div class="card-title">Uyqur Funksiyalari</div>
               <span class="uyqur-functions-percent uyqur-functions-percent-overall">Umumiy {{ overallPermissionPercent }}%</span>
             </div>
-            <div class="company-module-chart-metric-tabs">
-              <button type="button" class="company-module-chart-metric-btn"
-                :class="{ active: permissionDateFilter === 'all' }" @click="permissionDateFilter = 'all'">Hammasi</button>
-              <button type="button" class="company-module-chart-metric-btn"
-                :class="{ active: permissionDateFilter === 'old' }" @click="permissionDateFilter = 'old'">Eski</button>
-              <button type="button" class="company-module-chart-metric-btn"
-                :class="{ active: permissionDateFilter === 'new' }" @click="permissionDateFilter = 'new'">Yangi</button>
+            <div class="card-header-actions" ref="permissionFilterMenuRef">
+              <button class="btn-icon mini-icon" type="button" @click="permissionFilterMenuOpen = !permissionFilterMenuOpen"
+                title="Filtr">
+                <span>☰</span>
+              </button>
+              <Transition name="fade">
+                <div v-if="permissionFilterMenuOpen" class="actions-dropdown mini-dropdown right-align">
+                  <button type="button" @click="permissionDateFilter = 'all'; permissionFilterMenuOpen = false">
+                    <span>{{ permissionDateFilter === 'all' ? '✓ ' : '' }}Hammasi</span>
+                  </button>
+                  <button type="button" @click="permissionDateFilter = 'old'; permissionFilterMenuOpen = false">
+                    <span>{{ permissionDateFilter === 'old' ? '✓ ' : '' }}Eski</span>
+                  </button>
+                  <button type="button" @click="permissionDateFilter = 'new'; permissionFilterMenuOpen = false">
+                    <span>{{ permissionDateFilter === 'new' ? '✓ ' : '' }}Yangi</span>
+                  </button>
+                </div>
+              </Transition>
             </div>
-            <button class="btn primary" :disabled="loadingAction === 'saveUyqurPermissions'"
-              @click="saveUyqurPermissions">
-              {{ loadingAction === 'saveUyqurPermissions' ? 'Saqlanmoqda...' : 'Saqlash' }}
-            </button>
           </div>
           <div class="uyqur-functions-groups" v-if="permissionModules.length">
             <div class="uyqur-functions-group"
@@ -826,6 +833,12 @@
             </div>
           </div>
           <div v-else class="empty">{{ loadingAction === 'knowledgeDashboard' ? 'Yuklanmoqda...' : 'Funksiyalar topilmadi' }}</div>
+          <div style="display:flex; justify-content:flex-end; margin-top:16px;">
+            <button class="btn primary" :disabled="loadingAction === 'saveUyqurPermissions'"
+              @click="saveUyqurPermissions">
+              {{ loadingAction === 'saveUyqurPermissions' ? 'Saqlanmoqda...' : 'Saqlash' }}
+            </button>
+          </div>
         </section>
       </template>
       </div>
@@ -4558,6 +4571,8 @@ const clickupTasks = ref([]);
 const permissionModules = ref([]);
 const permissionSelected = ref([]);
 const permissionDateFilter = ref('all');
+const permissionFilterMenuOpen = ref(false);
+const permissionFilterMenuRef = ref(null);
 const supportOverview = ref([]);
 const selectedSupportId = ref('');
 const selectedSupportName = ref('');
@@ -5698,6 +5713,10 @@ function handleDocumentPointerDown(event) {
     const root = rankingMenuRef.value;
     if (!root || !root.contains(event.target)) rankingMenuOpen.value = false;
   }
+  if (permissionFilterMenuOpen.value) {
+    const root = permissionFilterMenuRef.value;
+    if (!root || !root.contains(event.target)) permissionFilterMenuOpen.value = false;
+  }
   if (moduleCompareMenuOpen.value) {
     const root = moduleCompareMenuRef.value;
     if (!root || !root.contains(event.target)) moduleCompareMenuOpen.value = false;
@@ -5728,6 +5747,7 @@ function handleDocumentKeydown(event) {
   if (event.key === 'Escape') {
     actionMenuOpen.value = false;
     rankingMenuOpen.value = false;
+    permissionFilterMenuOpen.value = false;
     moduleCompareMenuOpen.value = false;
     closeCompanyModuleFilterMenu();
     closeCompanyMrrFilterMenu();
