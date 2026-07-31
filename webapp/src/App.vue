@@ -727,7 +727,7 @@
         </article>
       </div>
 
-      <div style="display:grid; grid-template-columns: 1fr 1.5fr; gap:16px; margin-top:16px; align-items:start;">
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-top:16px; align-items:stretch;">
         <section class="card pad">
           <div class="card-header">
             <div class="card-title">Modullar bo‘yicha bilim darajasi</div>
@@ -756,7 +756,7 @@
           <div class="card-header">
             <div class="card-title">Xodimlar reytingi</div>
           </div>
-          <div style="display:flex; flex-direction:column; max-height:300px; overflow-y:auto;">
+          <div style="display:flex; flex-direction:column;">
             <div style="display:flex; align-items:center; gap:8px; padding:6px 0; font-size:11px; text-transform:uppercase; color:#9ca3af; border-bottom:1px solid #f1f5f9;">
               <span style="width:20px; flex-shrink:0;">#</span>
               <span style="flex:1;">Xodim</span>
