@@ -2562,6 +2562,10 @@ body {
   font-weight: 600;
 }
 
+.nav button b {
+  font-weight: inherit;
+}
+
 .nav button:hover {
   color: var(--text);
   background: var(--surface-soft);
