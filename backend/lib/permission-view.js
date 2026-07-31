@@ -455,11 +455,10 @@ async function getKnowledgeDashboard({ days = 7 } = {}) {
   // bo'limidagi jami songa teng bo'lishi uchun, har bir funksiya (submodule)
   // FAQAT BITTA marta hisoblanadi (xodim x funksiya juftliklari emas):
   //  - tanlanmagan yoki hali hodisasi yo'q — "boshlanmagan";
-  //  - hodisasi bor-у hech kim tegmagan (hech kimda learned_at yo'q) — "boshlanmagan";
-  //  - kamida bitta xodim o'rgangan, lekin hech kim tasdiqlamagan — "jarayonda";
-  //  - kamida bitta faol support tasdiqlagan — "o'rganilgan". ("BARCHASI
-  //    tasdiqlashi" shart qilinmaydi — 4+ kishilik jamoada bu deyarli hech
-  //    qachon bajarilmaydi va "0" degan noto'g'ri taassurot beradi.)
+  //  - hodisasi bor-у hech kim tegmagan — "boshlanmagan";
+  //  - kamida bitta xodim o'rgangan/tasdiqlagan, lekin BIRORTASI hali
+  //    tasdiqlamagan (hattoki bittasi qolgan bo'lsa ham) — "jarayonda";
+  //  - BARCHA faol support'lar tasdiqlagan — "o'rganilgan".
   let learnedFunctionsCount = 0;
   let inProgressFunctionsCount = 0;
   let notStartedFunctionsCount = 0;
@@ -469,9 +468,13 @@ async function getKnowledgeDashboard({ days = 7 } = {}) {
       notStartedFunctionsCount += 1;
       return;
     }
-    const confirmedByAny = employees.some(employee => Boolean(progressFor(record, event.id, employee.id).confirmed_at));
-    const learnedByAny = employees.some(employee => Boolean(progressFor(record, event.id, employee.id).learned_at));
-    if (confirmedByAny) learnedFunctionsCount += 1;
+    const learnedByAny = employees.some(employee => {
+      const progress = progressFor(record, event.id, employee.id);
+      return Boolean(progress.learned_at || progress.confirmed_at);
+    });
+    const confirmedByAll = employees.length > 0
+      && employees.every(employee => Boolean(progressFor(record, event.id, employee.id).confirmed_at));
+    if (confirmedByAll) learnedFunctionsCount += 1;
     else if (learnedByAny) inProgressFunctionsCount += 1;
     else notStartedFunctionsCount += 1;
   });
