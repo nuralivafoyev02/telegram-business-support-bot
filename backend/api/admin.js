@@ -5368,11 +5368,15 @@ async function sendTelegramProfilePhoto(query, res) {
   await sendTelegramFile({ file_id: photo.file_id }, res);
 }
 
-// "Boshqaruv paneli" hisobining o'zi yuklagan profil rasmini qaytaradi —
-// faqat hisobning o'ziga (query.employee_id yo'q bo'lsa ham) cheklanadi.
+// Xodim o'zi yuklagan profil rasmini qaytaradi. "Boshqaruv paneli" (yoki
+// admin/owner) har qanday xodimning rasmini ko'ra oladi — masalan xodimlar
+// reytingi yoki modul-funksiya tafsilotida boshqalarning rasmi ko'rsatiladi.
+// Support xodim sessiyasi esa faqat o'zining rasmini so'rashi mumkin.
 async function sendManagementAvatar(query, currentAdmin, res) {
   const employeeId = query.employee_id || currentAdmin.employee_id;
-  if (!employeeId || String(employeeId) !== String(currentAdmin.employee_id)) {
+  if (!employeeId) throw forbiddenForEmployeeSession('managementAvatar');
+  const canViewAnyEmployee = !isEmployeeSession(currentAdmin) || currentAdmin.role === 'management';
+  if (!canViewAnyEmployee && String(employeeId) !== String(currentAdmin.employee_id)) {
     throw forbiddenForEmployeeSession('managementAvatar');
   }
   const rows = await supabase.select('employees', {
@@ -6507,7 +6511,7 @@ async function updateAdmin(body, currentAdmin) {
 // doim sessiyaning o'z employee_id'si bilan majburan almashtiriladi, mijoz
 // tomonidan yuborilgan qiymat hech qachon ishonilmaydi.
 const EMPLOYEE_GET_ACTIONS = new Set(['employeeActivity', 'uyqurSupportHistory', 'groups', 'privates', 'requests', 'chatDetail']);
-const EMPLOYEE_POST_ACTIONS = new Set(['uyqurMarkLearned', 'sendMessage', 'replyRequest']);
+const EMPLOYEE_POST_ACTIONS = new Set(['uyqurMarkLearned', 'sendMessage', 'replyRequest', 'managementProfile', 'managementAvatarUpload', 'managementAvatarRemove']);
 
 // "Boshqaruv paneli" (role='management') xodimlari — o'z chatiga emas,
 // balki BUTUN jamoaning bilim-darajasi statistikasiga kirish huquqiga ega.

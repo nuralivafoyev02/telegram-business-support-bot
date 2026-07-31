@@ -57,6 +57,7 @@
             @click="refreshMyDashboard">
             {{ loadingAction === 'employeeRefresh' ? 'Yangilanmoqda...' : 'Yangilash' }}
           </button>
+          <button class="btn" type="button" @click="openManagementProfile">Profilni tahrirlash</button>
           <button class="btn" type="button" @click="logout">Chiqish</button>
         </div>
       </header>
@@ -576,6 +577,59 @@
       </div>
     </Transition>
 
+    <Transition name="modal-fade">
+      <Modal v-if="managementModal === 'profile'" title="Profilni tahrirlash" @close="closeManagementModal">
+        <form class="form" @submit.prevent="saveManagementProfile">
+          <div style="display:flex; align-items:center; gap:16px; padding-bottom:16px; margin-bottom:4px; border-bottom:1px solid #eef1f6;">
+            <div style="position:relative; width:84px; height:84px; flex-shrink:0;">
+              <img v-if="managementAvatarUrl" :src="managementAvatarUrl" alt=""
+                style="width:84px; height:84px; border-radius:50%; object-fit:cover; border:2px solid #eef1f6; display:block;" />
+              <span v-else style="width:84px; height:84px; border-radius:50%; border:2px solid #eef1f6; display:flex; align-items:center; justify-content:center; background:#eff6ff; color:#2563eb; font-size:28px; font-weight:800;">
+                {{ managementInitials }}
+              </span>
+              <button type="button"
+                style="position:absolute; right:-2px; bottom:-2px; width:30px; height:30px; border-radius:50%; background:#2563eb; color:#fff; border:2px solid #fff; display:flex; align-items:center; justify-content:center; cursor:pointer; box-shadow:0 2px 6px rgba(15,23,42,.22); padding:0;"
+                :disabled="managementAvatarUploading" @click="managementAvatarInputRef?.click()" title="Rasm yuklash">
+                <span v-if="managementAvatarUploading" class="spinner" style="width:14px; height:14px; border-radius:50%;" aria-hidden="true"></span>
+                <svg v-else viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M4 13.5V17a1 1 0 0 0 1 1h3.5L18.9 7.6a1.4 1.4 0 0 0 0-2L17 3.7a1.4 1.4 0 0 0-2 0L4.6 14.1z" />
+                  <path d="M13.3 5.7 16 8.4" />
+                </svg>
+              </button>
+              <input ref="managementAvatarInputRef" type="file" accept="image/png,image/jpeg,image/webp" style="display:none;" @change="onManagementAvatarSelected" />
+            </div>
+            <div style="display:flex; flex-direction:column; gap:6px;">
+              <div style="font-size:14px; font-weight:700; color:#1f2937;">Profil rasmi</div>
+              <div style="font-size:12px; color:#8a94a6;">JPG, PNG yoki WEBP · 8&nbsp;MB gacha</div>
+              <div style="display:flex; gap:8px;">
+                <button type="button" class="btn" style="padding:6px 14px; font-size:12px;"
+                  :disabled="managementAvatarUploading" @click="managementAvatarInputRef?.click()">
+                  {{ managementAvatarUploading ? 'Yuklanmoqda...' : (managementAvatarUrl ? 'Almashtirish' : 'Rasm yuklash') }}
+                </button>
+                <button v-if="managementAvatarUrl" type="button" class="btn" style="padding:6px 14px; font-size:12px; color:#dc2626;"
+                  :disabled="managementAvatarUploading" @click="removeManagementAvatarPhoto">
+                  O‘chirish
+                </button>
+              </div>
+            </div>
+          </div>
+          <label class="label">Ism
+            <input v-model.trim="managementProfileForm.full_name" class="input" placeholder="Ism familiya" />
+          </label>
+          <label class="label">Kirish nomi
+            <input v-model.trim="managementProfileForm.username" class="input" placeholder="username" />
+          </label>
+          <label class="label">Yangi parol
+            <input v-model="managementProfileForm.new_password" class="input" type="password"
+              autocomplete="new-password" placeholder="O‘zgartirish uchun kiriting" />
+          </label>
+          <button class="btn primary" :disabled="loadingAction === 'saveManagementProfile'">
+            {{ loadingAction === 'saveManagementProfile' ? 'Saqlanmoqda...' : 'Saqlash' }}
+          </button>
+        </form>
+      </Modal>
+    </Transition>
+
     <Transition name="toast-pop">
       <div v-if="toast" class="toast">{{ toast }}</div>
     </Transition>
@@ -780,7 +834,6 @@
           <div><span>O‘rgangan fichalar</span><b style="color:#16a34a;">{{ fmtNumber(moduleFunctionsDetail.learned_total) }}</b></div>
           <div><span>Jarayondagi fichalar</span><b style="color:#f59e0b;">{{ fmtNumber(moduleFunctionsDetail.in_progress_total) }}</b></div>
           <div><span>Boshlanmagan fichalar</span><b style="color:#dc2626;">{{ fmtNumber(moduleFunctionsDetail.not_started_total) }}</b></div>
-          <div><span>O‘rtacha o‘rganish vaqti</span><b>{{ moduleFunctionsDetail.avg_days_to_learn }} kun</b></div>
         </div>
         <div class="table-wrap">
           <table>
@@ -802,13 +855,11 @@
                 <td>
                   <div style="display:flex; flex-wrap:wrap; gap:8px; max-width:240px;">
                     <span v-for="person in fn.learned_employees" :key="`learned-${fn.event_id}-${person.id}`"
-                      style="display:flex; flex-direction:column; align-items:center; width:32px;"
                       :title="`${person.full_name} — ${fmtDate(person.learned_at)}`">
                       <img v-if="employeeAvatarUrl(person)" :src="employeeAvatarUrl(person)" alt=""
                         style="width:26px; height:26px; border-radius:50%; object-fit:cover; border:2px solid #dcfce7;" />
                       <span v-else class="profile-avatar"
                         style="width:26px; height:26px; font-size:10px; background:#dcfce7; color:#16a34a;">{{ initialsFromText(person.full_name) }}</span>
-                      <small style="font-size:9px; line-height:1.3; color:#6b7280; margin-top:2px; white-space:nowrap;">{{ fmtShortDate(person.learned_at) }}</small>
                     </span>
                     <span v-if="!fn.learned_employees.length" class="empty compact" style="padding:0;">—</span>
                   </div>
@@ -831,7 +882,6 @@
           </table>
         </div>
         <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
-          <button class="btn" type="button" @click="exportModuleFunctionsCsv">Excelga eksport qilish</button>
           <button class="btn primary" type="button" @click="closeManagementModal">Yopish</button>
         </div>
       </Modal>
@@ -5786,11 +5836,6 @@ function fmtDate(value) {
   return new Intl.DateTimeFormat('uz-UZ', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value));
 }
 
-function fmtShortDate(value) {
-  if (!value) return '';
-  return new Intl.DateTimeFormat('uz-UZ', { day: '2-digit', month: '2-digit' }).format(new Date(value));
-}
-
 function dateInputLabel(value = '') {
   const [year, month, day] = String(value || '').split('-');
   return year && month && day ? `${day}.${month}.${year}` : value || '—';
@@ -5847,10 +5892,20 @@ async function loadEmployeeAvatar(row = {}) {
   row = row || {};
   const key = employeeAvatarKey(row);
   const tgUserId = row.tg_user_id;
-  if (!key || !tgUserId || employeeAvatarUrls.value[key] || employeeAvatarLoading.value[key]) return;
+  // Xodim panelda o'zi rasm yuklagan bo'lsa (has_avatar), o'sha rasm birinchi
+  // navbatda ishlatiladi — faqat u topilmasa Telegram profil rasmiga qaytiladi.
+  const employeeId = row.has_avatar ? (row.employee_id || row.id) : null;
+  if (!key || (!tgUserId && !employeeId) || employeeAvatarUrls.value[key] || employeeAvatarLoading.value[key]) return;
   employeeAvatarLoading.value = { ...employeeAvatarLoading.value, [key]: true };
   try {
-    const blob = await api.telegramProfilePhoto(tgUserId);
+    let blob = null;
+    if (employeeId) {
+      blob = await api.employeeAvatar(employeeId).catch(() => null);
+    }
+    if (!blob && tgUserId) {
+      blob = await api.telegramProfilePhoto(tgUserId);
+    }
+    if (!blob) throw new Error('Rasm topilmadi');
     const url = URL.createObjectURL(blob);
     employeeAvatarUrls.value = { ...employeeAvatarUrls.value, [key]: url };
   } catch (_) {
@@ -11774,33 +11829,6 @@ async function removeManagementAvatarPhoto() {
   } finally {
     managementAvatarUploading.value = false;
   }
-}
-
-function csvCell(value) {
-  return `"${String(value ?? '').replace(/"/g, '""')}"`;
-}
-
-function exportModuleFunctionsCsv() {
-  const detail = moduleFunctionsDetail.value;
-  if (!detail || !detail.functions?.length) return showToast('Eksport qilish uchun ma’lumot yo‘q');
-  const rows = [['Funksiya nomi', 'Chiqqan sana', 'O‘rgangan xodimlar', 'O‘rganmagan xodimlar', 'Chiqqaniga (kun)']];
-  detail.functions.forEach(fn => {
-    rows.push([
-      fn.submodule_name,
-      fmtDate(fn.created_at),
-      fn.learned_employees.map(row => row.full_name).join('; '),
-      fn.not_learned_employees.map(row => row.full_name).join('; '),
-      String(fn.days_since_launch)
-    ]);
-  });
-  const csv = rows.map(row => row.map(csvCell).join(',')).join('\n');
-  const blob = new Blob([`﻿${csv}`], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `${detail.module_name}-funksiyalar.csv`;
-  link.click();
-  URL.revokeObjectURL(url);
 }
 
 // Emoji glyphlar OS/brauzerga qarab har xil (yoki umuman) chizilgani uchun

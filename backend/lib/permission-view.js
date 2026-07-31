@@ -170,7 +170,7 @@ async function savePermissionSelection(selected = []) {
 
 async function getSupportEmployees() {
   return supabase.select('employees', {
-    select: 'id,username,full_name,role,is_active,created_at,tg_user_id',
+    select: 'id,username,full_name,role,is_active,created_at,tg_user_id,avatar_path,avatar_updated_at',
     role: supabase.eq('support'),
     is_active: supabase.eq(true),
     limit: '200'
@@ -425,6 +425,7 @@ async function getKnowledgeDashboard({ days = 7 } = {}) {
       full_name: employee.full_name || employee.username || 'Xodim',
       username: employee.username || '',
       tg_user_id: employee.tg_user_id || null,
+      has_avatar: !!employee.avatar_path,
       percent,
       change_pct: percent - previousPercent,
       learned_count: counts.learned,
@@ -595,6 +596,7 @@ async function getModuleFunctionsDetail(moduleName) {
         id: employee.id,
         full_name: employee.full_name || employee.username || 'Xodim',
         tg_user_id: employee.tg_user_id || null,
+        has_avatar: !!employee.avatar_path,
         learned_at: progress.learned_at || null
       };
       if (progress.learned_at) learnedEmployees.push(row);
