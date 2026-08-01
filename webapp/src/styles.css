@@ -2850,6 +2850,11 @@ body {
   background: var(--surface-soft);
 }
 
+.actions-dropdown button.active {
+  color: var(--primary);
+  background: var(--surface-soft);
+}
+
 .danger-menu-item {
   color: var(--danger) !important;
 }

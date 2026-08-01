@@ -377,11 +377,36 @@
               <div class="uyqur-functions-group-title">
                 <div class="card-title">Uyqur Funksiyalari</div>
               </div>
+              <div style="display:flex; align-items:center; gap:10px;">
+                <button class="btn primary" type="button"
+                  :disabled="!employeeFunctionPending.size || loadingAction === 'employeeSendLearned'"
+                  @click="submitEmployeeFunctionChanges">
+                  {{ loadingAction === 'employeeSendLearned' ? (employeeRevertMode ? 'Qaytarilmoqda...' : 'Yuborilmoqda...') : (employeeRevertMode ? 'Ortga qaytarish' : 'Yuborish') }}
+                </button>
+                <div style="position:relative;" ref="employeeFunctionMenuRef">
+                  <button class="btn" type="button" title="Filtr va amallar" @click.stop="employeeFunctionMenuOpen = !employeeFunctionMenuOpen">☰</button>
+                  <Transition name="fade">
+                    <div v-if="employeeFunctionMenuOpen" class="actions-dropdown" @click.stop>
+                      <button type="button" :class="{ active: employeeFunctionViewMode === 'all' }"
+                        @click="chooseEmployeeFunctionMenuOption('all')">Hammasi</button>
+                      <button type="button" :class="{ active: employeeFunctionViewMode === 'sent' }"
+                        @click="chooseEmployeeFunctionMenuOption('sent')">Topshirilgan</button>
+                      <button type="button" :class="{ active: employeeFunctionViewMode === 'confirmed' }"
+                        @click="chooseEmployeeFunctionMenuOption('confirmed')">Tasdiqlangan</button>
+                      <button type="button" :class="{ active: employeeFunctionViewMode === 'not_learned' }"
+                        @click="chooseEmployeeFunctionMenuOption('not_learned')">O‘rganilmagan</button>
+                      <button type="button" :class="{ active: employeeFunctionViewMode === 'revert' }"
+                        @click="chooseEmployeeFunctionMenuOption('revert')">Ortga qaytarish</button>
+                    </div>
+                  </Transition>
+                </div>
+              </div>
             </div>
-            <div class="uyqur-functions-groups" ref="permissionGroupsRef" v-if="permissionModulesMerged.length">
+            <div class="uyqur-functions-groups" ref="permissionGroupsRef"
+              v-if="permissionModulesMerged.filter(m => m.submodules.some(sm => isEmployeeFunctionVisible(String(sm.key)))).length">
               <div class="uyqur-functions-group" :class="{ collapsed: !isPermissionModuleExpanded(module) }"
                 :style="permissionGroupMinHeight ? { minHeight: permissionGroupMinHeight + 'px' } : null"
-                v-for="module in permissionModulesMerged.filter(m => m.submodules.length)"
+                v-for="module in permissionModulesMerged.filter(m => m.submodules.some(sm => isEmployeeFunctionVisible(String(sm.key))))"
                 :key="'employee-functions-module-' + module.id">
                 <div class="uyqur-functions-group-head" @click="togglePermissionModuleExpanded(module)">
                   <span class="uyqur-functions-collapse-icon">›</span>
@@ -390,13 +415,14 @@
                   </span>
                 </div>
                 <div class="uyqur-functions-card-list" v-if="isPermissionModuleExpanded(module)">
-                  <label class="uyqur-functions-card" v-for="submodule in module.submodules"
+                  <label class="uyqur-functions-card"
+                    v-for="submodule in module.submodules.filter(sm => isEmployeeFunctionVisible(String(sm.key)))"
                     :key="'employee-functions-submodule-' + submodule.id"
                     :class="{ confirmed: isEmployeeFunctionConfirmed(String(submodule.key)) }"
-                    :style="{ cursor: isEmployeeFunctionConfirmed(String(submodule.key)) ? 'default' : 'pointer', justifyContent: 'flex-start' }">
+                    :style="{ cursor: isEmployeeFunctionDisabled(String(submodule.key)) ? 'default' : 'pointer', justifyContent: 'flex-start' }">
                     <input type="checkbox" class="row-check"
                       :checked="isEmployeeFunctionChecked(String(submodule.key))"
-                      :disabled="isEmployeeFunctionConfirmed(String(submodule.key))"
+                      :disabled="isEmployeeFunctionDisabled(String(submodule.key))"
                       @change="toggleEmployeeFunctionSelected(String(submodule.key))" />
                     <span>{{ submodule.name || submodule.key }}</span>
                   </label>
@@ -404,12 +430,6 @@
               </div>
             </div>
             <div v-else class="empty">{{ loadingAction === 'employeeRefresh' ? 'Yuklanmoqda...' : 'Funksiyalar topilmadi' }}</div>
-            <div style="display:flex; justify-content:flex-end; margin-top:16px;">
-              <button class="btn primary" type="button" :disabled="!employeeFunctionPending.size || loadingAction === 'employeeSendLearned'"
-                @click="submitEmployeeFunctionChanges">
-                {{ loadingAction === 'employeeSendLearned' ? 'Yuborilmoqda...' : (employeeFunctionPendingAction === 'revert' ? 'Qaytarish' : 'Yuborish') }}
-              </button>
-            </div>
           </section>
         </template>
       </div>
@@ -5851,6 +5871,10 @@ function handleDocumentPointerDown(event) {
     const root = managementMenuRef.value;
     if (!root || !root.contains(event.target)) managementMenuOpen.value = false;
   }
+  if (employeeFunctionMenuOpen.value) {
+    const root = employeeFunctionMenuRef.value;
+    if (!root || !root.contains(event.target)) employeeFunctionMenuOpen.value = false;
+  }
   if (rankingMenuOpen.value) {
     const root = rankingMenuRef.value;
     if (!root || !root.contains(event.target)) rankingMenuOpen.value = false;
@@ -5888,6 +5912,7 @@ function handleDocumentKeydown(event) {
     moduleCompareMenuOpen.value = false;
     managementMenuOpen.value = false;
     otherMenuOpen.value = false;
+    employeeFunctionMenuOpen.value = false;
     closeCompanyModuleFilterMenu();
     closeCompanyMrrFilterMenu();
     closeCompanyModuleChartCompanyMenu();
@@ -10878,15 +10903,37 @@ const employeeHistoryByKey = computed(() => {
 // key -> maqsad holat (true = yubormoqchi, false = qaytarmoqchi) — faqat
 // serverdagi joriy `learned` holatidan farq qilganda saqlanadi.
 const employeeFunctionPending = ref(new Map());
+// 'all' | 'sent' | 'confirmed' | 'not_learned' — faqat qaysi kartalar ko'rinishini
+// boshqaradi. 'revert' esa alohida rejim: faqat topshirilgan-lekin-tasdiqlanmagan
+// fichalar ko'rinadi va checkboxlar ULARNI qaytarish uchun ishlaydi.
+const employeeFunctionViewMode = ref('all');
+const employeeFunctionMenuOpen = ref(false);
+const employeeFunctionMenuRef = ref(null);
+const employeeRevertMode = computed(() => employeeFunctionViewMode.value === 'revert');
+watch(employeeFunctionViewMode, () => { employeeFunctionPending.value = new Map(); });
+
 function isEmployeeFunctionConfirmed(key) {
   return Boolean(employeeHistoryByKey.value.get(key)?.confirmed);
+}
+function isEmployeeFunctionVisible(key) {
+  const row = employeeHistoryByKey.value.get(key);
+  const mode = employeeFunctionViewMode.value;
+  if (mode === 'sent' || mode === 'revert') return Boolean(row?.learned) && !row?.confirmed;
+  if (mode === 'confirmed') return Boolean(row?.confirmed);
+  if (mode === 'not_learned') return !row?.learned;
+  return true;
 }
 function isEmployeeFunctionChecked(key) {
   if (employeeFunctionPending.value.has(key)) return employeeFunctionPending.value.get(key);
   return Boolean(employeeHistoryByKey.value.get(key)?.learned);
 }
+function isEmployeeFunctionDisabled(key) {
+  if (isEmployeeFunctionConfirmed(key)) return true;
+  const learned = Boolean(employeeHistoryByKey.value.get(key)?.learned);
+  return employeeRevertMode.value ? !learned : learned;
+}
 function toggleEmployeeFunctionSelected(key) {
-  if (isEmployeeFunctionConfirmed(key)) return;
+  if (isEmployeeFunctionDisabled(key)) return;
   const serverValue = Boolean(employeeHistoryByKey.value.get(key)?.learned);
   const nextValue = !isEmployeeFunctionChecked(key);
   const next = new Map(employeeFunctionPending.value);
@@ -10894,20 +10941,16 @@ function toggleEmployeeFunctionSelected(key) {
   else next.set(key, nextValue);
   employeeFunctionPending.value = next;
 }
-const employeeFunctionPendingAction = computed(() => {
-  let hasSend = false;
-  let hasRevert = false;
-  employeeFunctionPending.value.forEach(value => { if (value) hasSend = true; else hasRevert = true; });
-  if (hasSend) return 'send';
-  if (hasRevert) return 'revert';
-  return 'send';
-});
+function chooseEmployeeFunctionMenuOption(mode) {
+  employeeFunctionViewMode.value = mode;
+  employeeFunctionMenuOpen.value = false;
+}
 async function submitEmployeeFunctionChanges() {
   const entries = Array.from(employeeFunctionPending.value.entries())
     .map(([key, learned]) => ({ row: employeeHistoryByKey.value.get(key), learned }))
     .filter(item => item.row);
   if (!entries.length) return;
-  const actionLabel = employeeFunctionPendingAction.value;
+  const wasRevert = employeeRevertMode.value;
   startLoading('employeeSendLearned');
   try {
     // Bir vaqtda (Promise.all) yuborilsa, backenddagi bildirishnoma yozuvi
@@ -10919,7 +10962,8 @@ async function submitEmployeeFunctionChanges() {
     }
     await refreshSupportHistoryIfOpen(selectedSupportId.value);
     employeeFunctionPending.value = new Map();
-    showToast(actionLabel === 'revert' ? 'Qaytarildi' : 'Yuborildi');
+    if (wasRevert) employeeFunctionViewMode.value = 'all';
+    showToast(wasRevert ? 'Qaytarildi' : 'Yuborildi');
   } catch (error) {
     showToast(error.message);
   } finally {
