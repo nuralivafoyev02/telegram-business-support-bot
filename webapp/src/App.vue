@@ -81,7 +81,9 @@
       <div class="page-body">
         <template v-if="employeeActiveTab === 'performance'">
           <div class="support-summary-grid">
-            <article class="card support-summary-card">
+            <article class="card support-summary-card" role="button" tabindex="0" title="Guruhlar bo‘yicha tafsilot"
+              @click="openMyActivityDetail" @keydown.enter.prevent="openMyActivityDetail"
+              @keydown.space.prevent="openMyActivityDetail">
               <div class="support-summary-content">
                 <div class="support-summary-title">Guruhlar</div>
                 <div class="support-summary-value-row">
@@ -90,7 +92,9 @@
                 <div class="support-summary-note">Faol chatlar soni</div>
               </div>
             </article>
-            <article class="card support-summary-card">
+            <article class="card support-summary-card" role="button" tabindex="0" title="Xabarlar bo‘yicha tafsilot"
+              @click="openMyActivityDetail" @keydown.enter.prevent="openMyActivityDetail"
+              @keydown.space.prevent="openMyActivityDetail">
               <div class="support-summary-content">
                 <div class="support-summary-title">Xabarlar</div>
                 <div class="support-summary-value-row">
@@ -99,7 +103,9 @@
                 <div class="support-summary-note">Yuborilgan xabarlar</div>
               </div>
             </article>
-            <article class="card support-summary-card">
+            <article class="card support-summary-card" role="button" tabindex="0" title="Yopilgan so‘rovlar bo‘yicha tafsilot"
+              @click="openMyActivityDetail" @keydown.enter.prevent="openMyActivityDetail"
+              @keydown.space.prevent="openMyActivityDetail">
               <div class="support-summary-content">
                 <div class="support-summary-title">Yopilgan so‘rov</div>
                 <div class="support-summary-value-row">
@@ -134,19 +140,27 @@
               </div>
             </div>
             <div class="employee-profile-mini-stats">
-              <span>
+              <span role="button" tabindex="0" style="cursor:pointer;" title="Yopilgan so‘rovlar tafsiloti"
+                @click="openMyActivityDetail" @keydown.enter.prevent="openMyActivityDetail"
+                @keydown.space.prevent="openMyActivityDetail">
                 <small>Yopilgan</small>
                 <b>{{ fmtNumber(employeeActivity.summary?.closed_requests) }}</b>
               </span>
-              <span>
+              <span role="button" tabindex="0" style="cursor:pointer;" title="Ochiq so‘rovlar tafsiloti"
+                @click="openMyOpenRequests" @keydown.enter.prevent="openMyOpenRequests"
+                @keydown.space.prevent="openMyOpenRequests">
                 <small>Ochiq</small>
                 <b>{{ fmtNumber(employeeActivity.summary?.open_requests) }}</b>
               </span>
-              <span>
+              <span role="button" tabindex="0" style="cursor:pointer;" title="Guruhlar bo‘yicha tafsilot"
+                @click="openMyActivityDetail" @keydown.enter.prevent="openMyActivityDetail"
+                @keydown.space.prevent="openMyActivityDetail">
                 <small>Kompaniya</small>
                 <b>{{ fmtNumber(employeeActivity.summary?.company_total) }}</b>
               </span>
-              <span>
+              <span role="button" tabindex="0" style="cursor:pointer;" title="Yopilgan so‘rovlar tafsiloti"
+                @click="openMyActivityDetail" @keydown.enter.prevent="openMyActivityDetail"
+                @keydown.space.prevent="openMyActivityDetail">
                 <small>O‘rtacha</small>
                 <b>{{ fmtMinutes(employeeActivity.summary?.avg_close_minutes) }}</b>
               </span>
@@ -802,6 +816,63 @@
             <button class="btn small primary" type="button" @click.stop="loadChatDetail(row)">Ko‘rish</button>
           </template>
         </DataTable>
+      </Modal>
+    </Transition>
+
+    <Transition name="modal-fade">
+      <Modal v-if="managementModal === 'myActivity'" title="Mening faoliyatim" wide @close="closeManagementModal">
+        <div class="detail-stack">
+          <div class="detail-summary">
+            <div><span>Guruhlar</span><b>{{ fmtNumber(employeeActivity.summary?.handled_chats) }}</b></div>
+            <div><span>Xabarlar</span><b>{{ fmtNumber(employeeActivity.summary?.message_count) }}</b></div>
+            <div><span>Yopilgan so‘rov</span><b>{{ fmtNumber(employeeActivity.summary?.closed_requests) }}</b></div>
+            <div><span>Kompaniya</span><b>{{ fmtNumber(employeeActivity.summary?.company_total) }}</b></div>
+          </div>
+
+          <div v-if="employeeActivity.groups?.length" class="drilldown-stack">
+            <section v-for="group in employeeActivity.groups" :key="group.chat_id" class="drilldown-group">
+              <div class="drilldown-head">
+                <div>
+                  <div class="card-title">{{ group.title || group.chat_id }}</div>
+                  <div class="card-note">
+                    {{ fmtNumber(group.chat_message_count || group.message_count) }} xabar · {{
+                      fmtNumber(group.closed_count) }} yopilgan ·
+                    {{ fmtNumber(group.customer_count) }} mijoz
+                  </div>
+                </div>
+                <button class="btn small" type="button" @click="loadChatDetail(group)">Chat tafsiloti</button>
+              </div>
+
+              <div class="drilldown-columns">
+                <div class="drilldown-panel">
+                  <div class="drilldown-label">Javob bergan mijozlar</div>
+                  <div v-if="group.closed_requests?.length" class="mini-list">
+                    <article v-for="request in group.closed_requests" :key="request.id" class="mini-item">
+                      <b>{{ request.customer_name || request.customer_username || 'Mijoz' }}</b>
+                      <p>{{ request.initial_text || 'So‘rov matni yo‘q' }}</p>
+                      <time>{{ fmtDate(request.closed_at) }}</time>
+                    </article>
+                  </div>
+                  <div v-else class="empty compact">Yopilgan so‘rov yo‘q</div>
+                </div>
+
+                <div class="drilldown-panel">
+                  <div class="drilldown-label">Dialog</div>
+                  <div v-if="groupChatMessages(group).length" class="mini-list">
+                    <article v-for="message in groupChatMessages(group)"
+                      :key="message.id || message.message_id || message.created_at" class="mini-item">
+                      <b>{{ message.from_name || message.actor_name || message.source_label || 'Mijoz' }}</b>
+                      <p>{{ chatMessageText(message) || 'Matn yo‘q' }}</p>
+                      <time>{{ fmtDate(message.created_at) }}</time>
+                    </article>
+                  </div>
+                  <div v-else class="empty compact">Xabar yo‘q</div>
+                </div>
+              </div>
+            </section>
+          </div>
+          <div v-else class="empty">Bu davrda javob topilmadi</div>
+        </div>
       </Modal>
     </Transition>
 
@@ -12128,6 +12199,10 @@ async function loadMyTickets() {
   } catch (error) {
     showToast(error.message);
   }
+}
+
+function openMyActivityDetail() {
+  managementModal.value = 'myActivity';
 }
 
 async function openMyOpenRequests() {
