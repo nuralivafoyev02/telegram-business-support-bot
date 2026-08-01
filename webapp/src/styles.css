@@ -2829,6 +2829,10 @@ body {
   width: 220px;
 }
 
+.sidebar-profile-menu .actions-dropdown button {
+  border: 1px solid var(--line);
+}
+
 .actions-dropdown button,
 .theme-menu-row {
   display: flex;
