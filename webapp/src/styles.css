@@ -1617,7 +1617,7 @@ tbody tr:hover {
 .drilldown-chart-panel {
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  padding: 16px;
+  padding: 14px;
 }
 
 .drilldown-panel .data-table {
