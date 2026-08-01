@@ -10904,8 +10904,9 @@ const employeeHistoryByKey = computed(() => {
 // serverdagi joriy `learned` holatidan farq qilganda saqlanadi.
 const employeeFunctionPending = ref(new Map());
 // 'all' | 'sent' | 'confirmed' | 'not_learned' — faqat qaysi kartalar ko'rinishini
-// boshqaradi. 'revert' esa alohida rejim: faqat topshirilgan-lekin-tasdiqlanmagan
-// fichalar ko'rinadi va checkboxlar ULARNI qaytarish uchun ishlaydi.
+// boshqaradi. 'revert' esa alohida rejim: belgilangan (tasdiqlangan +
+// topshirilgan-lekin-tasdiqlanmagan) fichalarning barchasi ko'rinadi, lekin
+// checkboxlar faqat tasdiqlanmaganlarini qaytarish uchun ishlaydi.
 const employeeFunctionViewMode = ref('all');
 const employeeFunctionMenuOpen = ref(false);
 const employeeFunctionMenuRef = ref(null);
@@ -10918,7 +10919,8 @@ function isEmployeeFunctionConfirmed(key) {
 function isEmployeeFunctionVisible(key) {
   const row = employeeHistoryByKey.value.get(key);
   const mode = employeeFunctionViewMode.value;
-  if (mode === 'sent' || mode === 'revert') return Boolean(row?.learned) && !row?.confirmed;
+  if (mode === 'revert') return Boolean(row?.learned);
+  if (mode === 'sent') return Boolean(row?.learned) && !row?.confirmed;
   if (mode === 'confirmed') return Boolean(row?.confirmed);
   if (mode === 'not_learned') return !row?.learned;
   return true;
