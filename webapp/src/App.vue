@@ -817,12 +817,6 @@
             </div>
           </div>
           <div v-else class="empty">{{ loadingAction === 'knowledgeDashboard' ? 'Yuklanmoqda...' : 'Funksiyalar topilmadi' }}</div>
-          <div style="display:flex; justify-content:flex-end; margin-top:16px;">
-            <button class="btn primary" :disabled="loadingAction === 'saveUyqurPermissions'"
-              @click="saveUyqurPermissions">
-              {{ loadingAction === 'saveUyqurPermissions' ? 'Saqlanmoqda...' : 'Saqlash' }}
-            </button>
-          </div>
         </section>
       </template>
       </div>
@@ -844,7 +838,6 @@
               <tr>
                 <th>#</th>
                 <th>Yangi funksiya nomi</th>
-                <th>Chiqqan sana</th>
                 <th>O‘rgangan xodimlar</th>
                 <th>O‘rganmagan xodimlar</th>
                 <th>Chiqqaniga</th>
@@ -854,7 +847,6 @@
               <tr v-for="(fn, index) in moduleFunctionsDetail.functions" :key="fn.event_id">
                 <td>{{ index + 1 }}</td>
                 <td>{{ fn.submodule_name }}</td>
-                <td>{{ fmtDate(fn.created_at) }}</td>
                 <td>
                   <div style="display:flex; flex-wrap:wrap; gap:8px; max-width:240px;">
                     <span v-for="person in fn.learned_employees" :key="`learned-${fn.event_id}-${person.id}`"
@@ -879,7 +871,7 @@
                     <span v-if="!fn.not_learned_employees.length" class="empty compact" style="padding:0;">—</span>
                   </div>
                 </td>
-                <td>{{ fn.days_since_launch != null ? fn.days_since_launch + ' kun' : '—' }}</td>
+                <td>{{ formatDaysAgo(fn.days_since_launch) }}</td>
               </tr>
             </tbody>
           </table>
@@ -5874,6 +5866,12 @@ function dateInputLabel(value = '') {
 function fmtShortDayMonth(value = '') {
   const [, month, day] = String(value || '').split('-');
   return month && day ? `${day}.${month}` : value || '—';
+}
+
+function formatDaysAgo(days) {
+  if (days == null) return '—';
+  if (days <= 0) return 'Bugun';
+  return `${fmtNumber(days)} kun avval`;
 }
 
 function dateInputValue(date = new Date()) {

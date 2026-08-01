@@ -345,6 +345,21 @@ async function setManagerConfirmation(eventId, employeeId, confirmed = true, man
   return record.progress[eventId][employeeId];
 }
 
+// Tashqi daraxt yangilanganda (kesh muddati o'tib, qayta so'ralganda) topilgan
+// YANGI funksiyalar qo'lda "Saqlash" bosilishini kutmasdan, avtomatik ravishda
+// "yuborilgan" deb belgilanadi va supportlar uchun bildirishnoma hodisasi
+// yaratiladi — checkbox/Saqlash tugmasi endi umuman kerak emas.
+async function autoRegisterNewSubmodules(modules = [], previousSelected = []) {
+  const allKeys = modules.flatMap(module => (module.submodules || []).map(submodule => String(submodule.key)));
+  const previousSet = new Set(previousSelected.map(String));
+  const addedKeys = allKeys.filter(key => !previousSet.has(key));
+  if (!addedKeys.length) return previousSelected.map(String);
+  const nextSelected = Array.from(new Set([...previousSelected.map(String), ...addedKeys]));
+  await savePermissionViewRecord({ selected: nextSelected });
+  await recordPermissionToggleEvents(addedKeys, modules);
+  return nextSelected;
+}
+
 async function getPermissionView() {
   const record = await getPermissionViewRecord();
   const selected = Array.isArray(record.selected) ? record.selected.map(String) : [];
@@ -356,7 +371,8 @@ async function getPermissionView() {
   try {
     const modules = await fetchPermissionView();
     await savePermissionViewRecord({ modules, modules_cached_at: new Date().toISOString() });
-    return { modules, selected, from_cache: false };
+    const nextSelected = await autoRegisterNewSubmodules(modules, selected);
+    return { modules, selected: nextSelected, from_cache: false };
   } catch (error) {
     if (Array.isArray(record.modules) && record.modules.length) {
       return { modules: record.modules, selected, from_cache: true, stale: true, error: error.message };
