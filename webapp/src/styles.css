@@ -2618,6 +2618,11 @@ body {
   background: var(--surface);
 }
 
+.sidebar.icon-only .nav button.active {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+
 .sidebar.icon-only .nav button:hover {
   background: var(--surface-soft);
   border-color: var(--line-strong);
