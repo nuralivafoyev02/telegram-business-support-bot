@@ -4738,7 +4738,7 @@ const supportHistoryRows = ref([]);
 const supportHistoryFilter = ref('all');
 const filteredSupportHistoryRows = computed(() => {
   if (supportHistoryFilter.value === 'done') return supportHistoryRows.value.filter(row => row.confirmed);
-  if (supportHistoryFilter.value === 'pending') return supportHistoryRows.value.filter(row => !row.confirmed);
+  if (supportHistoryFilter.value === 'pending') return supportHistoryRows.value.filter(row => row.learned && !row.confirmed);
   return supportHistoryRows.value;
 });
 const selectedModuleName = ref('');

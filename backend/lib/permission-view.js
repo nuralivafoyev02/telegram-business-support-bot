@@ -107,6 +107,57 @@ function findSubmoduleMeta(modules = [], key = '') {
   return null;
 }
 
+function earlierTimestamp(a, b) {
+  if (!a) return b || null;
+  if (!b) return a;
+  return new Date(a).getTime() <= new Date(b).getTime() ? a : b;
+}
+
+function mergeEmployeeProgress(a = {}, b = {}) {
+  const confirmed_at = earlierTimestamp(a.confirmed_at, b.confirmed_at);
+  const learned_at = earlierTimestamp(a.learned_at, b.learned_at) || confirmed_at || null;
+  return {
+    learned_at: learned_at || null,
+    confirmed_at: confirmed_at || null,
+    confirmed_by: confirmed_at ? (a.confirmed_by || b.confirmed_by || null) : null
+  };
+}
+
+// Bir xil submodule_key uchun bir necha marta parallel ravishda
+// avtomatik ro'yxatga olish hodisasi yaratilib qolishi mumkin edi (bir xil
+// vaqtda bir nechta sahifa yuklanganda) — shu sabab har o'qishda hodisalar
+// submodule_key bo'yicha birlashtiriladi, eng erta sanasi va eng "yaxshi"
+// (tasdiqlangan > o'rganilgan > hech narsa) holati saqlanadi.
+function dedupeNotificationRecord(record) {
+  const canonicalByKey = new Map();
+  const idRemap = new Map();
+  const orderedEvents = [];
+  record.events.forEach(event => {
+    const key = String(event.submodule_key);
+    const existing = canonicalByKey.get(key);
+    if (!existing) {
+      canonicalByKey.set(key, event);
+      orderedEvents.push(event);
+      return;
+    }
+    if (event.created_at && (!existing.created_at || new Date(event.created_at) < new Date(existing.created_at))) {
+      existing.created_at = event.created_at;
+    }
+    idRemap.set(event.id, existing.id);
+  });
+  if (!idRemap.size) return { record, changed: false };
+  const nextProgress = {};
+  Object.entries(record.progress || {}).forEach(([eventId, perEmployee]) => {
+    const canonicalId = idRemap.get(eventId) || eventId;
+    const merged = nextProgress[canonicalId] || {};
+    Object.entries(perEmployee || {}).forEach(([employeeId, progress]) => {
+      merged[employeeId] = mergeEmployeeProgress(merged[employeeId], progress);
+    });
+    nextProgress[canonicalId] = merged;
+  });
+  return { record: { events: orderedEvents, progress: nextProgress }, changed: true };
+}
+
 async function getNotificationRecord() {
   const rows = await supabase.select('bot_settings', {
     select: 'key,value',
@@ -115,10 +166,13 @@ async function getNotificationRecord() {
   }).catch(() => []);
   const row = rows[0] || null;
   const value = row && row.value && typeof row.value === 'object' ? row.value : {};
-  return {
+  const rawRecord = {
     events: Array.isArray(value.events) ? value.events : [],
     progress: value.progress && typeof value.progress === 'object' ? value.progress : {}
   };
+  const { record, changed } = dedupeNotificationRecord(rawRecord);
+  if (changed) await saveNotificationRecord(record).catch(() => null);
+  return record;
 }
 
 async function saveNotificationRecord(record) {
@@ -133,17 +187,24 @@ async function saveNotificationRecord(record) {
 async function recordPermissionToggleEvents(addedKeys = [], modules = []) {
   if (!addedKeys.length) return;
   const record = await getNotificationRecord();
+  // Bir nechta so'rov bir vaqtda avtomatik ro'yxatga olishga urinishi mumkin
+  // (masalan bir nechta xodim sahifasi keshi bir vaqtda eskirganda) — shu
+  // sabab bu yerda ham submodule_key allaqachon mavjudligi qayta tekshiriladi.
+  const existingKeys = new Set(record.events.map(event => String(event.submodule_key)));
   const now = new Date().toISOString();
-  const newEvents = addedKeys.map(key => {
-    const meta = findSubmoduleMeta(modules, key);
-    return {
-      id: `${Date.now()}-${key}`,
-      submodule_key: key,
-      submodule_name: meta ? meta.submodule_name : key,
-      module_name: meta ? meta.module_name : '',
-      created_at: now
-    };
-  });
+  const newEvents = addedKeys
+    .filter(key => !existingKeys.has(String(key)))
+    .map(key => {
+      const meta = findSubmoduleMeta(modules, key);
+      return {
+        id: `${Date.now()}-${key}`,
+        submodule_key: key,
+        submodule_name: meta ? meta.submodule_name : key,
+        module_name: meta ? meta.module_name : '',
+        created_at: now
+      };
+    });
+  if (!newEvents.length) return;
   record.events = [...record.events, ...newEvents].slice(-MAX_NOTIFICATION_EVENTS);
   await saveNotificationRecord(record);
 }
@@ -206,14 +267,22 @@ async function getSupportOverview() {
   const [employees, record] = await Promise.all([getSupportEmployees(), getNotificationRecord()]);
   const total = record.events.length;
   return employees.map(employee => {
-    const confirmedCount = record.events.filter(event => progressFor(record, event.id, employee.id).confirmed_at).length;
-    const pending = total - confirmedCount;
+    let confirmedCount = 0;
+    // "unread" — support belgilab "Yuborish"ni bosgan (o'rgandim deb yuborgan),
+    // lekin admin hali tasdiqlamagan fichalar soni — hali umuman tegilmagan
+    // (yuborilmagan) fichalar bu yerga kirmaydi.
+    let pendingReviewCount = 0;
+    record.events.forEach(event => {
+      const progress = progressFor(record, event.id, employee.id);
+      if (progress.confirmed_at) confirmedCount += 1;
+      else if (progress.learned_at) pendingReviewCount += 1;
+    });
     const percent = total ? Math.round((confirmedCount / total) * 100) : 0;
     return {
       id: employee.id,
       full_name: employee.full_name || employee.username || 'Support',
       username: employee.username || '',
-      unread: pending,
+      unread: pendingReviewCount,
       confirmed: confirmedCount,
       percent
     };
