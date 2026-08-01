@@ -377,10 +377,6 @@
               <div class="uyqur-functions-group-title">
                 <div class="card-title">Uyqur Funksiyalari</div>
               </div>
-              <button class="btn" type="button" :disabled="!employeeLastSentEventIds.length || loadingAction === 'employeeUndoLearned'"
-                @click="undoEmployeeLearnedFunctions">
-                {{ loadingAction === 'employeeUndoLearned' ? 'Qaytarilmoqda...' : 'Ortga qaytarish' }}
-              </button>
             </div>
             <div class="uyqur-functions-groups" ref="permissionGroupsRef" v-if="permissionModulesMerged.length">
               <div class="uyqur-functions-group" :class="{ collapsed: !isPermissionModuleExpanded(module) }"
@@ -396,11 +392,11 @@
                 <div class="uyqur-functions-card-list" v-if="isPermissionModuleExpanded(module)">
                   <label class="uyqur-functions-card" v-for="submodule in module.submodules"
                     :key="'employee-functions-submodule-' + submodule.id"
-                    :class="{ confirmed: employeeHistoryByKey.get(String(submodule.key))?.confirmed }"
-                    style="cursor:pointer; justify-content:flex-start;">
+                    :class="{ confirmed: isEmployeeFunctionConfirmed(String(submodule.key)) }"
+                    :style="{ cursor: isEmployeeFunctionConfirmed(String(submodule.key)) ? 'default' : 'pointer', justifyContent: 'flex-start' }">
                     <input type="checkbox" class="row-check"
-                      :checked="isEmployeeFunctionSelected(String(submodule.key))"
-                      :disabled="employeeHistoryByKey.get(String(submodule.key))?.learned"
+                      :checked="isEmployeeFunctionChecked(String(submodule.key))"
+                      :disabled="isEmployeeFunctionConfirmed(String(submodule.key))"
                       @change="toggleEmployeeFunctionSelected(String(submodule.key))" />
                     <span>{{ submodule.name || submodule.key }}</span>
                   </label>
@@ -409,9 +405,9 @@
             </div>
             <div v-else class="empty">{{ loadingAction === 'employeeRefresh' ? 'Yuklanmoqda...' : 'Funksiyalar topilmadi' }}</div>
             <div style="display:flex; justify-content:flex-end; margin-top:16px;">
-              <button class="btn primary" type="button" :disabled="!employeeFunctionSelected.size || loadingAction === 'employeeSendLearned'"
-                @click="sendEmployeeLearnedFunctions">
-                {{ loadingAction === 'employeeSendLearned' ? 'Yuborilmoqda...' : 'Yuborildi' }}
+              <button class="btn primary" type="button" :disabled="!employeeFunctionPending.size || loadingAction === 'employeeSendLearned'"
+                @click="submitEmployeeFunctionChanges">
+                {{ loadingAction === 'employeeSendLearned' ? 'Yuborilmoqda...' : (employeeFunctionPendingAction === 'revert' ? 'Qaytarish' : 'Yuborish') }}
               </button>
             </div>
           </section>
@@ -10874,61 +10870,60 @@ async function toggleLearned(row) {
   }
 }
 
-const employeeFunctionSelected = ref(new Set());
 const employeeHistoryByKey = computed(() => {
   const map = new Map();
   supportHistoryRows.value.forEach(row => { if (row.submodule_key) map.set(String(row.submodule_key), row); });
   return map;
 });
-function isEmployeeFunctionSelected(key) {
-  return employeeHistoryByKey.value.get(key)?.learned || employeeFunctionSelected.value.has(key);
+// key -> maqsad holat (true = yubormoqchi, false = qaytarmoqchi) — faqat
+// serverdagi joriy `learned` holatidan farq qilganda saqlanadi.
+const employeeFunctionPending = ref(new Map());
+function isEmployeeFunctionConfirmed(key) {
+  return Boolean(employeeHistoryByKey.value.get(key)?.confirmed);
+}
+function isEmployeeFunctionChecked(key) {
+  if (employeeFunctionPending.value.has(key)) return employeeFunctionPending.value.get(key);
+  return Boolean(employeeHistoryByKey.value.get(key)?.learned);
 }
 function toggleEmployeeFunctionSelected(key) {
-  if (employeeHistoryByKey.value.get(key)?.learned) return;
-  const next = new Set(employeeFunctionSelected.value);
-  if (next.has(key)) next.delete(key); else next.add(key);
-  employeeFunctionSelected.value = next;
+  if (isEmployeeFunctionConfirmed(key)) return;
+  const serverValue = Boolean(employeeHistoryByKey.value.get(key)?.learned);
+  const nextValue = !isEmployeeFunctionChecked(key);
+  const next = new Map(employeeFunctionPending.value);
+  if (nextValue === serverValue) next.delete(key);
+  else next.set(key, nextValue);
+  employeeFunctionPending.value = next;
 }
-const employeeLastSentEventIds = ref([]);
-async function sendEmployeeLearnedFunctions() {
-  const targets = Array.from(employeeFunctionSelected.value)
-    .map(key => employeeHistoryByKey.value.get(key))
-    .filter(row => row && !row.learned);
-  if (!targets.length) { employeeFunctionSelected.value = new Set(); return; }
+const employeeFunctionPendingAction = computed(() => {
+  let hasSend = false;
+  let hasRevert = false;
+  employeeFunctionPending.value.forEach(value => { if (value) hasSend = true; else hasRevert = true; });
+  if (hasSend) return 'send';
+  if (hasRevert) return 'revert';
+  return 'send';
+});
+async function submitEmployeeFunctionChanges() {
+  const entries = Array.from(employeeFunctionPending.value.entries())
+    .map(([key, learned]) => ({ row: employeeHistoryByKey.value.get(key), learned }))
+    .filter(item => item.row);
+  if (!entries.length) return;
+  const actionLabel = employeeFunctionPendingAction.value;
   startLoading('employeeSendLearned');
   try {
     // Bir vaqtda (Promise.all) yuborilsa, backenddagi bildirishnoma yozuvi
     // yagona umumiy record bo'lgani uchun parallel yozishlar bir-birini
     // ustidan yozib, faqat oxirgisi saqlanib qolardi — shuning uchun
     // navbat bilan (ketma-ket) yuboriladi.
-    for (const row of targets) {
-      await api.markUyqurLearned({ event_id: row.event_id, employee_id: selectedSupportId.value, learned: true });
+    for (const { row, learned } of entries) {
+      await api.markUyqurLearned({ event_id: row.event_id, employee_id: selectedSupportId.value, learned });
     }
     await refreshSupportHistoryIfOpen(selectedSupportId.value);
-    employeeLastSentEventIds.value = targets.map(row => row.event_id);
-    employeeFunctionSelected.value = new Set();
-    showToast('Yuborildi');
+    employeeFunctionPending.value = new Map();
+    showToast(actionLabel === 'revert' ? 'Qaytarildi' : 'Yuborildi');
   } catch (error) {
     showToast(error.message);
   } finally {
     stopLoading('employeeSendLearned');
-  }
-}
-async function undoEmployeeLearnedFunctions() {
-  const eventIds = employeeLastSentEventIds.value;
-  if (!eventIds.length) return;
-  startLoading('employeeUndoLearned');
-  try {
-    for (const eventId of eventIds) {
-      await api.markUyqurLearned({ event_id: eventId, employee_id: selectedSupportId.value, learned: false });
-    }
-    await refreshSupportHistoryIfOpen(selectedSupportId.value);
-    employeeLastSentEventIds.value = [];
-    showToast('Qaytarildi');
-  } catch (error) {
-    showToast(error.message);
-  } finally {
-    stopLoading('employeeUndoLearned');
   }
 }
 
