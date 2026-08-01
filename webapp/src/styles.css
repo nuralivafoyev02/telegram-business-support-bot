@@ -2549,6 +2549,75 @@ body {
   font-size: 15px;
 }
 
+/* Yig'iladigan (icon-only) sidebar — 2-rasmdagidek: yopiq holatda faqat
+   iconkalar ko'rinadi, yozuvlar yashiriladi; ochilganda hammasi qaytadi. */
+.app-shell.sidebar-collapsed {
+  grid-template-columns: 72px minmax(0, 1fr);
+}
+
+.sidebar-toggle-btn {
+  margin-left: auto;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--muted-strong);
+  cursor: pointer;
+}
+
+.sidebar-toggle-btn:hover {
+  background: var(--surface-soft);
+}
+
+.sidebar.icon-only {
+  padding-left: 12px;
+  padding-right: 12px;
+}
+
+.sidebar.icon-only .brand {
+  justify-content: center;
+}
+
+.sidebar.icon-only .brand-wrapper {
+  display: none;
+}
+
+.sidebar.icon-only .sidebar-toggle-btn {
+  margin-left: 0;
+}
+
+.nav-icon {
+  font-size: 18px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.sidebar.icon-only .nav button {
+  justify-content: center;
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+.sidebar.icon-only .nav button b {
+  display: none;
+}
+
+.sidebar.icon-only .profile-action {
+  justify-content: center;
+  padding: 6px;
+  gap: 0;
+}
+
+.sidebar.icon-only .profile-action-info,
+.sidebar.icon-only .profile-action-caret {
+  display: none;
+}
+
 .detail-summary .chat-status-summary.active {
   border-color: color-mix(in srgb, var(--primary) 34%, var(--line));
 }
@@ -2727,6 +2796,12 @@ body {
   left: 0;
   right: 0;
   width: auto;
+}
+
+.icon-only .sidebar-profile-menu .actions-dropdown {
+  left: 0;
+  right: auto;
+  width: 220px;
 }
 
 .actions-dropdown button,

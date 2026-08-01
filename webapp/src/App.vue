@@ -634,18 +634,26 @@
     </Transition>
   </div>
 
-  <div v-else-if="isManagementAccount" class="app-shell">
-    <aside class="sidebar">
+  <div v-else-if="isManagementAccount" class="app-shell" :class="{ 'sidebar-collapsed': !managementSidebarExpanded }">
+    <aside class="sidebar" :class="{ 'icon-only': !managementSidebarExpanded }">
       <div class="brand">
         <img class="logo" :src="uyqurLogoUrl" alt="Uyqur" width="42" height="42" />
         <div class="brand-wrapper">
           <div class="brand-title">Uyqur Admin</div>
         </div>
+        <button type="button" class="sidebar-toggle-btn" :title="managementSidebarExpanded ? 'Menyuni yig‘ish' : 'Menyuni ochish'"
+          @click="managementSidebarExpanded = !managementSidebarExpanded">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round" :style="{ transform: managementSidebarExpanded ? 'rotate(180deg)' : 'none' }">
+            <path d="M9 6l6 6-6 6" />
+          </svg>
+        </button>
       </div>
 
       <nav class="nav">
         <button v-for="item in managementTabs" :key="item.key" :class="{ active: managementActiveTab === item.key }"
-          @click="managementActiveTab = item.key">
+          :title="item.label" @click="managementActiveTab = item.key">
+          <span class="nav-icon">{{ item.icon }}</span>
           <b>{{ item.label }}</b>
         </button>
       </nav>
@@ -656,11 +664,11 @@
           <img v-if="managementAvatarUrl" :src="managementAvatarUrl" alt="" class="profile-avatar"
             style="object-fit:cover; border-radius:50%;" />
           <span v-else class="profile-avatar" style="border-radius:50%;">{{ managementInitials }}</span>
-          <span>
+          <span class="profile-action-info">
             <b style="display:block;">{{ account?.full_name || 'Boshqaruv' }}</b>
             <small style="color:var(--muted,#6b7280);">Boshqaruv paneli</small>
           </span>
-          <b>⌄</b>
+          <b class="profile-action-caret">⌄</b>
         </button>
         <Transition name="fade">
           <div v-if="managementMenuOpen" class="actions-dropdown">
@@ -4499,6 +4507,8 @@ const managementTabs = [
   { key: 'functions', label: 'Barcha funksiyalar', icon: '🧩' }
 ];
 const managementActiveTab = ref('dashboard');
+// Sidebar default holatda yopiq (faqat iconkalar) — foydalanuvchi bosganda ochiladi.
+const managementSidebarExpanded = ref(false);
 const moduleFunctionsDetail = ref(null);
 const employeeKnowledgeProfile = ref(null);
 const managementModal = ref('');
