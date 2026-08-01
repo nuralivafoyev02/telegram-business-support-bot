@@ -108,13 +108,15 @@
                 <div class="support-summary-note">Hal qilingan so‘rovlar</div>
               </div>
             </article>
-            <article class="card support-summary-card">
+            <article class="card support-summary-card" role="button" tabindex="0" title="Yopilmagan so‘rovlarni ko‘rish"
+              @click="openMyOpenRequests" @keydown.enter.prevent="openMyOpenRequests"
+              @keydown.space.prevent="openMyOpenRequests">
               <div class="support-summary-content">
-                <div class="support-summary-title">Mijozlar</div>
+                <div class="support-summary-title">Yopilmagan so‘rovlar</div>
                 <div class="support-summary-value-row">
-                  <div class="support-summary-value">{{ fmtNumber(employeeActivity.summary?.customer_count) }}</div>
+                  <div class="support-summary-value">{{ fmtNumber(employeeActivity.summary?.open_requests) }}</div>
                 </div>
-                <div class="support-summary-note">Javob berilgan mijozlar</div>
+                <div class="support-summary-note">Hozircha ochiq turgan so‘rovlar</div>
               </div>
             </article>
           </div>
@@ -789,6 +791,17 @@
             {{ loadingAction === 'saveManagementProfile' ? 'Saqlanmoqda...' : 'Saqlash' }}
           </button>
         </form>
+      </Modal>
+    </Transition>
+
+    <Transition name="modal-fade">
+      <Modal v-if="managementModal === 'myOpenRequests'" title="Yopilmagan so‘rovlar" wide @close="closeManagementModal">
+        <DataTable :columns="employeeOpenRequestColumns" :rows="employeeOpenRequests" empty="Ochiq so‘rov yo‘q"
+          :on-cell-action="handleTableCellAction" :page-size="10">
+          <template #requestReply="{ row }">
+            <button class="btn small primary" type="button" @click.stop="loadChatDetail(row)">Ko‘rish</button>
+          </template>
+        </DataTable>
       </Modal>
     </Transition>
 
@@ -12110,6 +12123,17 @@ async function loadMyTickets() {
     const [groupRows, privateRows] = await Promise.all([api.groups(), api.privates()]);
     groups.value = groupRows || [];
     privates.value = privateRows || [];
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
+async function openMyOpenRequests() {
+  try {
+    const rows = await api.requests({ ...dashboardPeriodQuery(), limit: 5000 });
+    employeeOpenRequests.value = (rows || []).filter(row => row.status === 'open');
+    if (!employeeOpenRequests.value.length) return showToast('Ochiq so‘rov topilmadi');
+    managementModal.value = 'myOpenRequests';
   } catch (error) {
     showToast(error.message);
   }
