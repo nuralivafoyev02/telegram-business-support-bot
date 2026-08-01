@@ -319,26 +319,192 @@
           </section>
         </template>
 
-        <template v-else-if="employeeActiveTab === 'groups'">
-          <section class="card">
-            <div class="card-header">
+        <template v-else-if="employeeActiveTab === 'companyModules'">
+          <section class="card company-module-table-card">
+            <div class="card-header company-module-table-head">
               <div>
-                <div class="card-title">Bot ulangan guruhlar</div>
+                <div class="card-title">Bo‘limlar foydalanish statistikasi</div>
+              </div>
+              <div class="company-module-table-controls">
+                <div class="company-module-filter company-module-filter-wide company-module-filter-menu-wrap"
+                  ref="companyModuleFilterMenuRef">
+                  <span>Filter</span>
+                  <div class="company-module-filter-picker">
+                    <button type="button" class="company-module-filter-trigger select mini-select"
+                      @click.stop="toggleCompanyModuleFilterMenu">
+                      <span class="company-module-filter-trigger-label">{{ companyModuleFilterButtonLabel }}</span>
+                      <span class="company-module-filter-trigger-caret">▾</span>
+                    </button>
+                    <Transition name="fade">
+                      <div v-if="companyModuleFilterMenuOpen" class="company-module-filter-menu actions-dropdown"
+                        @click.stop>
+                        <template v-if="!companyModuleFilterMenuGroup">
+                          <button v-for="group in companyModuleControlGroups"
+                            :key="`employee-module-filter-menu-${group.key}`" type="button"
+                            class="company-module-filter-menu-group"
+                            @click="group.key === 'show' ? selectCompanyModuleControlOption(group, group.options[0]) : openCompanyModuleFilterGroup(group.key)">
+                            <span>{{ group.label }}</span>
+                            <span v-if="group.key !== 'show'" class="company-module-filter-menu-arrow">›</span>
+                          </button>
+                        </template>
+                        <template v-else-if="companyModuleFilterActiveGroup">
+                          <button type="button" class="company-module-filter-back"
+                            @click="companyModuleFilterMenuGroup = ''">
+                            <span class="company-module-filter-menu-arrow">‹</span>
+                            <span>{{ companyModuleFilterActiveGroup.label }}</span>
+                          </button>
+                          <button v-for="option in companyModuleFilterActiveGroup.options"
+                            :key="`employee-module-filter-option-${companyModuleFilterActiveGroup.key}-${option.key}`"
+                            type="button" class="company-module-filter-option"
+                            :class="{ active: isCompanyModuleControlOptionActive(companyModuleFilterActiveGroup, option) }"
+                            @click="selectCompanyModuleControlOption(companyModuleFilterActiveGroup, option)">
+                            <span>{{ option.label }}</span>
+                            <span v-if="isCompanyModuleControlOptionActive(companyModuleFilterActiveGroup, option)"
+                              class="company-module-filter-check">✓</span>
+                          </button>
+                        </template>
+                      </div>
+                    </Transition>
+                  </div>
+                </div>
+                <label class="company-module-filter">
+                  <span>Davr</span>
+                  <select :value="companyModulePeriod" class="select mini-select"
+                    @change="handleCompanyModulePeriodChange($event.target.value)"
+                    @mousedown="handleCompanyModulePeriodSelectPointerDown"
+                    @mouseup="handleCompanyModulePeriodSelectPointerUp">
+                    <option v-for="period in companyModulePeriodOptions" :key="`employee-module-period-${period.key}`"
+                      :value="period.key">
+                      {{ companyModulePeriodOptionLabel(period) }}
+                    </option>
+                  </select>
+                </label>
+                <div class="card-header-actions company-module-menu" ref="moduleCompareMenuRef">
+                  <button type="button" class="btn-icon mini-icon" title="Sozlamalar"
+                    @click="moduleCompareMenuOpen = !moduleCompareMenuOpen">
+                    <span>⋯</span>
+                  </button>
+                  <Transition name="fade">
+                    <div v-if="moduleCompareMenuOpen" class="actions-dropdown mini-dropdown right-align">
+                      <label class="theme-menu-row">
+                        <span>Taqqoslash</span>
+                        <label class="switch mini-switch">
+                          <input type="checkbox" v-model="companyModuleCompareEnabled">
+                          <span class="slider"></span>
+                        </label>
+                      </label>
+                    </div>
+                  </Transition>
+                </div>
               </div>
             </div>
-            <div v-if="groups.length" class="mini-list">
-              <article v-for="chat in groups" :key="chat.chat_id" class="mini-item employee-chat-row">
-                <div>
-                  <b>{{ chat.title || chat.chat_id }}</b>
-                  <p>{{ fmtDate(chat.last_message_at || chat.last_request_at) }}</p>
+            <div v-if="companyModuleTableSummary.total" class="company-module-summary">
+              <div class="company-module-summary-main">
+                <strong>Umumiy</strong>
+                <span>{{ companyModuleTableSummary.total }} ta kompaniya</span>
+              </div>
+              <div class="company-module-summary-grid">
+                <div class="company-module-summary-cell">
+                  <span class="company-module-summary-label">O'rtacha faollik</span>
+                  <div class="company-module-summary-metrics">
+                    <b class="company-module-summary-value">{{ companyModuleTableSummary.avgPercent }}%</b>
+                    <span v-if="companyModuleCompareEnabled && companyModuleTableSummary.usedComparison"
+                      class="trend-label module-trend-label company-module-summary-delta"
+                      :class="companyModuleTableSummary.usedComparison.tone">
+                      {{ companyModuleTableSummary.usedComparison.percentText }}
+                    </span>
+                  </div>
                 </div>
-                <div class="employee-chat-actions">
-                  <button class="btn small" type="button" @click="loadChatDetail(chat)">Tafsilot</button>
-                  <button class="btn small" type="button" @click="openSend(chat)">Yozish</button>
+                <div v-for="column in companyModuleColumns" :key="`employee-module-summary-${column.key}`"
+                  class="company-module-summary-cell">
+                  <span class="company-module-summary-label">{{ column.label }}</span>
+                  <div class="company-module-summary-metrics">
+                    <b class="company-module-summary-value">{{ companyModuleTableSummary.modulePercents[column.key]
+                      }}%</b>
+                    <span
+                      v-if="companyModuleCompareEnabled && companyModuleTableSummary.moduleComparisons[column.key]"
+                      class="trend-label module-trend-label company-module-summary-delta"
+                      :class="companyModuleTableSummary.moduleComparisons[column.key].tone">
+                      {{ companyModuleTableSummary.moduleComparisons[column.key].percentText }}
+                    </span>
+                  </div>
                 </div>
-              </article>
+              </div>
+              <div v-if="companyModuleTableSummary.supportStaff.length" class="company-module-summary-support">
+                <span class="company-module-summary-support-label">Mas’ul xodimlar</span>
+                <b class="company-module-summary-support-value">{{ companyModuleTableSummary.supportStaff.join(', ')
+                  }}</b>
+              </div>
             </div>
-            <div v-else class="empty">Sizga biriktirilgan guruh topilmadi</div>
+            <div class="company-module-table-wrap">
+              <table v-if="companyModuleBaseRows.length" class="company-module-table">
+                <thead>
+                  <tr>
+                    <th>№</th>
+                    <th>Kompaniya</th>
+                    <th class="module-business-col">Biznes holati</th>
+                    <th class="module-support-col">Mas’ul xodim</th>
+                    <th class="module-count-col">O'rtacha faollik</th>
+                    <th v-for="column in companyModuleColumns" :key="`employee-module-head-${column.key}`">{{ column.label }}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="(row, index) in companyModuleTableRows" :key="row.id || row.name || index">
+                    <td class="module-index-col">{{ index + 1 }}</td>
+                    <td class="module-company-col">
+                      <span class="company-identity company-module-identity">
+                        <img v-if="row.icon" :src="row.icon" alt="" />
+                        <span>
+                          <b>{{ row.name || 'Kompaniya' }}</b>
+                          <small>{{ row.brand || 'Brend kiritilmagan' }}</small>
+                        </span>
+                      </span>
+                    </td>
+                    <td class="module-business-col">
+                      <span class="status-pill mini" :class="businessStatusClass(row.business_status)">{{
+                        businessStatusLabel(row.business_status) }}</span>
+                    </td>
+                    <td class="module-support-col">
+                      <span class="support-owner">{{ companySupportLabel(row) }}</span>
+                    </td>
+                    <td class="module-count-col">
+                      <div class="module-count-stack">
+                        <span class="module-count-badge"
+                          :title="`${row.module_active_count} / ${companyModuleKeys.length}`">
+                          {{ row.module_active_percent }}%
+                        </span>
+                        <span v-if="companyModuleCompareEnabled && row.module_percent_comparison"
+                          class="trend-label module-trend-label" :class="row.module_percent_comparison.tone"
+                          :title="companyModuleCompareAgainstLabel">
+                          {{ row.module_percent_comparison.percentText }}
+                        </span>
+                      </div>
+                    </td>
+                    <td v-for="column in companyModuleColumns" :key="`employee-${row.id || row.name}-${column.key}`"
+                      class="module-status-cell">
+                      <span v-if="moduleUsageDeltaMark(row, column.key)" class="module-status-delta"
+                        :class="moduleUsageDeltaMark(row, column.key) === '+' ? 'plus' : 'minus'"
+                        :title="companyModuleCompareAgainstLabel">
+                        {{ moduleUsageDeltaMark(row, column.key) }}
+                      </span>
+                      <span class="module-status-icon" :class="row.module_usage[column.key] ? 'yes' : 'no'"
+                        :title="moduleStatusTitle(row, column.key)"
+                        :aria-label="row.module_usage[column.key] ? 'Ishlatilgan' : 'Ishlatilmagan'">
+                        <template v-if="row.module_usage[column.key]">✓</template>
+                        <template v-else>✗</template>
+                      </span>
+                    </td>
+                  </tr>
+                  <tr v-if="!companyModuleTableRows.length">
+                    <td :colspan="5 + companyModuleColumns.length" class="company-module-filter-empty">
+                      Filter bo‘yicha kompaniya topilmadi
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+              <div v-else class="empty compact">{{ loadingAction === 'employeeRefresh' ? 'Yuklanmoqda...' : 'Kompaniya ma’lumoti topilmadi' }}</div>
+            </div>
           </section>
         </template>
 
@@ -4614,7 +4780,7 @@ const isEmployeeAccount = computed(() => account.value?.type === 'employee' && a
 const isManagementAccount = computed(() => account.value?.type === 'employee' && account.value?.role === 'management');
 const employeeTabs = [
   { key: 'performance', label: 'Natijalarim', icon: '📊' },
-  { key: 'groups', label: 'Bot ulangan guruhlar', icon: '👥' },
+  { key: 'companyModules', label: 'Bo‘limlar statistikasi', icon: '🏢' },
   { key: 'notifications', label: 'Uyqur Funksiyalari', icon: '🧩' }
 ];
 const employeeActiveTab = ref('performance');
@@ -11949,10 +12115,24 @@ async function loadMyTickets() {
   }
 }
 
+async function loadEmployeeCompanyModuleStats() {
+  try {
+    await Promise.all([loadCompanyInfo({ cached: true }), refreshCompanyModuleReports()]);
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
 async function refreshMyDashboard() {
   startLoading('employeeRefresh');
   try {
-    await Promise.all([loadMyActivity(), loadMyNotifications(), loadMyTickets(), loadPermissionView()]);
+    await Promise.all([
+      loadMyActivity(),
+      loadMyNotifications(),
+      loadMyTickets(),
+      loadPermissionView(),
+      loadEmployeeCompanyModuleStats()
+    ]);
   } finally {
     stopLoading('employeeRefresh');
   }
@@ -12251,6 +12431,11 @@ const NAV_ICON_META = {
     bg: '#f1f5f9',
     color: '#475569',
     shape: '<circle cx="12" cy="12" r="3.2"/><path d="M12 3v2.6M12 18.4V21M21 12h-2.6M5.6 12H3M18.4 5.6l-1.8 1.8M7.4 16.6l-1.8 1.8M18.4 18.4l-1.8-1.8M7.4 7.4 5.6 5.6"/>'
+  },
+  companyModules: {
+    bg: '#e0edff',
+    color: '#1d4ed8',
+    shape: '<rect x="4" y="8.5" width="9" height="12" rx="1"/><rect x="13" y="3" width="7" height="17.5" rx="1"/><line x1="6.5" y1="12" x2="6.5" y2="12.01"/><line x1="10" y1="12" x2="10" y2="12.01"/><line x1="6.5" y1="16" x2="6.5" y2="16.01"/><line x1="10" y1="16" x2="10" y2="16.01"/><line x1="15.5" y1="6.5" x2="15.5" y2="6.51"/><line x1="17.5" y1="6.5" x2="17.5" y2="6.51"/><line x1="15.5" y1="10" x2="15.5" y2="10.01"/><line x1="17.5" y1="10" x2="17.5" y2="10.01"/>'
   }
 };
 const NAV_ICON_DEFAULT = { bg: '#f3f4f6', color: '#6b7280', shape: '<circle cx="12" cy="12" r="8.2"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>' };
