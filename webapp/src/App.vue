@@ -30,21 +30,45 @@
     </section>
   </main>
 
-  <div v-else-if="isEmployeeAccount" class="app-shell employee-shell">
-    <aside class="sidebar">
+  <div v-else-if="isEmployeeAccount" class="app-shell employee-shell" :class="{ 'sidebar-collapsed': !employeeSidebarExpanded }">
+    <aside class="sidebar" :class="{ 'icon-only': !employeeSidebarExpanded }"
+      :title="employeeSidebarExpanded ? 'Yig‘ish uchun bo‘sh joyni bosing' : 'Ochish uchun bo‘sh joyni bosing'"
+      @click="employeeSidebarExpanded = !employeeSidebarExpanded">
       <div class="brand">
         <img class="logo" :src="uyqurLogoUrl" alt="Uyqur" width="42" height="42" />
         <div class="brand-wrapper">
-          <div class="brand-title">Uyqur Admin</div>
+          <div class="brand-title">{{ employeeBrandTitle }}</div>
         </div>
       </div>
 
       <nav class="nav">
         <button v-for="item in employeeTabs" :key="item.key" :class="{ active: employeeActiveTab === item.key }"
-          @click="employeeActiveTab = item.key">
+          :title="item.label" @click.stop="employeeActiveTab = item.key">
+          <span class="nav-icon" :style="{ background: navIconMeta(item.key).bg, color: navIconMeta(item.key).color }"
+            v-html="navIconSvg(item.key)"></span>
           <b>{{ item.label }}</b>
         </button>
       </nav>
+
+      <div class="top-actions-menu sidebar-profile-menu" style="margin-top:auto; width:100%;" ref="managementMenuRef">
+        <button class="profile-action" type="button" style="width:100%;" :aria-expanded="managementMenuOpen"
+          @click.stop="managementMenuOpen = !managementMenuOpen">
+          <img v-if="managementAvatarUrl" :src="managementAvatarUrl" alt="" class="profile-avatar"
+            style="object-fit:cover; border-radius:50%;" />
+          <span v-else class="profile-avatar" style="border-radius:50%;">{{ managementInitials }}</span>
+          <span class="profile-action-info">
+            <b style="display:block;">{{ account?.full_name || 'Support' }}</b>
+            <small style="color:var(--muted,#6b7280);">Support paneli</small>
+          </span>
+          <b class="profile-action-caret">⌄</b>
+        </button>
+        <Transition name="fade">
+          <div v-if="managementMenuOpen" class="actions-dropdown" @click.stop>
+            <button type="button" @click="openManagementProfile">Profilni tahrirlash</button>
+            <button class="danger-menu-item" type="button" @click="logout">Chiqish</button>
+          </div>
+        </Transition>
+      </div>
     </aside>
 
     <section class="main">
@@ -52,14 +76,12 @@
         <div class="page-title">
           <h1>{{ employeeCurrentTitle }}</h1>
         </div>
-        <div class="topbar-actions">
-          <button class="btn topbar-refresh" type="button" :disabled="loadingAction === 'employeeRefresh'"
-            @click="refreshMyDashboard">
-            {{ loadingAction === 'employeeRefresh' ? 'Yangilanmoqda...' : 'Yangilash' }}
-          </button>
-          <button class="btn" type="button" @click="openManagementProfile">Profilni tahrirlash</button>
-          <button class="btn" type="button" @click="logout">Chiqish</button>
-        </div>
+        <button type="button" title="Profilni tahrirlash" @click="openManagementProfile"
+          style="border:0; background:transparent; padding:0; cursor:pointer; flex-shrink:0;">
+          <img v-if="managementAvatarUrl" :src="managementAvatarUrl" alt=""
+            style="width:72px; height:72px; border-radius:50%; object-fit:cover; display:block;" />
+          <span v-else class="profile-avatar" style="width:72px; height:72px; border-radius:50%; font-size:24px;">{{ managementInitials }}</span>
+        </button>
       </header>
 
       <div class="page-body">
@@ -350,60 +372,32 @@
         </template>
 
         <template v-else-if="employeeActiveTab === 'notifications'">
-          <section class="card pad">
-            <div class="card-header">
-              <div>
-                <div class="card-title">Bildirishnomalarim</div>
+          <section class="card pad settings-card">
+            <div class="settings-head">
+              <div class="uyqur-functions-group-title">
+                <div class="card-title">Uyqur Funksiyalari</div>
               </div>
             </div>
-            <div class="table-wrap permission-table-wrap">
-              <table v-if="filteredSupportHistoryRows.length">
-                <thead>
-                  <tr>
-                    <th>Funksiya</th>
-                    <th>Yuborilgan</th>
-                    <th>Holati</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="row in filteredSupportHistoryRows" :key="row.event_id">
-                    <td>{{ row.submodule_name || row.submodule_key }}</td>
-                    <td>{{ fmtDate(row.created_at) }}</td>
-                    <td><span class="badge" :class="row.confirmed ? 'green' : (row.learned ? 'blue' : 'orange')">{{
-                      row.confirmed ? '✓ Qabul qilindi' : (row.learned ? 'O‘rganildi' : 'Kutilmoqda') }}</span></td>
-                  </tr>
-                </tbody>
-              </table>
-              <div v-else class="empty">Hali hech narsa yuborilmagan</div>
-            </div>
-            <template v-if="supportHistoryFilter !== 'done'">
-              <div class="settings-head">
-                <div>
-                  <div class="card-title">Funksiyalar bo‘yicha o‘rganish holati</div>
+            <div class="uyqur-functions-groups" ref="permissionGroupsRef" v-if="permissionModulesMerged.length">
+              <div class="uyqur-functions-group" :class="{ collapsed: !isPermissionModuleExpanded(module) }"
+                :style="permissionGroupMinHeight ? { minHeight: permissionGroupMinHeight + 'px' } : null"
+                v-for="module in permissionModulesMerged.filter(m => m.submodules.length)"
+                :key="'employee-functions-module-' + module.id">
+                <div class="uyqur-functions-group-head" @click="togglePermissionModuleExpanded(module)">
+                  <span class="uyqur-functions-collapse-icon">›</span>
+                  <span class="uyqur-functions-group-title">
+                    <b>{{ module.name || module.key }}</b>
+                  </span>
                 </div>
-                <select class="select" v-model="selectedModuleName">
-                  <option v-for="name in supportHistoryModuleNames" :key="name" :value="name">{{ name }}</option>
-                </select>
+                <div class="uyqur-functions-card-list" v-if="isPermissionModuleExpanded(module)">
+                  <div class="uyqur-functions-card" v-for="submodule in module.submodules"
+                    :key="'employee-functions-submodule-' + submodule.id">
+                    <span>{{ submodule.name || submodule.key }}</span>
+                  </div>
+                </div>
               </div>
-              <div class="table-wrap">
-                <table v-if="selectedModuleHistoryRows.length">
-                  <thead>
-                    <tr>
-                      <th>Funksiya</th>
-                      <th>O‘rganildi</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="row in selectedModuleHistoryRows" :key="row.event_id">
-                      <td>{{ row.submodule_name || row.submodule_key }}</td>
-                      <td><button class="btn small learn-btn" :class="{ learned: row.learned }" type="button"
-                          @click="toggleLearned(row)">{{ row.learned ? '✓ O‘rganildi' : 'O‘rganildi' }}</button></td>
-                    </tr>
-                  </tbody>
-                </table>
-                <div v-else class="empty">Hozircha funksiya yoqilmagan</div>
-              </div>
-            </template>
+            </div>
+            <div v-else class="empty">{{ loadingAction === 'employeeRefresh' ? 'Yuklanmoqda...' : 'Funksiyalar topilmadi' }}</div>
           </section>
         </template>
       </div>
@@ -683,8 +677,8 @@
         <button type="button" title="Profilni tahrirlash" @click="openManagementProfile"
           style="border:0; background:transparent; padding:0; cursor:pointer; flex-shrink:0;">
           <img v-if="managementAvatarUrl" :src="managementAvatarUrl" alt=""
-            style="width:36px; height:36px; border-radius:50%; object-fit:cover; display:block;" />
-          <span v-else class="profile-avatar" style="width:36px; height:36px; border-radius:50%;">{{ managementInitials }}</span>
+            style="width:72px; height:72px; border-radius:50%; object-fit:cover; display:block;" />
+          <span v-else class="profile-avatar" style="width:72px; height:72px; border-radius:50%; font-size:24px;">{{ managementInitials }}</span>
         </button>
       </header>
 
@@ -4525,6 +4519,7 @@ const employeeTabs = [
 ];
 const employeeActiveTab = ref('performance');
 const employeeCurrentTitle = computed(() => employeeTabs.find(tab => tab.key === employeeActiveTab.value)?.label || 'Natijalarim');
+const employeeSidebarExpanded = ref(false);
 const knowledgeDashboard = ref({ kpis: {}, module_bars: [], employee_ranking: [], daily_dynamics: { days: [], series: [] }, quadrant_points: [], function_status: [], period_days: 7 });
 const knowledgePeriodDays = ref(7);
 const managementTabs = [
@@ -4800,6 +4795,10 @@ const userInitials = computed(() => {
 const managementInitials = computed(() => {
   const source = account.value?.full_name || account.value?.username || 'Boshqaruv';
   return String(source).split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]?.toUpperCase()).join('') || 'BP';
+});
+const employeeBrandTitle = computed(() => {
+  const firstName = String(account.value?.full_name || '').trim().split(/\s+/).filter(Boolean)[0];
+  return firstName ? `Uyqur ${firstName}` : 'Uyqur Admin';
 });
 const loginFeedback = computed(() => loginError.value || loginStatus.value);
 const loginButtonText = computed(() => loadingAction.value === 'login' ? 'Tekshirilmoqda...' : 'Kirish');
@@ -9421,8 +9420,7 @@ const managerMemberColumns = [
 
 const employeeLearnedFunctionColumns = [
   { key: 'submodule_name', label: 'Funksiya nomi' },
-  { key: 'created_at', label: 'Chiqqan sana', format: fmtDate },
-  { key: 'days_to_learn', label: 'O‘rganish vaqti', format: value => `${fmtNumber(value)} kun` }
+  { key: 'days_to_learn', label: 'O‘rganish vaqti', format: formatDaysAgo }
 ];
 
 const employeeNotLearnedFunctionColumns = [
@@ -10923,6 +10921,7 @@ async function submitLogin() {
     showToast(data.fallback ? 'Kirdingiz. DB admin yarating yoki parolni o‘zgartiring.' : 'Xush kelibsiz!');
     if (isEmployeeAccount.value) {
       await refreshMyDashboard();
+      loadManagementAvatarPreview();
     } else if (isManagementAccount.value) {
       await loadKnowledgeDashboard();
       loadManagementAvatarPreview();
@@ -11734,7 +11733,7 @@ async function loadMyTickets() {
 async function refreshMyDashboard() {
   startLoading('employeeRefresh');
   try {
-    await Promise.all([loadMyActivity(), loadMyNotifications(), loadMyTickets()]);
+    await Promise.all([loadMyActivity(), loadMyNotifications(), loadMyTickets(), loadPermissionView()]);
   } finally {
     stopLoading('employeeRefresh');
   }
@@ -11981,6 +11980,26 @@ const NAV_ICON_META = {
     shape: '<path d="M4 11.5 12 4l8 7.5"/><path d="M6 10v9a1 1 0 0 0 1 1h3v-5h4v5h3a1 1 0 0 0 1-1v-9"/>'
   },
   functions: {
+    bg: '#f3e8ff',
+    color: '#9333ea',
+    shape: '<rect x="3" y="3" width="7.5" height="7.5" rx="1.6"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.6"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.6"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.6"/>'
+  },
+  performance: {
+    bg: '#eff6ff',
+    color: '#2563eb',
+    shape: '<line x1="4.5" y1="20" x2="4.5" y2="13"/><line x1="10.5" y1="20" x2="10.5" y2="8.5"/><line x1="16.5" y1="20" x2="16.5" y2="4.5"/><line x1="3" y1="20" x2="21" y2="20"/>'
+  },
+  groups: {
+    bg: '#dcfce7',
+    color: '#16a34a',
+    shape: '<circle cx="9" cy="8.2" r="3"/><path d="M3.2 20c0-3.2 2.6-5.8 5.8-5.8s5.8 2.6 5.8 5.8"/><circle cx="17.3" cy="9.3" r="2.3"/><path d="M15.8 14.4c2.3.5 4 2.4 4.2 4.9"/>'
+  },
+  privates: {
+    bg: '#fce7f3',
+    color: '#db2777',
+    shape: '<rect x="4" y="4" width="16" height="11" rx="2.2"/><path d="M8 15v3.5l4-3.5"/>'
+  },
+  notifications: {
     bg: '#f3e8ff',
     color: '#9333ea',
     shape: '<rect x="3" y="3" width="7.5" height="7.5" rx="1.6"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.6"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.6"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.6"/>'
@@ -13770,6 +13789,7 @@ onMounted(async () => {
   if (token.value) {
     if (isEmployeeAccount.value) {
       await refreshMyDashboard();
+      loadManagementAvatarPreview();
     } else if (isManagementAccount.value) {
       await loadKnowledgeDashboard();
       loadManagementAvatarPreview();
