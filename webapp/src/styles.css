@@ -2592,9 +2592,18 @@ body {
 }
 
 .nav-icon {
-  font-size: 18px;
-  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
   flex-shrink: 0;
+}
+
+.nav button.active .nav-icon {
+  background: rgba(255, 255, 255, .25) !important;
+  color: var(--primary-contrast, #fff) !important;
 }
 
 .sidebar.icon-only .nav button {
@@ -2619,7 +2628,8 @@ body {
 }
 
 .sidebar.icon-only .nav-icon {
-  font-size: 20px;
+  width: 26px;
+  height: 26px;
 }
 
 .sidebar.icon-only .profile-action {

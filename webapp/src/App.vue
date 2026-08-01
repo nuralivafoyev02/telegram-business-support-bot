@@ -653,7 +653,8 @@
       <nav class="nav">
         <button v-for="item in managementTabs" :key="item.key" :class="{ active: managementActiveTab === item.key }"
           :title="item.label" @click="managementActiveTab = item.key">
-          <span class="nav-icon">{{ item.icon }}</span>
+          <span class="nav-icon" :style="{ background: navIconMeta(item.key).bg, color: navIconMeta(item.key).color }"
+            v-html="navIconSvg(item.key)"></span>
           <b>{{ item.label }}</b>
         </button>
       </nav>
@@ -705,7 +706,7 @@
                 {{ fmtNumber(Math.abs(knowledgeDashboard.kpis.avg_knowledge_change_pct || 0)) }}%
               </span>
             </div>
-            <div class="support-summary-note">👥 {{ fmtNumber(knowledgeDashboard.kpis.employees_total) }} support xodim</div>
+            <div class="support-summary-note">{{ fmtNumber(knowledgeDashboard.kpis.employees_total) }} support xodim</div>
           </div>
         </article>
         <article class="card support-summary-card">
@@ -767,10 +768,10 @@
             <div style="display:flex; align-items:center; gap:8px; padding:6px 0; font-size:11px; text-transform:uppercase; color:#9ca3af; border-bottom:1px solid #f1f5f9;">
               <span style="width:20px; flex-shrink:0;">#</span>
               <span style="flex:1;">Xodim</span>
-              <span style="width:70px; text-align:right; flex-shrink:0;">O‘rgangan</span>
-              <span style="width:70px; text-align:right; flex-shrink:0;">Jarayonda</span>
-              <span style="width:80px; text-align:right; flex-shrink:0;">Boshlamagan</span>
-              <span style="width:56px; text-align:right; flex-shrink:0;">Daraja</span>
+              <span style="width:70px; text-align:right; flex-shrink:0; padding-left:12px; border-left:1px solid #e5e7eb;">O‘rgangan</span>
+              <span style="width:70px; text-align:right; flex-shrink:0; padding-left:12px; border-left:1px solid #e5e7eb;">Jarayonda</span>
+              <span style="width:80px; text-align:right; flex-shrink:0; padding-left:12px; border-left:1px solid #e5e7eb;">Boshlamagan</span>
+              <span style="width:56px; text-align:right; flex-shrink:0; padding-left:12px; border-left:1px solid #e5e7eb;">Daraja</span>
             </div>
             <div v-for="(row, index) in knowledgeDashboard.employee_ranking" :key="row.employee_id"
               style="display:flex; align-items:center; gap:8px; padding:10px 0; border-bottom:1px solid #f8fafc; cursor:pointer;"
@@ -782,10 +783,10 @@
                 <span v-else class="profile-avatar" style="width:30px; height:30px; font-size:12px; flex-shrink:0;">{{ initialsFromText(row.full_name) }}</span>
                 <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; font-size:15px;">{{ row.full_name }}</span>
               </span>
-              <span style="width:70px; text-align:right; flex-shrink:0; font-size:14px; font-weight:600; color:#16a34a;">{{ row.learned_count }}</span>
-              <span style="width:70px; text-align:right; flex-shrink:0; font-size:14px; font-weight:600; color:#f59e0b;">{{ row.in_progress_count }}</span>
-              <span style="width:80px; text-align:right; flex-shrink:0; font-size:14px; font-weight:600; color:#dc2626;">{{ row.not_started_count }}</span>
-              <span style="width:56px; text-align:right; flex-shrink:0; font-size:14px; font-weight:600;">{{ row.percent }}%</span>
+              <span style="width:70px; text-align:right; flex-shrink:0; font-size:14px; font-weight:600; color:#16a34a; padding-left:12px; border-left:1px solid #f1f5f9; align-self:stretch; display:flex; align-items:center; justify-content:flex-end;">{{ row.learned_count }}</span>
+              <span style="width:70px; text-align:right; flex-shrink:0; font-size:14px; font-weight:600; color:#f59e0b; padding-left:12px; border-left:1px solid #f1f5f9; align-self:stretch; display:flex; align-items:center; justify-content:flex-end;">{{ row.in_progress_count }}</span>
+              <span style="width:80px; text-align:right; flex-shrink:0; font-size:14px; font-weight:600; color:#dc2626; padding-left:12px; border-left:1px solid #f1f5f9; align-self:stretch; display:flex; align-items:center; justify-content:flex-end;">{{ row.not_started_count }}</span>
+              <span style="width:56px; text-align:right; flex-shrink:0; font-size:14px; font-weight:600; padding-left:12px; border-left:1px solid #f1f5f9; align-self:stretch; display:flex; align-items:center; justify-content:flex-end;">{{ row.percent }}%</span>
             </div>
             <div v-if="!knowledgeDashboard.employee_ranking.length" class="empty">Support xodim topilmadi</div>
           </div>
@@ -11912,6 +11913,32 @@ function moduleIconMeta(name = '') {
 function moduleIconSvg(name = '') {
   const key = String(name).toLowerCase().replace(/[^a-z]/gi, '');
   const shape = MODULE_ICON_SHAPES[key] || MODULE_ICON_DEFAULT_SHAPE;
+  return `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${shape}</svg>`;
+}
+
+// Boshqaruv paneli sidebar navigatsiyasi uchun — modul ikonkalari bilan bir
+// xil chiziq-uslub, faqat alohida rang-shakl to'plami (sidebar bo'limlari
+// modul emas).
+const NAV_ICON_META = {
+  dashboard: {
+    bg: '#eff6ff',
+    color: '#2563eb',
+    shape: '<path d="M4 11.5 12 4l8 7.5"/><path d="M6 10v9a1 1 0 0 0 1 1h3v-5h4v5h3a1 1 0 0 0 1-1v-9"/>'
+  },
+  functions: {
+    bg: '#f3e8ff',
+    color: '#9333ea',
+    shape: '<rect x="3" y="3" width="7.5" height="7.5" rx="1.6"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.6"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.6"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.6"/>'
+  }
+};
+const NAV_ICON_DEFAULT = { bg: '#f3f4f6', color: '#6b7280', shape: '<circle cx="12" cy="12" r="8.2"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>' };
+
+function navIconMeta(key = '') {
+  return NAV_ICON_META[key] || NAV_ICON_DEFAULT;
+}
+
+function navIconSvg(key = '') {
+  const shape = navIconMeta(key).shape;
   return `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${shape}</svg>`;
 }
 
