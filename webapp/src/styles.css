@@ -1608,6 +1608,15 @@ tbody tr:hover {
 
 .drilldown-panel {
   min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px;
+}
+
+.drilldown-chart-panel {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 16px;
 }
 
 .drilldown-panel .data-table {
