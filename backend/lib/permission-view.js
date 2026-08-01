@@ -11,6 +11,17 @@ const PERMISSION_NOTIFICATIONS_KEY = 'uyqur_permission_notifications';
 const MAX_NOTIFICATION_EVENTS = 200;
 const MANAGER_CONFIRMERS_KEY = 'uyqur_manager_confirmers';
 
+// "Kontragent balansi" alohida modul sifatida ko'rsatilmaydi — uning
+// funksiyalari/hodisalari "Kontragent" ostiga birlashtiriladi (nomi bilan
+// bog'liq bo'lgan har qanday yozuvda, tashqi manba qanday nom bersa ham).
+function normalizeModuleNameKey(value = '') {
+  return String(value || '').toLowerCase().replace(/[^a-z]/gi, '');
+}
+
+function canonicalModuleName(name = '') {
+  return normalizeModuleNameKey(name) === 'kontragentbalansi' ? 'Kontragent' : name;
+}
+
 function permissionViewUrl() {
   const configured = optionalEnv('FUNCSIYALAR', DEFAULT_PERMISSION_VIEW_PATH).trim();
   if (/^https?:\/\//i.test(configured)) return configured;
@@ -492,12 +503,12 @@ async function getKnowledgeDashboard({ days = 7 } = {}) {
   // "Barcha funksiyalar"dagi BUTUN modul daraxti asos qilib olinadi — hodisasi
   // (kuzatilayotgan funksiyasi) yo'q modullar ham 0% bilan ro'yxatga kiradi.
   const treeModuleNames = (Array.isArray(permissionRecord.modules) ? permissionRecord.modules : [])
-    .map(module => module.name || module.key)
+    .map(module => canonicalModuleName(module.name || module.key))
     .filter(Boolean);
-  const eventModuleNames = events.map(event => event.module_name).filter(Boolean);
+  const eventModuleNames = events.map(event => canonicalModuleName(event.module_name)).filter(Boolean);
   const moduleNames = [...new Set([...treeModuleNames, ...eventModuleNames])];
   const moduleBars = moduleNames.map(moduleName => {
-    const moduleEvents = events.filter(event => event.module_name === moduleName);
+    const moduleEvents = events.filter(event => canonicalModuleName(event.module_name) === moduleName);
     let moduleLearnedPairs = 0;
     moduleEvents.forEach(event => {
       employees.forEach(employee => {
@@ -580,7 +591,8 @@ async function getModuleFunctionsDetail(moduleName) {
   if (!moduleName) throw new Error('module_name majburiy');
   const [employees, record] = await Promise.all([getSupportEmployees(), getNotificationRecord()]);
   const now = Date.now();
-  const moduleEvents = record.events.filter(event => event.module_name === moduleName);
+  const targetModuleName = canonicalModuleName(moduleName);
+  const moduleEvents = record.events.filter(event => canonicalModuleName(event.module_name) === targetModuleName);
 
   // "O'rganilgan/Jarayonda/Boshlanmagan fichalar" — donut hisoblagichi bilan
   // bir xil qoida (getKnowledgeDashboard'dagi kabi), lekin faqat shu modul
@@ -654,9 +666,9 @@ async function getEmployeeKnowledgeProfile(employeeId) {
   if (!employee) throw new Error('Xodim topilmadi');
   const events = record.events;
 
-  const moduleNames = [...new Set(events.map(event => event.module_name).filter(Boolean))];
+  const moduleNames = [...new Set(events.map(event => canonicalModuleName(event.module_name)).filter(Boolean))];
   const modulePercents = moduleNames.map(moduleName => {
-    const moduleEvents = events.filter(event => event.module_name === moduleName);
+    const moduleEvents = events.filter(event => canonicalModuleName(event.module_name) === moduleName);
     const learnedCount = moduleEvents.filter(event => Boolean(progressFor(record, event.id, employee.id).learned_at)).length;
     return {
       module_name: moduleName,
