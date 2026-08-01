@@ -1123,17 +1123,19 @@
             <b>{{ employeeKnowledgeProfile.not_learned_functions.length }}</b>
           </span>
         </div>
-        <div style="display:flex; align-items:stretch; justify-content:center; gap:120px; margin:16px 0; flex-wrap:wrap;">
+        <div class="drilldown-columns" style="margin:16px 0;">
           <div class="drilldown-chart-panel" style="display:flex; align-items:center; justify-content:center;">
             <RadarChart
               :axes="employeeKnowledgeProfile.module_percents.map(module => ({ label: module.module_name, value: module.percent }))"
               :size="260" />
           </div>
-          <div class="drilldown-chart-panel" style="min-width:320px;">
+          <div class="drilldown-chart-panel">
             <div class="drilldown-label">Bilim darajasi dinamikasi</div>
-            <LineChart
-              :points="employeeKnowledgeProfile.daily_progress.map(day => ({ label: fmtShortDayMonth(day.date), value: day.percent }))"
-              :width="420" :height="220" />
+            <div style="display:flex; justify-content:center;">
+              <LineChart
+                :points="employeeKnowledgeProfile.daily_progress.map(day => ({ label: fmtShortDayMonth(day.date), value: day.percent }))"
+                :width="420" :height="220" />
+            </div>
           </div>
         </div>
         <div class="drilldown-columns">
