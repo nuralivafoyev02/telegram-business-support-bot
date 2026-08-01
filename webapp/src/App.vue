@@ -10989,6 +10989,15 @@ async function submitEmployeeFunctionChanges() {
   }
 }
 
+async function refreshKnowledgeDashboardIfLoaded() {
+  if (!isManagementAccount.value) return;
+  try {
+    knowledgeDashboard.value = await api.knowledgeDashboard({ days: knowledgePeriodDays.value });
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
 async function toggleConfirmed(row) {
   try {
     await api.confirmUyqurReview({
@@ -10997,7 +11006,14 @@ async function toggleConfirmed(row) {
       confirmed: !row.confirmed,
       manager_username: ''
     });
-    await Promise.all([loadSupportOverview(), refreshSupportHistoryIfOpen(row.employee_id)]);
+    // Tasdiqlash/bekor qilishdan keyin bog'liq barcha ko'rinishlar (bell,
+    // Xodimlar reytingi, dashboard KPI'lari) yangi holatga mos sinxron
+    // yangilanishi kerak — aks holda eski (stale) sonlar ko'rinib qoladi.
+    await Promise.all([
+      loadSupportOverview(),
+      refreshSupportHistoryIfOpen(row.employee_id),
+      refreshKnowledgeDashboardIfLoaded()
+    ]);
   } catch (error) {
     showToast(error.message);
   }
