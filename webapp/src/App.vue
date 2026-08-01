@@ -342,29 +342,6 @@
           </section>
         </template>
 
-        <template v-else-if="employeeActiveTab === 'privates'">
-          <section class="card">
-            <div class="card-header">
-              <div>
-                <div class="card-title">Mijozlar</div>
-              </div>
-            </div>
-            <div v-if="privates.length" class="mini-list">
-              <article v-for="chat in privates" :key="chat.chat_id" class="mini-item employee-chat-row">
-                <div>
-                  <b>{{ chat.title || chat.first_name || chat.username || chat.chat_id }}</b>
-                  <p>{{ fmtDate(chat.last_message_at || chat.last_request_at) }}</p>
-                </div>
-                <div class="employee-chat-actions">
-                  <button class="btn small" type="button" @click="loadChatDetail(chat)">Tafsilot</button>
-                  <button class="btn small" type="button" @click="openSend(chat)">Yozish</button>
-                </div>
-              </article>
-            </div>
-            <div v-else class="empty">Sizga biriktirilgan mijoz chati topilmadi</div>
-          </section>
-        </template>
-
         <template v-else-if="employeeActiveTab === 'notifications'">
           <section class="card pad settings-card">
             <div class="settings-head">
@@ -4638,7 +4615,6 @@ const isManagementAccount = computed(() => account.value?.type === 'employee' &&
 const employeeTabs = [
   { key: 'performance', label: 'Natijalarim', icon: '📊' },
   { key: 'groups', label: 'Bot ulangan guruhlar', icon: '👥' },
-  { key: 'privates', label: 'Mijozlar', icon: '💬' },
   { key: 'notifications', label: 'Uyqur Funksiyalari', icon: '🧩' }
 ];
 const employeeActiveTab = ref('performance');
