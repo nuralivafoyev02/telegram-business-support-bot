@@ -2835,6 +2835,23 @@ body {
   border-radius: var(--radius);
 }
 
+/* Dropdown "Sozlamalar" nav-tugmasi ichida joylashgani uchun, sidebar
+   yig'ilgan (icon-only) holatda unga ham 44x44 ikonka-plitka qoidasi
+   tegib ketmasligi kerak — shu yerda qayta tiklanadi. */
+.sidebar.icon-only .nav .actions-dropdown button {
+  width: auto;
+  height: auto;
+  justify-content: flex-start;
+  align-items: center;
+  padding: 8px 10px;
+  margin: 0;
+  white-space: normal;
+}
+
+.sidebar.icon-only .nav .actions-dropdown button b {
+  display: inline;
+}
+
 .actions-dropdown button,
 .theme-menu-row {
   display: flex;
