@@ -390,14 +390,25 @@
                   </span>
                 </div>
                 <div class="uyqur-functions-card-list" v-if="isPermissionModuleExpanded(module)">
-                  <div class="uyqur-functions-card" v-for="submodule in module.submodules"
-                    :key="'employee-functions-submodule-' + submodule.id">
+                  <label class="uyqur-functions-card" v-for="submodule in module.submodules"
+                    :key="'employee-functions-submodule-' + submodule.id"
+                    style="cursor:pointer; justify-content:flex-start;">
+                    <input type="checkbox" class="row-check"
+                      :checked="isEmployeeFunctionSelected(String(submodule.key))"
+                      :disabled="employeeHistoryByKey.get(String(submodule.key))?.learned"
+                      @change="toggleEmployeeFunctionSelected(String(submodule.key))" />
                     <span>{{ submodule.name || submodule.key }}</span>
-                  </div>
+                  </label>
                 </div>
               </div>
             </div>
             <div v-else class="empty">{{ loadingAction === 'employeeRefresh' ? 'Yuklanmoqda...' : 'Funksiyalar topilmadi' }}</div>
+            <div style="display:flex; justify-content:flex-end; margin-top:16px;">
+              <button class="btn primary" type="button" :disabled="!employeeFunctionSelected.size || loadingAction === 'employeeSendLearned'"
+                @click="sendEmployeeLearnedFunctions">
+                {{ loadingAction === 'employeeSendLearned' ? 'Yuborilmoqda...' : 'Yuborildi' }}
+              </button>
+            </div>
           </section>
         </template>
       </div>
@@ -10760,6 +10771,39 @@ async function toggleLearned(row) {
     await Promise.all(tasks);
   } catch (error) {
     showToast(error.message);
+  }
+}
+
+const employeeFunctionSelected = ref(new Set());
+const employeeHistoryByKey = computed(() => {
+  const map = new Map();
+  supportHistoryRows.value.forEach(row => { if (row.submodule_key) map.set(String(row.submodule_key), row); });
+  return map;
+});
+function isEmployeeFunctionSelected(key) {
+  return employeeHistoryByKey.value.get(key)?.learned || employeeFunctionSelected.value.has(key);
+}
+function toggleEmployeeFunctionSelected(key) {
+  if (employeeHistoryByKey.value.get(key)?.learned) return;
+  const next = new Set(employeeFunctionSelected.value);
+  if (next.has(key)) next.delete(key); else next.add(key);
+  employeeFunctionSelected.value = next;
+}
+async function sendEmployeeLearnedFunctions() {
+  const targets = Array.from(employeeFunctionSelected.value)
+    .map(key => employeeHistoryByKey.value.get(key))
+    .filter(row => row && !row.learned);
+  if (!targets.length) { employeeFunctionSelected.value = new Set(); return; }
+  startLoading('employeeSendLearned');
+  try {
+    await Promise.all(targets.map(row => api.markUyqurLearned({ event_id: row.event_id, employee_id: selectedSupportId.value, learned: true })));
+    await refreshSupportHistoryIfOpen(selectedSupportId.value);
+    employeeFunctionSelected.value = new Set();
+    showToast('Yuborildi');
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    stopLoading('employeeSendLearned');
   }
 }
 
