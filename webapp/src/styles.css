@@ -2821,6 +2821,7 @@ body {
   left: 0;
   right: 0;
   width: auto;
+  gap: 10px;
 }
 
 .icon-only .sidebar-profile-menu .actions-dropdown {
@@ -2831,6 +2832,7 @@ body {
 
 .sidebar-profile-menu .actions-dropdown button {
   border: 1px solid var(--line);
+  border-radius: var(--radius);
 }
 
 .actions-dropdown button,
