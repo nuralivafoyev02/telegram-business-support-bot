@@ -181,10 +181,12 @@ export const api = {
   functionsByStatus: status => request('uyqurFunctionsByStatus', { query: { status } }).then(r => r.data),
   employeeKnowledgeProfile: (query = {}) => request('uyqurEmployeeKnowledgeProfile', { query }).then(r => r.data),
   saveManagementProfile: payload => request('managementProfile', { method: 'POST', body: payload }).then(r => r.data),
-  // `v` — versiya (avatar_updated_at) — brauzer HTTP keshini rasm yangilangach
-  // yangi so'rov sifatida ko'rishga majburlaydi, aks holda eski rasm
-  // keshdan qaytaverardi.
-  managementAvatar: version => requestBlob('managementAvatar', { query: { v: version || undefined } }),
+  // `employee_id` + `v` (avatar_updated_at) so'rov manzilini har bir
+  // foydalanuvchi va har bir rasm versiyasi uchun betakror qiladi — aks
+  // holda barcha hisoblar bir xil manzilni so'raganida (masalan "o'zimning
+  // rasmim"), brauzer boshqa hisobga tegishli keshlangan rasmni qaytarib
+  // yuborishi mumkin edi.
+  managementAvatar: (employeeId, version) => requestBlob('managementAvatar', { query: { employee_id: employeeId || undefined, v: version || undefined } }),
   employeeAvatar: (employeeId, version) => requestBlob('managementAvatar', { query: { employee_id: employeeId, v: version || undefined } }),
   saveManagementAvatar: imageDataUrl => request('managementAvatarUpload', { method: 'POST', body: { image: imageDataUrl } }).then(r => r.data),
   removeManagementAvatar: () => request('managementAvatarRemove', { method: 'POST', body: {} }).then(r => r.data)

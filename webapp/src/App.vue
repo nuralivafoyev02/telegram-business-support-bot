@@ -50,17 +50,12 @@
         </button>
       </nav>
 
-      <div class="top-actions-menu sidebar-profile-menu" style="margin-top:auto; width:100%;" ref="managementMenuRef">
-        <button class="profile-action" type="button" style="width:100%;" :aria-expanded="managementMenuOpen"
-          @click.stop="managementMenuOpen = !managementMenuOpen">
-          <img v-if="managementAvatarUrl" :src="managementAvatarUrl" alt="" class="profile-avatar"
-            style="object-fit:cover; border-radius:50%;" />
-          <span v-else class="profile-avatar" style="border-radius:50%;">{{ managementInitials }}</span>
-          <span class="profile-action-info">
-            <b style="display:block;">{{ account?.full_name || 'Support' }}</b>
-            <small style="color:var(--muted,#6b7280);">Support paneli</small>
-          </span>
-          <b class="profile-action-caret">⌄</b>
+      <nav class="nav nav-bottom sidebar-profile-menu" ref="managementMenuRef">
+        <button type="button" :class="{ active: managementMenuOpen }" title="Sozlamalar"
+          :aria-expanded="managementMenuOpen" @click.stop="managementMenuOpen = !managementMenuOpen">
+          <span class="nav-icon" :style="{ background: navIconMeta('settings').bg, color: navIconMeta('settings').color }"
+            v-html="navIconSvg('settings')"></span>
+          <b>Sozlamalar</b>
         </button>
         <Transition name="fade">
           <div v-if="managementMenuOpen" class="actions-dropdown" @click.stop>
@@ -68,7 +63,7 @@
             <button class="danger-menu-item" type="button" @click="logout">Chiqish</button>
           </div>
         </Transition>
-      </div>
+      </nav>
     </aside>
 
     <section class="main">
@@ -76,12 +71,11 @@
         <div class="page-title">
           <h1>{{ employeeCurrentTitle }}</h1>
         </div>
-        <button type="button" title="Profilni tahrirlash" @click="openManagementProfile"
-          style="border:0; background:transparent; padding:0; cursor:pointer; flex-shrink:0;">
+        <span style="flex-shrink:0;">
           <img v-if="managementAvatarUrl" :src="managementAvatarUrl" alt=""
             style="width:72px; height:72px; border-radius:50%; object-fit:cover; display:block;" />
           <span v-else class="profile-avatar" style="width:72px; height:72px; border-radius:50%; font-size:24px;">{{ managementInitials }}</span>
-        </button>
+        </span>
       </header>
 
       <div class="page-body">
@@ -12109,7 +12103,7 @@ async function loadManagementAvatarPreview() {
   revokeManagementAvatarUrl();
   if (!account.value?.has_avatar) return;
   try {
-    const blob = await api.managementAvatar(account.value?.avatar_updated_at);
+    const blob = await api.managementAvatar(account.value?.employee_id || account.value?.id, account.value?.avatar_updated_at);
     managementAvatarUrl.value = URL.createObjectURL(blob);
   } catch (_error) {
     managementAvatarUrl.value = '';
@@ -12276,6 +12270,11 @@ const NAV_ICON_META = {
     bg: '#f3e8ff',
     color: '#9333ea',
     shape: '<rect x="3" y="3" width="7.5" height="7.5" rx="1.6"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.6"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.6"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.6"/>'
+  },
+  settings: {
+    bg: '#f1f5f9',
+    color: '#475569',
+    shape: '<circle cx="12" cy="12" r="3.2"/><path d="M12 3v2.6M12 18.4V21M21 12h-2.6M5.6 12H3M18.4 5.6l-1.8 1.8M7.4 16.6l-1.8 1.8M18.4 18.4l-1.8-1.8M7.4 7.4 5.6 5.6"/>'
   }
 };
 const NAV_ICON_DEFAULT = { bg: '#f3f4f6', color: '#6b7280', shape: '<circle cx="12" cy="12" r="8.2"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>' };
