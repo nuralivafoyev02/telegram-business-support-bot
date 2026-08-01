@@ -500,25 +500,41 @@ async function getKnowledgeDashboard({ days = 7 } = {}) {
     total_count: totalFunctionsCount
   };
 
-  // "Barcha funksiyalar"dagi BUTUN modul daraxti asos qilib olinadi — hodisasi
-  // (kuzatilayotgan funksiyasi) yo'q modullar ham 0% bilan ro'yxatga kiradi.
-  const treeModuleNames = (Array.isArray(permissionRecord.modules) ? permissionRecord.modules : [])
-    .map(module => canonicalModuleName(module.name || module.key))
-    .filter(Boolean);
+  // "Barcha funksiyalar"dagi BUTUN modul daraxti asos qilib olinadi — hali
+  // yuborilmagan funksiya ham maxrajga kiradi (0% qo'shib turadi). Foiz
+  // faqat xodim "O'rgandim" deb belgilab, MENEJER buni tasdiqlagandan
+  // (confirmed_at) keyin oshadi — shunchaki "o'rgandim" belgisi yetarli emas.
+  const submodulesByCanonicalModule = new Map();
+  (Array.isArray(permissionRecord.modules) ? permissionRecord.modules : []).forEach(module => {
+    const canonicalName = canonicalModuleName(module.name || module.key);
+    if (!canonicalName) return;
+    const list = submodulesByCanonicalModule.get(canonicalName) || [];
+    list.push(...(module.submodules || []));
+    submodulesByCanonicalModule.set(canonicalName, list);
+  });
   const eventModuleNames = events.map(event => canonicalModuleName(event.module_name)).filter(Boolean);
-  const moduleNames = [...new Set([...treeModuleNames, ...eventModuleNames])];
+  const moduleNames = [...new Set([...submodulesByCanonicalModule.keys(), ...eventModuleNames])];
   const moduleBars = moduleNames.map(moduleName => {
-    const moduleEvents = events.filter(event => canonicalModuleName(event.module_name) === moduleName);
-    let moduleLearnedPairs = 0;
-    moduleEvents.forEach(event => {
+    // Daraxtda topilmasa (masalan olib tashlangan eski modul) — shu nomdagi
+    // hodisalarni submodule sifatida ishlatamiz, hech narsa yo'qolib qolmasin.
+    const submodules = submodulesByCanonicalModule.get(moduleName)?.length
+      ? submodulesByCanonicalModule.get(moduleName)
+      : events
+        .filter(event => canonicalModuleName(event.module_name) === moduleName)
+        .map(event => ({ key: event.submodule_key }));
+
+    let confirmedPairs = 0;
+    submodules.forEach(submodule => {
+      const event = eventBySubmoduleKey.get(String(submodule.key));
+      if (!event) return;
       employees.forEach(employee => {
-        if (progressFor(record, event.id, employee.id).learned_at) moduleLearnedPairs += 1;
+        if (progressFor(record, event.id, employee.id).confirmed_at) confirmedPairs += 1;
       });
     });
-    const moduleTotalPairs = moduleEvents.length * employees.length;
+    const totalPairs = submodules.length * employees.length;
     return {
       module_name: moduleName,
-      percent: moduleTotalPairs ? Math.round((moduleLearnedPairs / moduleTotalPairs) * 100) : 0
+      percent: totalPairs ? Math.round((confirmedPairs / totalPairs) * 100) : 0
     };
   }).sort((a, b) => b.percent - a.percent);
 
@@ -589,25 +605,44 @@ async function getKnowledgeDashboard({ days = 7 } = {}) {
 
 async function getModuleFunctionsDetail(moduleName) {
   if (!moduleName) throw new Error('module_name majburiy');
-  const [employees, record] = await Promise.all([getSupportEmployees(), getNotificationRecord()]);
+  const [employees, record, permissionRecord] = await Promise.all([
+    getSupportEmployees(),
+    getNotificationRecord(),
+    getPermissionViewRecord()
+  ]);
   const now = Date.now();
   const targetModuleName = canonicalModuleName(moduleName);
+
+  // Ro'yxat endi checkbox/hodisa bilan cheklanmaydi — shu modulga tegishli
+  // BARCHA funksiyalar daraxtdan olinadi ("Kontragent balansi" ham
+  // "Kontragent"ga birlashadi). Hodisasi (yuborilgan sanasi) bo'lmagan
+  // funksiya ham ro'yxatda ko'rinadi, faqat sanasi/o'rganish holati bo'sh
+  // chiqadi.
+  const treeSubmodules = (Array.isArray(permissionRecord.modules) ? permissionRecord.modules : [])
+    .filter(module => canonicalModuleName(module.name || module.key) === targetModuleName)
+    .flatMap(module => module.submodules || []);
+
   const moduleEvents = record.events.filter(event => canonicalModuleName(event.module_name) === targetModuleName);
+  const eventBySubmoduleKey = new Map(moduleEvents.map(event => [String(event.submodule_key), event]));
+  // Daraxtda endi yo'q-u, avval hodisasi yaratilgan (masalan olib tashlangan)
+  // funksiyalar ham ro'yxatdan tushib qolmasin.
+  const extraEvents = moduleEvents.filter(event => !treeSubmodules.some(sub => String(sub.key) === String(event.submodule_key)));
 
   // "O'rganilgan/Jarayonda/Boshlanmagan fichalar" — donut hisoblagichi bilan
-  // bir xil qoida (getKnowledgeDashboard'dagi kabi), lekin faqat shu modul
-  // fichalariga cheklangan: barcha faol support tasdiqlagan — o'rganilgan;
-  // kamida bittasi o'rgangan-u hammasi tasdiqlamagan — jarayonda; aks holda
+  // bir xil qoida (getKnowledgeDashboard'dagi kabi): barcha faol support
+  // tasdiqlagan — o'rganilgan; kamida bittasi o'rgangan-u hammasi
+  // tasdiqlamagan — jarayonda; hodisasi yo'q yoki hech kim tegmagan —
   // boshlanmagan.
   let learnedTotal = 0;
   let inProgressTotal = 0;
   let notStartedTotal = 0;
 
-  const functions = moduleEvents.map(event => {
+  function buildFunctionRow(submoduleKey, submoduleName, fallbackCreatedAt) {
+    const event = eventBySubmoduleKey.get(String(submoduleKey)) || null;
     const learnedEmployees = [];
     const notLearnedEmployees = [];
     employees.forEach(employee => {
-      const progress = progressFor(record, event.id, employee.id);
+      const progress = event ? progressFor(record, event.id, employee.id) : {};
       const row = {
         id: employee.id,
         full_name: employee.full_name || employee.username || 'Xodim',
@@ -619,21 +654,27 @@ async function getModuleFunctionsDetail(moduleName) {
       else notLearnedEmployees.push(row);
     });
 
-    const confirmedByAll = employees.length > 0
+    const confirmedByAll = Boolean(event) && employees.length > 0
       && employees.every(employee => Boolean(progressFor(record, event.id, employee.id).confirmed_at));
     if (confirmedByAll) learnedTotal += 1;
     else if (learnedEmployees.length > 0) inProgressTotal += 1;
     else notStartedTotal += 1;
 
+    const createdAt = event ? event.created_at : (fallbackCreatedAt || null);
     return {
-      event_id: event.id,
-      submodule_name: event.submodule_name,
-      created_at: event.created_at,
-      days_since_launch: Math.floor((now - new Date(event.created_at).getTime()) / DAY_MS),
+      event_id: event ? event.id : `pending-${submoduleKey}`,
+      submodule_name: submoduleName,
+      created_at: createdAt,
+      days_since_launch: createdAt ? Math.floor((now - new Date(createdAt).getTime()) / DAY_MS) : null,
       learned_employees: learnedEmployees,
       not_learned_employees: notLearnedEmployees
     };
-  }).sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
+  }
+
+  const functions = [
+    ...treeSubmodules.map(sub => buildFunctionRow(sub.key, sub.name || sub.key)),
+    ...extraEvents.map(event => buildFunctionRow(event.submodule_key, event.submodule_name, event.created_at))
+  ].sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
 
   const learnDurations = [];
   moduleEvents.forEach(event => {

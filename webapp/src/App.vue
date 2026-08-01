@@ -883,7 +883,7 @@
                     <span v-if="!fn.not_learned_employees.length" class="empty compact" style="padding:0;">—</span>
                   </div>
                 </td>
-                <td>{{ fn.days_since_launch }} kun</td>
+                <td>{{ fn.days_since_launch != null ? fn.days_since_launch + ' kun' : '—' }}</td>
               </tr>
             </tbody>
           </table>
