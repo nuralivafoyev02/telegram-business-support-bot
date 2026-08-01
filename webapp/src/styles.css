@@ -957,6 +957,7 @@ tbody tr:hover {
 
 .settings-card {
   background: var(--panel-strong);
+  overflow: visible;
 }
 
 .settings-head {

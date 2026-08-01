@@ -404,17 +404,17 @@
             </div>
             <div class="uyqur-functions-groups" ref="permissionGroupsRef"
               v-if="permissionModulesMerged.filter(m => m.submodules.some(sm => isEmployeeFunctionVisible(String(sm.key)))).length">
-              <div class="uyqur-functions-group" :class="{ collapsed: !isPermissionModuleExpanded(module) }"
+              <div class="uyqur-functions-group" :class="{ collapsed: !isEmployeeModuleExpanded(module) }"
                 :style="permissionGroupMinHeight ? { minHeight: permissionGroupMinHeight + 'px' } : null"
                 v-for="module in permissionModulesMerged.filter(m => m.submodules.some(sm => isEmployeeFunctionVisible(String(sm.key))))"
                 :key="'employee-functions-module-' + module.id">
-                <div class="uyqur-functions-group-head" @click="togglePermissionModuleExpanded(module)">
+                <div class="uyqur-functions-group-head" @click="toggleEmployeeModuleExpanded(module)">
                   <span class="uyqur-functions-collapse-icon">›</span>
                   <span class="uyqur-functions-group-title">
                     <b>{{ module.name || module.key }}</b>
                   </span>
                 </div>
-                <div class="uyqur-functions-card-list" v-if="isPermissionModuleExpanded(module)">
+                <div class="uyqur-functions-card-list" v-if="isEmployeeModuleExpanded(module)">
                   <label class="uyqur-functions-card"
                     v-for="submodule in module.submodules.filter(sm => isEmployeeFunctionVisible(String(sm.key)))"
                     :key="'employee-functions-submodule-' + submodule.id"
@@ -10817,6 +10817,22 @@ function togglePermissionModuleExpanded(module = {}) {
   recalcPermissionGroupHeight();
 }
 
+// Support (employee) uchun alohida yig'ish holati — admin/boshqaruv
+// ko'rinishidan mustaqil, defaultda hammasi OCHIQ turadi (to'plam bo'sh =
+// hech narsa yig'ilmagan).
+const employeeCollapsedModules = ref(new Set());
+function isEmployeeModuleExpanded(module = {}) {
+  return !employeeCollapsedModules.value.has(permissionModuleKey(module));
+}
+function toggleEmployeeModuleExpanded(module = {}) {
+  const key = permissionModuleKey(module);
+  const next = new Set(employeeCollapsedModules.value);
+  if (next.has(key)) next.delete(key);
+  else next.add(key);
+  employeeCollapsedModules.value = next;
+  recalcPermissionGroupHeight();
+}
+
 // Checkbox yo'q — "Saqlash" hozir daraxtdagi BARCHA funksiyalarni yuboradi
 // (avval hali yuborilmagan — "Yuborilmadi" — bo'lganlar uchun supportlarga
 // bildirishnoma hodisasi yaratiladi, allaqachon yuborilganlar qayta
@@ -10907,7 +10923,7 @@ const employeeFunctionPending = ref(new Map());
 // boshqaradi. 'revert' esa alohida rejim: belgilangan (tasdiqlangan +
 // topshirilgan-lekin-tasdiqlanmagan) fichalarning barchasi ko'rinadi, lekin
 // checkboxlar faqat tasdiqlanmaganlarini qaytarish uchun ishlaydi.
-const employeeFunctionViewMode = ref('all');
+const employeeFunctionViewMode = ref('not_learned');
 const employeeFunctionMenuOpen = ref(false);
 const employeeFunctionMenuRef = ref(null);
 const employeeRevertMode = computed(() => employeeFunctionViewMode.value === 'revert');
