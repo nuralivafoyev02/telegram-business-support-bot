@@ -119,11 +119,16 @@
             </article>
           </div>
 
-          <section class="card pad">
-            <div class="card-header">
+          <section class="card pad employee-performance-card">
+            <div class="card-header" style="align-items:flex-start; flex-wrap:wrap; gap:12px;">
               <div>
-                <div class="card-title">Natijalarim</div>
+                <div class="card-title">Mening faoliyatim</div>
                 <div class="card-note">Davr: {{ selectedPeriodLabel }}</div>
+              </div>
+              <div class="employee-profile-pills">
+                <span class="profile-pill" style="background:var(--info-bg); color:var(--info-text); border-color:transparent;">🛡️ SLA <b style="color:inherit;">{{ fmtPercent(employeeProfile.summary?.sla) }}</b></span>
+                <span class="profile-pill" style="background:var(--success-bg); color:var(--success-text); border-color:transparent;">✅ Yopish foizi <b style="color:inherit;">{{ fmtPercent(employeeProfile.summary?.close_rate)
+                    }}</b></span>
               </div>
             </div>
             <div class="employee-profile-mini-stats">
@@ -143,11 +148,6 @@
                 <small>O‘rtacha</small>
                 <b>{{ fmtMinutes(employeeActivity.summary?.avg_close_minutes) }}</b>
               </span>
-            </div>
-            <div class="employee-profile-pills">
-              <span class="profile-pill">🛡️ SLA <b>{{ fmtPercent(employeeProfile.summary?.sla) }}</b></span>
-              <span class="profile-pill">✅ Yopish foizi <b>{{ fmtPercent(employeeProfile.summary?.close_rate)
-                  }}</b></span>
             </div>
 
             <div class="employee-chat-tabs">

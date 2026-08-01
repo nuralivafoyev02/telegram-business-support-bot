@@ -6283,6 +6283,78 @@ tbody tr:hover {
   object-fit: cover;
 }
 
+/* Support xodimning o'z "Natijalarim" kartasi uchun qo'shimcha bezak —
+   faqat .employee-performance-card ichida, shared komponent (admin
+   xodim-profil oynasi) uslubiga tegmaydi. */
+.employee-performance-card .employee-profile-mini-stats {
+  gap: 10px;
+  margin: 14px 0 20px;
+}
+
+.employee-performance-card .employee-profile-mini-stats span {
+  padding: 8px 14px;
+  border: none;
+  border-radius: 12px;
+  background: var(--surface-soft);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .05);
+}
+
+.employee-performance-card .employee-profile-mini-stats span:nth-child(1) { background: var(--success-bg); }
+.employee-performance-card .employee-profile-mini-stats span:nth-child(1) b { color: var(--success-text); }
+.employee-performance-card .employee-profile-mini-stats span:nth-child(2) { background: #fee2e2; }
+.employee-performance-card .employee-profile-mini-stats span:nth-child(2) b { color: #dc2626; }
+.employee-performance-card .employee-profile-mini-stats span:nth-child(3) { background: var(--info-bg); }
+.employee-performance-card .employee-profile-mini-stats span:nth-child(3) b { color: var(--info-text); }
+.employee-performance-card .employee-profile-mini-stats span:nth-child(4) { background: #f3e8ff; }
+.employee-performance-card .employee-profile-mini-stats span:nth-child(4) b { color: #9333ea; }
+
+.employee-performance-card .employee-chat-tabs {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  border: none;
+  border-radius: 12px;
+  background: var(--surface-soft);
+  margin-bottom: 4px;
+}
+
+.employee-performance-card .employee-chat-tabs button {
+  min-height: 34px;
+  padding: 0 14px;
+  border-bottom: none;
+  border-radius: 9px;
+}
+
+.employee-performance-card .employee-chat-tabs button.active {
+  color: var(--primary);
+  background: var(--surface);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, .1);
+}
+
+.employee-performance-card .employee-chat-layout {
+  margin-top: 16px;
+  border-radius: 14px;
+}
+
+.employee-performance-card .employee-chat-list-panel {
+  background: var(--surface-soft);
+}
+
+.employee-performance-card .employee-chat-list {
+  padding: 6px;
+}
+
+.employee-performance-card .employee-chat-list button {
+  border-bottom: none;
+  border-radius: 11px;
+  margin-bottom: 3px;
+}
+
+.employee-performance-card .employee-chat-list button.has-open {
+  box-shadow: none;
+  border: 1px solid color-mix(in srgb, var(--danger) 35%, transparent);
+}
+
 .employee-chat-mini-avatar span {
   display: grid;
   place-items: center;
