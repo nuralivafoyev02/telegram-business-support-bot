@@ -930,7 +930,7 @@
             <b>{{ employeeKnowledgeProfile.not_learned_functions.length }}</b>
           </span>
         </div>
-        <div style="display:flex; align-items:stretch; justify-content:center; gap:16px; margin:16px 0; flex-wrap:wrap;">
+        <div style="display:flex; align-items:stretch; justify-content:center; gap:48px; margin:16px 0; flex-wrap:wrap;">
           <div class="drilldown-chart-panel" style="display:flex; align-items:center; justify-content:center;">
             <RadarChart
               :axes="employeeKnowledgeProfile.module_percents.map(module => ({ label: module.module_name, value: module.percent }))"
@@ -5779,6 +5779,8 @@ function handleDocumentKeydown(event) {
     actionMenuOpen.value = false;
     rankingMenuOpen.value = false;
     moduleCompareMenuOpen.value = false;
+    managementMenuOpen.value = false;
+    otherMenuOpen.value = false;
     closeCompanyModuleFilterMenu();
     closeCompanyMrrFilterMenu();
     closeCompanyModuleChartCompanyMenu();
@@ -5786,6 +5788,7 @@ function handleDocumentKeydown(event) {
     closeCompanyDetailClickupStatusMenu();
     hideFloatingTooltip();
     if (modal.value) closeModal();
+    if (managementModal.value) closeManagementModal();
   }
 }
 
