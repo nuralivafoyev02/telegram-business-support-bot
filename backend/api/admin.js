@@ -6520,8 +6520,8 @@ const EMPLOYEE_POST_ACTIONS = new Set(['uyqurMarkLearned', 'sendMessage', 'reply
 // yoqish/o'chirish (uyqurPermissionsSave) ham ruxsat etilgan — bu superadmin
 // bilan bitta umumiy ro'yxatni tahrirlaydi va supportlarga xuddi shu bildirishnoma
 // mexanizmi orqali (recordPermissionToggleEvents) xabar boradi.
-const MANAGEMENT_GET_ACTIONS = new Set(['uyqurKnowledgeDashboard', 'uyqurModuleFunctionsDetail', 'uyqurFunctionsByStatus', 'uyqurEmployeeKnowledgeProfile', 'uyqurPermissions']);
-const MANAGEMENT_POST_ACTIONS = new Set(['uyqurPermissionsSave', 'managementProfile', 'managementAvatarUpload', 'managementAvatarRemove']);
+const MANAGEMENT_GET_ACTIONS = new Set(['uyqurKnowledgeDashboard', 'uyqurModuleFunctionsDetail', 'uyqurFunctionsByStatus', 'uyqurEmployeeKnowledgeProfile', 'uyqurPermissions', 'uyqurSupportOverview', 'uyqurSupportHistory']);
+const MANAGEMENT_POST_ACTIONS = new Set(['uyqurPermissionsSave', 'managementProfile', 'managementAvatarUpload', 'managementAvatarRemove', 'uyqurConfirmReview', 'uyqurMarkLearned']);
 
 // Profil rasmi uchun ruxsat etilgan formatlar va hajm chegarasi — base64
 // belgilar soni (~4/3 nisbat), taxminan 2 MB rasm faylga to'g'ri keladi.

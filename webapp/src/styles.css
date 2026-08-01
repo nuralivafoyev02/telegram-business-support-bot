@@ -3812,6 +3812,12 @@ body {
   box-shadow: 0 1px 2px rgba(15, 23, 42, .04);
 }
 
+.uyqur-functions-card.confirmed {
+  border-color: var(--success, #16a34a);
+  background: var(--success-bg, #dcfce7);
+  color: var(--success-text, #14532d);
+}
+
 .manager-panel-lock {
   max-width: 320px;
 }

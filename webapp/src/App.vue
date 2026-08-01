@@ -377,6 +377,10 @@
               <div class="uyqur-functions-group-title">
                 <div class="card-title">Uyqur Funksiyalari</div>
               </div>
+              <button class="btn" type="button" :disabled="!employeeLastSentEventIds.length || loadingAction === 'employeeUndoLearned'"
+                @click="undoEmployeeLearnedFunctions">
+                {{ loadingAction === 'employeeUndoLearned' ? 'Qaytarilmoqda...' : 'Ortga qaytarish' }}
+              </button>
             </div>
             <div class="uyqur-functions-groups" ref="permissionGroupsRef" v-if="permissionModulesMerged.length">
               <div class="uyqur-functions-group" :class="{ collapsed: !isPermissionModuleExpanded(module) }"
@@ -392,6 +396,7 @@
                 <div class="uyqur-functions-card-list" v-if="isPermissionModuleExpanded(module)">
                   <label class="uyqur-functions-card" v-for="submodule in module.submodules"
                     :key="'employee-functions-submodule-' + submodule.id"
+                    :class="{ confirmed: employeeHistoryByKey.get(String(submodule.key))?.confirmed }"
                     style="cursor:pointer; justify-content:flex-start;">
                     <input type="checkbox" class="row-check"
                       :checked="isEmployeeFunctionSelected(String(submodule.key))"
@@ -685,12 +690,23 @@
         <div class="page-title">
           <h1>{{ managementActiveTab === 'functions' ? 'Barcha funksiyalar' : 'Boshqaruv paneli' }}</h1>
         </div>
-        <button type="button" title="Profilni tahrirlash" @click="openManagementProfile"
-          style="border:0; background:transparent; padding:0; cursor:pointer; flex-shrink:0;">
-          <img v-if="managementAvatarUrl" :src="managementAvatarUrl" alt=""
-            style="width:72px; height:72px; border-radius:50%; object-fit:cover; display:block;" />
-          <span v-else class="profile-avatar" style="width:72px; height:72px; border-radius:50%; font-size:24px;">{{ managementInitials }}</span>
-        </button>
+        <div style="display:flex; align-items:center; gap:16px;">
+          <button type="button" title="Bildirishnomalar" @click="openManagementSupportsList"
+            style="position:relative; border:1px solid var(--line); background:var(--surface); border-radius:50%; width:44px; height:44px; display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0;">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M6 10.5a6 6 0 0 1 12 0v4l1.6 2.6a1 1 0 0 1-.86 1.5H5.26a1 1 0 0 1-.86-1.5L6 14.5z" />
+              <path d="M9.8 19.6a2.2 2.2 0 0 0 4.4 0" />
+            </svg>
+            <span v-if="managementNotificationCount" class="notif-badge"
+              style="position:absolute; top:-2px; right:-2px;">{{ managementNotificationCount }}</span>
+          </button>
+          <button type="button" title="Profilni tahrirlash" @click="openManagementProfile"
+            style="border:0; background:transparent; padding:0; cursor:pointer; flex-shrink:0;">
+            <img v-if="managementAvatarUrl" :src="managementAvatarUrl" alt=""
+              style="width:72px; height:72px; border-radius:50%; object-fit:cover; display:block;" />
+            <span v-else class="profile-avatar" style="width:72px; height:72px; border-radius:50%; font-size:24px;">{{ managementInitials }}</span>
+          </button>
+        </div>
       </header>
 
       <div class="page-body">
@@ -810,7 +826,7 @@
               <div class="uyqur-functions-group-head" @click="togglePermissionModuleExpanded(module)">
                 <span class="uyqur-functions-collapse-icon">›</span>
                 <span class="uyqur-functions-group-title">
-                  <b>{{ module.name || module.key }}</b>
+                  <b>{{ module.name || module.key }} ({{ module.submodules.length }})</b>
                 </span>
               </div>
               <div class="uyqur-functions-card-list" v-if="isPermissionModuleExpanded(module)">
@@ -1018,6 +1034,90 @@
             {{ loadingAction === 'saveManagementProfile' ? 'Saqlanmoqda...' : 'Saqlash' }}
           </button>
         </form>
+      </Modal>
+    </Transition>
+
+    <Transition name="modal-fade">
+      <Modal v-if="managementModal === 'supportsList'" title="Bildirishnomalar — supportlar" wide @close="closeManagementModal">
+        <div class="table-wrap">
+          <table v-if="supportOverview.length">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Support</th>
+                <th>%</th>
+                <th>Bildirishnomalar</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(row, index) in supportOverview" :key="row.id" class="clickable-row"
+                :class="{ active: selectedSupportId === String(row.id) }" @click="openManagementSupportHistory(row)">
+                <td>{{ index + 1 }}</td>
+                <td>
+                  <span class="employee-cell">
+                    <span class="employee-avatar fallback">{{ employeeInitials(row) }}</span>
+                    <span>
+                      <b>{{ row.full_name }}</b><br />
+                      <span class="muted">@{{ row.username || '—' }}</span>
+                    </span>
+                  </span>
+                </td>
+                <td>{{ row.percent }}%</td>
+                <td>
+                  <span class="notif-bell" title="Hali tasdiqlanmaganlar" @click.stop="openManagementSupportHistory(row, 'pending')">
+                    🔔
+                    <span v-if="row.unread" class="notif-badge">{{ row.unread }}</span>
+                  </span>
+                  <span class="notif-divider"></span>
+                  <span class="notif-done" title="Tasdiqlanganlar" @click.stop="openManagementSupportHistory(row, 'done')">
+                    ✅
+                    <span v-if="row.confirmed" class="notif-done-badge">{{ row.confirmed }}</span>
+                  </span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <div v-else class="empty">Support xodimlar topilmadi</div>
+        </div>
+      </Modal>
+    </Transition>
+
+    <Transition name="modal-fade">
+      <Modal v-if="managementModal === 'supportHistory'" :title="`${selectedSupportName} — bildirishnomalar`" wide
+        @close="closeManagementModal">
+        <section class="settings-stack">
+          <div>
+            <div class="card-title">Bildirishnomalar tarixi</div>
+          </div>
+          <div class="table-wrap permission-table-wrap">
+            <table v-if="filteredSupportHistoryRows.length">
+              <thead>
+                <tr>
+                  <th>Funksiya</th>
+                  <th>Yuborilgan</th>
+                  <th>Holati</th>
+                  <th class="select-cell">Tasdiqlash</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in filteredSupportHistoryRows" :key="row.event_id">
+                  <td>{{ row.submodule_name || row.submodule_key }}</td>
+                  <td>{{ fmtDate(row.created_at) }}</td>
+                  <td>
+                    <span class="badge" :class="row.confirmed ? 'green' : (row.learned ? 'blue' : 'orange')">
+                      {{ row.confirmed ? '✓ Qabul qilindi' : (row.learned ? 'O‘rganildi' : 'Kutilmoqda') }}
+                    </span>
+                  </td>
+                  <td class="select-cell">
+                    <input class="row-check" type="checkbox" :checked="row.confirmed" :disabled="!row.learned"
+                      @change="toggleConfirmed({ ...row, employee_id: selectedSupportId })" />
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <div v-else class="empty">Bu supportga hali hech narsa yuborilmagan</div>
+          </div>
+        </section>
       </Modal>
     </Transition>
 
@@ -10789,6 +10889,7 @@ function toggleEmployeeFunctionSelected(key) {
   if (next.has(key)) next.delete(key); else next.add(key);
   employeeFunctionSelected.value = next;
 }
+const employeeLastSentEventIds = ref([]);
 async function sendEmployeeLearnedFunctions() {
   const targets = Array.from(employeeFunctionSelected.value)
     .map(key => employeeHistoryByKey.value.get(key))
@@ -10796,14 +10897,38 @@ async function sendEmployeeLearnedFunctions() {
   if (!targets.length) { employeeFunctionSelected.value = new Set(); return; }
   startLoading('employeeSendLearned');
   try {
-    await Promise.all(targets.map(row => api.markUyqurLearned({ event_id: row.event_id, employee_id: selectedSupportId.value, learned: true })));
+    // Bir vaqtda (Promise.all) yuborilsa, backenddagi bildirishnoma yozuvi
+    // yagona umumiy record bo'lgani uchun parallel yozishlar bir-birini
+    // ustidan yozib, faqat oxirgisi saqlanib qolardi — shuning uchun
+    // navbat bilan (ketma-ket) yuboriladi.
+    for (const row of targets) {
+      await api.markUyqurLearned({ event_id: row.event_id, employee_id: selectedSupportId.value, learned: true });
+    }
     await refreshSupportHistoryIfOpen(selectedSupportId.value);
+    employeeLastSentEventIds.value = targets.map(row => row.event_id);
     employeeFunctionSelected.value = new Set();
     showToast('Yuborildi');
   } catch (error) {
     showToast(error.message);
   } finally {
     stopLoading('employeeSendLearned');
+  }
+}
+async function undoEmployeeLearnedFunctions() {
+  const eventIds = employeeLastSentEventIds.value;
+  if (!eventIds.length) return;
+  startLoading('employeeUndoLearned');
+  try {
+    for (const eventId of eventIds) {
+      await api.markUyqurLearned({ event_id: eventId, employee_id: selectedSupportId.value, learned: false });
+    }
+    await refreshSupportHistoryIfOpen(selectedSupportId.value);
+    employeeLastSentEventIds.value = [];
+    showToast('Qaytarildi');
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    stopLoading('employeeUndoLearned');
   }
 }
 
@@ -11793,7 +11918,8 @@ async function loadKnowledgeDashboard() {
   try {
     const [dashboard] = await Promise.all([
       api.knowledgeDashboard({ days: knowledgePeriodDays.value }),
-      loadPermissionView()
+      loadPermissionView(),
+      loadSupportOverview()
     ]);
     knowledgeDashboard.value = dashboard;
   } catch (error) {
@@ -11849,7 +11975,29 @@ async function openEmployeeKnowledgeProfile(employeeId) {
 }
 
 function closeManagementModal() {
+  if (managementModal.value === 'supportHistory') closeSupportHistory();
   managementModal.value = '';
+}
+
+const managementNotificationCount = computed(() => supportOverview.value.reduce((sum, row) => sum + (row.unread || 0), 0));
+
+function openManagementSupportsList() {
+  managementMenuOpen.value = false;
+  managementModal.value = 'supportsList';
+  loadSupportOverview().catch(error => showToast(error.message));
+}
+
+async function openManagementSupportHistory(row, filter = 'all') {
+  selectedSupportId.value = String(row.id);
+  selectedSupportName.value = row.full_name || 'Support';
+  supportHistoryFilter.value = filter;
+  managementModal.value = 'supportHistory';
+  try {
+    supportHistoryRows.value = await api.uyqurSupportHistory({ employee_id: row.id });
+    selectedModuleName.value = supportHistoryModuleNames.value[0] || '';
+  } catch (error) {
+    showToast(error.message);
+  }
 }
 
 function openManagementProfile() {
