@@ -282,6 +282,9 @@ async function getSupportOverview() {
       id: employee.id,
       full_name: employee.full_name || employee.username || 'Support',
       username: employee.username || '',
+      tg_user_id: employee.tg_user_id || null,
+      has_avatar: !!employee.avatar_path,
+      avatar_updated_at: employee.avatar_updated_at || null,
       unread: pendingReviewCount,
       confirmed: confirmedCount,
       percent
@@ -522,6 +525,7 @@ async function getKnowledgeDashboard({ days = 7 } = {}) {
       username: employee.username || '',
       tg_user_id: employee.tg_user_id || null,
       has_avatar: !!employee.avatar_path,
+      avatar_updated_at: employee.avatar_updated_at || null,
       percent,
       change_pct: percent - previousPercent,
       learned_count: counts.learned,

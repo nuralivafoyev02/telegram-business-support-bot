@@ -1071,7 +1071,8 @@
                 <td>{{ index + 1 }}</td>
                 <td>
                   <span class="employee-cell">
-                    <span class="employee-avatar fallback">{{ employeeInitials(row) }}</span>
+                    <img v-if="employeeAvatarUrl(row)" class="employee-avatar" :src="employeeAvatarUrl(row)" alt="" />
+                    <span v-else class="employee-avatar fallback">{{ employeeInitials(row) }}</span>
                     <span>
                       <b>{{ row.full_name }}</b><br />
                       <span class="muted">@{{ row.username || '—' }}</span>
@@ -6069,7 +6070,7 @@ async function loadEmployeeAvatar(row = {}) {
   try {
     let blob = null;
     if (employeeId) {
-      blob = await api.employeeAvatar(employeeId).catch(() => null);
+      blob = await api.employeeAvatar(employeeId, row.avatar_updated_at).catch(() => null);
     }
     if (!blob && tgUserId) {
       blob = await api.telegramProfilePhoto(tgUserId);
@@ -10854,6 +10855,7 @@ async function saveUyqurPermissions() {
 
 async function loadSupportOverview() {
   supportOverview.value = await api.uyqurSupportOverview();
+  supportOverview.value.forEach(row => loadEmployeeAvatar(row));
 }
 
 async function resetUyqurNotifications() {
@@ -11995,6 +11997,7 @@ async function loadKnowledgeDashboard() {
       loadSupportOverview()
     ]);
     knowledgeDashboard.value = dashboard;
+    (dashboard.employee_ranking || []).forEach(row => loadEmployeeAvatar(row));
   } catch (error) {
     showToast(error.message);
   } finally {
@@ -12106,7 +12109,7 @@ async function loadManagementAvatarPreview() {
   revokeManagementAvatarUrl();
   if (!account.value?.has_avatar) return;
   try {
-    const blob = await api.managementAvatar();
+    const blob = await api.managementAvatar(account.value?.avatar_updated_at);
     managementAvatarUrl.value = URL.createObjectURL(blob);
   } catch (_error) {
     managementAvatarUrl.value = '';

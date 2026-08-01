@@ -181,8 +181,11 @@ export const api = {
   functionsByStatus: status => request('uyqurFunctionsByStatus', { query: { status } }).then(r => r.data),
   employeeKnowledgeProfile: (query = {}) => request('uyqurEmployeeKnowledgeProfile', { query }).then(r => r.data),
   saveManagementProfile: payload => request('managementProfile', { method: 'POST', body: payload }).then(r => r.data),
-  managementAvatar: () => requestBlob('managementAvatar', {}),
-  employeeAvatar: employeeId => requestBlob('managementAvatar', { query: { employee_id: employeeId } }),
+  // `v` — versiya (avatar_updated_at) — brauzer HTTP keshini rasm yangilangach
+  // yangi so'rov sifatida ko'rishga majburlaydi, aks holda eski rasm
+  // keshdan qaytaverardi.
+  managementAvatar: version => requestBlob('managementAvatar', { query: { v: version || undefined } }),
+  employeeAvatar: (employeeId, version) => requestBlob('managementAvatar', { query: { employee_id: employeeId, v: version || undefined } }),
   saveManagementAvatar: imageDataUrl => request('managementAvatarUpload', { method: 'POST', body: { image: imageDataUrl } }).then(r => r.data),
   removeManagementAvatar: () => request('managementAvatarRemove', { method: 'POST', body: {} }).then(r => r.data)
 };
