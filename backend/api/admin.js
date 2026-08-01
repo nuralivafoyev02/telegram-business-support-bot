@@ -45,6 +45,7 @@ const {
   resetPermissionNotifications,
   getKnowledgeDashboard,
   getModuleFunctionsDetail,
+  getFunctionsByLearningStatus,
   getEmployeeKnowledgeProfile
 } = require('../lib/permission-view');
 const {
@@ -6519,7 +6520,7 @@ const EMPLOYEE_POST_ACTIONS = new Set(['uyqurMarkLearned', 'sendMessage', 'reply
 // yoqish/o'chirish (uyqurPermissionsSave) ham ruxsat etilgan — bu superadmin
 // bilan bitta umumiy ro'yxatni tahrirlaydi va supportlarga xuddi shu bildirishnoma
 // mexanizmi orqali (recordPermissionToggleEvents) xabar boradi.
-const MANAGEMENT_GET_ACTIONS = new Set(['uyqurKnowledgeDashboard', 'uyqurModuleFunctionsDetail', 'uyqurEmployeeKnowledgeProfile', 'uyqurPermissions']);
+const MANAGEMENT_GET_ACTIONS = new Set(['uyqurKnowledgeDashboard', 'uyqurModuleFunctionsDetail', 'uyqurFunctionsByStatus', 'uyqurEmployeeKnowledgeProfile', 'uyqurPermissions']);
 const MANAGEMENT_POST_ACTIONS = new Set(['uyqurPermissionsSave', 'managementProfile', 'managementAvatarUpload', 'managementAvatarRemove']);
 
 // Profil rasmi uchun ruxsat etilgan formatlar va hajm chegarasi — base64
@@ -6646,6 +6647,7 @@ async function handleGet(action, query, session) {
     case 'uyqurManagerEmployees': return getManagerEmployees();
     case 'uyqurKnowledgeDashboard': return getKnowledgeDashboard({ days: query.days });
     case 'uyqurModuleFunctionsDetail': return getModuleFunctionsDetail(query.module_name);
+    case 'uyqurFunctionsByStatus': return getFunctionsByLearningStatus(query.status);
     case 'uyqurEmployeeKnowledgeProfile': return getEmployeeKnowledgeProfile(query.employee_id);
     default: throw new Error(`Unknown GET action: ${action}`);
   }

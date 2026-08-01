@@ -700,6 +700,74 @@ async function getModuleFunctionsDetail(moduleName) {
   };
 }
 
+const FUNCTION_STATUS_LABELS = {
+  learned: 'O‘rganilgan funksiyalar',
+  in_progress: 'Jarayondagi funksiyalar',
+  not_started: 'Boshlanmagan funksiyalar'
+};
+
+// Bosh sahifadagi "O'rganilgan/Jarayondagi/Boshlanmagan funksiyalar"
+// kartochkalari bosilganda — aynan shu holatga tushgan funksiyalarning
+// to'liq ro'yxati (barcha modullar bo'ylab). Sinf getKnowledgeDashboard'dagi
+// donut hisoblagichi bilan bir xil qoida asosida aniqlanadi.
+async function getFunctionsByLearningStatus(status) {
+  if (!FUNCTION_STATUS_LABELS[status]) throw new Error('Noto‘g‘ri holat: ' + status);
+  const [employees, record, permissionRecord] = await Promise.all([
+    getSupportEmployees(),
+    getNotificationRecord(),
+    getPermissionViewRecord()
+  ]);
+  const now = Date.now();
+  const eventBySubmoduleKey = new Map(record.events.map(event => [String(event.submodule_key), event]));
+
+  const rows = [];
+  (Array.isArray(permissionRecord.modules) ? permissionRecord.modules : []).forEach(module => {
+    const moduleName = canonicalModuleName(module.name || module.key);
+    (module.submodules || []).forEach(submodule => {
+      const event = eventBySubmoduleKey.get(String(submodule.key)) || null;
+      const learnedEmployees = [];
+      const notLearnedEmployees = [];
+      employees.forEach(employee => {
+        const progress = event ? progressFor(record, event.id, employee.id) : {};
+        const row = {
+          id: employee.id,
+          full_name: employee.full_name || employee.username || 'Xodim',
+          tg_user_id: employee.tg_user_id || null,
+          has_avatar: !!employee.avatar_path,
+          learned_at: progress.learned_at || null
+        };
+        if (progress.learned_at) learnedEmployees.push(row);
+        else notLearnedEmployees.push(row);
+      });
+
+      const confirmedByAll = Boolean(event) && employees.length > 0
+        && employees.every(employee => Boolean(progressFor(record, event.id, employee.id).confirmed_at));
+      const rowStatus = confirmedByAll ? 'learned' : (learnedEmployees.length > 0 ? 'in_progress' : 'not_started');
+      if (rowStatus !== status) return;
+
+      const createdAt = event ? event.created_at : null;
+      rows.push({
+        event_id: event ? event.id : `pending-${submodule.key}`,
+        module_name: moduleName,
+        submodule_name: submodule.name || submodule.key,
+        created_at: createdAt,
+        days_since_launch: createdAt ? Math.floor((now - new Date(createdAt).getTime()) / DAY_MS) : null,
+        learned_employees: learnedEmployees,
+        not_learned_employees: notLearnedEmployees
+      });
+    });
+  });
+
+  rows.sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
+
+  return {
+    status,
+    title: FUNCTION_STATUS_LABELS[status],
+    total: rows.length,
+    functions: rows
+  };
+}
+
 async function getEmployeeKnowledgeProfile(employeeId) {
   if (!employeeId) throw new Error('employee_id majburiy');
   const [employees, record] = await Promise.all([getSupportEmployees(), getNotificationRecord()]);
@@ -806,5 +874,6 @@ module.exports = {
   resetPermissionNotifications,
   getKnowledgeDashboard,
   getModuleFunctionsDetail,
+  getFunctionsByLearningStatus,
   getEmployeeKnowledgeProfile
 };

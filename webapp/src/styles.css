@@ -2555,23 +2555,12 @@ body {
   grid-template-columns: 72px minmax(0, 1fr);
 }
 
-.sidebar-toggle-btn {
-  margin-left: auto;
-  width: 24px;
-  height: 24px;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--line);
-  border-radius: 50%;
-  background: var(--surface);
-  color: var(--muted-strong);
+.sidebar {
   cursor: pointer;
 }
 
-.sidebar-toggle-btn:hover {
-  background: var(--surface-soft);
+.sidebar button {
+  cursor: pointer;
 }
 
 .sidebar.icon-only {
@@ -2585,10 +2574,6 @@ body {
 
 .sidebar.icon-only .brand-wrapper {
   display: none;
-}
-
-.sidebar.icon-only .sidebar-toggle-btn {
-  margin-left: 0;
 }
 
 .nav-icon {

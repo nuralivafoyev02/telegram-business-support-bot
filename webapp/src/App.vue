@@ -635,24 +635,19 @@
   </div>
 
   <div v-else-if="isManagementAccount" class="app-shell" :class="{ 'sidebar-collapsed': !managementSidebarExpanded }">
-    <aside class="sidebar" :class="{ 'icon-only': !managementSidebarExpanded }">
+    <aside class="sidebar" :class="{ 'icon-only': !managementSidebarExpanded }"
+      :title="managementSidebarExpanded ? 'Yig‘ish uchun bo‘sh joyni bosing' : 'Ochish uchun bo‘sh joyni bosing'"
+      @click="managementSidebarExpanded = !managementSidebarExpanded">
       <div class="brand">
         <img class="logo" :src="uyqurLogoUrl" alt="Uyqur" width="42" height="42" />
         <div class="brand-wrapper">
           <div class="brand-title">Uyqur Admin</div>
         </div>
-        <button type="button" class="sidebar-toggle-btn" :title="managementSidebarExpanded ? 'Menyuni yig‘ish' : 'Menyuni ochish'"
-          @click="managementSidebarExpanded = !managementSidebarExpanded">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"
-            stroke-linecap="round" stroke-linejoin="round" :style="{ transform: managementSidebarExpanded ? 'rotate(180deg)' : 'none' }">
-            <path d="M9 6l6 6-6 6" />
-          </svg>
-        </button>
       </div>
 
       <nav class="nav">
         <button v-for="item in managementTabs" :key="item.key" :class="{ active: managementActiveTab === item.key }"
-          :title="item.label" @click="managementActiveTab = item.key">
+          :title="item.label" @click.stop="managementActiveTab = item.key">
           <span class="nav-icon" :style="{ background: navIconMeta(item.key).bg, color: navIconMeta(item.key).color }"
             v-html="navIconSvg(item.key)"></span>
           <b>{{ item.label }}</b>
@@ -661,7 +656,7 @@
 
       <div class="top-actions-menu sidebar-profile-menu" style="margin-top:auto; width:100%;" ref="managementMenuRef">
         <button class="profile-action" type="button" style="width:100%;" :aria-expanded="managementMenuOpen"
-          @click="managementMenuOpen = !managementMenuOpen">
+          @click.stop="managementMenuOpen = !managementMenuOpen">
           <img v-if="managementAvatarUrl" :src="managementAvatarUrl" alt="" class="profile-avatar"
             style="object-fit:cover; border-radius:50%;" />
           <span v-else class="profile-avatar" style="border-radius:50%;">{{ managementInitials }}</span>
@@ -672,7 +667,7 @@
           <b class="profile-action-caret">⌄</b>
         </button>
         <Transition name="fade">
-          <div v-if="managementMenuOpen" class="actions-dropdown">
+          <div v-if="managementMenuOpen" class="actions-dropdown" @click.stop>
             <button type="button" @click="openManagementProfile">Profilni tahrirlash</button>
             <button class="danger-menu-item" type="button" @click="logout">Chiqish</button>
           </div>
@@ -709,7 +704,7 @@
             <div class="support-summary-note">{{ fmtNumber(knowledgeDashboard.kpis.employees_total) }} support xodim</div>
           </div>
         </article>
-        <article class="card support-summary-card">
+        <article class="card support-summary-card" style="cursor:pointer;" @click="openFunctionsByStatus('learned')">
           <div class="support-summary-content">
             <div class="support-summary-title">O‘rganilgan funksiyalar</div>
             <div class="support-summary-value-row">
@@ -717,7 +712,7 @@
             </div>
           </div>
         </article>
-        <article class="card support-summary-card">
+        <article class="card support-summary-card" style="cursor:pointer;" @click="openFunctionsByStatus('in_progress')">
           <div class="support-summary-content">
             <div class="support-summary-title">Jarayondagi funksiyalar</div>
             <div class="support-summary-value-row">
@@ -725,7 +720,7 @@
             </div>
           </div>
         </article>
-        <article class="card support-summary-card">
+        <article class="card support-summary-card" style="cursor:pointer;" @click="openFunctionsByStatus('not_started')">
           <div class="support-summary-content">
             <div class="support-summary-title">Boshlanmagan funksiyalar</div>
             <div class="support-summary-value-row">
@@ -889,6 +884,43 @@
             </tbody>
           </table>
         </div>
+        <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
+          <button class="btn primary" type="button" @click="closeManagementModal">Yopish</button>
+        </div>
+      </Modal>
+    </Transition>
+
+    <Transition name="modal-fade">
+      <Modal v-if="managementModal === 'functionsByStatus' && functionsByStatus"
+        :title="`${functionsByStatus.title} (${fmtNumber(functionsByStatus.total)})`" wide xlarge
+        @close="closeManagementModal">
+        <DataTable :columns="functionsByStatusColumns" :rows="functionsByStatus.functions" :page-size="15"
+          empty="Funksiya topilmadi">
+          <template #learnedEmployees="{ row }">
+            <div style="display:flex; flex-wrap:wrap; gap:8px; max-width:240px;">
+              <span v-for="person in row.learned_employees" :key="`byStatus-learned-${row.event_id}-${person.id}`"
+                :title="`${person.full_name} — ${fmtDate(person.learned_at)}`">
+                <img v-if="employeeAvatarUrl(person)" :src="employeeAvatarUrl(person)" alt=""
+                  style="width:26px; height:26px; border-radius:50%; object-fit:cover; border:2px solid #dcfce7;" />
+                <span v-else class="profile-avatar"
+                  style="width:26px; height:26px; font-size:10px; background:#dcfce7; color:#16a34a;">{{ initialsFromText(person.full_name) }}</span>
+              </span>
+              <span v-if="!row.learned_employees.length" class="empty compact" style="padding:0;">—</span>
+            </div>
+          </template>
+          <template #notLearnedEmployees="{ row }">
+            <div style="display:flex; flex-wrap:wrap; gap:8px; max-width:240px;">
+              <span v-for="person in row.not_learned_employees" :key="`byStatus-not-learned-${row.event_id}-${person.id}`"
+                :title="person.full_name">
+                <img v-if="employeeAvatarUrl(person)" :src="employeeAvatarUrl(person)" alt=""
+                  style="width:26px; height:26px; border-radius:50%; object-fit:cover; border:2px solid #fee2e2;" />
+                <span v-else class="profile-avatar"
+                  style="width:26px; height:26px; font-size:10px; background:#fee2e2; color:#dc2626;">{{ initialsFromText(person.full_name) }}</span>
+              </span>
+              <span v-if="!row.not_learned_employees.length" class="empty compact" style="padding:0;">—</span>
+            </div>
+          </template>
+        </DataTable>
         <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
           <button class="btn primary" type="button" @click="closeManagementModal">Yopish</button>
         </div>
@@ -4511,6 +4543,15 @@ const managementActiveTab = ref('dashboard');
 // Sidebar default holatda yopiq (faqat iconkalar) — foydalanuvchi bosganda ochiladi.
 const managementSidebarExpanded = ref(false);
 const moduleFunctionsDetail = ref(null);
+const functionsByStatus = ref(null);
+const functionsByStatusColumns = [
+  { key: 'module_name', label: 'Modul' },
+  { key: 'submodule_name', label: 'Funksiya nomi' },
+  { key: 'created_at', label: 'Chiqqan sana', format: fmtDate },
+  { key: 'learned_employees', label: 'O‘rgangan xodimlar', slot: 'learnedEmployees' },
+  { key: 'not_learned_employees', label: 'O‘rganmagan xodimlar', slot: 'notLearnedEmployees' },
+  { key: 'days_since_launch', label: 'Chiqqaniga', format: value => (value != null ? `${value} kun` : '—') }
+];
 const employeeKnowledgeProfile = ref(null);
 const managementModal = ref('');
 const activeTab = ref(getStoredActiveTab());
@@ -11729,6 +11770,22 @@ async function openModuleFunctionsDetail(moduleName) {
     showToast(error.message);
   } finally {
     stopLoading('moduleFunctionsDetail');
+  }
+}
+
+async function openFunctionsByStatus(status) {
+  if (!status) return;
+  startLoading('functionsByStatus');
+  try {
+    functionsByStatus.value = await api.functionsByStatus(status);
+    managementModal.value = 'functionsByStatus';
+    (functionsByStatus.value.functions || []).forEach(fn => {
+      [...fn.learned_employees, ...fn.not_learned_employees].forEach(person => loadEmployeeAvatar(person));
+    });
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    stopLoading('functionsByStatus');
   }
 }
 
