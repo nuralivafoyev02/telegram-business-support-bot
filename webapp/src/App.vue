@@ -3004,16 +3004,10 @@
                 <div class="uyqur-functions-group-title">
                   <div class="card-title">Uyqur Funksiyalari</div>
                 </div>
-                <div style="display:flex; align-items:center; gap:8px;">
-                  <button type="button" class="btn primary" :disabled="!permissionSelectedActionCount || loadingAction === 'sendPermissionActions'"
-                    @click="sendSelectedPermissionActions">
-                    {{ loadingAction === 'sendPermissionActions' ? 'Yuborilmoqda...' : (permissionSelectedActionCount ? `Yuborish (${permissionSelectedActionCount})` : 'Yuborish') }}
-                  </button>
-                  <button class="btn primary" :disabled="loadingAction === 'saveUyqurPermissions'"
-                    @click="saveUyqurPermissions">
-                    {{ loadingAction === 'saveUyqurPermissions' ? 'Saqlanmoqda...' : 'Saqlash' }}
-                  </button>
-                </div>
+                <button type="button" class="btn primary" :disabled="!permissionSelectedActionCount || loadingAction === 'sendPermissionActions'"
+                  @click="sendSelectedPermissionActions">
+                  {{ loadingAction === 'sendPermissionActions' ? 'Yuborilmoqda...' : (permissionSelectedActionCount ? `Yuborish (${permissionSelectedActionCount})` : 'Yuborish') }}
+                </button>
               </div>
               <div class="uyqur-functions-groups" ref="permissionGroupsRef" v-if="permissionModulesMerged.length">
                 <div class="uyqur-functions-group" :class="{ collapsed: !isPermissionModuleExpanded(module) }"
@@ -11361,25 +11355,6 @@ function toggleEmployeeModuleExpanded(module = {}) {
   else next.add(key);
   employeeCollapsedModules.value = next;
   recalcPermissionGroupHeight();
-}
-
-// Checkbox yo'q — "Saqlash" hozir daraxtdagi BARCHA funksiyalarni yuboradi
-// (avval hali yuborilmagan — "Yuborilmadi" — bo'lganlar uchun supportlarga
-// bildirishnoma hodisasi yaratiladi, allaqachon yuborilganlar qayta
-// yuborilmaydi — backend faqat farqni hisoblaydi).
-async function saveUyqurPermissions() {
-  startLoading('saveUyqurPermissions');
-  try {
-    const allKeys = permissionModules.value.flatMap(module => (module.submodules || []).map(submodule => String(submodule.key)));
-    const data = await api.saveUyqurPermissions({ selected: allKeys });
-    permissionSavedSelected.value = Array.isArray(data.selected) ? data.selected.map(String) : allKeys;
-    showToast('Saqlandi');
-    if (account.value?.type === 'admin') await loadSupportOverview();
-  } catch (error) {
-    showToast(error.message);
-  } finally {
-    stopLoading('saveUyqurPermissions');
-  }
 }
 
 async function loadSupportOverview() {
