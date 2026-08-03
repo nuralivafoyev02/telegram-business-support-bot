@@ -2199,9 +2199,15 @@
               <section class="card chart-card" ref="companyMrrChartMenuRef">
                 <div class="card-header chart-card-head">
                   <div>
-                    <div class="card-title">MRR taqsimoti</div>
+                    <div class="card-title">{{ companyMrrViewMode === 'list' ? 'MRR taqsimoti' : 'MRR vs Faollik' }}</div>
                   </div>
                   <div class="company-module-table-controls">
+                    <div class="ticket-filter-tabs source-tabs" style="margin:0;">
+                      <button type="button" :class="{ active: companyMrrViewMode === 'chart' }"
+                        @click="companyMrrViewMode = 'chart'">Chart</button>
+                      <button type="button" :class="{ active: companyMrrViewMode === 'list' }"
+                        @click="companyMrrViewMode = 'list'">List</button>
+                    </div>
                     <button type="button" class="btn" title="Umumiy filterlar"
                       style="display:inline-flex; align-items:center; gap:6px;"
                       @click="companyMrrChartFilterOpen = !companyMrrChartFilterOpen">
@@ -2216,7 +2222,7 @@
                   </div>
                 </div>
                 <Transition name="fade">
-                  <div v-if="companyMrrChartFilterOpen" class="company-module-inline-filter-panel">
+                  <div v-if="companyMrrChartFilterOpen && companyMrrViewMode === 'list'" class="company-module-inline-filter-panel">
                     <div class="company-module-filter company-module-filter-wide company-module-filter-menu-wrap"
                       ref="companyMrrFilterMenuRef">
                       <span>Filter</span>
@@ -2271,43 +2277,25 @@
                     </label>
                   </div>
                 </Transition>
-                <div v-if="companyMrrChartRows.length" class="company-mrr-bars">
-                  <article v-for="row in companyMrrChartRows" :key="`mrr-bar-${row.id}`" class="company-mrr-row">
-                    <b>{{ row.name }}</b>
-                    <div class="company-mrr-track">
-                      <span class="company-mrr-fill" :style="{ width: row.bar_percent + '%' }"></span>
-                    </div>
-                    <strong>
-                      {{ fmtNumber(row.mrr_amount) }}
-                      <span class="company-mrr-score" :style="{ background: activityScoreColor(row.activity_score) }"
-                        :title="`Faollik balli: ${row.activity_score}/5`"></span>
-                    </strong>
-                  </article>
-                </div>
-                <div v-else class="empty compact">MRR ma’lumoti topilmadi</div>
-              </section>
-
-              <section class="card chart-card" ref="companyMrrScatterMenuRef">
-                <div class="card-header chart-card-head">
-                  <div>
-                    <div class="card-title">MRR vs Faollik</div>
+                <template v-if="companyMrrViewMode === 'list'">
+                  <div v-if="companyMrrChartRows.length" class="company-mrr-bars">
+                    <article v-for="row in companyMrrChartRows" :key="`mrr-bar-${row.id}`" class="company-mrr-row">
+                      <b>{{ row.name }}</b>
+                      <div class="company-mrr-track">
+                        <span class="company-mrr-fill" :style="{ width: row.bar_percent + '%' }"></span>
+                      </div>
+                      <strong>
+                        {{ fmtNumber(row.mrr_amount) }}
+                        <span class="company-mrr-score" :style="{ background: activityScoreColor(row.activity_score) }"
+                          :title="`Faollik balli: ${row.activity_score}/5`"></span>
+                      </strong>
+                    </article>
                   </div>
-                  <div class="company-module-table-controls">
-                    <button type="button" class="btn" title="Umumiy filterlar"
-                      style="display:inline-flex; align-items:center; gap:6px;"
-                      @click="companyMrrScatterFilterOpen = !companyMrrScatterFilterOpen">
-                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"
-                        stroke-linecap="round">
-                        <line x1="4" y1="7" x2="20" y2="7" />
-                        <line x1="7" y1="12" x2="17" y2="12" />
-                        <line x1="10" y1="17" x2="14" y2="17" />
-                      </svg>
-                      <span>Umumiy filterlar</span>
-                    </button>
-                  </div>
-                </div>
+                  <div v-else class="empty compact">MRR ma’lumoti topilmadi</div>
+                </template>
+                <template v-else>
                 <Transition name="fade">
-                  <div v-if="companyMrrScatterFilterOpen" class="company-module-inline-filter-panel">
+                  <div v-if="companyMrrChartFilterOpen" class="company-module-inline-filter-panel">
                     <label class="company-module-filter">
                       <span>Kompaniya</span>
                       <select v-model="companyMrrScatterCompanyId" class="select mini-select">
@@ -2483,6 +2471,7 @@
                   <span><i class="legend-square" style="background: #86efac;"></i>Yuqori faollik (4-5)</span>
                   <span>r = {{ fmtNumber(companyMrrCorrelation) }}</span>
                 </div>
+                </template>
               </section>
             </div>
           </template>
@@ -4950,8 +4939,7 @@ const companyModuleChartFilterOpen = ref(false);
 const companyModuleChartMenuRef = ref(null);
 const companyMrrChartFilterOpen = ref(false);
 const companyMrrChartMenuRef = ref(null);
-const companyMrrScatterFilterOpen = ref(false);
-const companyMrrScatterMenuRef = ref(null);
+const companyMrrViewMode = ref('list');
 const companyModuleFilterMenuOpen = ref(false);
 const companyModuleFilterMenuGroup = ref('');
 const companyModuleFilterMenuRef = ref(null);
@@ -6148,10 +6136,6 @@ function handleDocumentPointerDown(event) {
   if (companyMrrChartFilterOpen.value) {
     const root = companyMrrChartMenuRef.value;
     if (!root || !root.contains(event.target)) companyMrrChartFilterOpen.value = false;
-  }
-  if (companyMrrScatterFilterOpen.value) {
-    const root = companyMrrScatterMenuRef.value;
-    if (!root || !root.contains(event.target)) companyMrrScatterFilterOpen.value = false;
   }
   if (companyModuleFilterMenuOpen.value) {
     const root = companyModuleFilterMenuRef.value;
