@@ -2202,7 +2202,7 @@
                     <div class="card-title">{{ companyMrrViewMode === 'list' ? 'MRR taqsimoti' : 'MRR vs Faollik' }}</div>
                   </div>
                   <div class="company-module-table-controls">
-                    <div class="ticket-filter-tabs source-tabs" style="margin:0;">
+                    <div class="ticket-filter-tabs source-tabs" style="margin:0; grid-template-columns:repeat(2, minmax(70px, max-content));">
                       <button type="button" :class="{ active: companyMrrViewMode === 'chart' }"
                         @click="companyMrrViewMode = 'chart'">Chart</button>
                       <button type="button" :class="{ active: companyMrrViewMode === 'list' }"
@@ -2358,10 +2358,12 @@
                     <label class="company-module-filter">
                       <span>Davr</span>
                       <select :value="companyMrrScatterPeriod" class="select mini-select"
-                        @change="handleCompanyMrrScatterPeriodChange($event.target.value)">
+                        @change="handleCompanyMrrScatterPeriodChange($event.target.value)"
+                        @mousedown="handleCompanyMrrScatterPeriodSelectPointerDown"
+                        @mouseup="handleCompanyMrrScatterPeriodSelectPointerUp">
                         <option v-for="period in companyMrrScatterPeriodOptions"
                           :key="`mrr-scatter-period-${period.key}`" :value="period.key">
-                          {{ period.label }}
+                          {{ companyMrrScatterPeriodOptionLabel(period) }}
                         </option>
                       </select>
                     </label>
@@ -3216,6 +3218,27 @@
             <button class="btn" type="button" @click="cancelCompanyModuleChartCustomPeriod">Bekor qilish</button>
             <button class="btn primary" type="submit" :disabled="loadingAction === 'companyModuleChartCustomPeriod'">
               {{ loadingAction === 'companyModuleChartCustomPeriod' ? 'Yuklanmoqda...' : 'Qo‘llash' }}
+            </button>
+          </div>
+        </form>
+      </Modal>
+    </Transition>
+
+    <Transition name="modal-fade">
+      <Modal v-if="modal === 'companyMrrScatterCustomPeriod'" title="Ixtiyoriy davr"
+        @close="cancelCompanyMrrScatterCustomPeriod">
+        <form class="form two custom-period-form" @submit.prevent="applyCompanyMrrScatterCustomPeriod">
+          <label class="label">Boshlanish sanasi
+            <input v-model="companyMrrScatterCustomPeriodForm.start" class="input" type="date" required />
+          </label>
+          <label class="label">Tugash sanasi
+            <input v-model="companyMrrScatterCustomPeriodForm.end" class="input" type="date" required />
+          </label>
+          <p v-if="companyMrrScatterCustomPeriodError" class="form-error">{{ companyMrrScatterCustomPeriodError }}</p>
+          <div class="form-actions">
+            <button class="btn" type="button" @click="cancelCompanyMrrScatterCustomPeriod">Bekor qilish</button>
+            <button class="btn primary" type="submit" :disabled="loadingAction === 'companyMrrScatterCustomPeriod'">
+              {{ loadingAction === 'companyMrrScatterCustomPeriod' ? 'Yuklanmoqda...' : 'Qo‘llash' }}
             </button>
           </div>
         </form>
@@ -7820,8 +7843,12 @@ const companyMrrChartRows = computed(() => {
   return rows.map(row => ({ ...row, bar_percent: Math.round((row.mrr_amount / max) * 1000) / 10 }));
 });
 
-const companyMrrScatterPeriod = ref('today');
-const companyMrrScatterReports = ref({ companies: [], report_dates: [], period: 'today', fetched_at: null });
+const companyMrrScatterPeriod = ref('day3');
+const companyMrrScatterReports = ref({ companies: [], report_dates: [], period: 'day3', fetched_at: null });
+const companyMrrScatterCustomPeriodForm = reactive({ start: '', end: '', appliedStart: '', appliedEnd: '' });
+const companyMrrScatterCustomPeriodError = ref('');
+const previousCompanyMrrScatterPeriod = ref('day3');
+let companyMrrScatterPeriodSelectValueOnPointerDown = '';
 const clickupCompanyLinks = ref([]);
 
 function clickupCompanyKey(name = '') {
@@ -7847,11 +7874,106 @@ const companyMrrScatterBusinessFilter = ref('ACTIVE');
 const companyMrrScatterSupportFilter = ref('all');
 const companyMrrScatterClickupStatusFilter = ref(new Set(['not_started', 'in_progress']));
 const companyMrrScatterCompanyId = ref('');
-const companyMrrScatterPeriodOptions = companyModulePeriodOptions.filter(period => period.key !== 'custom');
+const companyMrrScatterPeriodOptions = [
+  { key: 'today', label: 'Bugun' },
+  { key: 'yesterday', label: 'Kecha' },
+  { key: 'day3', label: '3 kun' },
+  { key: 'week', label: '7 kun' },
+  { key: 'month', label: '1 oy' },
+  { key: 'custom', label: 'Ixtiyoriy' }
+];
+
+function companyMrrScatterPeriodQuery(period = 'day3') {
+  if (period === 'day3') {
+    const end = new Date();
+    const start = new Date();
+    start.setDate(start.getDate() - 2);
+    return { start_date: dateInputValue(start), end_date: dateInputValue(end), include_daily: 0 };
+  }
+  if (period === 'custom') {
+    if (!companyMrrScatterCustomPeriodForm.appliedStart || !companyMrrScatterCustomPeriodForm.appliedEnd) {
+      return { period: 'day3', include_daily: 0 };
+    }
+    return {
+      period: 'custom',
+      start_date: companyMrrScatterCustomPeriodForm.appliedStart,
+      end_date: companyMrrScatterCustomPeriodForm.appliedEnd,
+      include_daily: 0
+    };
+  }
+  return { period, include_daily: 0 };
+}
+
+function companyMrrScatterPeriodOptionLabel(period = {}) {
+  if (period.key === 'custom' && companyMrrScatterCustomPeriodForm.appliedStart && companyMrrScatterCustomPeriodForm.appliedEnd) {
+    return `${dateInputLabel(companyMrrScatterCustomPeriodForm.appliedStart)} — ${dateInputLabel(companyMrrScatterCustomPeriodForm.appliedEnd)}`;
+  }
+  return period.label;
+}
+
+function openCompanyMrrScatterCustomPeriodModal() {
+  const defaults = defaultCustomPeriodDates();
+  companyMrrScatterCustomPeriodForm.start = companyMrrScatterCustomPeriodForm.appliedStart || companyMrrScatterCustomPeriodForm.start || defaults.start;
+  companyMrrScatterCustomPeriodForm.end = companyMrrScatterCustomPeriodForm.appliedEnd || companyMrrScatterCustomPeriodForm.end || defaults.end;
+  companyMrrScatterCustomPeriodError.value = '';
+  companyMrrScatterPeriod.value = 'custom';
+  modal.value = 'companyMrrScatterCustomPeriod';
+}
+
+function handleCompanyMrrScatterPeriodSelectPointerDown(event) {
+  const select = event.currentTarget;
+  if (select?.value) companyMrrScatterPeriodSelectValueOnPointerDown = select.value;
+}
+
+function handleCompanyMrrScatterPeriodSelectPointerUp(event) {
+  const select = event.currentTarget;
+  if (!(select instanceof HTMLSelectElement)) return;
+  const previousValue = companyMrrScatterPeriodSelectValueOnPointerDown;
+  companyMrrScatterPeriodSelectValueOnPointerDown = '';
+  requestAnimationFrame(() => {
+    if (select.value === 'custom' && previousValue === 'custom') {
+      openCompanyMrrScatterCustomPeriodModal();
+    }
+  });
+}
+
+function cancelCompanyMrrScatterCustomPeriod() {
+  companyMrrScatterCustomPeriodError.value = '';
+  if (!companyMrrScatterCustomPeriodForm.appliedStart || !companyMrrScatterCustomPeriodForm.appliedEnd) {
+    companyMrrScatterPeriod.value = previousCompanyMrrScatterPeriod.value || 'day3';
+  }
+  modal.value = '';
+}
+
+async function applyCompanyMrrScatterCustomPeriod() {
+  companyMrrScatterCustomPeriodError.value = '';
+  if (!companyMrrScatterCustomPeriodForm.start || !companyMrrScatterCustomPeriodForm.end) {
+    companyMrrScatterCustomPeriodError.value = 'Ikkala sanani ham tanlang';
+    return;
+  }
+  const start = companyMrrScatterCustomPeriodForm.start <= companyMrrScatterCustomPeriodForm.end
+    ? companyMrrScatterCustomPeriodForm.start
+    : companyMrrScatterCustomPeriodForm.end;
+  const end = companyMrrScatterCustomPeriodForm.start <= companyMrrScatterCustomPeriodForm.end
+    ? companyMrrScatterCustomPeriodForm.end
+    : companyMrrScatterCustomPeriodForm.start;
+  companyMrrScatterCustomPeriodForm.appliedStart = start;
+  companyMrrScatterCustomPeriodForm.appliedEnd = end;
+  companyMrrScatterPeriod.value = 'custom';
+  modal.value = '';
+  startLoading('companyMrrScatterCustomPeriod');
+  try {
+    await loadCompanyMrrScatterReports();
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    stopLoading('companyMrrScatterCustomPeriod');
+  }
+}
 
 async function loadCompanyMrrScatterReports() {
   try {
-    const data = await api.companyModuleReports({ period: companyMrrScatterPeriod.value, include_daily: 0 });
+    const data = await api.companyModuleReports(companyMrrScatterPeriodQuery(companyMrrScatterPeriod.value));
     companyMrrScatterReports.value = { ...data, period: companyMrrScatterPeriod.value };
   } catch (error) {
     companyMrrScatterReports.value = {
@@ -7865,6 +7987,16 @@ async function loadCompanyMrrScatterReports() {
 }
 
 async function handleCompanyMrrScatterPeriodChange(value) {
+  if (value === 'custom') {
+    previousCompanyMrrScatterPeriod.value = companyMrrScatterPeriod.value === 'custom'
+      ? previousCompanyMrrScatterPeriod.value
+      : companyMrrScatterPeriod.value;
+    openCompanyMrrScatterCustomPeriodModal();
+    return;
+  }
+  companyMrrScatterCustomPeriodForm.appliedStart = '';
+  companyMrrScatterCustomPeriodForm.appliedEnd = '';
+  previousCompanyMrrScatterPeriod.value = value;
   companyMrrScatterPeriod.value = value;
   await loadCompanyMrrScatterReports();
 }
@@ -8421,7 +8553,7 @@ const companyDetailWeekActivityPercent = ref(null);
 
 const companyDetailNavItems = computed(() => [
   { key: 'total', label: 'Jami amallar', value: fmtNumber(companyDetailEmployeeActivity.value?.total_actions || 0) },
-  { key: 'tasks', label: 'Vazifalar', value: fmtNumber(companyDetailClickupTasks.value.length) },
+  { key: 'tasks', label: 'Vazifalar', value: fmtNumber(companyDetailAllClickupTasks.value.length) },
   {
     key: 'weekActivity',
     label: 'Faollik',
