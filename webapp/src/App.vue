@@ -2046,12 +2046,27 @@
               </section>
 
               <section v-if="companyModuleChartRows.length"
-                class="card chart-card line-chart-card company-module-chart-card">
+                class="card chart-card line-chart-card company-module-chart-card" ref="companyModuleChartMenuRef">
                 <div class="card-header chart-card-head company-module-chart-head">
                   <div>
                     <div class="card-title">Bo‘limlar dinamikasi</div>
                   </div>
                   <div class="company-module-chart-controls">
+                    <button type="button" class="btn" title="Umumiy filterlar"
+                      style="display:inline-flex; align-items:center; gap:6px;"
+                      @click="companyModuleChartFilterOpen = !companyModuleChartFilterOpen">
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round">
+                        <line x1="4" y1="7" x2="20" y2="7" />
+                        <line x1="7" y1="12" x2="17" y2="12" />
+                        <line x1="10" y1="17" x2="14" y2="17" />
+                      </svg>
+                      <span>Umumiy filterlar</span>
+                    </button>
+                  </div>
+                </div>
+                <Transition name="fade">
+                  <div v-if="companyModuleChartFilterOpen" class="company-module-inline-filter-panel">
                     <div class="company-module-filter company-module-filter-wide company-module-filter-menu-wrap"
                       ref="companyModuleChartCompanyMenuRef">
                       <span>Kompaniyalar</span>
@@ -2104,7 +2119,7 @@
                       </select>
                     </label>
                   </div>
-                </div>
+                </Transition>
                 <div class="company-module-chart-shell" ref="companyModuleChartRef"
                   @mouseleave="companyModuleChartHoverIndex = -1">
                   <div class="company-module-chart-legend top">
@@ -2181,12 +2196,27 @@
                 </div>
               </section>
 
-              <section class="card chart-card">
+              <section class="card chart-card" ref="companyMrrChartMenuRef">
                 <div class="card-header chart-card-head">
                   <div>
                     <div class="card-title">MRR taqsimoti</div>
                   </div>
                   <div class="company-module-table-controls">
+                    <button type="button" class="btn" title="Umumiy filterlar"
+                      style="display:inline-flex; align-items:center; gap:6px;"
+                      @click="companyMrrChartFilterOpen = !companyMrrChartFilterOpen">
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round">
+                        <line x1="4" y1="7" x2="20" y2="7" />
+                        <line x1="7" y1="12" x2="17" y2="12" />
+                        <line x1="10" y1="17" x2="14" y2="17" />
+                      </svg>
+                      <span>Umumiy filterlar</span>
+                    </button>
+                  </div>
+                </div>
+                <Transition name="fade">
+                  <div v-if="companyMrrChartFilterOpen" class="company-module-inline-filter-panel">
                     <div class="company-module-filter company-module-filter-wide company-module-filter-menu-wrap"
                       ref="companyMrrFilterMenuRef">
                       <span>Filter</span>
@@ -2240,7 +2270,7 @@
                       </select>
                     </label>
                   </div>
-                </div>
+                </Transition>
                 <div v-if="companyMrrChartRows.length" class="company-mrr-bars">
                   <article v-for="row in companyMrrChartRows" :key="`mrr-bar-${row.id}`" class="company-mrr-row">
                     <b>{{ row.name }}</b>
@@ -2257,12 +2287,27 @@
                 <div v-else class="empty compact">MRR ma’lumoti topilmadi</div>
               </section>
 
-              <section class="card chart-card">
+              <section class="card chart-card" ref="companyMrrScatterMenuRef">
                 <div class="card-header chart-card-head">
                   <div>
                     <div class="card-title">MRR vs Faollik</div>
                   </div>
                   <div class="company-module-table-controls">
+                    <button type="button" class="btn" title="Umumiy filterlar"
+                      style="display:inline-flex; align-items:center; gap:6px;"
+                      @click="companyMrrScatterFilterOpen = !companyMrrScatterFilterOpen">
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round">
+                        <line x1="4" y1="7" x2="20" y2="7" />
+                        <line x1="7" y1="12" x2="17" y2="12" />
+                        <line x1="10" y1="17" x2="14" y2="17" />
+                      </svg>
+                      <span>Umumiy filterlar</span>
+                    </button>
+                  </div>
+                </div>
+                <Transition name="fade">
+                  <div v-if="companyMrrScatterFilterOpen" class="company-module-inline-filter-panel">
                     <label class="company-module-filter">
                       <span>Kompaniya</span>
                       <select v-model="companyMrrScatterCompanyId" class="select mini-select">
@@ -2333,7 +2378,7 @@
                       </select>
                     </label>
                   </div>
-                </div>
+                </Transition>
                 <div v-if="companyMrrScatterPoints.length" class="company-mrr-scatter-zoom">
                   <button type="button" class="btn-icon mini-icon" title="Doiralarni kichraytirish"
                     @click="adjustCompanyMrrScatterRadiusScale(-0.1)">−</button>
@@ -4901,6 +4946,12 @@ const rankingMenuOpen = ref(false);
 const rankingMenuRef = ref(null);
 const moduleCompareMenuOpen = ref(false);
 const moduleCompareMenuRef = ref(null);
+const companyModuleChartFilterOpen = ref(false);
+const companyModuleChartMenuRef = ref(null);
+const companyMrrChartFilterOpen = ref(false);
+const companyMrrChartMenuRef = ref(null);
+const companyMrrScatterFilterOpen = ref(false);
+const companyMrrScatterMenuRef = ref(null);
 const companyModuleFilterMenuOpen = ref(false);
 const companyModuleFilterMenuGroup = ref('');
 const companyModuleFilterMenuRef = ref(null);
@@ -6089,6 +6140,18 @@ function handleDocumentPointerDown(event) {
   if (moduleCompareMenuOpen.value) {
     const root = moduleCompareMenuRef.value;
     if (!root || !root.contains(event.target)) moduleCompareMenuOpen.value = false;
+  }
+  if (companyModuleChartFilterOpen.value) {
+    const root = companyModuleChartMenuRef.value;
+    if (!root || !root.contains(event.target)) companyModuleChartFilterOpen.value = false;
+  }
+  if (companyMrrChartFilterOpen.value) {
+    const root = companyMrrChartMenuRef.value;
+    if (!root || !root.contains(event.target)) companyMrrChartFilterOpen.value = false;
+  }
+  if (companyMrrScatterFilterOpen.value) {
+    const root = companyMrrScatterMenuRef.value;
+    if (!root || !root.contains(event.target)) companyMrrScatterFilterOpen.value = false;
   }
   if (companyModuleFilterMenuOpen.value) {
     const root = companyModuleFilterMenuRef.value;

@@ -5185,6 +5185,7 @@ td,
 .company-module-inline-filter-panel {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   flex-wrap: wrap;
   gap: 20px;
   margin-top: 12px;
