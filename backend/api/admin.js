@@ -3404,8 +3404,10 @@ async function getChatDetail(query) {
       select: 'id,tg_message_id,chat_id,from_tg_user_id,from_name,from_username,source_type,update_kind,text,classification,employee_id,business_connection_id,raw,created_at',
       chat_id: supabase.eq(chatId),
       ...businessConnectionFilter(businessConnectionId),
+      // Chat juda uzun bo'lsa (minglab xabar), hammasini yuklash sekinlashtiradi —
+      // faqat eng so'nggi 500 tasi yetarli (order allaqachon eng yangisidan boshlab keladi).
       order: supabase.order('created_at', false)
-    }, { maxRows: 20000 }),
+    }, { maxRows: 500 }),
     getEmployeeLookup()
   ]);
 

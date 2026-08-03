@@ -5050,16 +5050,20 @@ const permissionExpandedModules = ref(new Set());
 // ro'yxati bilan kelishi mumkin — bu avval hech qayerda ko'rsatilmagan edi.
 // Har bir ustun (modul) ichida bir vaqtda faqat BITTA fichaning actions
 // ro'yxati ochiq turadi — boshqasi ochilsa, avvalgisi avtomatik yopiladi.
-const permissionExpandedActionByModule = ref({});
+// Ba'zi modullarning submodule'larida tashqi API `id` (va hatto `key`) bir
+// xil yoki bo'sh kelib qolishi mumkin edi — shu sabab satrga asoslangan uid
+// o'rniga submodule OBYEKTINING o'zi (reference) identifikator sifatida
+// ishlatiladi, bu esa ma'lumot sifatidan qat'iy nazar har doim ishonchli.
+const permissionExpandedActionByModule = ref(new Map());
 function isSubmoduleActionsExpanded(submodule = {}, module = {}) {
   const moduleKey = permissionModuleKey(module);
-  return permissionExpandedActionByModule.value[moduleKey] === submodule.id;
+  return permissionExpandedActionByModule.value.get(moduleKey) === submodule;
 }
 function toggleSubmoduleActionsExpanded(submodule = {}, module = {}) {
   const moduleKey = permissionModuleKey(module);
-  const next = { ...permissionExpandedActionByModule.value };
-  if (next[moduleKey] === submodule.id) delete next[moduleKey];
-  else next[moduleKey] = submodule.id;
+  const next = new Map(permissionExpandedActionByModule.value);
+  if (next.get(moduleKey) === submodule) next.delete(moduleKey);
+  else next.set(moduleKey, submodule);
   permissionExpandedActionByModule.value = next;
   recalcPermissionGroupHeight();
 }
@@ -11306,7 +11310,7 @@ const permissionModulesMerged = computed(() => mergeContragentBalance(permission
 // boshlanadi (faqat bosilganda, bittadan ochiladi).
 function computeDefaultExpandedModules() {
   permissionExpandedModules.value = new Set(permissionModulesMerged.value.map(module => permissionModuleKey(module)));
-  permissionExpandedActionByModule.value = {};
+  permissionExpandedActionByModule.value = new Map();
 }
 
 async function recalcPermissionGroupHeight() {
