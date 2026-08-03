@@ -341,12 +341,19 @@
               </div>
               <div class="company-module-table-controls">
                 <div class="card-header-actions company-module-menu" ref="moduleCompareMenuRef">
-                  <button type="button" class="btn-icon mini-icon" title="Umumiy filter"
+                  <button type="button" class="btn" title="Umumiy filterlar"
+                    style="display:inline-flex; align-items:center; gap:6px;"
                     @click="moduleCompareMenuOpen = !moduleCompareMenuOpen">
-                    <span>⋯</span>
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"
+                      stroke-linecap="round">
+                      <line x1="4" y1="7" x2="20" y2="7" />
+                      <line x1="7" y1="12" x2="17" y2="12" />
+                      <line x1="10" y1="17" x2="14" y2="17" />
+                    </svg>
+                    <span>Umumiy filterlar</span>
                   </button>
                   <Transition name="fade">
-                    <div v-if="moduleCompareMenuOpen" class="actions-dropdown mini-dropdown right-align" @click.stop>
+                    <div v-if="moduleCompareMenuOpen" class="actions-dropdown right-align" style="width:260px;" @click.stop>
                       <div class="company-module-filter company-module-filter-wide company-module-filter-menu-wrap"
                         ref="companyModuleFilterMenuRef">
                         <span>Filter</span>
@@ -1858,12 +1865,19 @@
                   </div>
                   <div class="company-module-table-controls">
                     <div class="card-header-actions company-module-menu" ref="moduleCompareMenuRef">
-                      <button type="button" class="btn-icon mini-icon" title="Umumiy filter"
+                      <button type="button" class="btn" title="Umumiy filterlar"
+                        style="display:inline-flex; align-items:center; gap:6px;"
                         @click="moduleCompareMenuOpen = !moduleCompareMenuOpen">
-                        <span>⋯</span>
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"
+                          stroke-linecap="round">
+                          <line x1="4" y1="7" x2="20" y2="7" />
+                          <line x1="7" y1="12" x2="17" y2="12" />
+                          <line x1="10" y1="17" x2="14" y2="17" />
+                        </svg>
+                        <span>Umumiy filterlar</span>
                       </button>
                       <Transition name="fade">
-                        <div v-if="moduleCompareMenuOpen" class="actions-dropdown mini-dropdown right-align" @click.stop>
+                        <div v-if="moduleCompareMenuOpen" class="actions-dropdown right-align" style="width:260px;" @click.stop>
                           <div class="company-module-filter company-module-filter-wide company-module-filter-menu-wrap"
                             ref="companyModuleFilterMenuRef">
                             <span>Filter</span>
