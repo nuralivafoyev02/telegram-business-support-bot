@@ -5180,6 +5180,20 @@ td,
   background: var(--surface-soft);
 }
 
+/* "Umumiy filterlar" bosilganda pastdagi tarkibni bosib turmaydi (overlay
+   emas) — oddiy oqim ichida to'liq kenglikda ochilib, joy bo'shatib beradi. */
+.company-module-inline-filter-panel {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 20px;
+  margin-top: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-soft);
+}
+
 .company-module-summary-main {
   display: flex;
   align-items: center;
