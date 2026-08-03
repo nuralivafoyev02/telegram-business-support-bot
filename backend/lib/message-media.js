@@ -1,7 +1,8 @@
 'use strict';
 
 function bestPhotoSize(photos = []) {
-  return [...photos].filter(photo => photo && photo.file_id).sort((a, b) => {
+  const list = Array.isArray(photos) ? photos : [];
+  return list.filter(photo => photo && photo.file_id).sort((a, b) => {
     const areaA = Number(a.width || 0) * Number(a.height || 0);
     const areaB = Number(b.width || 0) * Number(b.height || 0);
     return (Number(a.file_size || areaA) || 0) - (Number(b.file_size || areaB) || 0);
