@@ -3737,8 +3737,8 @@ body {
 }
 
 .uyqur-functions-group {
-  flex: 0 0 300px;
-  width: 300px;
+  flex: 0 0 360px;
+  width: 360px;
   padding: 0 16px;
   border-right: 1px solid var(--line);
   display: flex;
@@ -3875,9 +3875,10 @@ body {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-height: 245px;
+  max-height: 340px;
+  min-height: 0;
   margin-bottom: 4px;
-  margin-left: 18px;
+  margin-left: 14px;
   padding-right: 2px;
   overflow-y: auto;
 }
