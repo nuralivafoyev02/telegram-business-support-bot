@@ -575,11 +575,11 @@
                         @change="toggleEmployeeFunctionSelected(String(submodule.key))" />
                       <span>{{ submodule.name || submodule.key }}</span>
                       <button v-if="(submodule.actions || []).length" type="button" class="uyqur-functions-card-count"
-                        style="border:0; cursor:pointer;" @click.stop="toggleSubmoduleActionsExpanded(submodule)">
+                        style="border:0; cursor:pointer;" @click.stop="toggleSubmoduleActionsExpanded(submodule, module)">
                         {{ submodule.actions.length }}
                       </button>
                     </label>
-                    <div v-if="isSubmoduleActionsExpanded(submodule) && (submodule.actions || []).length"
+                    <div v-if="isSubmoduleActionsExpanded(submodule, module) && (submodule.actions || []).length"
                       class="uyqur-functions-subactions">
                       <div v-for="action in submodule.actions" :key="'employee-functions-action-' + action.id"
                         class="uyqur-functions-subaction" :class="{ sent: isActionSent(action) }">{{ action.name || action.key }}</div>
@@ -1080,11 +1080,11 @@
               <div class="uyqur-functions-card-list" v-if="isPermissionModuleExpanded(module)">
                 <template v-for="submodule in module.submodules" :key="'all-functions-submodule-' + submodule.id">
                   <div class="uyqur-functions-card" :class="{ expandable: (submodule.actions || []).length }"
-                    @click="(submodule.actions || []).length && toggleSubmoduleActionsExpanded(submodule)">
+                    @click="(submodule.actions || []).length && toggleSubmoduleActionsExpanded(submodule, module)">
                     <span>{{ submodule.name || submodule.key }}</span>
                     <span v-if="(submodule.actions || []).length" class="uyqur-functions-card-count">{{ submodule.actions.length }}</span>
                   </div>
-                  <div v-if="isSubmoduleActionsExpanded(submodule) && (submodule.actions || []).length"
+                  <div v-if="isSubmoduleActionsExpanded(submodule, module) && (submodule.actions || []).length"
                     class="uyqur-functions-subactions">
                     <label v-for="action in submodule.actions" :key="'all-functions-action-' + action.id"
                       class="uyqur-functions-subaction" :class="{ sent: isActionSent(action) }" @click.stop>
@@ -3029,11 +3029,11 @@
                   <div class="uyqur-functions-card-list" v-if="isPermissionModuleExpanded(module)">
                     <template v-for="submodule in module.submodules" :key="'submodule-' + submodule.id">
                       <div class="uyqur-functions-card" :class="{ expandable: (submodule.actions || []).length }"
-                        @click="(submodule.actions || []).length && toggleSubmoduleActionsExpanded(submodule)">
+                        @click="(submodule.actions || []).length && toggleSubmoduleActionsExpanded(submodule, module)">
                         <span>{{ submodule.name || submodule.key }}</span>
                         <span v-if="(submodule.actions || []).length" class="uyqur-functions-card-count">{{ submodule.actions.length }}</span>
                       </div>
-                      <div v-if="isSubmoduleActionsExpanded(submodule) && (submodule.actions || []).length"
+                      <div v-if="isSubmoduleActionsExpanded(submodule, module) && (submodule.actions || []).length"
                         class="uyqur-functions-subactions">
                         <label v-for="action in submodule.actions" :key="'settings-action-' + action.id"
                           class="uyqur-functions-subaction" :class="{ sent: isActionSent(action) }" @click.stop>
@@ -5048,15 +5048,19 @@ const permissionSavedSelected = ref([]);
 const permissionExpandedModules = ref(new Set());
 // Har bir ficha (submodule) tashqi webhookdan o'zining ichki "actions"
 // ro'yxati bilan kelishi mumkin — bu avval hech qayerda ko'rsatilmagan edi.
-const permissionExpandedActions = ref(new Set());
-function isSubmoduleActionsExpanded(submodule = {}) {
-  return permissionExpandedActions.value.has(submodule.id);
+// Har bir ustun (modul) ichida bir vaqtda faqat BITTA fichaning actions
+// ro'yxati ochiq turadi — boshqasi ochilsa, avvalgisi avtomatik yopiladi.
+const permissionExpandedActionByModule = ref({});
+function isSubmoduleActionsExpanded(submodule = {}, module = {}) {
+  const moduleKey = permissionModuleKey(module);
+  return permissionExpandedActionByModule.value[moduleKey] === submodule.id;
 }
-function toggleSubmoduleActionsExpanded(submodule = {}) {
-  const next = new Set(permissionExpandedActions.value);
-  if (next.has(submodule.id)) next.delete(submodule.id);
-  else next.add(submodule.id);
-  permissionExpandedActions.value = next;
+function toggleSubmoduleActionsExpanded(submodule = {}, module = {}) {
+  const moduleKey = permissionModuleKey(module);
+  const next = { ...permissionExpandedActionByModule.value };
+  if (next[moduleKey] === submodule.id) delete next[moduleKey];
+  else next[moduleKey] = submodule.id;
+  permissionExpandedActionByModule.value = next;
   recalcPermissionGroupHeight();
 }
 
@@ -11297,17 +11301,12 @@ function mergeContragentBalance(modules = []) {
 
 const permissionModulesMerged = computed(() => mergeContragentBalance(permissionModules.value));
 
-// Default holatda barcha modullar va ularning ichidagi "actions" ro'yxatlari
-// ochiq holatda boshlanadi.
+// Default holatda barcha modullar (ustunlar) ochiq holatda boshlanadi —
+// lekin ularning ichidagi har bir fichaning "actions" ro'yxati yopiq
+// boshlanadi (faqat bosilganda, bittadan ochiladi).
 function computeDefaultExpandedModules() {
   permissionExpandedModules.value = new Set(permissionModulesMerged.value.map(module => permissionModuleKey(module)));
-  const actionIds = new Set();
-  permissionModulesMerged.value.forEach(module => {
-    (module.submodules || []).forEach(submodule => {
-      if ((submodule.actions || []).length) actionIds.add(submodule.id);
-    });
-  });
-  permissionExpandedActions.value = actionIds;
+  permissionExpandedActionByModule.value = {};
 }
 
 async function recalcPermissionGroupHeight() {
