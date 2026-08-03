@@ -1408,19 +1408,25 @@
 
       <nav class="nav">
         <button v-for="item in mainTabs" :key="item.key" :class="{ active: activeTab === item.key }"
-          @click="setTab(item.key)">
+          :title="item.label" @click="setTab(item.key)">
+          <span class="nav-icon" :style="{ background: navIconMeta(item.key).bg, color: navIconMeta(item.key).color }"
+            v-html="navIconSvg(item.key)"></span>
           <b>{{ item.label }}</b>
         </button>
         <div class="nav-group" :class="{ open: otherMenuOpen }">
           <button class="nav-disclosure" :class="{ active: isOtherTabActive }" type="button"
             :aria-expanded="otherMenuOpen ? 'true' : 'false'" @click="otherMenuOpen = !otherMenuOpen">
+            <span class="nav-icon" :style="{ background: navIconMeta('more').bg, color: navIconMeta('more').color }"
+              v-html="navIconSvg('more')"></span>
             <b>Boshqa menyular</b>
             <em>{{ otherMenuOpen ? '−' : '+' }}</em>
           </button>
           <Transition name="fade">
             <div v-if="otherMenuOpen" class="nav-submenu">
               <button v-for="item in otherTabs" :key="item.key" :class="{ active: activeTab === item.key }"
-                @click="setTab(item.key)">
+                :title="item.label" @click="setTab(item.key)">
+                <span class="nav-icon" :style="{ background: navIconMeta(item.key).bg, color: navIconMeta(item.key).color }"
+                  v-html="navIconSvg(item.key)"></span>
                 <b>{{ item.label }}</b>
               </button>
             </div>
@@ -1429,10 +1435,12 @@
       </nav>
 
       <nav class="nav nav-bottom">
-        <button :class="{ active: activeTab === settingsTab.key }" @click="setTab(settingsTab.key)">
+        <button :class="{ active: activeTab === settingsTab.key }" :title="settingsTab.label" @click="setTab(settingsTab.key)">
+          <span class="nav-icon" :style="{ background: navIconMeta(settingsTab.key).bg, color: navIconMeta(settingsTab.key).color }"
+            v-html="navIconSvg(settingsTab.key)"></span>
           <b>{{ settingsTab.label }}</b>
         </button>
-      </nav>  
+      </nav>
     </aside>
 
     <section class="main">
@@ -4881,10 +4889,10 @@ const TELEGRAM_AUTO_SYNC_INTERVAL_MS = 25_000;
 const COMPANY_ACTIVITY_SYNC_INTERVAL_MS = 60 * 60 * 1000;
 const SETTINGS_SECTION_KEYS = ['bot', 'integrations', 'telegram', 'admin'];
 const tabs = [
-  { key: 'stats', label: 'Support performance', icon: '📊' },
+  { key: 'stats', label: 'Support faoliyati', icon: '📊' },
   { key: 'uyqurPermissions', label: 'Uyqur Funksiyalari', icon: '🧩' },
-  { key: 'companyActivity', label: 'Company activity', icon: '🏢' },
-  { key: 'productAnalytics', label: 'Product analytics', icon: '📈' },
+  { key: 'companyActivity', label: 'Kompaniya faoliyati', icon: '🏢' },
+  { key: 'productAnalytics', label: 'Mahsulot tahlili', icon: '📈' },
   { key: 'groups', label: 'Bot ulangan guruhlar', icon: '👥' },
   { key: 'employees', label: 'Xodimlar', icon: '🧑‍💼' },
   { key: 'companies', label: 'Kompaniyalar', icon: '🏬' },
@@ -12819,6 +12827,53 @@ const NAV_ICON_META = {
     bg: '#e0edff',
     color: '#1d4ed8',
     shape: '<rect x="4" y="8.5" width="9" height="12" rx="1"/><rect x="13" y="3" width="7" height="17.5" rx="1"/><line x1="6.5" y1="12" x2="6.5" y2="12.01"/><line x1="10" y1="12" x2="10" y2="12.01"/><line x1="6.5" y1="16" x2="6.5" y2="16.01"/><line x1="10" y1="16" x2="10" y2="16.01"/><line x1="15.5" y1="6.5" x2="15.5" y2="6.51"/><line x1="17.5" y1="6.5" x2="17.5" y2="6.51"/><line x1="15.5" y1="10" x2="15.5" y2="10.01"/><line x1="17.5" y1="10" x2="17.5" y2="10.01"/>'
+  },
+  // Real admin (superadmin) sidebar uchun — mavjud modul/panel ikonkalari
+  // bilan bir xil chiziq-uslub.
+  stats: {
+    bg: '#eff6ff',
+    color: '#2563eb',
+    shape: '<line x1="4.5" y1="20" x2="4.5" y2="13"/><line x1="10.5" y1="20" x2="10.5" y2="8.5"/><line x1="16.5" y1="20" x2="16.5" y2="4.5"/><line x1="3" y1="20" x2="21" y2="20"/>'
+  },
+  uyqurPermissions: {
+    bg: '#f3e8ff',
+    color: '#9333ea',
+    shape: '<rect x="3" y="3" width="7.5" height="7.5" rx="1.6"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.6"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.6"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.6"/>'
+  },
+  companyActivity: {
+    bg: '#e0edff',
+    color: '#1d4ed8',
+    shape: '<rect x="4" y="8.5" width="9" height="12" rx="1"/><rect x="13" y="3" width="7" height="17.5" rx="1"/><line x1="6.5" y1="12" x2="6.5" y2="12.01"/><line x1="10" y1="12" x2="10" y2="12.01"/><line x1="6.5" y1="16" x2="6.5" y2="16.01"/><line x1="10" y1="16" x2="10" y2="16.01"/><line x1="15.5" y1="6.5" x2="15.5" y2="6.51"/><line x1="17.5" y1="6.5" x2="17.5" y2="6.51"/><line x1="15.5" y1="10" x2="15.5" y2="10.01"/><line x1="17.5" y1="10" x2="17.5" y2="10.01"/>'
+  },
+  productAnalytics: {
+    bg: '#ccfbf1',
+    color: '#0d9488',
+    shape: '<path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/>'
+  },
+  employees: {
+    bg: '#fef3c7',
+    color: '#d97706',
+    shape: '<circle cx="12" cy="8" r="3.2"/><path d="M5 20c0-3.9 3.1-7 7-7s7 3.1 7 7"/>'
+  },
+  companies: {
+    bg: '#e0e7ff',
+    color: '#4338ca',
+    shape: '<rect x="4" y="3" width="9" height="18" rx="1"/><rect x="13" y="8" width="7" height="13" rx="1"/><line x1="7" y1="7" x2="7" y2="7.01"/><line x1="10" y1="7" x2="10" y2="7.01"/><line x1="7" y1="11" x2="7" y2="11.01"/><line x1="10" y1="11" x2="10" y2="11.01"/><line x1="7" y1="15" x2="7" y2="15.01"/><line x1="10" y1="15" x2="10" y2="15.01"/>'
+  },
+  clickup: {
+    bg: '#d1fae5',
+    color: '#059669',
+    shape: '<circle cx="12" cy="12" r="8.5"/><path d="M8.5 12.5l2.5 2.5 5-5.5"/>'
+  },
+  knowledgeBase: {
+    bg: '#fef9c3',
+    color: '#ca8a04',
+    shape: '<path d="M4 5.5c0-1 .8-1.5 2-1.5h5.5v15H6c-1.2 0-2 .5-2 1.5z"/><path d="M20 5.5c0-1-.8-1.5-2-1.5h-5.5v15H18c1.2 0 2 .5 2 1.5z"/>'
+  },
+  more: {
+    bg: '#f1f5f9',
+    color: '#475569',
+    shape: '<circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/>'
   }
 };
 const NAV_ICON_DEFAULT = { bg: '#f3f4f6', color: '#6b7280', shape: '<circle cx="12" cy="12" r="8.2"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>' };
