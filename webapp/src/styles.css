@@ -3737,8 +3737,8 @@ body {
 }
 
 .uyqur-functions-group {
-  flex: 0 0 auto;
-  min-width: 190px;
+  flex: 0 0 300px;
+  width: 300px;
   padding: 0 16px;
   border-right: 1px solid var(--line);
   display: flex;
@@ -3827,6 +3827,7 @@ body {
   padding-top: 4px;
   padding-right: 4px;
   flex: 1;
+  min-height: 0;
   max-height: 480px;
   overflow-y: auto;
 }
@@ -3892,6 +3893,12 @@ body {
   font-size: 14px;
   color: var(--muted-strong);
   box-shadow: 0 1px 2px rgba(15, 23, 42, .04);
+}
+
+.uyqur-functions-subaction.sent {
+  border-color: var(--success, #16a34a);
+  background: var(--success-bg, #dcfce7);
+  color: var(--success-text, #14532d);
 }
 
 .manager-panel-lock {

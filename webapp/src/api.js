@@ -173,6 +173,7 @@ export const api = {
   uyqurManagerEmployees: () => request('uyqurManagerEmployees').then(r => r.data),
   saveUyqurManagerConfirmers: payload => request('uyqurManagerConfirmersSave', { method: 'POST', body: payload }).then(r => r.data),
   resetUyqurNotifications: () => request('uyqurResetNotifications', { method: 'POST', body: {} }).then(r => r.data),
+  sendUyqurPermissionActions: payload => request('uyqurActionsSend', { method: 'POST', body: payload }).then(r => r.data),
   verifyUyqurManagerPassword: payload => request('uyqurVerifyManagerPassword', { method: 'POST', body: payload }).then(r => r.data),
   markUyqurLearned: payload => request('uyqurMarkLearned', { method: 'POST', body: payload }).then(r => r.data),
   confirmUyqurReview: payload => request('uyqurConfirmReview', { method: 'POST', body: payload }).then(r => r.data),

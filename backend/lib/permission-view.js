@@ -10,6 +10,7 @@ const PERMISSION_VIEW_CACHE_TTL_MS = 10 * 60 * 1000;
 const PERMISSION_NOTIFICATIONS_KEY = 'uyqur_permission_notifications';
 const MAX_NOTIFICATION_EVENTS = 200;
 const MANAGER_CONFIRMERS_KEY = 'uyqur_manager_confirmers';
+const PERMISSION_ACTION_SENT_KEY = 'uyqur_permission_action_sent';
 
 // "Kontragent balansi" alohida modul sifatida ko'rsatilmaydi — uning
 // funksiyalari/hodisalari "Kontragent" ostiga birlashtiriladi (nomi bilan
@@ -240,6 +241,51 @@ async function savePermissionSelection(selected = []) {
   return { selected: next.selected };
 }
 
+// Boshqaruv/admin panelida har bir "action" (submodule ichidagi kichik
+// funksiya) oldida belgilab, "Yuborish" bosilganda TANLANGAN action'lar
+// "yuborilgan" deb belgilanadi — bu submodule darajasidagi bilim-daraja
+// hisob-kitobiga (getKnowledgeDashboard) mutlaqo ta'sir qilmasligi uchun
+// alohida, mustaqil bot_settings yozuvida saqlanadi.
+async function getSentActionKeys() {
+  const rows = await supabase.select('bot_settings', {
+    select: 'key,value',
+    key: supabase.eq(PERMISSION_ACTION_SENT_KEY),
+    limit: '1'
+  }).catch(() => []);
+  const row = rows[0] || null;
+  const value = row && row.value && typeof row.value === 'object' ? row.value : {};
+  return Array.isArray(value.keys) ? value.keys.map(String) : [];
+}
+
+function actionCompositeKey(submoduleKey, actionKey) {
+  return `${submoduleKey}::${actionKey}`;
+}
+
+async function sendPermissionActions(items = []) {
+  const normalized = (Array.isArray(items) ? items : [])
+    .map(item => ({
+      module_name: (item && item.module_name) || '',
+      submodule_key: String((item && item.submodule_key) || ''),
+      submodule_name: (item && item.submodule_name) || '',
+      action_key: String((item && item.action_key) || ''),
+      action_name: (item && item.action_name) || ''
+    }))
+    .filter(item => item.submodule_key && item.action_key);
+
+  const existingKeys = new Set(await getSentActionKeys());
+  if (normalized.length) {
+    normalized.forEach(item => {
+      existingKeys.add(actionCompositeKey(item.submodule_key, item.action_key));
+    });
+    await supabase.insert('bot_settings', [{
+      key: PERMISSION_ACTION_SENT_KEY,
+      value: { keys: Array.from(existingKeys) },
+      updated_at: new Date().toISOString()
+    }], { upsert: true, onConflict: 'key', prefer: 'return=minimal' });
+  }
+  return { sent: Array.from(existingKeys) };
+}
+
 async function getSupportEmployees() {
   return supabase.select('employees', {
     select: 'id,username,full_name,role,is_active,created_at,tg_user_id,avatar_path,avatar_updated_at',
@@ -435,19 +481,20 @@ async function autoRegisterNewSubmodules(modules = [], previousSelected = []) {
 async function getPermissionView() {
   const record = await getPermissionViewRecord();
   const selected = Array.isArray(record.selected) ? record.selected.map(String) : [];
+  const sentActionKeys = await getSentActionKeys();
   const cachedAt = record.modules_cached_at ? new Date(record.modules_cached_at).getTime() : 0;
   const cacheFresh = Array.isArray(record.modules) && record.modules.length
     && cachedAt && (Date.now() - cachedAt <= PERMISSION_VIEW_CACHE_TTL_MS);
-  if (cacheFresh) return { modules: record.modules, selected, from_cache: true };
+  if (cacheFresh) return { modules: record.modules, selected, sentActionKeys, from_cache: true };
 
   try {
     const modules = await fetchPermissionView();
     await savePermissionViewRecord({ modules, modules_cached_at: new Date().toISOString() });
     const nextSelected = await autoRegisterNewSubmodules(modules, selected);
-    return { modules, selected: nextSelected, from_cache: false };
+    return { modules, selected: nextSelected, sentActionKeys, from_cache: false };
   } catch (error) {
     if (Array.isArray(record.modules) && record.modules.length) {
-      return { modules: record.modules, selected, from_cache: true, stale: true, error: error.message };
+      return { modules: record.modules, selected, sentActionKeys, from_cache: true, stale: true, error: error.message };
     }
     throw error;
   }
@@ -964,5 +1011,6 @@ module.exports = {
   getKnowledgeDashboard,
   getModuleFunctionsDetail,
   getFunctionsByLearningStatus,
-  getEmployeeKnowledgeProfile
+  getEmployeeKnowledgeProfile,
+  sendPermissionActions
 };

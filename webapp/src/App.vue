@@ -582,7 +582,7 @@
                     <div v-if="isSubmoduleActionsExpanded(submodule) && (submodule.actions || []).length"
                       class="uyqur-functions-subactions">
                       <div v-for="action in submodule.actions" :key="'employee-functions-action-' + action.id"
-                        class="uyqur-functions-subaction">{{ action.name || action.key }}</div>
+                        class="uyqur-functions-subaction" :class="{ sent: isActionSent(action) }">{{ action.name || action.key }}</div>
                     </div>
                   </template>
                 </div>
@@ -1060,6 +1060,10 @@
             <div class="uyqur-functions-group-title">
               <div class="card-title">Uyqur Funksiyalari</div>
             </div>
+            <button type="button" class="btn primary" :disabled="!permissionSelectedActionCount || loadingAction === 'sendPermissionActions'"
+              @click="sendSelectedPermissionActions">
+              {{ loadingAction === 'sendPermissionActions' ? 'Yuborilmoqda...' : (permissionSelectedActionCount ? `Yuborish (${permissionSelectedActionCount})` : 'Yuborish') }}
+            </button>
           </div>
           <div class="uyqur-functions-groups" ref="permissionGroupsRef" v-if="permissionModulesMerged.length">
             <div class="uyqur-functions-group" :class="{ collapsed: !isPermissionModuleExpanded(module) }"
@@ -1082,8 +1086,14 @@
                   </div>
                   <div v-if="isSubmoduleActionsExpanded(submodule) && (submodule.actions || []).length"
                     class="uyqur-functions-subactions">
-                    <div v-for="action in submodule.actions" :key="'all-functions-action-' + action.id"
-                      class="uyqur-functions-subaction">{{ action.name || action.key }}</div>
+                    <label v-for="action in submodule.actions" :key="'all-functions-action-' + action.id"
+                      class="uyqur-functions-subaction" :class="{ sent: isActionSent(action) }" @click.stop>
+                      <input type="checkbox" class="row-check"
+                        :checked="isActionSent(action) || isActionSelected(action)"
+                        :disabled="isActionSent(action)"
+                        @change="toggleActionSelected(action)" />
+                      <span>{{ action.name || action.key }}</span>
+                    </label>
                   </div>
                 </template>
               </div>
@@ -2994,10 +3004,16 @@
                 <div class="uyqur-functions-group-title">
                   <div class="card-title">Uyqur Funksiyalari</div>
                 </div>
-                <button class="btn primary" :disabled="loadingAction === 'saveUyqurPermissions'"
-                  @click="saveUyqurPermissions">
-                  {{ loadingAction === 'saveUyqurPermissions' ? 'Saqlanmoqda...' : 'Saqlash' }}
-                </button>
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <button type="button" class="btn primary" :disabled="!permissionSelectedActionCount || loadingAction === 'sendPermissionActions'"
+                    @click="sendSelectedPermissionActions">
+                    {{ loadingAction === 'sendPermissionActions' ? 'Yuborilmoqda...' : (permissionSelectedActionCount ? `Yuborish (${permissionSelectedActionCount})` : 'Yuborish') }}
+                  </button>
+                  <button class="btn primary" :disabled="loadingAction === 'saveUyqurPermissions'"
+                    @click="saveUyqurPermissions">
+                    {{ loadingAction === 'saveUyqurPermissions' ? 'Saqlanmoqda...' : 'Saqlash' }}
+                  </button>
+                </div>
               </div>
               <div class="uyqur-functions-groups" ref="permissionGroupsRef" v-if="permissionModulesMerged.length">
                 <div class="uyqur-functions-group" :class="{ collapsed: !isPermissionModuleExpanded(module) }"
@@ -3019,8 +3035,14 @@
                       </div>
                       <div v-if="isSubmoduleActionsExpanded(submodule) && (submodule.actions || []).length"
                         class="uyqur-functions-subactions">
-                        <div v-for="action in submodule.actions" :key="'settings-action-' + action.id"
-                          class="uyqur-functions-subaction">{{ action.name || action.key }}</div>
+                        <label v-for="action in submodule.actions" :key="'settings-action-' + action.id"
+                          class="uyqur-functions-subaction" :class="{ sent: isActionSent(action) }" @click.stop>
+                          <input type="checkbox" class="row-check"
+                            :checked="isActionSent(action) || isActionSelected(action)"
+                            :disabled="isActionSent(action)"
+                            @change="toggleActionSelected(action)" />
+                          <span>{{ action.name || action.key }}</span>
+                        </label>
                       </div>
                     </template>
                   </div>
@@ -5035,6 +5057,75 @@ function toggleSubmoduleActionsExpanded(submodule = {}) {
   if (next.has(submodule.id)) next.delete(submodule.id);
   else next.add(submodule.id);
   permissionExpandedActions.value = next;
+  recalcPermissionGroupHeight();
+}
+
+// Boshqaruv/admin panelida har bir action oldida checkbox — belgilab
+// "Yuborish" bosilganda TANLANGAN action'lar backendga "yuborilgan" deb
+// yoziladi (submodule darajasidagi bilim-daraja tizimidan mustaqil).
+const permissionSentActionIds = ref(new Set());
+const permissionSelectedActionIds = ref(new Set());
+function actionUid(action = {}) {
+  return String(action.id ?? action.key ?? '');
+}
+function isActionSent(action = {}) {
+  return permissionSentActionIds.value.has(actionUid(action));
+}
+function isActionSelected(action = {}) {
+  return permissionSelectedActionIds.value.has(actionUid(action));
+}
+function toggleActionSelected(action = {}) {
+  if (isActionSent(action)) return;
+  const uid = actionUid(action);
+  const next = new Set(permissionSelectedActionIds.value);
+  if (next.has(uid)) next.delete(uid);
+  else next.add(uid);
+  permissionSelectedActionIds.value = next;
+}
+const permissionSelectedActionCount = computed(() => permissionSelectedActionIds.value.size);
+function populateSentActionIds(sentActionKeys = []) {
+  const sentSet = new Set((sentActionKeys || []).map(String));
+  const nextSentIds = new Set();
+  permissionModulesMerged.value.forEach(module => {
+    (module.submodules || []).forEach(submodule => {
+      (submodule.actions || []).forEach(action => {
+        const composite = `${submodule.key}::${action.key || action.id}`;
+        if (sentSet.has(composite)) nextSentIds.add(actionUid(action));
+      });
+    });
+  });
+  permissionSentActionIds.value = nextSentIds;
+}
+async function sendSelectedPermissionActions() {
+  if (!permissionSelectedActionIds.value.size) return;
+  startLoading('sendPermissionActions');
+  try {
+    const index = new Map();
+    permissionModulesMerged.value.forEach(module => {
+      (module.submodules || []).forEach(submodule => {
+        (submodule.actions || []).forEach(action => {
+          index.set(actionUid(action), {
+            module_name: module.name || module.key,
+            submodule_key: String(submodule.key),
+            submodule_name: submodule.name || submodule.key,
+            action_key: String(action.key || action.id),
+            action_name: action.name || action.key
+          });
+        });
+      });
+    });
+    const items = Array.from(permissionSelectedActionIds.value).map(uid => index.get(uid)).filter(Boolean);
+    await api.sendUyqurPermissionActions({ actions: items });
+    const nextSent = new Set(permissionSentActionIds.value);
+    permissionSelectedActionIds.value.forEach(uid => nextSent.add(uid));
+    permissionSentActionIds.value = nextSent;
+    permissionSelectedActionIds.value = new Set();
+    showToast('Yuborildi');
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    stopLoading('sendPermissionActions');
+  }
 }
 const permissionGroupsRef = ref(null);
 // Yopiq (yon tomonga tor) ustunlar ochiq ustunlar bilan bir xil balandlikda
@@ -11206,10 +11297,17 @@ function mergeContragentBalance(modules = []) {
 
 const permissionModulesMerged = computed(() => mergeContragentBalance(permissionModules.value));
 
-// Har bir modul default holatda yopiq (yon tomonga, tor ustun) bo'lib
-// boshlanadi — kerak bo'lganda foydalanuvchi o'zi bosib ochadi.
+// Default holatda barcha modullar va ularning ichidagi "actions" ro'yxatlari
+// ochiq holatda boshlanadi.
 function computeDefaultExpandedModules() {
-  permissionExpandedModules.value = new Set();
+  permissionExpandedModules.value = new Set(permissionModulesMerged.value.map(module => permissionModuleKey(module)));
+  const actionIds = new Set();
+  permissionModulesMerged.value.forEach(module => {
+    (module.submodules || []).forEach(submodule => {
+      if ((submodule.actions || []).length) actionIds.add(submodule.id);
+    });
+  });
+  permissionExpandedActions.value = actionIds;
 }
 
 async function recalcPermissionGroupHeight() {
@@ -11228,6 +11326,7 @@ async function loadPermissionView() {
   const data = await api.uyqurPermissions();
   permissionModules.value = Array.isArray(data.modules) ? data.modules : [];
   permissionSavedSelected.value = Array.isArray(data.selected) ? data.selected.map(String) : [];
+  populateSentActionIds(data.sentActionKeys);
   computeDefaultExpandedModules();
   recalcPermissionGroupHeight();
 }
