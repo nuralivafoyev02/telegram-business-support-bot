@@ -81,17 +81,6 @@
       <div class="page-body">
         <template v-if="employeeActiveTab === 'performance'">
           <div class="support-summary-grid">
-            <article class="card support-summary-card" role="button" tabindex="0" title="Guruhlar bo‘yicha tafsilot"
-              @click="openMyActivityDetail" @keydown.enter.prevent="openMyActivityDetail"
-              @keydown.space.prevent="openMyActivityDetail">
-              <div class="support-summary-content">
-                <div class="support-summary-title">Guruhlar</div>
-                <div class="support-summary-value-row">
-                  <div class="support-summary-value">{{ fmtNumber(employeeActivity.summary?.handled_chats) }}</div>
-                </div>
-                <div class="support-summary-note">Faol chatlar soni</div>
-              </div>
-            </article>
             <article class="card support-summary-card" role="button" tabindex="0" title="Xabarlar bo‘yicha tafsilot"
               @click="openMyActivityDetail" @keydown.enter.prevent="openMyActivityDetail"
               @keydown.space.prevent="openMyActivityDetail">
@@ -100,29 +89,38 @@
                 <div class="support-summary-value-row">
                   <div class="support-summary-value">{{ fmtNumber(employeeActivity.summary?.message_count) }}</div>
                 </div>
-                <div class="support-summary-note">Yuborilgan xabarlar</div>
+                <div class="support-summary-note">{{ fmtNumber(employeeActivity.summary?.company_total) }} ta kompaniya</div>
               </div>
             </article>
-            <article class="card support-summary-card" role="button" tabindex="0" title="Yopilgan so‘rovlar bo‘yicha tafsilot"
+            <article class="card support-summary-card" role="button" tabindex="0" title="So‘rovlar (ticket) bo‘yicha tafsilot"
               @click="openMyActivityDetail" @keydown.enter.prevent="openMyActivityDetail"
               @keydown.space.prevent="openMyActivityDetail">
               <div class="support-summary-content">
-                <div class="support-summary-title">Yopilgan so‘rov</div>
+                <div class="support-summary-title">Ticketlar</div>
+                <div class="support-summary-value-row">
+                  <div class="support-summary-value">{{ fmtNumber((employeeActivity.summary?.closed_requests || 0) + (employeeActivity.summary?.open_requests || 0)) }}</div>
+                </div>
+                <div class="support-summary-note">Jami so‘rovlar (savollar)</div>
+              </div>
+            </article>
+            <article class="card support-summary-card" role="button" tabindex="0" title="Javob berilgan so‘rovlar bo‘yicha tafsilot"
+              @click="openMyActivityDetail" @keydown.enter.prevent="openMyActivityDetail"
+              @keydown.space.prevent="openMyActivityDetail">
+              <div class="support-summary-content">
+                <div class="support-summary-title">Javob berilgan</div>
                 <div class="support-summary-value-row">
                   <div class="support-summary-value">{{ fmtNumber(employeeActivity.summary?.closed_requests) }}</div>
                 </div>
                 <div class="support-summary-note">Hal qilingan so‘rovlar</div>
               </div>
             </article>
-            <article class="card support-summary-card" role="button" tabindex="0" title="Yopilmagan so‘rovlarni ko‘rish"
-              @click="openMyOpenRequests" @keydown.enter.prevent="openMyOpenRequests"
-              @keydown.space.prevent="openMyOpenRequests">
+            <article class="card support-summary-card">
               <div class="support-summary-content">
-                <div class="support-summary-title">Yopilmagan so‘rovlar</div>
+                <div class="support-summary-title">O‘rtacha javob vaqti</div>
                 <div class="support-summary-value-row">
-                  <div class="support-summary-value">{{ fmtNumber(employeeActivity.summary?.open_requests) }}</div>
+                  <div class="support-summary-value">{{ fmtMinutes(employeeActivity.summary?.avg_close_minutes) }}</div>
                 </div>
-                <div class="support-summary-note">Hozircha ochiq turgan so‘rovlar</div>
+                <div class="support-summary-note">Javob berish tezligi</div>
               </div>
             </article>
           </div>
@@ -415,10 +413,6 @@
               </div>
             </div>
             <div v-if="companyModuleTableSummary.total" class="company-module-summary">
-              <div class="company-module-summary-main">
-                <strong>Umumiy</strong>
-                <span>{{ companyModuleTableSummary.total }} ta kompaniya</span>
-              </div>
               <div class="company-module-summary-grid">
                 <div class="company-module-summary-cell">
                   <span class="company-module-summary-label">O'rtacha faollik</span>
@@ -430,6 +424,7 @@
                       {{ companyModuleTableSummary.usedComparison.percentText }}
                     </span>
                   </div>
+                  <small style="color:var(--muted); font-size:11px;">{{ companyModuleTableSummary.total }} ta kompaniya</small>
                 </div>
                 <div v-for="column in companyModuleColumns" :key="`employee-module-summary-${column.key}`"
                   class="company-module-summary-cell">
@@ -445,11 +440,6 @@
                     </span>
                   </div>
                 </div>
-              </div>
-              <div v-if="companyModuleTableSummary.supportStaff.length" class="company-module-summary-support">
-                <span class="company-module-summary-support-label">Mas’ul xodimlar</span>
-                <b class="company-module-summary-support-value">{{ companyModuleTableSummary.supportStaff.join(', ')
-                  }}</b>
               </div>
             </div>
             <div class="company-module-table-wrap">
@@ -1416,9 +1406,6 @@
           <h1>{{ currentTitle }}</h1>
         </div>
         <div class="topbar-actions">
-          <button class="btn topbar-refresh" type="button" :disabled="loadingAction === 'refresh'" @click="refresh">
-            {{ loadingAction === 'refresh' ? 'Yangilanmoqda...' : 'Yangilash' }}
-          </button>
           <div class="top-actions-menu" ref="actionMenuRef">
             <button class="profile-action" type="button" :aria-expanded="actionMenuOpen"
               @click="actionMenuOpen = !actionMenuOpen">
@@ -1428,6 +1415,9 @@
             </button>
             <Transition name="fade">
               <div v-if="actionMenuOpen" class="actions-dropdown">
+                <button type="button" :disabled="loadingAction === 'refresh'" @click="runHeaderAction(refresh)">
+                  {{ loadingAction === 'refresh' ? 'Yangilanmoqda...' : 'Yangilash' }}
+                </button>
                 <button v-if="activeTab === 'stats'" type="button" :disabled="loadingAction === 'mainStats'"
                   @click="runHeaderAction(sendMainStats)">
                   {{ loadingAction === 'mainStats' ? 'Yuborilmoqda...' : 'Statistika yuborish' }}
@@ -1815,8 +1805,6 @@
           </template>
 
           <template v-if="activeTab === 'companyActivity'">
-            <Toolbar v-model="search" />
-
             <div class="metric-strip company-metrics">
               <article class="card metric clickable-metric" role="button" tabindex="0"
                 title="Kompaniyalar ro‘yxatini ko‘rish" @click="openCompanyMetricDetail('total')"
@@ -1942,10 +1930,6 @@
                   </div>
                 </div>
                 <div v-if="companyModuleTableSummary.total" class="company-module-summary">
-                  <div class="company-module-summary-main">
-                    <strong>Umumiy</strong>
-                    <span>{{ companyModuleTableSummary.total }} ta kompaniya</span>
-                  </div>
                   <div class="company-module-summary-grid">
                     <div class="company-module-summary-cell">
                       <span class="company-module-summary-label">O'rtacha faollik</span>
@@ -1957,6 +1941,7 @@
                           {{ companyModuleTableSummary.usedComparison.percentText }}
                         </span>
                       </div>
+                      <small style="color:var(--muted); font-size:11px;">{{ companyModuleTableSummary.total }} ta kompaniya</small>
                     </div>
                     <div v-for="column in companyModuleColumns" :key="`module-summary-${column.key}`"
                       class="company-module-summary-cell">
@@ -1972,11 +1957,6 @@
                         </span>
                       </div>
                     </div>
-                  </div>
-                  <div v-if="companyModuleTableSummary.supportStaff.length" class="company-module-summary-support">
-                    <span class="company-module-summary-support-label">Mas’ul xodimlar</span>
-                    <b class="company-module-summary-support-value">{{ companyModuleTableSummary.supportStaff.join(', ')
-                      }}</b>
                   </div>
                 </div>
                 <div class="company-module-table-wrap">
@@ -2060,9 +2040,6 @@
                 <div class="card-header chart-card-head company-module-chart-head">
                   <div>
                     <div class="card-title">Bo‘limlar dinamikasi</div>
-                    <small class="company-module-chart-fetched-at" :title="companyModuleChartSource.fetched_at || ''">
-                      So‘nggi yangilanish: {{ companyModuleChartSource.fetched_at ? fmtDate(companyModuleChartSource.fetched_at) : '—' }}
-                    </small>
                   </div>
                   <div class="company-module-chart-controls">
                     <div class="company-module-filter company-module-filter-wide company-module-filter-menu-wrap"
@@ -3424,9 +3401,6 @@
                 <div class="card-header chart-card-head company-module-chart-head">
                   <div>
                     <div class="card-title">Bo‘limlar dinamikasi</div>
-                    <small class="company-module-chart-fetched-at" :title="companyModuleChartSource.fetched_at || ''">
-                      So‘nggi yangilanish: {{ companyModuleChartSource.fetched_at ? fmtDate(companyModuleChartSource.fetched_at) : '—' }}
-                    </small>
                   </div>
                   <div class="company-module-chart-controls">
                     <div class="company-detail-trend-company">{{ companyModuleChartCompanyLabel }}</div>
@@ -4795,19 +4769,19 @@ const COMPANY_ACTIVITY_SYNC_INTERVAL_MS = 60 * 60 * 1000;
 const SETTINGS_SECTION_KEYS = ['bot', 'integrations', 'telegram', 'admin'];
 const tabs = [
   { key: 'stats', label: 'Support performance', icon: '📊' },
-  { key: 'productAnalytics', label: 'Product analytics', icon: '📈' },
+  { key: 'uyqurPermissions', label: 'Uyqur Funksiyalari', icon: '🧩' },
   { key: 'companyActivity', label: 'Company activity', icon: '🏢' },
+  { key: 'productAnalytics', label: 'Product analytics', icon: '📈' },
   { key: 'groups', label: 'Bot ulangan guruhlar', icon: '👥' },
   { key: 'employees', label: 'Xodimlar', icon: '🧑‍💼' },
   { key: 'companies', label: 'Kompaniyalar', icon: '🏬' },
   { key: 'clickup', label: 'ClickUp', icon: '✅' },
   { key: 'privates', label: 'Mijozlar', icon: '💬' },
   { key: 'knowledgeBase', label: 'Bilim bazasi', icon: '📚' },
-  { key: 'uyqurPermissions', label: 'Uyqur Funksiyalari', icon: '🧩' },
   { key: 'settings', label: 'Sozlamalar', icon: '⚙️' }
 ];
-const mainTabKeys = ['stats', 'productAnalytics', 'companyActivity'];
-const otherTabKeys = ['groups', 'employees', 'companies', 'clickup', 'privates', 'knowledgeBase', 'uyqurPermissions'];
+const mainTabKeys = ['stats', 'uyqurPermissions', 'companyActivity', 'productAnalytics'];
+const otherTabKeys = ['groups', 'employees', 'companies', 'clickup', 'privates', 'knowledgeBase'];
 
 function isValidTab(key) {
   return tabs.some(tab => tab.key === key);
