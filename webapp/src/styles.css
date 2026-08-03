@@ -3874,6 +3874,7 @@ body {
 .uyqur-functions-subactions {
   display: flex;
   flex-direction: column;
+  flex-shrink: 0;
   gap: 8px;
   max-height: 260px;
   min-height: 0;

@@ -564,7 +564,7 @@
                   </span>
                 </div>
                 <div class="uyqur-functions-card-list" v-if="isEmployeeModuleExpanded(module)">
-                  <template v-for="submodule in module.submodules.filter(sm => isEmployeeFunctionVisible(String(sm.key)))"
+                  <template v-for="(submodule, submoduleIndex) in module.submodules.filter(sm => isEmployeeFunctionVisible(String(sm.key)))"
                     :key="'employee-functions-submodule-' + submodule.id">
                     <label class="uyqur-functions-card"
                       :class="{ confirmed: isEmployeeFunctionConfirmed(String(submodule.key)) }"
@@ -575,11 +575,11 @@
                         @change="toggleEmployeeFunctionSelected(String(submodule.key))" />
                       <span>{{ submodule.name || submodule.key }}</span>
                       <button v-if="(submodule.actions || []).length" type="button" class="uyqur-functions-card-count"
-                        style="border:0; cursor:pointer;" @click.stop="toggleSubmoduleActionsExpanded(submodule, module)">
+                        style="border:0; cursor:pointer;" @click.stop="toggleSubmoduleActionsExpanded(submodule, module, submoduleIndex)">
                         {{ submodule.actions.length }}
                       </button>
                     </label>
-                    <div v-if="isSubmoduleActionsExpanded(submodule, module) && (submodule.actions || []).length"
+                    <div v-if="isSubmoduleActionsExpanded(submodule, module, submoduleIndex) && (submodule.actions || []).length"
                       class="uyqur-functions-subactions">
                       <div v-for="action in submodule.actions" :key="'employee-functions-action-' + action.id"
                         class="uyqur-functions-subaction" :class="{ sent: isActionSent(action) }">{{ action.name || action.key }}</div>
@@ -1078,13 +1078,13 @@
                 </span>
               </div>
               <div class="uyqur-functions-card-list" v-if="isPermissionModuleExpanded(module)">
-                <template v-for="submodule in module.submodules" :key="'all-functions-submodule-' + submodule.id">
+                <template v-for="(submodule, submoduleIndex) in module.submodules" :key="'all-functions-submodule-' + submodule.id">
                   <div class="uyqur-functions-card" :class="{ expandable: (submodule.actions || []).length }"
-                    @click="(submodule.actions || []).length && toggleSubmoduleActionsExpanded(submodule, module)">
+                    @click="(submodule.actions || []).length && toggleSubmoduleActionsExpanded(submodule, module, submoduleIndex)">
                     <span>{{ submodule.name || submodule.key }}</span>
                     <span v-if="(submodule.actions || []).length" class="uyqur-functions-card-count">{{ submodule.actions.length }}</span>
                   </div>
-                  <div v-if="isSubmoduleActionsExpanded(submodule, module) && (submodule.actions || []).length"
+                  <div v-if="isSubmoduleActionsExpanded(submodule, module, submoduleIndex) && (submodule.actions || []).length"
                     class="uyqur-functions-subactions">
                     <label v-for="action in submodule.actions" :key="'all-functions-action-' + action.id"
                       class="uyqur-functions-subaction" :class="{ sent: isActionSent(action) }" @click.stop>
@@ -3027,13 +3027,13 @@
                     </span>
                   </div>
                   <div class="uyqur-functions-card-list" v-if="isPermissionModuleExpanded(module)">
-                    <template v-for="submodule in module.submodules" :key="'submodule-' + submodule.id">
+                    <template v-for="(submodule, submoduleIndex) in module.submodules" :key="'submodule-' + submodule.id">
                       <div class="uyqur-functions-card" :class="{ expandable: (submodule.actions || []).length }"
-                        @click="(submodule.actions || []).length && toggleSubmoduleActionsExpanded(submodule, module)">
+                        @click="(submodule.actions || []).length && toggleSubmoduleActionsExpanded(submodule, module, submoduleIndex)">
                         <span>{{ submodule.name || submodule.key }}</span>
                         <span v-if="(submodule.actions || []).length" class="uyqur-functions-card-count">{{ submodule.actions.length }}</span>
                       </div>
-                      <div v-if="isSubmoduleActionsExpanded(submodule, module) && (submodule.actions || []).length"
+                      <div v-if="isSubmoduleActionsExpanded(submodule, module, submoduleIndex) && (submodule.actions || []).length"
                         class="uyqur-functions-subactions">
                         <label v-for="action in submodule.actions" :key="'settings-action-' + action.id"
                           class="uyqur-functions-subaction" :class="{ sent: isActionSent(action) }" @click.stop>
@@ -5050,20 +5050,20 @@ const permissionExpandedModules = ref(new Set());
 // ro'yxati bilan kelishi mumkin — bu avval hech qayerda ko'rsatilmagan edi.
 // Har bir ustun (modul) ichida bir vaqtda faqat BITTA fichaning actions
 // ro'yxati ochiq turadi — boshqasi ochilsa, avvalgisi avtomatik yopiladi.
-// Ba'zi modullarning submodule'larida tashqi API `id` (va hatto `key`) bir
-// xil yoki bo'sh kelib qolishi mumkin edi — shu sabab satrga asoslangan uid
-// o'rniga submodule OBYEKTINING o'zi (reference) identifikator sifatida
-// ishlatiladi, bu esa ma'lumot sifatidan qat'iy nazar har doim ishonchli.
-const permissionExpandedActionByModule = ref(new Map());
-function isSubmoduleActionsExpanded(submodule = {}, module = {}) {
+// Ba'zi modullarning submodule'larida tashqi API `id`/`key` maydonlari bo'sh
+// yoki bir-biriga mos kelib qolishi mumkin edi — shu sabab identifikatsiya
+// uchun ma'lumot maydonlariga umuman tayanmasdan, submodule'ning ro'yxatdagi
+// O'RNI (index) ishlatiladi — bu har doim, har qanday holatda ishonchli.
+const permissionExpandedActionByModule = ref({});
+function isSubmoduleActionsExpanded(submodule, module, submoduleIndex) {
   const moduleKey = permissionModuleKey(module);
-  return permissionExpandedActionByModule.value.get(moduleKey) === submodule;
+  return permissionExpandedActionByModule.value[moduleKey] === submoduleIndex;
 }
-function toggleSubmoduleActionsExpanded(submodule = {}, module = {}) {
+function toggleSubmoduleActionsExpanded(submodule, module, submoduleIndex) {
   const moduleKey = permissionModuleKey(module);
-  const next = new Map(permissionExpandedActionByModule.value);
-  if (next.get(moduleKey) === submodule) next.delete(moduleKey);
-  else next.set(moduleKey, submodule);
+  const next = { ...permissionExpandedActionByModule.value };
+  if (next[moduleKey] === submoduleIndex) delete next[moduleKey];
+  else next[moduleKey] = submoduleIndex;
   permissionExpandedActionByModule.value = next;
   recalcPermissionGroupHeight();
 }
@@ -11310,7 +11310,7 @@ const permissionModulesMerged = computed(() => mergeContragentBalance(permission
 // boshlanadi (faqat bosilganda, bittadan ochiladi).
 function computeDefaultExpandedModules() {
   permissionExpandedModules.value = new Set(permissionModulesMerged.value.map(module => permissionModuleKey(module)));
-  permissionExpandedActionByModule.value = new Map();
+  permissionExpandedActionByModule.value = {};
 }
 
 async function recalcPermissionGroupHeight() {
