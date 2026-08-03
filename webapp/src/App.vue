@@ -555,8 +555,9 @@
               <div class="uyqur-functions-group" :class="{ collapsed: !isEmployeeModuleExpanded(module) }"
                 :style="permissionGroupMinHeight ? { minHeight: permissionGroupMinHeight + 'px' } : null"
                 v-for="module in permissionModulesMerged.filter(m => m.submodules.some(sm => isEmployeeFunctionVisible(String(sm.key))))"
-                :key="'employee-functions-module-' + module.id">
-                <div class="uyqur-functions-group-head" @click="toggleEmployeeModuleExpanded(module)">
+                :key="'employee-functions-module-' + module.id"
+                @click="!isEmployeeModuleExpanded(module) && toggleEmployeeModuleExpanded(module)">
+                <div class="uyqur-functions-group-head" @click.stop="toggleEmployeeModuleExpanded(module)">
                   <span class="uyqur-functions-collapse-icon">›</span>
                   <span class="uyqur-functions-group-title">
                     <b>{{ module.name || module.key }}</b>
@@ -1054,8 +1055,9 @@
             <div class="uyqur-functions-group" :class="{ collapsed: !isPermissionModuleExpanded(module) }"
               :style="permissionGroupMinHeight ? { minHeight: permissionGroupMinHeight + 'px' } : null"
               v-for="module in permissionModulesMerged.filter(m => m.submodules.length)"
-              :key="'all-functions-module-' + module.id">
-              <div class="uyqur-functions-group-head" @click="togglePermissionModuleExpanded(module)">
+              :key="'all-functions-module-' + module.id"
+              @click="!isPermissionModuleExpanded(module) && togglePermissionModuleExpanded(module)">
+              <div class="uyqur-functions-group-head" @click.stop="togglePermissionModuleExpanded(module)">
                 <span class="uyqur-functions-collapse-icon">›</span>
                 <span class="uyqur-functions-group-title">
                   <b>{{ module.name || module.key }} ({{ module.submodules.length }})</b>
@@ -2982,8 +2984,9 @@
               <div class="uyqur-functions-groups" ref="permissionGroupsRef" v-if="permissionModulesMerged.length">
                 <div class="uyqur-functions-group" :class="{ collapsed: !isPermissionModuleExpanded(module) }"
                   :style="permissionGroupMinHeight ? { minHeight: permissionGroupMinHeight + 'px' } : null"
-                  v-for="module in permissionModulesMerged.filter(m => m.submodules.length)" :key="'module-' + module.id">
-                  <div class="uyqur-functions-group-head" @click="togglePermissionModuleExpanded(module)">
+                  v-for="module in permissionModulesMerged.filter(m => m.submodules.length)" :key="'module-' + module.id"
+                  @click="!isPermissionModuleExpanded(module) && togglePermissionModuleExpanded(module)">
+                  <div class="uyqur-functions-group-head" @click.stop="togglePermissionModuleExpanded(module)">
                     <span class="uyqur-functions-collapse-icon">›</span>
                     <span class="uyqur-functions-group-title">
                       <b>{{ module.name || module.key }}</b>
@@ -4962,7 +4965,7 @@ const companyModuleChartFilterOpen = ref(false);
 const companyModuleChartMenuRef = ref(null);
 const companyMrrChartFilterOpen = ref(false);
 const companyMrrChartMenuRef = ref(null);
-const companyMrrViewMode = ref('list');
+const companyMrrViewMode = ref('chart');
 const companyModuleFilterMenuOpen = ref(false);
 const companyModuleFilterMenuGroup = ref('');
 const companyModuleFilterMenuRef = ref(null);
