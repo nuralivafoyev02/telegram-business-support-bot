@@ -3848,6 +3848,40 @@ body {
   color: var(--success-text, #14532d);
 }
 
+.uyqur-functions-card.expandable {
+  cursor: pointer;
+}
+
+.uyqur-functions-card-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  background: var(--surface-soft);
+  color: var(--muted-strong);
+  font-size: 11px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.uyqur-functions-subactions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: -2px 0 4px 14px;
+  padding: 6px 10px;
+  border-left: 2px solid var(--line);
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.uyqur-functions-subaction {
+  padding: 2px 0;
+}
+
 .manager-panel-lock {
   max-width: 320px;
 }

@@ -564,17 +564,27 @@
                   </span>
                 </div>
                 <div class="uyqur-functions-card-list" v-if="isEmployeeModuleExpanded(module)">
-                  <label class="uyqur-functions-card"
-                    v-for="submodule in module.submodules.filter(sm => isEmployeeFunctionVisible(String(sm.key)))"
-                    :key="'employee-functions-submodule-' + submodule.id"
-                    :class="{ confirmed: isEmployeeFunctionConfirmed(String(submodule.key)) }"
-                    :style="{ cursor: isEmployeeFunctionDisabled(String(submodule.key)) ? 'default' : 'pointer', justifyContent: 'flex-start' }">
-                    <input type="checkbox" class="row-check"
-                      :checked="isEmployeeFunctionChecked(String(submodule.key))"
-                      :disabled="isEmployeeFunctionDisabled(String(submodule.key))"
-                      @change="toggleEmployeeFunctionSelected(String(submodule.key))" />
-                    <span>{{ submodule.name || submodule.key }}</span>
-                  </label>
+                  <template v-for="submodule in module.submodules.filter(sm => isEmployeeFunctionVisible(String(sm.key)))"
+                    :key="'employee-functions-submodule-' + submodule.id">
+                    <label class="uyqur-functions-card"
+                      :class="{ confirmed: isEmployeeFunctionConfirmed(String(submodule.key)) }"
+                      :style="{ cursor: isEmployeeFunctionDisabled(String(submodule.key)) ? 'default' : 'pointer', justifyContent: 'flex-start' }">
+                      <input type="checkbox" class="row-check"
+                        :checked="isEmployeeFunctionChecked(String(submodule.key))"
+                        :disabled="isEmployeeFunctionDisabled(String(submodule.key))"
+                        @change="toggleEmployeeFunctionSelected(String(submodule.key))" />
+                      <span>{{ submodule.name || submodule.key }}</span>
+                      <button v-if="(submodule.actions || []).length" type="button" class="uyqur-functions-card-count"
+                        style="border:0; cursor:pointer;" @click.stop="toggleSubmoduleActionsExpanded(submodule)">
+                        {{ submodule.actions.length }}
+                      </button>
+                    </label>
+                    <div v-if="isSubmoduleActionsExpanded(submodule) && (submodule.actions || []).length"
+                      class="uyqur-functions-subactions">
+                      <div v-for="action in submodule.actions" :key="'employee-functions-action-' + action.id"
+                        class="uyqur-functions-subaction">{{ action.name || action.key }}</div>
+                    </div>
+                  </template>
                 </div>
               </div>
             </div>
@@ -1064,10 +1074,18 @@
                 </span>
               </div>
               <div class="uyqur-functions-card-list" v-if="isPermissionModuleExpanded(module)">
-                <div class="uyqur-functions-card" v-for="submodule in module.submodules"
-                  :key="'all-functions-submodule-' + submodule.id">
-                  <span>{{ submodule.name || submodule.key }}</span>
-                </div>
+                <template v-for="submodule in module.submodules" :key="'all-functions-submodule-' + submodule.id">
+                  <div class="uyqur-functions-card" :class="{ expandable: (submodule.actions || []).length }"
+                    @click="(submodule.actions || []).length && toggleSubmoduleActionsExpanded(submodule)">
+                    <span>{{ submodule.name || submodule.key }}</span>
+                    <span v-if="(submodule.actions || []).length" class="uyqur-functions-card-count">{{ submodule.actions.length }}</span>
+                  </div>
+                  <div v-if="isSubmoduleActionsExpanded(submodule) && (submodule.actions || []).length"
+                    class="uyqur-functions-subactions">
+                    <div v-for="action in submodule.actions" :key="'all-functions-action-' + action.id"
+                      class="uyqur-functions-subaction">{{ action.name || action.key }}</div>
+                  </div>
+                </template>
               </div>
             </div>
           </div>
@@ -2993,9 +3011,18 @@
                     </span>
                   </div>
                   <div class="uyqur-functions-card-list" v-if="isPermissionModuleExpanded(module)">
-                    <div class="uyqur-functions-card" v-for="submodule in module.submodules" :key="'submodule-' + submodule.id">
-                      <span>{{ submodule.name || submodule.key }}</span>
-                    </div>
+                    <template v-for="submodule in module.submodules" :key="'submodule-' + submodule.id">
+                      <div class="uyqur-functions-card" :class="{ expandable: (submodule.actions || []).length }"
+                        @click="(submodule.actions || []).length && toggleSubmoduleActionsExpanded(submodule)">
+                        <span>{{ submodule.name || submodule.key }}</span>
+                        <span v-if="(submodule.actions || []).length" class="uyqur-functions-card-count">{{ submodule.actions.length }}</span>
+                      </div>
+                      <div v-if="isSubmoduleActionsExpanded(submodule) && (submodule.actions || []).length"
+                        class="uyqur-functions-subactions">
+                        <div v-for="action in submodule.actions" :key="'settings-action-' + action.id"
+                          class="uyqur-functions-subaction">{{ action.name || action.key }}</div>
+                      </div>
+                    </template>
                   </div>
                 </div>
               </div>
@@ -4997,6 +5024,18 @@ const permissionModules = ref([]);
 // "Saqlash" hozirgi daraxtdagi BARCHA funksiyalarni birdaniga yuboradi.
 const permissionSavedSelected = ref([]);
 const permissionExpandedModules = ref(new Set());
+// Har bir ficha (submodule) tashqi webhookdan o'zining ichki "actions"
+// ro'yxati bilan kelishi mumkin — bu avval hech qayerda ko'rsatilmagan edi.
+const permissionExpandedActions = ref(new Set());
+function isSubmoduleActionsExpanded(submodule = {}) {
+  return permissionExpandedActions.value.has(submodule.id);
+}
+function toggleSubmoduleActionsExpanded(submodule = {}) {
+  const next = new Set(permissionExpandedActions.value);
+  if (next.has(submodule.id)) next.delete(submodule.id);
+  else next.add(submodule.id);
+  permissionExpandedActions.value = next;
+}
 const permissionGroupsRef = ref(null);
 // Yopiq (yon tomonga tor) ustunlar ochiq ustunlar bilan bir xil balandlikda
 // bo'lishi uchun — CSS stretch yozuv yo'nalishi (writing-mode) bilan
