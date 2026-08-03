@@ -340,66 +340,66 @@
                 <div class="card-title">Bo‘limlar foydalanish statistikasi</div>
               </div>
               <div class="company-module-table-controls">
-                <div class="company-module-filter company-module-filter-wide company-module-filter-menu-wrap"
-                  ref="companyModuleFilterMenuRef">
-                  <span>Filter</span>
-                  <div class="company-module-filter-picker">
-                    <button type="button" class="company-module-filter-trigger select mini-select"
-                      @click.stop="toggleCompanyModuleFilterMenu">
-                      <span class="company-module-filter-trigger-label">{{ companyModuleFilterButtonLabel }}</span>
-                      <span class="company-module-filter-trigger-caret">▾</span>
-                    </button>
-                    <Transition name="fade">
-                      <div v-if="companyModuleFilterMenuOpen" class="company-module-filter-menu actions-dropdown"
-                        @click.stop>
-                        <template v-if="!companyModuleFilterMenuGroup">
-                          <button v-for="group in companyModuleControlGroups"
-                            :key="`employee-module-filter-menu-${group.key}`" type="button"
-                            class="company-module-filter-menu-group"
-                            @click="group.key === 'show' ? selectCompanyModuleControlOption(group, group.options[0]) : openCompanyModuleFilterGroup(group.key)">
-                            <span>{{ group.label }}</span>
-                            <span v-if="group.key !== 'show'" class="company-module-filter-menu-arrow">›</span>
-                          </button>
-                        </template>
-                        <template v-else-if="companyModuleFilterActiveGroup">
-                          <button type="button" class="company-module-filter-back"
-                            @click="companyModuleFilterMenuGroup = ''">
-                            <span class="company-module-filter-menu-arrow">‹</span>
-                            <span>{{ companyModuleFilterActiveGroup.label }}</span>
-                          </button>
-                          <button v-for="option in companyModuleFilterActiveGroup.options"
-                            :key="`employee-module-filter-option-${companyModuleFilterActiveGroup.key}-${option.key}`"
-                            type="button" class="company-module-filter-option"
-                            :class="{ active: isCompanyModuleControlOptionActive(companyModuleFilterActiveGroup, option) }"
-                            @click="selectCompanyModuleControlOption(companyModuleFilterActiveGroup, option)">
-                            <span>{{ option.label }}</span>
-                            <span v-if="isCompanyModuleControlOptionActive(companyModuleFilterActiveGroup, option)"
-                              class="company-module-filter-check">✓</span>
-                          </button>
-                        </template>
-                      </div>
-                    </Transition>
-                  </div>
-                </div>
-                <label class="company-module-filter">
-                  <span>Davr</span>
-                  <select :value="companyModulePeriod" class="select mini-select"
-                    @change="handleCompanyModulePeriodChange($event.target.value)"
-                    @mousedown="handleCompanyModulePeriodSelectPointerDown"
-                    @mouseup="handleCompanyModulePeriodSelectPointerUp">
-                    <option v-for="period in companyModulePeriodOptions" :key="`employee-module-period-${period.key}`"
-                      :value="period.key">
-                      {{ companyModulePeriodOptionLabel(period) }}
-                    </option>
-                  </select>
-                </label>
                 <div class="card-header-actions company-module-menu" ref="moduleCompareMenuRef">
-                  <button type="button" class="btn-icon mini-icon" title="Sozlamalar"
+                  <button type="button" class="btn-icon mini-icon" title="Umumiy filter"
                     @click="moduleCompareMenuOpen = !moduleCompareMenuOpen">
                     <span>⋯</span>
                   </button>
                   <Transition name="fade">
-                    <div v-if="moduleCompareMenuOpen" class="actions-dropdown mini-dropdown right-align">
+                    <div v-if="moduleCompareMenuOpen" class="actions-dropdown mini-dropdown right-align" @click.stop>
+                      <div class="company-module-filter company-module-filter-wide company-module-filter-menu-wrap"
+                        ref="companyModuleFilterMenuRef">
+                        <span>Filter</span>
+                        <div class="company-module-filter-picker">
+                          <button type="button" class="company-module-filter-trigger select mini-select"
+                            @click.stop="toggleCompanyModuleFilterMenu">
+                            <span class="company-module-filter-trigger-label">{{ companyModuleFilterButtonLabel }}</span>
+                            <span class="company-module-filter-trigger-caret">▾</span>
+                          </button>
+                          <Transition name="fade">
+                            <div v-if="companyModuleFilterMenuOpen" class="company-module-filter-menu actions-dropdown"
+                              @click.stop>
+                              <template v-if="!companyModuleFilterMenuGroup">
+                                <button v-for="group in companyModuleControlGroups"
+                                  :key="`employee-module-filter-menu-${group.key}`" type="button"
+                                  class="company-module-filter-menu-group"
+                                  @click="group.key === 'show' ? selectCompanyModuleControlOption(group, group.options[0]) : openCompanyModuleFilterGroup(group.key)">
+                                  <span>{{ group.label }}</span>
+                                  <span v-if="group.key !== 'show'" class="company-module-filter-menu-arrow">›</span>
+                                </button>
+                              </template>
+                              <template v-else-if="companyModuleFilterActiveGroup">
+                                <button type="button" class="company-module-filter-back"
+                                  @click="companyModuleFilterMenuGroup = ''">
+                                  <span class="company-module-filter-menu-arrow">‹</span>
+                                  <span>{{ companyModuleFilterActiveGroup.label }}</span>
+                                </button>
+                                <button v-for="option in companyModuleFilterActiveGroup.options"
+                                  :key="`employee-module-filter-option-${companyModuleFilterActiveGroup.key}-${option.key}`"
+                                  type="button" class="company-module-filter-option"
+                                  :class="{ active: isCompanyModuleControlOptionActive(companyModuleFilterActiveGroup, option) }"
+                                  @click="selectCompanyModuleControlOption(companyModuleFilterActiveGroup, option)">
+                                  <span>{{ option.label }}</span>
+                                  <span v-if="isCompanyModuleControlOptionActive(companyModuleFilterActiveGroup, option)"
+                                    class="company-module-filter-check">✓</span>
+                                </button>
+                              </template>
+                            </div>
+                          </Transition>
+                        </div>
+                      </div>
+                      <label class="company-module-filter">
+                        <span>Davr</span>
+                        <select :value="companyModulePeriod" class="select mini-select"
+                          @change="handleCompanyModulePeriodChange($event.target.value)"
+                          @mousedown="handleCompanyModulePeriodSelectPointerDown"
+                          @mouseup="handleCompanyModulePeriodSelectPointerUp">
+                          <option v-for="period in companyModulePeriodOptions" :key="`employee-module-period-${period.key}`"
+                            :value="period.key">
+                            {{ companyModulePeriodOptionLabel(period) }}
+                          </option>
+                        </select>
+                      </label>
                       <label class="theme-menu-row">
                         <span>Taqqoslash</span>
                         <label class="switch mini-switch">
@@ -1857,66 +1857,66 @@
                     <div class="card-title">Bo‘limlar foydalanish statistikasi</div>
                   </div>
                   <div class="company-module-table-controls">
-                    <div class="company-module-filter company-module-filter-wide company-module-filter-menu-wrap"
-                      ref="companyModuleFilterMenuRef">
-                      <span>Filter</span>
-                      <div class="company-module-filter-picker">
-                        <button type="button" class="company-module-filter-trigger select mini-select"
-                          @click.stop="toggleCompanyModuleFilterMenu">
-                          <span class="company-module-filter-trigger-label">{{ companyModuleFilterButtonLabel }}</span>
-                          <span class="company-module-filter-trigger-caret">▾</span>
-                        </button>
-                        <Transition name="fade">
-                          <div v-if="companyModuleFilterMenuOpen" class="company-module-filter-menu actions-dropdown"
-                            @click.stop>
-                            <template v-if="!companyModuleFilterMenuGroup">
-                              <button v-for="group in companyModuleControlGroups"
-                                :key="`module-filter-menu-${group.key}`" type="button"
-                                class="company-module-filter-menu-group"
-                                @click="group.key === 'show' ? selectCompanyModuleControlOption(group, group.options[0]) : openCompanyModuleFilterGroup(group.key)">
-                                <span>{{ group.label }}</span>
-                                <span v-if="group.key !== 'show'" class="company-module-filter-menu-arrow">›</span>
-                              </button>
-                            </template>
-                            <template v-else-if="companyModuleFilterActiveGroup">
-                              <button type="button" class="company-module-filter-back"
-                                @click="companyModuleFilterMenuGroup = ''">
-                                <span class="company-module-filter-menu-arrow">‹</span>
-                                <span>{{ companyModuleFilterActiveGroup.label }}</span>
-                              </button>
-                              <button v-for="option in companyModuleFilterActiveGroup.options"
-                                :key="`module-filter-option-${companyModuleFilterActiveGroup.key}-${option.key}`"
-                                type="button" class="company-module-filter-option"
-                                :class="{ active: isCompanyModuleControlOptionActive(companyModuleFilterActiveGroup, option) }"
-                                @click="selectCompanyModuleControlOption(companyModuleFilterActiveGroup, option)">
-                                <span>{{ option.label }}</span>
-                                <span v-if="isCompanyModuleControlOptionActive(companyModuleFilterActiveGroup, option)"
-                                  class="company-module-filter-check">✓</span>
-                              </button>
-                            </template>
-                          </div>
-                        </Transition>
-                      </div>
-                    </div>
-                    <label class="company-module-filter">
-                      <span>Davr</span>
-                      <select :value="companyModulePeriod" class="select mini-select"
-                        @change="handleCompanyModulePeriodChange($event.target.value)"
-                        @mousedown="handleCompanyModulePeriodSelectPointerDown"
-                        @mouseup="handleCompanyModulePeriodSelectPointerUp">
-                        <option v-for="period in companyModulePeriodOptions" :key="`module-period-${period.key}`"
-                          :value="period.key">
-                          {{ companyModulePeriodOptionLabel(period) }}
-                        </option>
-                      </select>
-                    </label>
                     <div class="card-header-actions company-module-menu" ref="moduleCompareMenuRef">
-                      <button type="button" class="btn-icon mini-icon" title="Sozlamalar"
+                      <button type="button" class="btn-icon mini-icon" title="Umumiy filter"
                         @click="moduleCompareMenuOpen = !moduleCompareMenuOpen">
                         <span>⋯</span>
                       </button>
                       <Transition name="fade">
-                        <div v-if="moduleCompareMenuOpen" class="actions-dropdown mini-dropdown right-align">
+                        <div v-if="moduleCompareMenuOpen" class="actions-dropdown mini-dropdown right-align" @click.stop>
+                          <div class="company-module-filter company-module-filter-wide company-module-filter-menu-wrap"
+                            ref="companyModuleFilterMenuRef">
+                            <span>Filter</span>
+                            <div class="company-module-filter-picker">
+                              <button type="button" class="company-module-filter-trigger select mini-select"
+                                @click.stop="toggleCompanyModuleFilterMenu">
+                                <span class="company-module-filter-trigger-label">{{ companyModuleFilterButtonLabel }}</span>
+                                <span class="company-module-filter-trigger-caret">▾</span>
+                              </button>
+                              <Transition name="fade">
+                                <div v-if="companyModuleFilterMenuOpen" class="company-module-filter-menu actions-dropdown"
+                                  @click.stop>
+                                  <template v-if="!companyModuleFilterMenuGroup">
+                                    <button v-for="group in companyModuleControlGroups"
+                                      :key="`module-filter-menu-${group.key}`" type="button"
+                                      class="company-module-filter-menu-group"
+                                      @click="group.key === 'show' ? selectCompanyModuleControlOption(group, group.options[0]) : openCompanyModuleFilterGroup(group.key)">
+                                      <span>{{ group.label }}</span>
+                                      <span v-if="group.key !== 'show'" class="company-module-filter-menu-arrow">›</span>
+                                    </button>
+                                  </template>
+                                  <template v-else-if="companyModuleFilterActiveGroup">
+                                    <button type="button" class="company-module-filter-back"
+                                      @click="companyModuleFilterMenuGroup = ''">
+                                      <span class="company-module-filter-menu-arrow">‹</span>
+                                      <span>{{ companyModuleFilterActiveGroup.label }}</span>
+                                    </button>
+                                    <button v-for="option in companyModuleFilterActiveGroup.options"
+                                      :key="`module-filter-option-${companyModuleFilterActiveGroup.key}-${option.key}`"
+                                      type="button" class="company-module-filter-option"
+                                      :class="{ active: isCompanyModuleControlOptionActive(companyModuleFilterActiveGroup, option) }"
+                                      @click="selectCompanyModuleControlOption(companyModuleFilterActiveGroup, option)">
+                                      <span>{{ option.label }}</span>
+                                      <span v-if="isCompanyModuleControlOptionActive(companyModuleFilterActiveGroup, option)"
+                                        class="company-module-filter-check">✓</span>
+                                    </button>
+                                  </template>
+                                </div>
+                              </Transition>
+                            </div>
+                          </div>
+                          <label class="company-module-filter">
+                            <span>Davr</span>
+                            <select :value="companyModulePeriod" class="select mini-select"
+                              @change="handleCompanyModulePeriodChange($event.target.value)"
+                              @mousedown="handleCompanyModulePeriodSelectPointerDown"
+                              @mouseup="handleCompanyModulePeriodSelectPointerUp">
+                              <option v-for="period in companyModulePeriodOptions" :key="`module-period-${period.key}`"
+                                :value="period.key">
+                                {{ companyModulePeriodOptionLabel(period) }}
+                              </option>
+                            </select>
+                          </label>
                           <label class="theme-menu-row">
                             <span>Taqqoslash</span>
                             <label class="switch mini-switch">
