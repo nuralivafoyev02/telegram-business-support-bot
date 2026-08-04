@@ -1418,7 +1418,11 @@
                   <th>Funksiya</th>
                   <th>Yuborilgan</th>
                   <th>Holati</th>
-                  <th class="select-cell">Tasdiqlash</th>
+                  <th class="select-cell">
+                    <input class="row-check" type="checkbox" title="Hammasini tanlash"
+                      :checked="isAllSupportHistorySelected" :disabled="!supportHistorySelectableRows.length"
+                      @change="toggleSelectAllSupportHistory" />
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -3333,7 +3337,11 @@
                   <th>Funksiya</th>
                   <th>Yuborilgan</th>
                   <th>Holati</th>
-                  <th class="select-cell">Tasdiqlash</th>
+                  <th class="select-cell">
+                    <input class="row-check" type="checkbox" title="Hammasini tanlash"
+                      :checked="isAllSupportHistorySelected" :disabled="!supportHistorySelectableRows.length"
+                      @change="toggleSelectAllSupportHistory" />
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -5546,6 +5554,21 @@ function toggleSupportHistoryEventSelected(row = {}) {
   supportHistorySelectedEvents.value = next;
 }
 const supportHistorySelectedCount = computed(() => supportHistorySelectedEvents.value.size);
+// Joriy filtrlangan ro'yxatdagi (masalan faqat "Jarayonda") o'rganilgan
+// qatorlarning HAMMASINI bir bosishda belgilash/bekor qilish uchun.
+const supportHistorySelectableRows = computed(() => filteredSupportHistoryRows.value.filter(row => row.learned));
+const isAllSupportHistorySelected = computed(() => {
+  const rows = supportHistorySelectableRows.value;
+  return rows.length > 0 && rows.every(row => supportHistorySelectedEvents.value.has(row.event_id));
+});
+function toggleSelectAllSupportHistory() {
+  const rows = supportHistorySelectableRows.value;
+  if (isAllSupportHistorySelected.value) {
+    supportHistorySelectedEvents.value = new Set();
+    return;
+  }
+  supportHistorySelectedEvents.value = new Set(rows.map(row => row.event_id));
+}
 // "Tasdiqlanganlar" (done) ro'yxatini ko'rayotganda tugma "Qaytarish" deb
 // nomlanadi — tanlanganlar tasdiqlanish bekor qilinadi. Boshqa holatlarda
 // "Tasdiqlash" (yangi tasdiqlash).
