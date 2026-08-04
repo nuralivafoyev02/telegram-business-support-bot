@@ -526,14 +526,35 @@ async function getKnowledgeDashboard({ days = 7 } = {}) {
   // cho'ziladi (0), ya'ni hech qanday vaqt bo'yicha filtrlash qo'llanmaydi.
   const periodStartMs = isAllTime ? 0 : now - periodDays * DAY_MS;
 
+  // Har bir submodule kalitiga mos ICHKI "actions" soni — endi barcha
+  // foiz/son hisob-kitoblari SUBMODULE emas, balki shu submodule ichidagi
+  // actions soniga qarab OG'IRLASHTIRILADI (masalan 16 ta action'i bor
+  // submodule umumiy hisobga 16 birlik qo'shadi, 1 tasi bo'lgani — 1 birlik).
+  // Actions ma'lumoti yo'q submodule xavfsizlik uchun kamida 1 deb hisoblanadi
+  // (butunlay hisobdan tushib qolmasin).
+  const submoduleActionsCountByKey = new Map();
+  (Array.isArray(permissionRecord.modules) ? permissionRecord.modules : []).forEach(module => {
+    (module.submodules || []).forEach(submodule => {
+      const count = Array.isArray(submodule.actions) && submodule.actions.length ? submodule.actions.length : 1;
+      submoduleActionsCountByKey.set(String(submodule.key), count);
+    });
+  });
+  function actionsCountFor(key) {
+    return submoduleActionsCountByKey.get(String(key)) || 1;
+  }
+
   function percentAsOf(employeeId, cutoffMs) {
     const relevant = events.filter(event => new Date(event.created_at).getTime() <= cutoffMs);
     if (!relevant.length) return 0;
-    const learned = relevant.filter(event => {
+    let totalWeight = 0;
+    let learnedWeight = 0;
+    relevant.forEach(event => {
+      const weight = actionsCountFor(event.submodule_key);
+      totalWeight += weight;
       const progress = progressFor(record, event.id, employeeId);
-      return progress.learned_at && new Date(progress.learned_at).getTime() <= cutoffMs;
-    }).length;
-    return Math.round((learned / relevant.length) * 100);
+      if (progress.learned_at && new Date(progress.learned_at).getTime() <= cutoffMs) learnedWeight += weight;
+    });
+    return totalWeight ? Math.round((learnedWeight / totalWeight) * 100) : 0;
   }
 
   // "Barcha funksiyalar"dagi BUTUN daraxt (tanlangan + tanlanmagan) — xodimlar
@@ -553,15 +574,16 @@ async function getKnowledgeDashboard({ days = 7 } = {}) {
     let inProgress = 0;
     let notStarted = 0;
     allSubmodules.forEach(key => {
+      const weight = actionsCountFor(key);
       const event = selectedKeys.has(key) ? eventBySubmoduleKey.get(key) : null;
       if (!event) {
-        notStarted += 1;
+        notStarted += weight;
         return;
       }
       const progress = progressFor(record, event.id, employeeId);
-      if (progress.confirmed_at) learned += 1;
-      else if (progress.learned_at) inProgress += 1;
-      else notStarted += 1;
+      if (progress.confirmed_at) learned += weight;
+      else if (progress.learned_at) inProgress += weight;
+      else notStarted += weight;
     });
     return { learned, inProgress, notStarted };
   }
@@ -602,9 +624,9 @@ async function getKnowledgeDashboard({ days = 7 } = {}) {
   const periodFullyLearnedCount = periodEvents.filter(event => employees.length > 0
     && employees.every(employee => Boolean(progressFor(record, event.id, employee.id).learned_at))).length;
 
-  // "O'rganilgan/Jarayonda/Boshlanmagan funksiyalar" — "Barcha funksiyalar"
-  // bo'limidagi jami songa teng bo'lishi uchun, har bir funksiya (submodule)
-  // FAQAT BITTA marta hisoblanadi (xodim x funksiya juftliklari emas):
+  // "O'rganilgan/Jarayonda/Boshlanmagan funksiyalar" — endi har bir funksiya
+  // (submodule) o'zining ICHKI ACTIONS soniga teng OG'IRLIKDA hisoblanadi
+  // (submodule x 1 emas):
   //  - tanlanmagan yoki hali hodisasi yo'q — "boshlanmagan";
   //  - hodisasi bor-у hech kim tegmagan — "boshlanmagan";
   //  - kamida bitta xodim o'rgangan/tasdiqlagan, lekin BIRORTASI hali
@@ -613,10 +635,13 @@ async function getKnowledgeDashboard({ days = 7 } = {}) {
   let learnedFunctionsCount = 0;
   let inProgressFunctionsCount = 0;
   let notStartedFunctionsCount = 0;
+  let totalFunctionsCount = 0;
   allSubmodules.forEach(key => {
+    const weight = actionsCountFor(key);
+    totalFunctionsCount += weight;
     const event = selectedKeys.has(key) ? eventBySubmoduleKey.get(key) : null;
     if (!event) {
-      notStartedFunctionsCount += 1;
+      notStartedFunctionsCount += weight;
       return;
     }
     const learnedByAny = employees.some(employee => {
@@ -625,11 +650,10 @@ async function getKnowledgeDashboard({ days = 7 } = {}) {
     });
     const confirmedByAll = employees.length > 0
       && employees.every(employee => Boolean(progressFor(record, event.id, employee.id).confirmed_at));
-    if (confirmedByAll) learnedFunctionsCount += 1;
-    else if (learnedByAny) inProgressFunctionsCount += 1;
-    else notStartedFunctionsCount += 1;
+    if (confirmedByAll) learnedFunctionsCount += weight;
+    else if (learnedByAny) inProgressFunctionsCount += weight;
+    else notStartedFunctionsCount += weight;
   });
-  const totalFunctionsCount = allSubmodules.length;
   const donut = {
     learned_pct: totalFunctionsCount ? Math.round((learnedFunctionsCount / totalFunctionsCount) * 100) : 0,
     in_progress_pct: totalFunctionsCount ? Math.round((inProgressFunctionsCount / totalFunctionsCount) * 100) : 0,
@@ -663,18 +687,19 @@ async function getKnowledgeDashboard({ days = 7 } = {}) {
         .filter(event => canonicalModuleName(event.module_name) === moduleName)
         .map(event => ({ key: event.submodule_key }));
 
-    let confirmedPairs = 0;
+    let confirmedWeight = 0;
+    let totalWeight = 0;
     submodules.forEach(submodule => {
+      const weight = actionsCountFor(submodule.key);
       const event = eventBySubmoduleKey.get(String(submodule.key));
-      if (!event) return;
       employees.forEach(employee => {
-        if (progressFor(record, event.id, employee.id).confirmed_at) confirmedPairs += 1;
+        totalWeight += weight;
+        if (event && progressFor(record, event.id, employee.id).confirmed_at) confirmedWeight += weight;
       });
     });
-    const totalPairs = submodules.length * employees.length;
     return {
       module_name: moduleName,
-      percent: totalPairs ? Math.round((confirmedPairs / totalPairs) * 100) : 0
+      percent: totalWeight ? Math.round((confirmedWeight / totalWeight) * 100) : 0
     };
   }).sort((a, b) => b.percent - a.percent);
 
@@ -777,7 +802,13 @@ async function getModuleFunctionsDetail(moduleName) {
   let inProgressTotal = 0;
   let notStartedTotal = 0;
 
-  function buildFunctionRow(submoduleKey, submoduleName, fallbackCreatedAt) {
+  // Ichki "actions" soniga qarab og'irlashtirish (getKnowledgeDashboard'dagi
+  // bilan bir xil qoida) — actions ma'lumoti yo'q bo'lsa kamida 1.
+  function submoduleWeight(sub = {}) {
+    return Array.isArray(sub.actions) && sub.actions.length ? sub.actions.length : 1;
+  }
+
+  function buildFunctionRow(submoduleKey, submoduleName, fallbackCreatedAt, weight = 1) {
     const event = eventBySubmoduleKey.get(String(submoduleKey)) || null;
     const learnedEmployees = [];
     const notLearnedEmployees = [];
@@ -796,9 +827,9 @@ async function getModuleFunctionsDetail(moduleName) {
 
     const confirmedByAll = Boolean(event) && employees.length > 0
       && employees.every(employee => Boolean(progressFor(record, event.id, employee.id).confirmed_at));
-    if (confirmedByAll) learnedTotal += 1;
-    else if (learnedEmployees.length > 0) inProgressTotal += 1;
-    else notStartedTotal += 1;
+    if (confirmedByAll) learnedTotal += weight;
+    else if (learnedEmployees.length > 0) inProgressTotal += weight;
+    else notStartedTotal += weight;
 
     const createdAt = event ? event.created_at : (fallbackCreatedAt || null);
     return {
@@ -812,8 +843,11 @@ async function getModuleFunctionsDetail(moduleName) {
   }
 
   const functions = [
-    ...treeSubmodules.map(sub => buildFunctionRow(sub.key, sub.name || sub.key)),
-    ...extraEvents.map(event => buildFunctionRow(event.submodule_key, event.submodule_name, event.created_at))
+    ...treeSubmodules.map(sub => ({
+      ...buildFunctionRow(sub.key, sub.name || sub.key, null, submoduleWeight(sub)),
+      actions: Array.isArray(sub.actions) ? sub.actions : []
+    })),
+    ...extraEvents.map(event => buildFunctionRow(event.submodule_key, event.submodule_name, event.created_at, 1))
   ].sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
 
   const learnDurations = [];
@@ -831,7 +865,7 @@ async function getModuleFunctionsDetail(moduleName) {
 
   return {
     module_name: moduleName,
-    total_functions: functions.length,
+    total_functions: learnedTotal + inProgressTotal + notStartedTotal,
     learned_total: learnedTotal,
     in_progress_total: inProgressTotal,
     not_started_total: notStartedTotal,
@@ -901,35 +935,67 @@ async function getFunctionsByLearningStatus(status) {
 
   rows.sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
 
+  // Umumiy son ham ichki "actions" soniga qarab og'irlashtiriladi — bosh
+  // sahifadagi KPI kartochkasidagi son bilan bir xil bo'lishi uchun (u ham
+  // shu qoida bilan hisoblanadi).
+  const weightedTotal = rows.reduce((sum, row) => sum + (row.actions.length || 1), 0);
+
   return {
     status,
     title: FUNCTION_STATUS_LABELS[status],
-    total: rows.length,
+    total: weightedTotal,
     functions: rows
   };
 }
 
 async function getEmployeeKnowledgeProfile(employeeId) {
   if (!employeeId) throw new Error('employee_id majburiy');
-  const [employees, record] = await Promise.all([getSupportEmployees(), getNotificationRecord()]);
+  const [employees, record, permissionRecord] = await Promise.all([
+    getSupportEmployees(),
+    getNotificationRecord(),
+    getPermissionView()
+  ]);
   const employee = employees.find(row => String(row.id) === String(employeeId));
   if (!employee) throw new Error('Xodim topilmadi');
   const events = record.events;
 
+  // getKnowledgeDashboard'dagi bilan bir xil — ichki "actions" soniga qarab
+  // og'irlashtirish, dashboarddagi foizlar bilan mos kelishi uchun.
+  const submoduleActionsCountByKey = new Map();
+  (Array.isArray(permissionRecord.modules) ? permissionRecord.modules : []).forEach(module => {
+    (module.submodules || []).forEach(submodule => {
+      const count = Array.isArray(submodule.actions) && submodule.actions.length ? submodule.actions.length : 1;
+      submoduleActionsCountByKey.set(String(submodule.key), count);
+    });
+  });
+  function actionsCountFor(key) {
+    return submoduleActionsCountByKey.get(String(key)) || 1;
+  }
+
   const moduleNames = [...new Set(events.map(event => canonicalModuleName(event.module_name)).filter(Boolean))];
   const modulePercents = moduleNames.map(moduleName => {
     const moduleEvents = events.filter(event => canonicalModuleName(event.module_name) === moduleName);
-    const learnedCount = moduleEvents.filter(event => Boolean(progressFor(record, event.id, employee.id).learned_at)).length;
+    let totalWeight = 0;
+    let learnedWeight = 0;
+    moduleEvents.forEach(event => {
+      const weight = actionsCountFor(event.submodule_key);
+      totalWeight += weight;
+      if (progressFor(record, event.id, employee.id).learned_at) learnedWeight += weight;
+    });
     return {
       module_name: moduleName,
-      percent: moduleEvents.length ? Math.round((learnedCount / moduleEvents.length) * 100) : 0,
+      percent: totalWeight ? Math.round((learnedWeight / totalWeight) * 100) : 0,
       event_count: moduleEvents.length
     };
   });
 
-  const overallPercent = events.length
-    ? Math.round((events.filter(event => Boolean(progressFor(record, event.id, employee.id).learned_at)).length / events.length) * 100)
-    : 0;
+  const overallWeight = events.reduce((acc, event) => {
+    const weight = actionsCountFor(event.submodule_key);
+    acc.total += weight;
+    if (progressFor(record, event.id, employee.id).learned_at) acc.learned += weight;
+    return acc;
+  }, { total: 0, learned: 0 });
+  const overallPercent = overallWeight.total ? Math.round((overallWeight.learned / overallWeight.total) * 100) : 0;
 
   // "Jamoa" uchun alohida ustun yo'q — xodim eng ko'p ishlagan (eng ko'p
   // hodisaga ega) moduli asosida chiqariladi.
@@ -951,11 +1017,15 @@ async function getEmployeeKnowledgeProfile(employeeId) {
   const dailyProgress = progressDays.map(dayKey => {
     const cutoffMs = new Date(`${dayKey}T23:59:59.999Z`).getTime();
     const relevant = events.filter(event => new Date(event.created_at).getTime() <= cutoffMs);
-    const learned = relevant.filter(event => {
+    let totalWeight = 0;
+    let learnedWeight = 0;
+    relevant.forEach(event => {
+      const weight = actionsCountFor(event.submodule_key);
+      totalWeight += weight;
       const progress = progressFor(record, event.id, employee.id);
-      return progress.learned_at && new Date(progress.learned_at).getTime() <= cutoffMs;
-    }).length;
-    return { date: dayKey, percent: relevant.length ? Math.round((learned / relevant.length) * 100) : 0 };
+      if (progress.learned_at && new Date(progress.learned_at).getTime() <= cutoffMs) learnedWeight += weight;
+    });
+    return { date: dayKey, percent: totalWeight ? Math.round((learnedWeight / totalWeight) * 100) : 0 };
   });
 
   const learnedFunctions = [];

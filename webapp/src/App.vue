@@ -1143,32 +1143,43 @@
             <tbody>
               <tr v-for="(fn, index) in moduleFunctionsDetail.functions" :key="fn.event_id">
                 <td>{{ index + 1 }}</td>
-                <td>{{ fn.submodule_name }}</td>
                 <td>
-                  <div style="display:flex; flex-wrap:wrap; gap:8px; max-width:240px;">
-                    <span v-for="person in fn.learned_employees" :key="`learned-${fn.event_id}-${person.id}`"
-                      :title="`${person.full_name} — ${fmtDate(person.learned_at)}`">
-                      <img v-if="employeeAvatarUrl(person)" :src="employeeAvatarUrl(person)" alt=""
-                        style="width:26px; height:26px; border-radius:50%; object-fit:cover; border:2px solid #dcfce7;" />
-                      <span v-else class="profile-avatar"
-                        style="width:26px; height:26px; font-size:10px; background:#dcfce7; color:#16a34a;">{{ initialsFromText(person.full_name) }}</span>
+                  <div>
+                    <span>{{ fn.submodule_name }}</span>
+                    <button v-if="(fn.actions || []).length" type="button" class="uyqur-functions-card-count"
+                      style="border:0; cursor:pointer; margin-left:8px;" @click.stop="toggleFunctionsByStatusExpanded(fn)">
+                      {{ fn.actions.length }}
+                    </button>
+                    <div v-if="isFunctionsByStatusExpanded(fn) && (fn.actions || []).length" class="uyqur-functions-subactions"
+                      style="margin-top:8px; margin-left:0; max-height:200px;">
+                      <div v-for="action in fn.actions" :key="'moduledetail-action-' + fn.event_id + '-' + action.id"
+                        class="uyqur-functions-subaction">{{ action.name || action.key }}</div>
+                    </div>
+                  </div>
+                </td>
+                <td>
+                  <div class="avatar-stack">
+                    <span v-for="person in fn.learned_employees.slice(0, 4)" :key="`learned-${fn.event_id}-${person.id}`"
+                      class="avatar-stack-item" :title="`${person.full_name} — ${fmtDate(person.learned_at)}`">
+                      <img v-if="employeeAvatarUrl(person)" :src="employeeAvatarUrl(person)" alt="" style="border-color:#dcfce7;" />
+                      <span v-else class="profile-avatar" style="background:#dcfce7; color:#16a34a;">{{ initialsFromText(person.full_name) }}</span>
                     </span>
+                    <span v-if="fn.learned_employees.length > 4" class="avatar-stack-more">+{{ fn.learned_employees.length - 4 }}</span>
                     <span v-if="!fn.learned_employees.length" class="empty compact" style="padding:0;">—</span>
                   </div>
                 </td>
                 <td>
-                  <div style="display:flex; flex-wrap:wrap; gap:8px; max-width:240px;">
-                    <span v-for="person in fn.not_learned_employees" :key="`not-learned-${fn.event_id}-${person.id}`"
-                      style="display:flex; flex-direction:column; align-items:center; width:32px;" :title="person.full_name">
-                      <img v-if="employeeAvatarUrl(person)" :src="employeeAvatarUrl(person)" alt=""
-                        style="width:26px; height:26px; border-radius:50%; object-fit:cover; border:2px solid #fee2e2;" />
-                      <span v-else class="profile-avatar"
-                        style="width:26px; height:26px; font-size:10px; background:#fee2e2; color:#dc2626;">{{ initialsFromText(person.full_name) }}</span>
+                  <div class="avatar-stack">
+                    <span v-for="person in fn.not_learned_employees.slice(0, 4)" :key="`not-learned-${fn.event_id}-${person.id}`"
+                      class="avatar-stack-item" :title="person.full_name">
+                      <img v-if="employeeAvatarUrl(person)" :src="employeeAvatarUrl(person)" alt="" style="border-color:#fee2e2;" />
+                      <span v-else class="profile-avatar" style="background:#fee2e2; color:#dc2626;">{{ initialsFromText(person.full_name) }}</span>
                     </span>
+                    <span v-if="fn.not_learned_employees.length > 4" class="avatar-stack-more">+{{ fn.not_learned_employees.length - 4 }}</span>
                     <span v-if="!fn.not_learned_employees.length" class="empty compact" style="padding:0;">—</span>
                   </div>
                 </td>
-                <td>{{ formatDaysAgo(fn.days_since_launch) }}</td>
+                <td><span class="days-pill" :class="{ new: fn.days_since_launch != null && fn.days_since_launch <= 3 }">{{ formatDaysAgo(fn.days_since_launch) }}</span></td>
               </tr>
             </tbody>
           </table>
@@ -12562,6 +12573,7 @@ async function openModuleFunctionsDetail(moduleName) {
   startLoading('moduleFunctionsDetail');
   try {
     moduleFunctionsDetail.value = await api.moduleFunctionsDetail({ module_name: moduleName });
+    functionsByStatusExpanded.value = new Set();
     managementModal.value = 'moduleDetail';
     (moduleFunctionsDetail.value.functions || []).forEach(fn => {
       [...fn.learned_employees, ...fn.not_learned_employees].forEach(person => loadEmployeeAvatar(person));
