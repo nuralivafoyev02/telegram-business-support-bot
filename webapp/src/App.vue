@@ -73,8 +73,8 @@
         </div>
         <span style="flex-shrink:0;">
           <img v-if="managementAvatarUrl" :src="managementAvatarUrl" alt=""
-            style="width:72px; height:72px; border-radius:50%; object-fit:cover; display:block;" />
-          <span v-else class="profile-avatar" style="width:72px; height:72px; border-radius:50%; font-size:24px;">{{ managementInitials }}</span>
+            style="width:50px; height:50px; border-radius:50%; object-fit:cover; display:block;" />
+          <span v-else class="profile-avatar" style="width:50px; height:50px; border-radius:50%; font-size:17px;">{{ managementInitials }}</span>
         </span>
       </header>
 
@@ -937,20 +937,11 @@
           <h1>{{ managementActiveTab === 'functions' ? 'Barcha funksiyalar' : 'Boshqaruv paneli' }}</h1>
         </div>
         <div style="display:flex; align-items:center; gap:16px;">
-          <button type="button" title="Bildirishnomalar" @click="openManagementSupportsList"
-            style="position:relative; border:1px solid var(--line); background:var(--surface); border-radius:50%; width:44px; height:44px; display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0;">
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M6 10.5a6 6 0 0 1 12 0v4l1.6 2.6a1 1 0 0 1-.86 1.5H5.26a1 1 0 0 1-.86-1.5L6 14.5z" />
-              <path d="M9.8 19.6a2.2 2.2 0 0 0 4.4 0" />
-            </svg>
-            <span v-if="managementNotificationCount" class="notif-badge"
-              style="position:absolute; top:-2px; right:-2px;">{{ managementNotificationCount }}</span>
-          </button>
           <button type="button" title="Profilni tahrirlash" @click="openManagementProfile"
             style="border:0; background:transparent; padding:0; cursor:pointer; flex-shrink:0;">
             <img v-if="managementAvatarUrl" :src="managementAvatarUrl" alt=""
-              style="width:72px; height:72px; border-radius:50%; object-fit:cover; display:block;" />
-            <span v-else class="profile-avatar" style="width:72px; height:72px; border-radius:50%; font-size:24px;">{{ managementInitials }}</span>
+              style="width:50px; height:50px; border-radius:50%; object-fit:cover; display:block;" />
+            <span v-else class="profile-avatar" style="width:50px; height:50px; border-radius:50%; font-size:17px;">{{ managementInitials }}</span>
           </button>
         </div>
       </header>
@@ -1046,7 +1037,9 @@
                 <span v-else class="profile-avatar" style="width:30px; height:30px; font-size:12px; flex-shrink:0;">{{ initialsFromText(row.full_name) }}</span>
                 <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; font-size:15px;">{{ row.full_name }}</span>
               </span>
-              <span style="width:70px; text-align:right; flex-shrink:0; font-size:14px; font-weight:600; color:#16a34a; padding-left:12px; border-left:1px solid #f1f5f9; align-self:stretch; display:flex; align-items:center; justify-content:flex-end;">{{ row.learned_count }}</span>
+              <span style="width:70px; text-align:right; flex-shrink:0; font-size:14px; font-weight:600; color:#16a34a; padding-left:12px; border-left:1px solid #f1f5f9; align-self:stretch; display:flex; align-items:center; justify-content:flex-end; cursor:pointer;"
+                title="O‘rganilgan (tasdiqlangan) funksiyalar"
+                @click.stop="openManagementSupportHistory({ id: row.employee_id, full_name: row.full_name }, 'done')">{{ row.learned_count }}</span>
               <span style="width:70px; flex-shrink:0; padding-left:12px; border-left:1px solid #f1f5f9; align-self:stretch; display:flex; align-items:center; justify-content:flex-end; cursor:pointer;"
                 title="Jarayondagi funksiyalar (tasdiqlanmagan)"
                 @click.stop="openManagementSupportHistory({ id: row.employee_id, full_name: row.full_name }, 'pending')">
@@ -1055,7 +1048,9 @@
                   <span v-if="row.in_progress_count" class="notif-badge">{{ row.in_progress_count }}</span>
                 </span>
               </span>
-              <span style="width:80px; text-align:right; flex-shrink:0; font-size:14px; font-weight:600; color:#dc2626; padding-left:12px; border-left:1px solid #f1f5f9; align-self:stretch; display:flex; align-items:center; justify-content:flex-end;">{{ row.not_started_count }}</span>
+              <span style="width:80px; text-align:right; flex-shrink:0; font-size:14px; font-weight:600; color:#dc2626; padding-left:12px; border-left:1px solid #f1f5f9; align-self:stretch; display:flex; align-items:center; justify-content:flex-end; cursor:pointer;"
+                title="Boshlanmagan funksiyalar"
+                @click.stop="openManagementSupportHistory({ id: row.employee_id, full_name: row.full_name }, 'not_started')">{{ row.not_started_count }}</span>
               <span style="width:56px; text-align:right; flex-shrink:0; font-size:14px; font-weight:600; padding-left:12px; border-left:1px solid #f1f5f9; align-self:stretch; display:flex; align-items:center; justify-content:flex-end;">{{ row.percent }}%</span>
               <span style="flex:2; min-width:160px; padding-left:12px; border-left:1px solid #f1f5f9; align-self:stretch; display:flex; align-items:center;">
                 <span style="flex:1; height:8px; border-radius:4px; background:#f1f5f9; overflow:hidden;">
@@ -1331,52 +1326,6 @@
             {{ loadingAction === 'saveManagementProfile' ? 'Saqlanmoqda...' : 'Saqlash' }}
           </button>
         </form>
-      </Modal>
-    </Transition>
-
-    <Transition name="modal-fade">
-      <Modal v-if="managementModal === 'supportsList'" title="Bildirishnomalar — supportlar" wide @close="closeManagementModal">
-        <div class="table-wrap">
-          <table v-if="supportOverview.length">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Support</th>
-                <th>%</th>
-                <th>Bildirishnomalar</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="(row, index) in supportOverview" :key="row.id" class="clickable-row"
-                :class="{ active: selectedSupportId === String(row.id) }" @click="openManagementSupportHistory(row)">
-                <td>{{ index + 1 }}</td>
-                <td>
-                  <span class="employee-cell">
-                    <img v-if="employeeAvatarUrl(row)" class="employee-avatar" :src="employeeAvatarUrl(row)" alt="" />
-                    <span v-else class="employee-avatar fallback">{{ employeeInitials(row) }}</span>
-                    <span>
-                      <b>{{ row.full_name }}</b><br />
-                      <span class="muted">@{{ row.username || '—' }}</span>
-                    </span>
-                  </span>
-                </td>
-                <td>{{ row.percent }}%</td>
-                <td>
-                  <span class="notif-bell" title="Hali tasdiqlanmaganlar" @click.stop="openManagementSupportHistory(row, 'pending')">
-                    🔔
-                    <span v-if="row.unread" class="notif-badge">{{ row.unread }}</span>
-                  </span>
-                  <span class="notif-divider"></span>
-                  <span class="notif-done" title="Tasdiqlanganlar" @click.stop="openManagementSupportHistory(row, 'done')">
-                    ✅
-                    <span v-if="row.confirmed" class="notif-done-badge">{{ row.confirmed }}</span>
-                  </span>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-          <div v-else class="empty">Support xodimlar topilmadi</div>
-        </div>
       </Modal>
     </Transition>
 
@@ -5181,6 +5130,7 @@ const supportHistoryFilter = ref('all');
 const filteredSupportHistoryRows = computed(() => {
   if (supportHistoryFilter.value === 'done') return supportHistoryRows.value.filter(row => row.confirmed);
   if (supportHistoryFilter.value === 'pending') return supportHistoryRows.value.filter(row => row.learned && !row.confirmed);
+  if (supportHistoryFilter.value === 'not_started') return supportHistoryRows.value.filter(row => !row.learned && !row.confirmed);
   return supportHistoryRows.value;
 });
 // Checkbox endi darhol tasdiqlamaydi — avval belgilanadi, keyin "Tasdiqlash"
@@ -12645,14 +12595,6 @@ async function openEmployeeKnowledgeProfile(employeeId) {
 function closeManagementModal() {
   if (managementModal.value === 'supportHistory') closeSupportHistory();
   managementModal.value = '';
-}
-
-const managementNotificationCount = computed(() => supportOverview.value.reduce((sum, row) => sum + (row.unread || 0), 0));
-
-function openManagementSupportsList() {
-  managementMenuOpen.value = false;
-  managementModal.value = 'supportsList';
-  loadSupportOverview().catch(error => showToast(error.message));
 }
 
 async function openManagementSupportHistory(row, filter = 'all') {
