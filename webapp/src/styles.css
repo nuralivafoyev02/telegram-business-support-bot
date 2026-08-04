@@ -4074,9 +4074,10 @@ body {
    mos — har bir ichki action qatorida ham xuddi shu 3 ta bo'lim, chiziq
    bilan ajratilgan holda takrorlanadi. */
 .status-subaction-col {
-  flex: 0 0 auto;
+  flex: 1;
   min-width: 76px;
   padding-left: 12px;
+  padding-right: 12px;
   border-left: 1px solid var(--line);
   display: flex;
   align-items: center;
