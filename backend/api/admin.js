@@ -6640,7 +6640,7 @@ async function handleGet(action, query, session) {
     case 'settings': return listSettings();
     case 'clickupTasks': return listClickUpTasks(query);
     case 'telegramWebhookInfo': return getTelegramWebhookStatus();
-    case 'uyqurPermissions': return getPermissionView();
+    case 'uyqurPermissions': return getPermissionView({ withProgress: true });
     case 'uyqurSupportOverview': return getSupportOverview();
     case 'uyqurSupportHistory': return getSupportEventHistory(query.employee_id);
     case 'uyqurNotificationEvents': return listNotificationEvents();

@@ -226,6 +226,14 @@ async function removePermissionToggleEvents(removedKeys = []) {
 
 async function resetPermissionNotifications() {
   await saveNotificationRecord({ events: [], progress: {} });
+  // Boshqaruv/admin paneldan qo'lda "yuborilgan" deb belgilangan action'lar
+  // holati ham shu bilan birga tozalanadi — aks holda ular yashil (yuborilgan)
+  // bo'lib qolaverardi, submodule darajasidagi progress nolga tushsa ham.
+  await supabase.insert('bot_settings', [{
+    key: PERMISSION_ACTION_SENT_KEY,
+    value: { keys: [] },
+    updated_at: new Date().toISOString()
+  }], { upsert: true, onConflict: 'key', prefer: 'return=minimal' });
   return { ok: true };
 }
 
@@ -478,23 +486,70 @@ async function autoRegisterNewSubmodules(modules = [], previousSelected = []) {
   return nextSelected;
 }
 
-async function getPermissionView() {
+// Modul daraxti keshini "toza" saqlash uchun (o'zi 10 daqiqa keshlanadi),
+// har bir submodule'ga xodimlarning o'rgangan/o'rganmagan holati va chiqqan
+// sanasi bu yerda — HAR SO'ROVDA yangi (kesh ICHIGA yozib qo'yilmaydi) —
+// biriktiriladi. "Uyqur Funksiyalari" boardida har bir ficha (submodule)
+// oldida ko'rsatish uchun ishlatiladi.
+async function attachSubmoduleProgress(modules = []) {
+  const [employees, record] = await Promise.all([getSupportEmployees(), getNotificationRecord()]);
+  const eventBySubmoduleKey = new Map(record.events.map(event => [String(event.submodule_key), event]));
+  const now = Date.now();
+  const dayMs = 24 * 60 * 60 * 1000;
+  return modules.map(module => ({
+    ...module,
+    submodules: (module.submodules || []).map(submodule => {
+      const event = eventBySubmoduleKey.get(String(submodule.key)) || null;
+      const learned_employees = [];
+      const not_learned_employees = [];
+      employees.forEach(employee => {
+        const progress = event ? progressFor(record, event.id, employee.id) : {};
+        const row = {
+          id: employee.id,
+          full_name: employee.full_name || employee.username || 'Xodim',
+          tg_user_id: employee.tg_user_id || null,
+          has_avatar: !!employee.avatar_path,
+          avatar_updated_at: employee.avatar_updated_at || null,
+          learned_at: progress.learned_at || null
+        };
+        if (progress.learned_at) learned_employees.push(row);
+        else not_learned_employees.push(row);
+      });
+      const createdAt = event ? event.created_at : null;
+      return {
+        ...submodule,
+        created_at: createdAt,
+        days_since_launch: createdAt ? Math.floor((now - new Date(createdAt).getTime()) / dayMs) : null,
+        learned_employees,
+        not_learned_employees
+      };
+    })
+  }));
+}
+
+async function getPermissionView({ withProgress = false } = {}) {
   const record = await getPermissionViewRecord();
   const selected = Array.isArray(record.selected) ? record.selected.map(String) : [];
   const sentActionKeys = await getSentActionKeys();
   const cachedAt = record.modules_cached_at ? new Date(record.modules_cached_at).getTime() : 0;
   const cacheFresh = Array.isArray(record.modules) && record.modules.length
     && cachedAt && (Date.now() - cachedAt <= PERMISSION_VIEW_CACHE_TTL_MS);
-  if (cacheFresh) return { modules: record.modules, selected, sentActionKeys, from_cache: true };
+
+  async function finalize(modules, extra = {}) {
+    const finalModules = withProgress ? await attachSubmoduleProgress(modules) : modules;
+    return { modules: finalModules, selected, sentActionKeys, ...extra };
+  }
+
+  if (cacheFresh) return finalize(record.modules, { from_cache: true });
 
   try {
     const modules = await fetchPermissionView();
     await savePermissionViewRecord({ modules, modules_cached_at: new Date().toISOString() });
     const nextSelected = await autoRegisterNewSubmodules(modules, selected);
-    return { modules, selected: nextSelected, sentActionKeys, from_cache: false };
+    return finalize(modules, { selected: nextSelected, from_cache: false });
   } catch (error) {
     if (Array.isArray(record.modules) && record.modules.length) {
-      return { modules: record.modules, selected, sentActionKeys, from_cache: true, stale: true, error: error.message };
+      return finalize(record.modules, { from_cache: true, stale: true, error: error.message });
     }
     throw error;
   }

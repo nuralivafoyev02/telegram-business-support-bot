@@ -585,7 +585,26 @@
                     <div v-if="isSubmoduleActionsExpanded(submodule, module, submoduleIndex) && (submodule.actions || []).length"
                       class="uyqur-functions-subactions">
                       <div v-for="action in submodule.actions" :key="'employee-functions-action-' + action.id"
-                        class="uyqur-functions-subaction" :class="{ sent: isActionSent(action) }">{{ action.name || action.key }}</div>
+                        class="uyqur-functions-subaction status-subaction" :class="{ sent: isActionSent(action) }">
+                        <span class="status-subaction-name">{{ action.name || action.key }}</span>
+                        <div class="avatar-stack">
+                          <span v-for="person in (submodule.learned_employees || []).slice(0, 3)"
+                            :key="'emp-action-learned-' + submodule.id + '-' + action.id + '-' + person.id"
+                            class="avatar-stack-item" :title="`${person.full_name} — o‘rgangan`">
+                            <img v-if="employeeAvatarUrl(person)" :src="employeeAvatarUrl(person)" alt="" style="border-color:#dcfce7;" />
+                            <span v-else class="profile-avatar" style="background:#dcfce7; color:#16a34a;">{{ initialsFromText(person.full_name) }}</span>
+                          </span>
+                          <span v-for="person in (submodule.not_learned_employees || []).slice(0, 3)"
+                            :key="'emp-action-not-learned-' + submodule.id + '-' + action.id + '-' + person.id"
+                            class="avatar-stack-item" :title="`${person.full_name} — o‘rganmagan`">
+                            <img v-if="employeeAvatarUrl(person)" :src="employeeAvatarUrl(person)" alt="" style="border-color:#fee2e2;" />
+                            <span v-else class="profile-avatar" style="background:#fee2e2; color:#dc2626;">{{ initialsFromText(person.full_name) }}</span>
+                          </span>
+                        </div>
+                        <span class="days-pill" :class="{ new: submodule.days_since_launch != null && submodule.days_since_launch <= 3 }">
+                          {{ formatDaysAgo(submodule.days_since_launch) }}
+                        </span>
+                      </div>
                     </div>
                   </template>
                 </div>
@@ -1101,12 +1120,29 @@
                   <div v-if="isSubmoduleActionsExpanded(submodule, module, submoduleIndex) && (submodule.actions || []).length"
                     class="uyqur-functions-subactions">
                     <label v-for="action in submodule.actions" :key="'all-functions-action-' + action.id"
-                      class="uyqur-functions-subaction" :class="{ sent: isActionSent(action) }" @click.stop>
+                      class="uyqur-functions-subaction status-subaction" :class="{ sent: isActionSent(action) }" @click.stop>
                       <input type="checkbox" class="row-check"
                         :checked="isActionSent(action) || isActionSelected(action)"
                         :disabled="isActionSent(action)"
                         @change="toggleActionSelected(action)" />
-                      <span>{{ action.name || action.key }}</span>
+                      <span class="status-subaction-name">{{ action.name || action.key }}</span>
+                      <div class="avatar-stack">
+                        <span v-for="person in (submodule.learned_employees || []).slice(0, 3)"
+                          :key="'mgmt-action-learned-' + submodule.id + '-' + action.id + '-' + person.id"
+                          class="avatar-stack-item" :title="`${person.full_name} — o‘rgangan`">
+                          <img v-if="employeeAvatarUrl(person)" :src="employeeAvatarUrl(person)" alt="" style="border-color:#dcfce7;" />
+                          <span v-else class="profile-avatar" style="background:#dcfce7; color:#16a34a;">{{ initialsFromText(person.full_name) }}</span>
+                        </span>
+                        <span v-for="person in (submodule.not_learned_employees || []).slice(0, 3)"
+                          :key="'mgmt-action-not-learned-' + submodule.id + '-' + action.id + '-' + person.id"
+                          class="avatar-stack-item" :title="`${person.full_name} — o‘rganmagan`">
+                          <img v-if="employeeAvatarUrl(person)" :src="employeeAvatarUrl(person)" alt="" style="border-color:#fee2e2;" />
+                          <span v-else class="profile-avatar" style="background:#fee2e2; color:#dc2626;">{{ initialsFromText(person.full_name) }}</span>
+                        </span>
+                      </div>
+                      <span class="days-pill" :class="{ new: submodule.days_since_launch != null && submodule.days_since_launch <= 3 }">
+                        {{ formatDaysAgo(submodule.days_since_launch) }}
+                      </span>
                     </label>
                   </div>
                 </template>
@@ -1505,10 +1541,6 @@
                   {{ loadingAction === 'mainStats' ? 'Yuborilmoqda...' : 'Statistika yuborish' }}
                 </button>
                 <button type="button" @click="runHeaderAction(openBroadcast)">Umumiy xabar</button>
-                <button v-if="activeTab === 'uyqurPermissions'" class="danger-menu-item" type="button"
-                  :disabled="loadingAction === 'resetNotifications'" @click="runHeaderAction(resetUyqurNotifications)">
-                  {{ loadingAction === 'resetNotifications' ? 'Tozalanmoqda...' : 'Nolga tushirish' }}
-                </button>
                 <label v-if="activeTab === 'stats'" class="theme-menu-row">
                   <span>Davr</span>
                   <select v-model="selectedStatsPeriod" class="select mini-select" @change="handleStatsPeriodChange">
@@ -3080,12 +3112,29 @@
                       <div v-if="isSubmoduleActionsExpanded(submodule, module, submoduleIndex) && (submodule.actions || []).length"
                         class="uyqur-functions-subactions">
                         <label v-for="action in submodule.actions" :key="'settings-action-' + action.id"
-                          class="uyqur-functions-subaction" :class="{ sent: isActionSent(action) }" @click.stop>
+                          class="uyqur-functions-subaction status-subaction" :class="{ sent: isActionSent(action) }" @click.stop>
                           <input type="checkbox" class="row-check"
                             :checked="isActionSent(action) || isActionSelected(action)"
                             :disabled="isActionSent(action)"
                             @change="toggleActionSelected(action)" />
-                          <span>{{ action.name || action.key }}</span>
+                          <span class="status-subaction-name">{{ action.name || action.key }}</span>
+                          <div class="avatar-stack">
+                            <span v-for="person in (submodule.learned_employees || []).slice(0, 3)"
+                              :key="'admin-action-learned-' + submodule.id + '-' + action.id + '-' + person.id"
+                              class="avatar-stack-item" :title="`${person.full_name} — o‘rgangan`">
+                              <img v-if="employeeAvatarUrl(person)" :src="employeeAvatarUrl(person)" alt="" style="border-color:#dcfce7;" />
+                              <span v-else class="profile-avatar" style="background:#dcfce7; color:#16a34a;">{{ initialsFromText(person.full_name) }}</span>
+                            </span>
+                            <span v-for="person in (submodule.not_learned_employees || []).slice(0, 3)"
+                              :key="'admin-action-not-learned-' + submodule.id + '-' + action.id + '-' + person.id"
+                              class="avatar-stack-item" :title="`${person.full_name} — o‘rganmagan`">
+                              <img v-if="employeeAvatarUrl(person)" :src="employeeAvatarUrl(person)" alt="" style="border-color:#fee2e2;" />
+                              <span v-else class="profile-avatar" style="background:#fee2e2; color:#dc2626;">{{ initialsFromText(person.full_name) }}</span>
+                            </span>
+                          </div>
+                          <span class="days-pill" :class="{ new: submodule.days_since_launch != null && submodule.days_since_launch <= 3 }">
+                            {{ formatDaysAgo(submodule.days_since_launch) }}
+                          </span>
                         </label>
                       </div>
                     </template>
@@ -11369,6 +11418,11 @@ async function loadPermissionView() {
   populateSentActionIds(data.sentActionKeys);
   computeDefaultExpandedModules();
   recalcPermissionGroupHeight();
+  permissionModules.value.forEach(module => {
+    (module.submodules || []).forEach(submodule => {
+      [...(submodule.learned_employees || []), ...(submodule.not_learned_employees || [])].forEach(loadEmployeeAvatar);
+    });
+  });
 }
 
 function isPermissionModuleExpanded(module = {}) {
@@ -11403,23 +11457,6 @@ function toggleEmployeeModuleExpanded(module = {}) {
 async function loadSupportOverview() {
   supportOverview.value = await api.uyqurSupportOverview();
   supportOverview.value.forEach(row => loadEmployeeAvatar(row));
-}
-
-async function resetUyqurNotifications() {
-  const ok = window.confirm('Barcha funksiyalar (belgilash) va bildirishnomalar tozalanadi. Davom etasizmi?');
-  if (!ok) return;
-  startLoading('resetNotifications');
-  try {
-    await api.saveUyqurPermissions({ selected: [] });
-    permissionSavedSelected.value = [];
-    await api.resetUyqurNotifications();
-    await Promise.all([loadSupportOverview(), refreshSupportHistoryIfOpen(selectedSupportId.value)]);
-    showToast('Tozalandi');
-  } catch (error) {
-    showToast(error.message);
-  } finally {
-    stopLoading('resetNotifications');
-  }
 }
 
 async function openSupportHistory(row, filter = 'all') {
