@@ -1047,9 +1047,10 @@
                 <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; font-size:15px;">{{ row.full_name }}</span>
               </span>
               <span style="width:70px; text-align:right; flex-shrink:0; font-size:14px; font-weight:600; color:#16a34a; padding-left:12px; border-left:1px solid #f1f5f9; align-self:stretch; display:flex; align-items:center; justify-content:flex-end;">{{ row.learned_count }}</span>
-              <span style="width:70px; flex-shrink:0; padding-left:12px; border-left:1px solid #f1f5f9; align-self:stretch; display:flex; align-items:center; justify-content:flex-end;">
-                <span class="notif-bell" title="Jarayondagi funksiyalar (tasdiqlanmagan)"
-                  @click.stop="openManagementSupportHistory({ id: row.employee_id, full_name: row.full_name }, 'pending')">
+              <span style="width:70px; flex-shrink:0; padding-left:12px; border-left:1px solid #f1f5f9; align-self:stretch; display:flex; align-items:center; justify-content:flex-end; cursor:pointer;"
+                title="Jarayondagi funksiyalar (tasdiqlanmagan)"
+                @click.stop="openManagementSupportHistory({ id: row.employee_id, full_name: row.full_name }, 'pending')">
+                <span class="notif-bell">
                   🔔
                   <span v-if="row.in_progress_count" class="notif-badge">{{ row.in_progress_count }}</span>
                 </span>
@@ -1406,13 +1407,20 @@
                     </span>
                   </td>
                   <td class="select-cell">
-                    <input class="row-check" type="checkbox" :checked="row.confirmed" :disabled="!row.learned"
-                      @change="toggleConfirmed({ ...row, employee_id: selectedSupportId })" />
+                    <input class="row-check" type="checkbox"
+                      :checked="row.confirmed || isSupportHistoryEventSelected(row)" :disabled="!row.learned || row.confirmed"
+                      @change="toggleSupportHistoryEventSelected(row)" />
                   </td>
                 </tr>
               </tbody>
             </table>
             <div v-else class="empty">Bu supportga hali hech narsa yuborilmagan</div>
+          </div>
+          <div style="display:flex; justify-content:flex-end;">
+            <button type="button" class="btn primary" :disabled="!supportHistorySelectedCount || loadingAction === 'confirmSupportHistory'"
+              @click="confirmSelectedSupportHistory">
+              {{ loadingAction === 'confirmSupportHistory' ? 'Tasdiqlanmoqda...' : (supportHistorySelectedCount ? `Tasdiqlash (${supportHistorySelectedCount})` : 'Tasdiqlash') }}
+            </button>
           </div>
         </section>
       </Modal>
@@ -3169,13 +3177,20 @@
                     </span>
                   </td>
                   <td class="select-cell">
-                    <input class="row-check" type="checkbox" :checked="row.confirmed" :disabled="!row.learned"
-                      @change="toggleConfirmed({ ...row, employee_id: selectedSupportId })" />
+                    <input class="row-check" type="checkbox"
+                      :checked="row.confirmed || isSupportHistoryEventSelected(row)" :disabled="!row.learned || row.confirmed"
+                      @change="toggleSupportHistoryEventSelected(row)" />
                   </td>
                 </tr>
               </tbody>
             </table>
             <div v-else class="empty">Bu supportga hali hech narsa yuborilmagan</div>
+          </div>
+          <div style="display:flex; justify-content:flex-end;">
+            <button type="button" class="btn primary" :disabled="!supportHistorySelectedCount || loadingAction === 'confirmSupportHistory'"
+              @click="confirmSelectedSupportHistory">
+              {{ loadingAction === 'confirmSupportHistory' ? 'Tasdiqlanmoqda...' : (supportHistorySelectedCount ? `Tasdiqlash (${supportHistorySelectedCount})` : 'Tasdiqlash') }}
+            </button>
           </div>
         </section>
       </Modal>
@@ -5168,6 +5183,20 @@ const filteredSupportHistoryRows = computed(() => {
   if (supportHistoryFilter.value === 'pending') return supportHistoryRows.value.filter(row => row.learned && !row.confirmed);
   return supportHistoryRows.value;
 });
+// Checkbox endi darhol tasdiqlamaydi — avval belgilanadi, keyin "Tasdiqlash"
+// tugmasi bosilganda BARCHA belgilangan qatorlar birdaniga tasdiqlanadi.
+const supportHistorySelectedEvents = ref(new Set());
+function isSupportHistoryEventSelected(row = {}) {
+  return supportHistorySelectedEvents.value.has(row.event_id);
+}
+function toggleSupportHistoryEventSelected(row = {}) {
+  if (!row.learned || row.confirmed) return;
+  const next = new Set(supportHistorySelectedEvents.value);
+  if (next.has(row.event_id)) next.delete(row.event_id);
+  else next.add(row.event_id);
+  supportHistorySelectedEvents.value = next;
+}
+const supportHistorySelectedCount = computed(() => supportHistorySelectedEvents.value.size);
 const companyInfo = ref({ summary: {}, companies: [], fetched_at: '', source: '' });
 const companyModuleReports = ref({ companies: [], report_dates: [], period: 'all' });
 const companyModuleChartSource = ref({ period: 'week', daily_companies: [], report_dates: [] });
@@ -11399,6 +11428,7 @@ async function openSupportHistory(row, filter = 'all') {
   selectedSupportId.value = String(row.id);
   selectedSupportName.value = row.full_name || 'Support';
   supportHistoryFilter.value = filter;
+  supportHistorySelectedEvents.value = new Set();
   modal.value = 'supportHistory';
   try {
     supportHistoryRows.value = await api.uyqurSupportHistory({ employee_id: row.id });
@@ -11412,6 +11442,7 @@ function closeSupportHistory() {
   selectedSupportName.value = '';
   supportHistoryRows.value = [];
   supportHistoryFilter.value = 'all';
+  supportHistorySelectedEvents.value = new Set();
 }
 
 async function refreshSupportHistoryIfOpen(employeeId) {
@@ -11525,6 +11556,31 @@ async function toggleConfirmed(row) {
     ]);
   } catch (error) {
     showToast(error.message);
+  }
+}
+
+async function confirmSelectedSupportHistory() {
+  if (!supportHistorySelectedEvents.value.size || !selectedSupportId.value) return;
+  startLoading('confirmSupportHistory');
+  try {
+    const eventIds = Array.from(supportHistorySelectedEvents.value);
+    await Promise.all(eventIds.map(eventId => api.confirmUyqurReview({
+      event_id: eventId,
+      employee_id: selectedSupportId.value,
+      confirmed: true,
+      manager_username: ''
+    })));
+    supportHistorySelectedEvents.value = new Set();
+    await Promise.all([
+      loadSupportOverview(),
+      refreshSupportHistoryIfOpen(selectedSupportId.value),
+      refreshKnowledgeDashboardIfLoaded()
+    ]);
+    showToast('Tasdiqlandi');
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    stopLoading('confirmSupportHistory');
   }
 }
 
@@ -12603,6 +12659,7 @@ async function openManagementSupportHistory(row, filter = 'all') {
   selectedSupportId.value = String(row.id);
   selectedSupportName.value = row.full_name || 'Support';
   supportHistoryFilter.value = filter;
+  supportHistorySelectedEvents.value = new Set();
   managementModal.value = 'supportHistory';
   try {
     supportHistoryRows.value = await api.uyqurSupportHistory({ employee_id: row.id });
