@@ -1189,6 +1189,20 @@
         @close="closeManagementModal">
         <DataTable :columns="functionsByStatusColumns" :rows="functionsByStatus.functions" :page-size="15"
           empty="Funksiya topilmadi">
+          <template #submoduleName="{ row }">
+            <div>
+              <span>{{ row.submodule_name }}</span>
+              <button v-if="(row.actions || []).length" type="button" class="uyqur-functions-card-count"
+                style="border:0; cursor:pointer; margin-left:8px;" @click.stop="toggleFunctionsByStatusExpanded(row)">
+                {{ row.actions.length }}
+              </button>
+              <div v-if="isFunctionsByStatusExpanded(row) && (row.actions || []).length" class="uyqur-functions-subactions"
+                style="margin-top:8px; margin-left:0; max-height:200px;">
+                <div v-for="action in row.actions" :key="'status-action-' + row.event_id + '-' + action.id"
+                  class="uyqur-functions-subaction">{{ action.name || action.key }}</div>
+              </div>
+            </div>
+          </template>
           <template #learnedEmployees="{ row }">
             <div style="display:flex; flex-wrap:wrap; gap:8px; max-width:240px;">
               <span v-for="person in row.learned_employees" :key="`byStatus-learned-${row.event_id}-${person.id}`"
@@ -4969,9 +4983,19 @@ const managementSidebarExpanded = ref(false);
 const adminSidebarExpanded = ref(false);
 const moduleFunctionsDetail = ref(null);
 const functionsByStatus = ref(null);
+const functionsByStatusExpanded = ref(new Set());
+function isFunctionsByStatusExpanded(row = {}) {
+  return functionsByStatusExpanded.value.has(row.event_id);
+}
+function toggleFunctionsByStatusExpanded(row = {}) {
+  const next = new Set(functionsByStatusExpanded.value);
+  if (next.has(row.event_id)) next.delete(row.event_id);
+  else next.add(row.event_id);
+  functionsByStatusExpanded.value = next;
+}
 const functionsByStatusColumns = [
   { key: 'module_name', label: 'Modul' },
-  { key: 'submodule_name', label: 'Funksiya nomi' },
+  { key: 'submodule_name', label: 'Funksiya nomi', slot: 'submoduleName' },
   { key: 'created_at', label: 'Chiqqan sana', format: fmtDate },
   { key: 'learned_employees', label: 'O‘rgangan xodimlar', slot: 'learnedEmployees' },
   { key: 'not_learned_employees', label: 'O‘rganmagan xodimlar', slot: 'notLearnedEmployees' },
@@ -12537,6 +12561,7 @@ async function openFunctionsByStatus(status) {
   startLoading('functionsByStatus');
   try {
     functionsByStatus.value = await api.functionsByStatus(status);
+    functionsByStatusExpanded.value = new Set();
     managementModal.value = 'functionsByStatus';
     (functionsByStatus.value.functions || []).forEach(fn => {
       [...fn.learned_employees, ...fn.not_learned_employees].forEach(person => loadEmployeeAvatar(person));

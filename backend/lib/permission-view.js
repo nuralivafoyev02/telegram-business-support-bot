@@ -893,7 +893,8 @@ async function getFunctionsByLearningStatus(status) {
         created_at: createdAt,
         days_since_launch: createdAt ? Math.floor((now - new Date(createdAt).getTime()) / DAY_MS) : null,
         learned_employees: learnedEmployees,
-        not_learned_employees: notLearnedEmployees
+        not_learned_employees: notLearnedEmployees,
+        actions: Array.isArray(submodule.actions) ? submodule.actions : []
       });
     });
   });
