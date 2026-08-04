@@ -1034,7 +1034,7 @@
               <span style="width:70px; text-align:right; flex-shrink:0; padding-left:12px; border-left:1px solid #e5e7eb;">Jarayonda</span>
               <span style="width:80px; text-align:right; flex-shrink:0; padding-left:12px; border-left:1px solid #e5e7eb;">Boshlamagan</span>
               <span style="width:56px; text-align:right; flex-shrink:0; padding-left:12px; border-left:1px solid #e5e7eb;">Daraja</span>
-              <span style="width:120px; flex-shrink:0; padding-left:12px; border-left:1px solid #e5e7eb;">Progress</span>
+              <span style="flex:2; min-width:160px; padding-left:12px; border-left:1px solid #e5e7eb;">Progress</span>
             </div>
             <div v-for="(row, index) in knowledgeDashboard.employee_ranking" :key="row.employee_id"
               style="display:flex; align-items:center; gap:8px; padding:10px 0; border-bottom:1px solid #f8fafc; cursor:pointer;"
@@ -1050,7 +1050,7 @@
               <span style="width:70px; text-align:right; flex-shrink:0; font-size:14px; font-weight:600; color:#f59e0b; padding-left:12px; border-left:1px solid #f1f5f9; align-self:stretch; display:flex; align-items:center; justify-content:flex-end;">{{ row.in_progress_count }}</span>
               <span style="width:80px; text-align:right; flex-shrink:0; font-size:14px; font-weight:600; color:#dc2626; padding-left:12px; border-left:1px solid #f1f5f9; align-self:stretch; display:flex; align-items:center; justify-content:flex-end;">{{ row.not_started_count }}</span>
               <span style="width:56px; text-align:right; flex-shrink:0; font-size:14px; font-weight:600; padding-left:12px; border-left:1px solid #f1f5f9; align-self:stretch; display:flex; align-items:center; justify-content:flex-end;">{{ row.percent }}%</span>
-              <span style="width:120px; flex-shrink:0; padding-left:12px; border-left:1px solid #f1f5f9; align-self:stretch; display:flex; align-items:center;">
+              <span style="flex:2; min-width:160px; padding-left:12px; border-left:1px solid #f1f5f9; align-self:stretch; display:flex; align-items:center;">
                 <span style="flex:1; height:8px; border-radius:4px; background:#f1f5f9; overflow:hidden;">
                   <span :style="{ display: 'block', width: row.percent + '%', height: '100%', borderRadius: '4px', background: row.percent >= 70 ? '#16a34a' : (row.percent >= 40 ? '#f59e0b' : '#dc2626') }"></span>
                 </span>
