@@ -4014,6 +4014,42 @@ body {
   color: #b45309;
 }
 
+/* Har bir ustunni ajratib turadigan chiziq — "Jarayondagi/O'rganilgan/
+   Boshlanmagan funksiyalar" va modul-detail jadvallarida. */
+.status-functions-table th,
+.status-functions-table td {
+  border-right: 1px solid var(--line);
+}
+
+.status-functions-table th:last-child,
+.status-functions-table td:last-child {
+  border-right: 0;
+}
+
+.submodule-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.submodule-name-row.clickable {
+  cursor: pointer;
+}
+
+/* Ochilgandan keyingi ichki action qatorlarida ham o'rgangan/o'rganmagan
+   xodimlarning profil rasmlari ko'rinib tursin. */
+.status-subaction {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.status-subaction-name {
+  flex: 1;
+  min-width: 0;
+}
+
 .manager-panel-lock {
   max-width: 320px;
 }

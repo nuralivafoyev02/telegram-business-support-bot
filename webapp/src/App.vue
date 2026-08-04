@@ -1130,7 +1130,7 @@
           <div><span>Boshlanmagan fichalar</span><b style="color:#dc2626;">{{ fmtNumber(moduleFunctionsDetail.not_started_total) }}</b></div>
         </div>
         <div class="table-wrap">
-          <table>
+          <table class="status-functions-table">
             <thead>
               <tr>
                 <th>#</th>
@@ -1145,15 +1145,28 @@
                 <td>{{ index + 1 }}</td>
                 <td>
                   <div>
-                    <span>{{ fn.submodule_name }}</span>
-                    <button v-if="(fn.actions || []).length" type="button" class="uyqur-functions-card-count"
-                      style="border:0; cursor:pointer; margin-left:8px;" @click.stop="toggleFunctionsByStatusExpanded(fn)">
-                      {{ fn.actions.length }}
-                    </button>
-                    <div v-if="isFunctionsByStatusExpanded(fn) && (fn.actions || []).length" class="uyqur-functions-subactions"
-                      style="margin-top:8px; margin-left:0; max-height:200px;">
+                    <div class="submodule-name-row" :class="{ clickable: (fn.actions || []).length }"
+                      @click="(fn.actions || []).length && toggleFunctionsByStatusExpanded(fn)">
+                      <span>{{ fn.submodule_name }}</span>
+                      <span v-if="(fn.actions || []).length" class="uyqur-functions-card-count">{{ fn.actions.length }}</span>
+                    </div>
+                    <div v-if="isFunctionsByStatusExpanded(fn) && (fn.actions || []).length" class="uyqur-functions-subactions status-subactions">
                       <div v-for="action in fn.actions" :key="'moduledetail-action-' + fn.event_id + '-' + action.id"
-                        class="uyqur-functions-subaction">{{ action.name || action.key }}</div>
+                        class="uyqur-functions-subaction status-subaction">
+                        <span class="status-subaction-name">{{ action.name || action.key }}</span>
+                        <div class="avatar-stack">
+                          <span v-for="person in fn.learned_employees.slice(0, 4)" :key="`moduledetail-action-learned-${fn.event_id}-${action.id}-${person.id}`"
+                            class="avatar-stack-item" :title="`${person.full_name} — o‘rgangan`">
+                            <img v-if="employeeAvatarUrl(person)" :src="employeeAvatarUrl(person)" alt="" style="border-color:#dcfce7;" />
+                            <span v-else class="profile-avatar" style="background:#dcfce7; color:#16a34a;">{{ initialsFromText(person.full_name) }}</span>
+                          </span>
+                          <span v-for="person in fn.not_learned_employees.slice(0, 4)" :key="`moduledetail-action-not-learned-${fn.event_id}-${action.id}-${person.id}`"
+                            class="avatar-stack-item" :title="`${person.full_name} — o‘rganmagan`">
+                            <img v-if="employeeAvatarUrl(person)" :src="employeeAvatarUrl(person)" alt="" style="border-color:#fee2e2;" />
+                            <span v-else class="profile-avatar" style="background:#fee2e2; color:#dc2626;">{{ initialsFromText(person.full_name) }}</span>
+                          </span>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </td>
@@ -1204,15 +1217,28 @@
           </template>
           <template #submoduleName="{ row }">
             <div>
-              <span>{{ row.submodule_name }}</span>
-              <button v-if="(row.actions || []).length" type="button" class="uyqur-functions-card-count"
-                style="border:0; cursor:pointer; margin-left:8px;" @click.stop="toggleFunctionsByStatusExpanded(row)">
-                {{ row.actions.length }}
-              </button>
-              <div v-if="isFunctionsByStatusExpanded(row) && (row.actions || []).length" class="uyqur-functions-subactions"
-                style="margin-top:8px; margin-left:0; max-height:200px;">
+              <div class="submodule-name-row" :class="{ clickable: (row.actions || []).length }"
+                @click="(row.actions || []).length && toggleFunctionsByStatusExpanded(row)">
+                <span>{{ row.submodule_name }}</span>
+                <span v-if="(row.actions || []).length" class="uyqur-functions-card-count">{{ row.actions.length }}</span>
+              </div>
+              <div v-if="isFunctionsByStatusExpanded(row) && (row.actions || []).length" class="uyqur-functions-subactions status-subactions">
                 <div v-for="action in row.actions" :key="'status-action-' + row.event_id + '-' + action.id"
-                  class="uyqur-functions-subaction">{{ action.name || action.key }}</div>
+                  class="uyqur-functions-subaction status-subaction">
+                  <span class="status-subaction-name">{{ action.name || action.key }}</span>
+                  <div class="avatar-stack">
+                    <span v-for="person in row.learned_employees.slice(0, 4)" :key="`status-action-learned-${row.event_id}-${action.id}-${person.id}`"
+                      class="avatar-stack-item" :title="`${person.full_name} — o‘rgangan`">
+                      <img v-if="employeeAvatarUrl(person)" :src="employeeAvatarUrl(person)" alt="" style="border-color:#dcfce7;" />
+                      <span v-else class="profile-avatar" style="background:#dcfce7; color:#16a34a;">{{ initialsFromText(person.full_name) }}</span>
+                    </span>
+                    <span v-for="person in row.not_learned_employees.slice(0, 4)" :key="`status-action-not-learned-${row.event_id}-${action.id}-${person.id}`"
+                      class="avatar-stack-item" :title="`${person.full_name} — o‘rganmagan`">
+                      <img v-if="employeeAvatarUrl(person)" :src="employeeAvatarUrl(person)" alt="" style="border-color:#fee2e2;" />
+                      <span v-else class="profile-avatar" style="background:#fee2e2; color:#dc2626;">{{ initialsFromText(person.full_name) }}</span>
+                    </span>
+                  </div>
+                </div>
               </div>
             </div>
           </template>
