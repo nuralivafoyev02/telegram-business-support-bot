@@ -860,6 +860,12 @@ tbody tr:hover {
   font-weight: 700;
 }
 
+.settings-layout .label {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 700;
+}
+
 .input,
 .textarea,
 .select {
