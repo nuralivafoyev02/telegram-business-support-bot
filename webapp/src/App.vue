@@ -587,23 +587,33 @@
                       <div v-for="action in submodule.actions" :key="'employee-functions-action-' + action.id"
                         class="uyqur-functions-subaction status-subaction" :class="{ sent: isActionSent(action) }">
                         <span class="status-subaction-name">{{ action.name || action.key }}</span>
-                        <div class="avatar-stack">
-                          <span v-for="person in (submodule.learned_employees || []).slice(0, 3)"
-                            :key="'emp-action-learned-' + submodule.id + '-' + action.id + '-' + person.id"
-                            class="avatar-stack-item" :title="`${person.full_name} — o‘rgangan`">
-                            <img v-if="employeeAvatarUrl(person)" :src="employeeAvatarUrl(person)" alt="" style="border-color:#dcfce7;" />
-                            <span v-else class="profile-avatar" style="background:#dcfce7; color:#16a34a;">{{ initialsFromText(person.full_name) }}</span>
-                          </span>
-                          <span v-for="person in (submodule.not_learned_employees || []).slice(0, 3)"
-                            :key="'emp-action-not-learned-' + submodule.id + '-' + action.id + '-' + person.id"
-                            class="avatar-stack-item" :title="`${person.full_name} — o‘rganmagan`">
-                            <img v-if="employeeAvatarUrl(person)" :src="employeeAvatarUrl(person)" alt="" style="border-color:#fee2e2;" />
-                            <span v-else class="profile-avatar" style="background:#fee2e2; color:#dc2626;">{{ initialsFromText(person.full_name) }}</span>
+                        <div class="status-subaction-col">
+                          <div class="avatar-stack">
+                            <span v-for="person in (submodule.learned_employees || []).slice(0, 3)"
+                              :key="'emp-action-learned-' + submodule.id + '-' + action.id + '-' + person.id"
+                              class="avatar-stack-item" :title="`${person.full_name} — o‘rgangan`">
+                              <img v-if="employeeAvatarUrl(person)" :src="employeeAvatarUrl(person)" alt="" style="border-color:#dcfce7;" />
+                              <span v-else class="profile-avatar" style="background:#dcfce7; color:#16a34a;">{{ initialsFromText(person.full_name) }}</span>
+                            </span>
+                            <span v-if="!(submodule.learned_employees || []).length" class="empty compact" style="padding:0;">—</span>
+                          </div>
+                        </div>
+                        <div class="status-subaction-col">
+                          <div class="avatar-stack">
+                            <span v-for="person in (submodule.not_learned_employees || []).slice(0, 3)"
+                              :key="'emp-action-not-learned-' + submodule.id + '-' + action.id + '-' + person.id"
+                              class="avatar-stack-item" :title="`${person.full_name} — o‘rganmagan`">
+                              <img v-if="employeeAvatarUrl(person)" :src="employeeAvatarUrl(person)" alt="" style="border-color:#fee2e2;" />
+                              <span v-else class="profile-avatar" style="background:#fee2e2; color:#dc2626;">{{ initialsFromText(person.full_name) }}</span>
+                            </span>
+                            <span v-if="!(submodule.not_learned_employees || []).length" class="empty compact" style="padding:0;">—</span>
+                          </div>
+                        </div>
+                        <div class="status-subaction-col">
+                          <span class="days-pill" :class="{ new: submodule.days_since_launch != null && submodule.days_since_launch <= 3 }">
+                            {{ formatDaysAgo(submodule.days_since_launch) }}
                           </span>
                         </div>
-                        <span class="days-pill" :class="{ new: submodule.days_since_launch != null && submodule.days_since_launch <= 3 }">
-                          {{ formatDaysAgo(submodule.days_since_launch) }}
-                        </span>
                       </div>
                     </div>
                   </template>
@@ -1126,23 +1136,33 @@
                         :disabled="isActionSent(action)"
                         @change="toggleActionSelected(action)" />
                       <span class="status-subaction-name">{{ action.name || action.key }}</span>
-                      <div class="avatar-stack">
-                        <span v-for="person in (submodule.learned_employees || []).slice(0, 3)"
-                          :key="'mgmt-action-learned-' + submodule.id + '-' + action.id + '-' + person.id"
-                          class="avatar-stack-item" :title="`${person.full_name} — o‘rgangan`">
-                          <img v-if="employeeAvatarUrl(person)" :src="employeeAvatarUrl(person)" alt="" style="border-color:#dcfce7;" />
-                          <span v-else class="profile-avatar" style="background:#dcfce7; color:#16a34a;">{{ initialsFromText(person.full_name) }}</span>
-                        </span>
-                        <span v-for="person in (submodule.not_learned_employees || []).slice(0, 3)"
-                          :key="'mgmt-action-not-learned-' + submodule.id + '-' + action.id + '-' + person.id"
-                          class="avatar-stack-item" :title="`${person.full_name} — o‘rganmagan`">
-                          <img v-if="employeeAvatarUrl(person)" :src="employeeAvatarUrl(person)" alt="" style="border-color:#fee2e2;" />
-                          <span v-else class="profile-avatar" style="background:#fee2e2; color:#dc2626;">{{ initialsFromText(person.full_name) }}</span>
+                      <div class="status-subaction-col">
+                        <div class="avatar-stack">
+                          <span v-for="person in (submodule.learned_employees || []).slice(0, 3)"
+                            :key="'mgmt-action-learned-' + submodule.id + '-' + action.id + '-' + person.id"
+                            class="avatar-stack-item" :title="`${person.full_name} — o‘rgangan`">
+                            <img v-if="employeeAvatarUrl(person)" :src="employeeAvatarUrl(person)" alt="" style="border-color:#dcfce7;" />
+                            <span v-else class="profile-avatar" style="background:#dcfce7; color:#16a34a;">{{ initialsFromText(person.full_name) }}</span>
+                          </span>
+                          <span v-if="!(submodule.learned_employees || []).length" class="empty compact" style="padding:0;">—</span>
+                        </div>
+                      </div>
+                      <div class="status-subaction-col">
+                        <div class="avatar-stack">
+                          <span v-for="person in (submodule.not_learned_employees || []).slice(0, 3)"
+                            :key="'mgmt-action-not-learned-' + submodule.id + '-' + action.id + '-' + person.id"
+                            class="avatar-stack-item" :title="`${person.full_name} — o‘rganmagan`">
+                            <img v-if="employeeAvatarUrl(person)" :src="employeeAvatarUrl(person)" alt="" style="border-color:#fee2e2;" />
+                            <span v-else class="profile-avatar" style="background:#fee2e2; color:#dc2626;">{{ initialsFromText(person.full_name) }}</span>
+                          </span>
+                          <span v-if="!(submodule.not_learned_employees || []).length" class="empty compact" style="padding:0;">—</span>
+                        </div>
+                      </div>
+                      <div class="status-subaction-col">
+                        <span class="days-pill" :class="{ new: submodule.days_since_launch != null && submodule.days_since_launch <= 3 }">
+                          {{ formatDaysAgo(submodule.days_since_launch) }}
                         </span>
                       </div>
-                      <span class="days-pill" :class="{ new: submodule.days_since_launch != null && submodule.days_since_launch <= 3 }">
-                        {{ formatDaysAgo(submodule.days_since_launch) }}
-                      </span>
                     </label>
                   </div>
                 </template>
@@ -1190,16 +1210,29 @@
                       <div v-for="action in fn.actions" :key="'moduledetail-action-' + fn.event_id + '-' + action.id"
                         class="uyqur-functions-subaction status-subaction">
                         <span class="status-subaction-name">{{ action.name || action.key }}</span>
-                        <div class="avatar-stack">
-                          <span v-for="person in fn.learned_employees.slice(0, 4)" :key="`moduledetail-action-learned-${fn.event_id}-${action.id}-${person.id}`"
-                            class="avatar-stack-item" :title="`${person.full_name} — o‘rgangan`">
-                            <img v-if="employeeAvatarUrl(person)" :src="employeeAvatarUrl(person)" alt="" style="border-color:#dcfce7;" />
-                            <span v-else class="profile-avatar" style="background:#dcfce7; color:#16a34a;">{{ initialsFromText(person.full_name) }}</span>
-                          </span>
-                          <span v-for="person in fn.not_learned_employees.slice(0, 4)" :key="`moduledetail-action-not-learned-${fn.event_id}-${action.id}-${person.id}`"
-                            class="avatar-stack-item" :title="`${person.full_name} — o‘rganmagan`">
-                            <img v-if="employeeAvatarUrl(person)" :src="employeeAvatarUrl(person)" alt="" style="border-color:#fee2e2;" />
-                            <span v-else class="profile-avatar" style="background:#fee2e2; color:#dc2626;">{{ initialsFromText(person.full_name) }}</span>
+                        <div class="status-subaction-col">
+                          <div class="avatar-stack">
+                            <span v-for="person in fn.learned_employees.slice(0, 4)" :key="`moduledetail-action-learned-${fn.event_id}-${action.id}-${person.id}`"
+                              class="avatar-stack-item" :title="`${person.full_name} — o‘rgangan`">
+                              <img v-if="employeeAvatarUrl(person)" :src="employeeAvatarUrl(person)" alt="" style="border-color:#dcfce7;" />
+                              <span v-else class="profile-avatar" style="background:#dcfce7; color:#16a34a;">{{ initialsFromText(person.full_name) }}</span>
+                            </span>
+                            <span v-if="!fn.learned_employees.length" class="empty compact" style="padding:0;">—</span>
+                          </div>
+                        </div>
+                        <div class="status-subaction-col">
+                          <div class="avatar-stack">
+                            <span v-for="person in fn.not_learned_employees.slice(0, 4)" :key="`moduledetail-action-not-learned-${fn.event_id}-${action.id}-${person.id}`"
+                              class="avatar-stack-item" :title="`${person.full_name} — o‘rganmagan`">
+                              <img v-if="employeeAvatarUrl(person)" :src="employeeAvatarUrl(person)" alt="" style="border-color:#fee2e2;" />
+                              <span v-else class="profile-avatar" style="background:#fee2e2; color:#dc2626;">{{ initialsFromText(person.full_name) }}</span>
+                            </span>
+                            <span v-if="!fn.not_learned_employees.length" class="empty compact" style="padding:0;">—</span>
+                          </div>
+                        </div>
+                        <div class="status-subaction-col">
+                          <span class="days-pill" :class="{ new: fn.days_since_launch != null && fn.days_since_launch <= 3 }">
+                            {{ fn.days_since_launch != null ? `${fn.days_since_launch} kun` : '—' }}
                           </span>
                         </div>
                       </div>
@@ -1262,16 +1295,29 @@
                 <div v-for="action in row.actions" :key="'status-action-' + row.event_id + '-' + action.id"
                   class="uyqur-functions-subaction status-subaction">
                   <span class="status-subaction-name">{{ action.name || action.key }}</span>
-                  <div class="avatar-stack">
-                    <span v-for="person in row.learned_employees.slice(0, 4)" :key="`status-action-learned-${row.event_id}-${action.id}-${person.id}`"
-                      class="avatar-stack-item" :title="`${person.full_name} — o‘rgangan`">
-                      <img v-if="employeeAvatarUrl(person)" :src="employeeAvatarUrl(person)" alt="" style="border-color:#dcfce7;" />
-                      <span v-else class="profile-avatar" style="background:#dcfce7; color:#16a34a;">{{ initialsFromText(person.full_name) }}</span>
-                    </span>
-                    <span v-for="person in row.not_learned_employees.slice(0, 4)" :key="`status-action-not-learned-${row.event_id}-${action.id}-${person.id}`"
-                      class="avatar-stack-item" :title="`${person.full_name} — o‘rganmagan`">
-                      <img v-if="employeeAvatarUrl(person)" :src="employeeAvatarUrl(person)" alt="" style="border-color:#fee2e2;" />
-                      <span v-else class="profile-avatar" style="background:#fee2e2; color:#dc2626;">{{ initialsFromText(person.full_name) }}</span>
+                  <div class="status-subaction-col">
+                    <div class="avatar-stack">
+                      <span v-for="person in row.learned_employees.slice(0, 4)" :key="`status-action-learned-${row.event_id}-${action.id}-${person.id}`"
+                        class="avatar-stack-item" :title="`${person.full_name} — o‘rgangan`">
+                        <img v-if="employeeAvatarUrl(person)" :src="employeeAvatarUrl(person)" alt="" style="border-color:#dcfce7;" />
+                        <span v-else class="profile-avatar" style="background:#dcfce7; color:#16a34a;">{{ initialsFromText(person.full_name) }}</span>
+                      </span>
+                      <span v-if="!row.learned_employees.length" class="empty compact" style="padding:0;">—</span>
+                    </div>
+                  </div>
+                  <div class="status-subaction-col">
+                    <div class="avatar-stack">
+                      <span v-for="person in row.not_learned_employees.slice(0, 4)" :key="`status-action-not-learned-${row.event_id}-${action.id}-${person.id}`"
+                        class="avatar-stack-item" :title="`${person.full_name} — o‘rganmagan`">
+                        <img v-if="employeeAvatarUrl(person)" :src="employeeAvatarUrl(person)" alt="" style="border-color:#fee2e2;" />
+                        <span v-else class="profile-avatar" style="background:#fee2e2; color:#dc2626;">{{ initialsFromText(person.full_name) }}</span>
+                      </span>
+                      <span v-if="!row.not_learned_employees.length" class="empty compact" style="padding:0;">—</span>
+                    </div>
+                  </div>
+                  <div class="status-subaction-col">
+                    <span class="days-pill" :class="{ new: row.days_since_launch != null && row.days_since_launch <= 3 }">
+                      {{ row.days_since_launch != null ? `${row.days_since_launch} kun` : '—' }}
                     </span>
                   </div>
                 </div>
@@ -3118,23 +3164,33 @@
                             :disabled="isActionSent(action)"
                             @change="toggleActionSelected(action)" />
                           <span class="status-subaction-name">{{ action.name || action.key }}</span>
-                          <div class="avatar-stack">
-                            <span v-for="person in (submodule.learned_employees || []).slice(0, 3)"
-                              :key="'admin-action-learned-' + submodule.id + '-' + action.id + '-' + person.id"
-                              class="avatar-stack-item" :title="`${person.full_name} — o‘rgangan`">
-                              <img v-if="employeeAvatarUrl(person)" :src="employeeAvatarUrl(person)" alt="" style="border-color:#dcfce7;" />
-                              <span v-else class="profile-avatar" style="background:#dcfce7; color:#16a34a;">{{ initialsFromText(person.full_name) }}</span>
-                            </span>
-                            <span v-for="person in (submodule.not_learned_employees || []).slice(0, 3)"
-                              :key="'admin-action-not-learned-' + submodule.id + '-' + action.id + '-' + person.id"
-                              class="avatar-stack-item" :title="`${person.full_name} — o‘rganmagan`">
-                              <img v-if="employeeAvatarUrl(person)" :src="employeeAvatarUrl(person)" alt="" style="border-color:#fee2e2;" />
-                              <span v-else class="profile-avatar" style="background:#fee2e2; color:#dc2626;">{{ initialsFromText(person.full_name) }}</span>
+                          <div class="status-subaction-col">
+                            <div class="avatar-stack">
+                              <span v-for="person in (submodule.learned_employees || []).slice(0, 3)"
+                                :key="'admin-action-learned-' + submodule.id + '-' + action.id + '-' + person.id"
+                                class="avatar-stack-item" :title="`${person.full_name} — o‘rgangan`">
+                                <img v-if="employeeAvatarUrl(person)" :src="employeeAvatarUrl(person)" alt="" style="border-color:#dcfce7;" />
+                                <span v-else class="profile-avatar" style="background:#dcfce7; color:#16a34a;">{{ initialsFromText(person.full_name) }}</span>
+                              </span>
+                              <span v-if="!(submodule.learned_employees || []).length" class="empty compact" style="padding:0;">—</span>
+                            </div>
+                          </div>
+                          <div class="status-subaction-col">
+                            <div class="avatar-stack">
+                              <span v-for="person in (submodule.not_learned_employees || []).slice(0, 3)"
+                                :key="'admin-action-not-learned-' + submodule.id + '-' + action.id + '-' + person.id"
+                                class="avatar-stack-item" :title="`${person.full_name} — o‘rganmagan`">
+                                <img v-if="employeeAvatarUrl(person)" :src="employeeAvatarUrl(person)" alt="" style="border-color:#fee2e2;" />
+                                <span v-else class="profile-avatar" style="background:#fee2e2; color:#dc2626;">{{ initialsFromText(person.full_name) }}</span>
+                              </span>
+                              <span v-if="!(submodule.not_learned_employees || []).length" class="empty compact" style="padding:0;">—</span>
+                            </div>
+                          </div>
+                          <div class="status-subaction-col">
+                            <span class="days-pill" :class="{ new: submodule.days_since_launch != null && submodule.days_since_launch <= 3 }">
+                              {{ formatDaysAgo(submodule.days_since_launch) }}
                             </span>
                           </div>
-                          <span class="days-pill" :class="{ new: submodule.days_since_launch != null && submodule.days_since_launch <= 3 }">
-                            {{ formatDaysAgo(submodule.days_since_launch) }}
-                          </span>
                         </label>
                       </div>
                     </template>

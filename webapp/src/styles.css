@@ -4041,13 +4041,25 @@ body {
 .status-subaction {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  gap: 0;
 }
 
 .status-subaction-name {
   flex: 1;
   min-width: 0;
+  padding-right: 10px;
+}
+
+/* Tashqi jadvaldagi "O'rgangan/O'rganmagan xodimlar/Chiqqaniga" ustunlariga
+   mos — har bir ichki action qatorida ham xuddi shu 3 ta bo'lim, chiziq
+   bilan ajratilgan holda takrorlanadi. */
+.status-subaction-col {
+  flex: 0 0 auto;
+  min-width: 76px;
+  padding-left: 12px;
+  border-left: 1px solid var(--line);
+  display: flex;
+  align-items: center;
 }
 
 .manager-panel-lock {
