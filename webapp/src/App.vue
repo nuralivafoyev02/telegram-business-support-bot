@@ -1191,9 +1191,6 @@
               <tr>
                 <th>#</th>
                 <th>Yangi funksiya nomi</th>
-                <th>O‘rgangan xodimlar</th>
-                <th>O‘rganmagan xodimlar</th>
-                <th>Chiqqaniga</th>
               </tr>
             </thead>
             <tbody>
@@ -1239,29 +1236,6 @@
                     </div>
                   </div>
                 </td>
-                <td>
-                  <div class="avatar-stack">
-                    <span v-for="person in fn.learned_employees.slice(0, 4)" :key="`learned-${fn.event_id}-${person.id}`"
-                      class="avatar-stack-item" :title="`${person.full_name} — ${fmtDate(person.learned_at)}`">
-                      <img v-if="employeeAvatarUrl(person)" :src="employeeAvatarUrl(person)" alt="" style="border-color:#dcfce7;" />
-                      <span v-else class="profile-avatar" style="background:#dcfce7; color:#16a34a;">{{ initialsFromText(person.full_name) }}</span>
-                    </span>
-                    <span v-if="fn.learned_employees.length > 4" class="avatar-stack-more">+{{ fn.learned_employees.length - 4 }}</span>
-                    <span v-if="!fn.learned_employees.length" class="empty compact" style="padding:0;">—</span>
-                  </div>
-                </td>
-                <td>
-                  <div class="avatar-stack">
-                    <span v-for="person in fn.not_learned_employees.slice(0, 4)" :key="`not-learned-${fn.event_id}-${person.id}`"
-                      class="avatar-stack-item" :title="person.full_name">
-                      <img v-if="employeeAvatarUrl(person)" :src="employeeAvatarUrl(person)" alt="" style="border-color:#fee2e2;" />
-                      <span v-else class="profile-avatar" style="background:#fee2e2; color:#dc2626;">{{ initialsFromText(person.full_name) }}</span>
-                    </span>
-                    <span v-if="fn.not_learned_employees.length > 4" class="avatar-stack-more">+{{ fn.not_learned_employees.length - 4 }}</span>
-                    <span v-if="!fn.not_learned_employees.length" class="empty compact" style="padding:0;">—</span>
-                  </div>
-                </td>
-                <td><span class="days-pill" :class="{ new: fn.days_since_launch != null && fn.days_since_launch <= 3 }">{{ formatDaysAgo(fn.days_since_launch) }}</span></td>
               </tr>
             </tbody>
           </table>
@@ -1323,35 +1297,6 @@
                 </div>
               </div>
             </div>
-          </template>
-          <template #learnedEmployees="{ row }">
-            <div class="avatar-stack">
-              <span v-for="person in row.learned_employees.slice(0, 4)" :key="`byStatus-learned-${row.event_id}-${person.id}`"
-                class="avatar-stack-item" :title="`${person.full_name} — ${fmtDate(person.learned_at)}`">
-                <img v-if="employeeAvatarUrl(person)" :src="employeeAvatarUrl(person)" alt=""
-                  style="border-color:#dcfce7;" />
-                <span v-else class="profile-avatar" style="background:#dcfce7; color:#16a34a;">{{ initialsFromText(person.full_name) }}</span>
-              </span>
-              <span v-if="row.learned_employees.length > 4" class="avatar-stack-more">+{{ row.learned_employees.length - 4 }}</span>
-              <span v-if="!row.learned_employees.length" class="empty compact" style="padding:0;">—</span>
-            </div>
-          </template>
-          <template #notLearnedEmployees="{ row }">
-            <div class="avatar-stack">
-              <span v-for="person in row.not_learned_employees.slice(0, 4)" :key="`byStatus-not-learned-${row.event_id}-${person.id}`"
-                class="avatar-stack-item" :title="person.full_name">
-                <img v-if="employeeAvatarUrl(person)" :src="employeeAvatarUrl(person)" alt=""
-                  style="border-color:#fee2e2;" />
-                <span v-else class="profile-avatar" style="background:#fee2e2; color:#dc2626;">{{ initialsFromText(person.full_name) }}</span>
-              </span>
-              <span v-if="row.not_learned_employees.length > 4" class="avatar-stack-more">+{{ row.not_learned_employees.length - 4 }}</span>
-              <span v-if="!row.not_learned_employees.length" class="empty compact" style="padding:0;">—</span>
-            </div>
-          </template>
-          <template #daysPill="{ row }">
-            <span class="days-pill" :class="{ new: row.days_since_launch != null && row.days_since_launch <= 3 }">
-              {{ row.days_since_launch != null ? `${row.days_since_launch} kun` : '—' }}
-            </span>
           </template>
         </DataTable>
         <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
@@ -5112,11 +5057,7 @@ function toggleFunctionsByStatusExpanded(row = {}) {
 }
 const functionsByStatusColumns = [
   { key: 'module_name', label: 'Modul', slot: 'moduleTag' },
-  { key: 'submodule_name', label: 'Funksiya nomi', slot: 'submoduleName' },
-  { key: 'created_at', label: 'Chiqqan sana', format: fmtDate },
-  { key: 'learned_employees', label: 'O‘rgangan xodimlar', slot: 'learnedEmployees' },
-  { key: 'not_learned_employees', label: 'O‘rganmagan xodimlar', slot: 'notLearnedEmployees' },
-  { key: 'days_since_launch', label: 'Chiqqaniga', slot: 'daysPill' }
+  { key: 'submodule_name', label: 'Funksiya nomi', slot: 'submoduleName' }
 ];
 const employeeKnowledgeProfile = ref(null);
 const managementModal = ref('');

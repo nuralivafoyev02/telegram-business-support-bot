@@ -3905,6 +3905,14 @@ body {
   overflow-y: auto;
 }
 
+/* "Jarayondagi funksiyalar" va modul-detail jadvallarida — tashqi ustunlar
+   olib tashlangani uchun ko'proq eniga joy bor, chetlashtirish shart emas
+   va 5 tagacha qator scrolsiz ko'rinishi uchun balandroq. */
+.status-subactions {
+  margin-left: 0;
+  max-height: 320px;
+}
+
 .uyqur-functions-subaction {
   display: flex;
   align-items: center;
