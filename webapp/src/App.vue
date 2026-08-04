@@ -1080,7 +1080,7 @@
                   <span class="uyqur-functions-module-icon"
                     :style="{ background: moduleIconMeta(module.name || module.key).bg, color: moduleIconMeta(module.name || module.key).color }"
                     v-html="moduleIconSvg(module.name || module.key)"></span>
-                  <b>{{ module.name || module.key }} ({{ module.submodules.length }})</b>
+                  <b>{{ module.name || module.key }}</b>
                 </span>
               </div>
               <div class="uyqur-functions-card-list" v-if="isPermissionModuleExpanded(module)">
@@ -3151,39 +3151,6 @@
             </table>
             <div v-else class="empty">Bu supportga hali hech narsa yuborilmagan</div>
           </div>
-
-          <template v-if="supportHistoryFilter !== 'done'">
-            <div class="settings-head">
-              <div>
-                <div class="card-title">Funksiyalar bo‘yicha o‘rganish holati</div>
-              </div>
-              <select class="select" v-model="selectedModuleName">
-                <option v-for="name in supportHistoryModuleNames" :key="name" :value="name">{{ name }}</option>
-              </select>
-            </div>
-            <div class="table-wrap">
-              <table v-if="selectedModuleHistoryRows.length">
-                <thead>
-                  <tr>
-                    <th>Funksiya</th>
-                    <th>O‘rganildi</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="row in selectedModuleHistoryRows" :key="row.event_id">
-                    <td>{{ row.submodule_name || row.submodule_key }}</td>
-                    <td>
-                      <button class="btn small learn-btn" :class="{ learned: row.learned }" type="button"
-                        @click="toggleLearned(row)">
-                        {{ row.learned ? '✓ O‘rganildi' : 'O‘rganildi' }}
-                      </button>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-              <div v-else class="empty">Hozircha funksiya yoqilmagan</div>
-            </div>
-          </template>
         </section>
       </Modal>
     </Transition>
@@ -5165,13 +5132,6 @@ const filteredSupportHistoryRows = computed(() => {
   if (supportHistoryFilter.value === 'pending') return supportHistoryRows.value.filter(row => row.learned && !row.confirmed);
   return supportHistoryRows.value;
 });
-const selectedModuleName = ref('');
-const supportHistoryModuleNames = computed(() => [...new Set(
-  filteredSupportHistoryRows.value.map(row => row.module_name).filter(Boolean)
-)]);
-const selectedModuleHistoryRows = computed(() => filteredSupportHistoryRows.value.filter(
-  row => row.module_name === selectedModuleName.value
-));
 const companyInfo = ref({ summary: {}, companies: [], fetched_at: '', source: '' });
 const companyModuleReports = ref({ companies: [], report_dates: [], period: 'all' });
 const companyModuleChartSource = ref({ period: 'week', daily_companies: [], report_dates: [] });
@@ -11406,7 +11366,6 @@ async function openSupportHistory(row, filter = 'all') {
   modal.value = 'supportHistory';
   try {
     supportHistoryRows.value = await api.uyqurSupportHistory({ employee_id: row.id });
-    selectedModuleName.value = supportHistoryModuleNames.value[0] || '';
   } catch (error) {
     showToast(error.message);
   }
@@ -11416,24 +11375,12 @@ function closeSupportHistory() {
   selectedSupportId.value = '';
   selectedSupportName.value = '';
   supportHistoryRows.value = [];
-  selectedModuleName.value = '';
   supportHistoryFilter.value = 'all';
 }
 
 async function refreshSupportHistoryIfOpen(employeeId) {
   if (selectedSupportId.value && selectedSupportId.value === String(employeeId)) {
     supportHistoryRows.value = await api.uyqurSupportHistory({ employee_id: employeeId }).catch(() => supportHistoryRows.value);
-  }
-}
-
-async function toggleLearned(row) {
-  try {
-    await api.markUyqurLearned({ event_id: row.event_id, employee_id: selectedSupportId.value, learned: !row.learned });
-    const tasks = [refreshSupportHistoryIfOpen(selectedSupportId.value)];
-    if (!isEmployeeAccount.value) tasks.push(loadSupportOverview());
-    await Promise.all(tasks);
-  } catch (error) {
-    showToast(error.message);
   }
 }
 
@@ -12487,7 +12434,6 @@ async function loadMyNotifications() {
   supportHistoryFilter.value = 'all';
   try {
     supportHistoryRows.value = await api.uyqurSupportHistory({});
-    selectedModuleName.value = supportHistoryModuleNames.value[0] || '';
   } catch (error) {
     showToast(error.message);
   }
@@ -12623,7 +12569,6 @@ async function openManagementSupportHistory(row, filter = 'all') {
   managementModal.value = 'supportHistory';
   try {
     supportHistoryRows.value = await api.uyqurSupportHistory({ employee_id: row.id });
-    selectedModuleName.value = supportHistoryModuleNames.value[0] || '';
   } catch (error) {
     showToast(error.message);
   }
