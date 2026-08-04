@@ -1100,17 +1100,10 @@
             <div class="uyqur-functions-group-title">
               <div class="card-title">Uyqur Funksiyalari</div>
             </div>
-            <div style="display:flex; align-items:center; gap:14px;">
-              <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:var(--muted-strong); cursor:pointer;">
-                <input class="row-check" type="checkbox" :checked="isAllPermissionActionsSelected"
-                  :disabled="!permissionAllSelectableActionIds.length" @change="toggleSelectAllPermissionActions" />
-                Hammasini tanlash
-              </label>
-              <button type="button" class="btn primary" :disabled="!permissionSelectedActionCount || loadingAction === 'sendPermissionActions'"
-                @click="sendSelectedPermissionActions">
-                {{ loadingAction === 'sendPermissionActions' ? 'Yuborilmoqda...' : (permissionSelectedActionCount ? `Yuborish (${permissionSelectedActionCount})` : 'Yuborish') }}
-              </button>
-            </div>
+            <button type="button" class="btn primary" :disabled="!permissionSelectedActionCount || loadingAction === 'sendPermissionActions'"
+              @click="sendSelectedPermissionActions">
+              {{ loadingAction === 'sendPermissionActions' ? 'Yuborilmoqda...' : (permissionSelectedActionCount ? `Yuborish (${permissionSelectedActionCount})` : 'Yuborish') }}
+            </button>
           </div>
           <div class="uyqur-functions-groups" ref="permissionGroupsRef" v-if="permissionModulesMerged.length">
             <div class="uyqur-functions-group" :class="{ collapsed: !isPermissionModuleExpanded(module) }"
@@ -1121,6 +1114,9 @@
               <div class="uyqur-functions-group-head" @click.stop="togglePermissionModuleExpanded(module)">
                 <span class="uyqur-functions-collapse-icon">›</span>
                 <span class="uyqur-functions-group-title">
+                  <input class="row-check" type="checkbox" :checked="isModuleActionsSelected(module)"
+                    :disabled="!moduleSelectableActionIds(module).length" @click.stop
+                    @change="toggleModuleActionsSelected(module)" />
                   <span class="uyqur-functions-module-icon"
                     :style="{ background: moduleIconMeta(module.name || module.key).bg, color: moduleIconMeta(module.name || module.key).color }"
                     v-html="moduleIconSvg(module.name || module.key)"></span>
@@ -1131,6 +1127,9 @@
                 <template v-for="(submodule, submoduleIndex) in module.submodules" :key="'all-functions-submodule-' + submodule.id">
                   <div class="uyqur-functions-card" :class="{ expandable: (submodule.actions || []).length }"
                     @click="(submodule.actions || []).length && toggleSubmoduleActionsExpanded(submodule, module, submoduleIndex)">
+                    <input class="row-check" type="checkbox" :checked="isSubmoduleAllActionsSelected(submodule)"
+                      :disabled="!submoduleSelectableActionIds(submodule).length" @click.stop
+                      @change="toggleSubmoduleAllActionsSelected(submodule)" />
                     <span>{{ submodule.name || submodule.key }}</span>
                     <span v-if="(submodule.actions || []).length" class="uyqur-functions-card-count">{{ submodule.actions.length }}</span>
                   </div>
@@ -3207,17 +3206,10 @@
                 <div class="uyqur-functions-group-title">
                   <div class="card-title">Uyqur Funksiyalari</div>
                 </div>
-                <div style="display:flex; align-items:center; gap:14px;">
-                  <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:var(--muted-strong); cursor:pointer;">
-                    <input class="row-check" type="checkbox" :checked="isAllPermissionActionsSelected"
-                      :disabled="!permissionAllSelectableActionIds.length" @change="toggleSelectAllPermissionActions" />
-                    Hammasini tanlash
-                  </label>
-                  <button type="button" class="btn primary" :disabled="!permissionSelectedActionCount || loadingAction === 'sendPermissionActions'"
-                    @click="sendSelectedPermissionActions">
-                    {{ loadingAction === 'sendPermissionActions' ? 'Yuborilmoqda...' : (permissionSelectedActionCount ? `Yuborish (${permissionSelectedActionCount})` : 'Yuborish') }}
-                  </button>
-                </div>
+                <button type="button" class="btn primary" :disabled="!permissionSelectedActionCount || loadingAction === 'sendPermissionActions'"
+                  @click="sendSelectedPermissionActions">
+                  {{ loadingAction === 'sendPermissionActions' ? 'Yuborilmoqda...' : (permissionSelectedActionCount ? `Yuborish (${permissionSelectedActionCount})` : 'Yuborish') }}
+                </button>
               </div>
               <div class="uyqur-functions-groups" ref="permissionGroupsRef" v-if="permissionModulesMerged.length">
                 <div class="uyqur-functions-group" :class="{ collapsed: !isPermissionModuleExpanded(module) }"
@@ -3227,6 +3219,9 @@
                   <div class="uyqur-functions-group-head" @click.stop="togglePermissionModuleExpanded(module)">
                     <span class="uyqur-functions-collapse-icon">›</span>
                     <span class="uyqur-functions-group-title">
+                      <input class="row-check" type="checkbox" :checked="isModuleActionsSelected(module)"
+                        :disabled="!moduleSelectableActionIds(module).length" @click.stop
+                        @change="toggleModuleActionsSelected(module)" />
                       <span class="uyqur-functions-module-icon"
                         :style="{ background: moduleIconMeta(module.name || module.key).bg, color: moduleIconMeta(module.name || module.key).color }"
                         v-html="moduleIconSvg(module.name || module.key)"></span>
@@ -3237,6 +3232,9 @@
                     <template v-for="(submodule, submoduleIndex) in module.submodules" :key="'submodule-' + submodule.id">
                       <div class="uyqur-functions-card" :class="{ expandable: (submodule.actions || []).length }"
                         @click="(submodule.actions || []).length && toggleSubmoduleActionsExpanded(submodule, module, submoduleIndex)">
+                        <input class="row-check" type="checkbox" :checked="isSubmoduleAllActionsSelected(submodule)"
+                          :disabled="!submoduleSelectableActionIds(submodule).length" @click.stop
+                          @change="toggleSubmoduleAllActionsSelected(submodule)" />
                         <span>{{ submodule.name || submodule.key }}</span>
                         <span v-if="(submodule.actions || []).length" class="uyqur-functions-card-count">{{ submodule.actions.length }}</span>
                       </div>
@@ -5491,30 +5489,45 @@ function toggleActionSelected(action = {}) {
   permissionSelectedActionIds.value = next;
 }
 const permissionSelectedActionCount = computed(() => permissionSelectedActionIds.value.size);
-// "Uyqur Funksiyalari" boardidagi BARCHA (hali yuborilmagan) action'larni
-// bir bosishda belgilash/bekor qilish uchun — modul/submodule ochiq yoki
-// yopiq bo'lishidan qat'iy nazar, butun daraxt bo'yicha ishlaydi.
-const permissionAllSelectableActionIds = computed(() => {
+
+// Har bir MODUL ("Loyiha" kabi) va har bir FICHA (submodule, masalan
+// "Papkalar") oldida ham o'zining "hammasini tanlash" katagi bo'lishi
+// uchun — global tugmadan tashqari, bo'lim-bo'lim ham belgilash mumkin.
+function moduleSelectableActionIds(module = {}) {
   const ids = [];
-  permissionModulesMerged.value.forEach(module => {
-    (module.submodules || []).forEach(submodule => {
-      (submodule.actions || []).forEach(action => {
-        if (!isActionSent(action)) ids.push(actionUid(action));
-      });
+  (module.submodules || []).forEach(submodule => {
+    (submodule.actions || []).forEach(action => {
+      if (!isActionSent(action)) ids.push(actionUid(action));
     });
   });
   return ids;
-});
-const isAllPermissionActionsSelected = computed(() => {
-  const ids = permissionAllSelectableActionIds.value;
+}
+function isModuleActionsSelected(module = {}) {
+  const ids = moduleSelectableActionIds(module);
   return ids.length > 0 && ids.every(id => permissionSelectedActionIds.value.has(id));
-});
-function toggleSelectAllPermissionActions() {
-  if (isAllPermissionActionsSelected.value) {
-    permissionSelectedActionIds.value = new Set();
-    return;
-  }
-  permissionSelectedActionIds.value = new Set(permissionAllSelectableActionIds.value);
+}
+function toggleModuleActionsSelected(module = {}) {
+  const ids = moduleSelectableActionIds(module);
+  if (!ids.length) return;
+  const next = new Set(permissionSelectedActionIds.value);
+  if (isModuleActionsSelected(module)) ids.forEach(id => next.delete(id));
+  else ids.forEach(id => next.add(id));
+  permissionSelectedActionIds.value = next;
+}
+function submoduleSelectableActionIds(submodule = {}) {
+  return (submodule.actions || []).filter(action => !isActionSent(action)).map(action => actionUid(action));
+}
+function isSubmoduleAllActionsSelected(submodule = {}) {
+  const ids = submoduleSelectableActionIds(submodule);
+  return ids.length > 0 && ids.every(id => permissionSelectedActionIds.value.has(id));
+}
+function toggleSubmoduleAllActionsSelected(submodule = {}) {
+  const ids = submoduleSelectableActionIds(submodule);
+  if (!ids.length) return;
+  const next = new Set(permissionSelectedActionIds.value);
+  if (isSubmoduleAllActionsSelected(submodule)) ids.forEach(id => next.delete(id));
+  else ids.forEach(id => next.add(id));
+  permissionSelectedActionIds.value = next;
 }
 function populateSentActionIds(sentActionKeys = []) {
   const sentSet = new Set((sentActionKeys || []).map(String));
