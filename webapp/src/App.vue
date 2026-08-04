@@ -1047,7 +1047,13 @@
                 <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; font-size:15px;">{{ row.full_name }}</span>
               </span>
               <span style="width:70px; text-align:right; flex-shrink:0; font-size:14px; font-weight:600; color:#16a34a; padding-left:12px; border-left:1px solid #f1f5f9; align-self:stretch; display:flex; align-items:center; justify-content:flex-end;">{{ row.learned_count }}</span>
-              <span style="width:70px; text-align:right; flex-shrink:0; font-size:14px; font-weight:600; color:#f59e0b; padding-left:12px; border-left:1px solid #f1f5f9; align-self:stretch; display:flex; align-items:center; justify-content:flex-end;">{{ row.in_progress_count }}</span>
+              <span style="width:70px; flex-shrink:0; padding-left:12px; border-left:1px solid #f1f5f9; align-self:stretch; display:flex; align-items:center; justify-content:flex-end;">
+                <span class="notif-bell" title="Jarayondagi funksiyalar (tasdiqlanmagan)"
+                  @click.stop="openManagementSupportHistory({ id: row.employee_id, full_name: row.full_name }, 'pending')">
+                  🔔
+                  <span v-if="row.in_progress_count" class="notif-badge">{{ row.in_progress_count }}</span>
+                </span>
+              </span>
               <span style="width:80px; text-align:right; flex-shrink:0; font-size:14px; font-weight:600; color:#dc2626; padding-left:12px; border-left:1px solid #f1f5f9; align-self:stretch; display:flex; align-items:center; justify-content:flex-end;">{{ row.not_started_count }}</span>
               <span style="width:56px; text-align:right; flex-shrink:0; font-size:14px; font-weight:600; padding-left:12px; border-left:1px solid #f1f5f9; align-self:stretch; display:flex; align-items:center; justify-content:flex-end;">{{ row.percent }}%</span>
               <span style="flex:2; min-width:160px; padding-left:12px; border-left:1px solid #f1f5f9; align-self:stretch; display:flex; align-items:center;">

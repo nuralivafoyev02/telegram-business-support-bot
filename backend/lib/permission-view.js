@@ -511,10 +511,14 @@ const MAX_DYNAMICS_DAYS = 60;
 async function getKnowledgeDashboard({ days = 7 } = {}) {
   const isAllTime = String(days) === 'all';
   const periodDays = !isAllTime && KNOWLEDGE_DASHBOARD_PERIOD_DAYS.has(Number(days)) ? Number(days) : 7;
+  // getPermissionView() (raw getPermissionViewRecord() emas) ishlatiladi —
+  // shu orqali "Uyqur Funksiyalari" sahifasidagi kabi kesh eskirgan bo'lsa
+  // avtomatik yangilanadi, aks holda bu yerdagi jami son ("allSubmodules")
+  // o'sha sahifadagi haqiqiy daraxtdan orqada qolib ketishi mumkin edi.
   const [employees, record, permissionRecord] = await Promise.all([
     getSupportEmployees(),
     getNotificationRecord(),
-    getPermissionViewRecord()
+    getPermissionView()
   ]);
   const events = record.events;
   const now = Date.now();
@@ -744,7 +748,7 @@ async function getModuleFunctionsDetail(moduleName) {
   const [employees, record, permissionRecord] = await Promise.all([
     getSupportEmployees(),
     getNotificationRecord(),
-    getPermissionViewRecord()
+    getPermissionView()
   ]);
   const now = Date.now();
   const targetModuleName = canonicalModuleName(moduleName);
@@ -851,7 +855,7 @@ async function getFunctionsByLearningStatus(status) {
   const [employees, record, permissionRecord] = await Promise.all([
     getSupportEmployees(),
     getNotificationRecord(),
-    getPermissionViewRecord()
+    getPermissionView()
   ]);
   const now = Date.now();
   const eventBySubmoduleKey = new Map(record.events.map(event => [String(event.submodule_key), event]));
