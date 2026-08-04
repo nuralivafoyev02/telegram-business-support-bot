@@ -1817,6 +1817,123 @@
 
           </template>
 
+          <template v-if="activeTab === 'knowledgeDashboard'">
+          <div class="support-summary-grid">
+            <article class="card support-summary-card">
+              <div class="support-summary-content">
+                <div class="support-summary-title">O‘rtacha umumiy bilim darajasi</div>
+                <div class="support-summary-value-row">
+                  <div class="support-summary-value">{{ fmtPercent(knowledgeDashboard.kpis.avg_knowledge_pct) }}</div>
+                  <span class="trend-label" :class="(knowledgeDashboard.kpis.avg_knowledge_change_pct || 0) >= 0 ? 'good' : 'bad'">
+                    {{ (knowledgeDashboard.kpis.avg_knowledge_change_pct || 0) >= 0 ? '↑' : '↓' }}
+                    {{ fmtNumber(Math.abs(knowledgeDashboard.kpis.avg_knowledge_change_pct || 0)) }}%
+                  </span>
+                </div>
+                <div class="support-summary-note">{{ fmtNumber(knowledgeDashboard.kpis.employees_total) }} support xodim</div>
+              </div>
+            </article>
+            <article class="card support-summary-card" style="cursor:pointer;" @click="openFunctionsByStatus('learned')">
+              <div class="support-summary-content">
+                <div class="support-summary-title">O‘rganilgan funksiyalar</div>
+                <div class="support-summary-value-row">
+                  <div class="support-summary-value" style="color:#16a34a;">{{ fmtNumber(knowledgeDashboard.kpis.donut?.learned_count) }}</div>
+                </div>
+              </div>
+            </article>
+            <article class="card support-summary-card" style="cursor:pointer;" @click="openFunctionsByStatus('in_progress')">
+              <div class="support-summary-content">
+                <div class="support-summary-title">Jarayondagi funksiyalar</div>
+                <div class="support-summary-value-row">
+                  <div class="support-summary-value" style="color:#f59e0b;">{{ fmtNumber(knowledgeDashboard.kpis.donut?.in_progress_count) }}</div>
+                </div>
+              </div>
+            </article>
+            <article class="card support-summary-card" style="cursor:pointer;" @click="openFunctionsByStatus('not_started')">
+              <div class="support-summary-content">
+                <div class="support-summary-title">Boshlanmagan funksiyalar</div>
+                <div class="support-summary-value-row">
+                  <div class="support-summary-value" style="color:#dc2626;">{{ fmtNumber(knowledgeDashboard.kpis.donut?.not_learned_count) }}</div>
+                </div>
+              </div>
+            </article>
+          </div>
+
+          <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-top:16px; align-items:stretch;">
+            <section class="card pad">
+              <div class="card-header">
+                <div class="card-title">Modullar bo‘yicha bilim darajasi</div>
+              </div>
+              <div style="display:flex; flex-direction:column; gap:16px;">
+                <div v-for="module in knowledgeDashboard.module_bars" :key="module.module_name"
+                  style="display:flex; align-items:center; gap:12px; cursor:pointer;"
+                  @click="openModuleFunctionsDetail(module.module_name)">
+                  <span style="display:flex; align-items:center; gap:10px; width:150px; flex-shrink:0;">
+                    <span
+                      :style="{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', borderRadius: '10px', flexShrink: 0, background: moduleIconMeta(module.module_name).bg, color: moduleIconMeta(module.module_name).color }"
+                      v-html="moduleIconSvg(module.module_name)"
+                    ></span>
+                    <span style="font-size:15px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ module.module_name }}</span>
+                  </span>
+                  <div style="flex:1; height:10px; border-radius:5px; background:#f1f5f9; overflow:hidden;">
+                    <div :style="{ width: module.percent + '%', height: '100%', borderRadius: '5px', background: module.percent >= 70 ? '#16a34a' : (module.percent >= 40 ? '#f59e0b' : '#dc2626') }"></div>
+                  </div>
+                  <span style="width:48px; text-align:right; font-size:15px; font-weight:600;">{{ module.percent }}%</span>
+                </div>
+                <div v-if="!knowledgeDashboard.module_bars.length" class="empty compact">Modul ma’lumoti yo‘q</div>
+              </div>
+            </section>
+
+            <section class="card pad">
+              <div class="card-header">
+                <div class="card-title">Xodimlar reytingi</div>
+              </div>
+              <div style="display:flex; flex-direction:column;">
+                <div style="display:flex; align-items:center; gap:8px; padding:6px 0; font-size:11px; text-transform:uppercase; color:#9ca3af; border-bottom:1px solid #f1f5f9;">
+                  <span style="width:20px; flex-shrink:0;">#</span>
+                  <span style="flex:1;">Xodim</span>
+                  <span style="width:70px; text-align:right; flex-shrink:0; padding-left:12px; border-left:1px solid #e5e7eb;">O‘rgangan</span>
+                  <span style="width:70px; text-align:right; flex-shrink:0; padding-left:12px; border-left:1px solid #e5e7eb;">Jarayonda</span>
+                  <span style="width:80px; text-align:right; flex-shrink:0; padding-left:12px; border-left:1px solid #e5e7eb;">Boshlamagan</span>
+                  <span style="width:56px; text-align:right; flex-shrink:0; padding-left:12px; border-left:1px solid #e5e7eb;">Daraja</span>
+                  <span style="flex:2; min-width:160px; padding-left:12px; border-left:1px solid #e5e7eb;">Progress</span>
+                </div>
+                <div v-for="(row, index) in knowledgeDashboard.employee_ranking" :key="row.employee_id"
+                  style="display:flex; align-items:center; gap:8px; padding:10px 0; border-bottom:1px solid #f8fafc; cursor:pointer;"
+                  @click="openEmployeeKnowledgeProfile(row.employee_id)">
+                  <span style="width:20px; flex-shrink:0; font-size:13px;">{{ index + 1 }}</span>
+                  <span style="flex:1; display:flex; align-items:center; gap:8px; min-width:0;">
+                    <img v-if="employeeAvatarUrl(row)" :src="employeeAvatarUrl(row)" alt=""
+                      style="width:30px; height:30px; border-radius:50%; object-fit:cover; flex-shrink:0;" />
+                    <span v-else class="profile-avatar" style="width:30px; height:30px; font-size:12px; flex-shrink:0;">{{ initialsFromText(row.full_name) }}</span>
+                    <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; font-size:15px;">{{ row.full_name }}</span>
+                  </span>
+                  <span style="width:70px; text-align:right; flex-shrink:0; font-size:14px; font-weight:600; color:#16a34a; padding-left:12px; border-left:1px solid #f1f5f9; align-self:stretch; display:flex; align-items:center; justify-content:flex-end; cursor:pointer;"
+                    title="O‘rganilgan (tasdiqlangan) funksiyalar"
+                    @click.stop="openSupportHistory({ id: row.employee_id, full_name: row.full_name }, 'done')">{{ row.learned_count }}</span>
+                  <span style="width:70px; flex-shrink:0; padding-left:12px; border-left:1px solid #f1f5f9; align-self:stretch; display:flex; align-items:center; justify-content:flex-end; cursor:pointer;"
+                    title="Jarayondagi funksiyalar (tasdiqlanmagan)"
+                    @click.stop="openSupportHistory({ id: row.employee_id, full_name: row.full_name }, 'pending')">
+                    <span class="notif-bell">
+                      🔔
+                      <span v-if="row.in_progress_count" class="notif-badge">{{ row.in_progress_count }}</span>
+                    </span>
+                  </span>
+                  <span style="width:80px; text-align:right; flex-shrink:0; font-size:14px; font-weight:600; color:#dc2626; padding-left:12px; border-left:1px solid #f1f5f9; align-self:stretch; display:flex; align-items:center; justify-content:flex-end; cursor:pointer;"
+                    title="Boshlanmagan funksiyalar"
+                    @click.stop="openSupportHistory({ id: row.employee_id, full_name: row.full_name }, 'not_started')">{{ row.not_started_count }}</span>
+                  <span style="width:56px; text-align:right; flex-shrink:0; font-size:14px; font-weight:600; padding-left:12px; border-left:1px solid #f1f5f9; align-self:stretch; display:flex; align-items:center; justify-content:flex-end;">{{ row.percent }}%</span>
+                  <span style="flex:2; min-width:160px; padding-left:12px; border-left:1px solid #f1f5f9; align-self:stretch; display:flex; align-items:center;">
+                    <span style="flex:1; height:8px; border-radius:4px; background:#f1f5f9; overflow:hidden;">
+                      <span :style="{ display: 'block', width: row.percent + '%', height: '100%', borderRadius: '4px', background: row.percent >= 70 ? '#16a34a' : (row.percent >= 40 ? '#f59e0b' : '#dc2626') }"></span>
+                    </span>
+                  </span>
+                </div>
+                <div v-if="!knowledgeDashboard.employee_ranking.length" class="empty">Support xodim topilmadi</div>
+              </div>
+            </section>
+          </div>
+          </template>
+
           <template v-if="activeTab === 'productAnalytics'">
             <Toolbar v-model="search" />
 
@@ -4928,6 +5045,181 @@
       </div>
     </Transition>
 
+    <Transition name="modal-fade">
+      <Modal v-if="modal === 'moduleDetail' && moduleFunctionsDetail"
+        :title="`${moduleFunctionsDetail.module_name} moduli — yangi funksiyalar ro‘yxati`" wide xlarge
+        @close="closeModal">
+        <div class="detail-summary">
+          <div><span>Jami fichalar</span><b>{{ fmtNumber(moduleFunctionsDetail.total_functions) }}</b></div>
+          <div><span>O‘rgangan fichalar</span><b style="color:#16a34a;">{{ fmtNumber(moduleFunctionsDetail.learned_total) }}</b></div>
+          <div><span>Jarayondagi fichalar</span><b style="color:#f59e0b;">{{ fmtNumber(moduleFunctionsDetail.in_progress_total) }}</b></div>
+          <div><span>Boshlanmagan fichalar</span><b style="color:#dc2626;">{{ fmtNumber(moduleFunctionsDetail.not_started_total) }}</b></div>
+        </div>
+        <div class="table-wrap">
+          <table class="status-functions-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Yangi funksiya nomi</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(fn, index) in moduleFunctionsDetail.functions" :key="fn.event_id">
+                <td>{{ index + 1 }}</td>
+                <td>
+                  <div>
+                    <div class="submodule-name-row" :class="{ clickable: (fn.actions || []).length }"
+                      @click="(fn.actions || []).length && toggleFunctionsByStatusExpanded(fn)">
+                      <span>{{ fn.submodule_name }}</span>
+                      <span v-if="(fn.actions || []).length" class="uyqur-functions-card-count">{{ fn.actions.length }}</span>
+                    </div>
+                    <div v-if="isFunctionsByStatusExpanded(fn) && (fn.actions || []).length" class="uyqur-functions-subactions status-subactions">
+                      <div v-for="action in fn.actions" :key="'moduledetail-action-' + fn.event_id + '-' + action.id"
+                        class="uyqur-functions-subaction status-subaction">
+                        <span class="status-subaction-name">{{ action.name || action.key }}</span>
+                        <div class="status-subaction-col">
+                          <div class="avatar-stack">
+                            <span v-for="person in fn.learned_employees.slice(0, 4)" :key="`moduledetail-action-learned-${fn.event_id}-${action.id}-${person.id}`"
+                              class="avatar-stack-item" :title="`${person.full_name} — o‘rgangan`">
+                              <img v-if="employeeAvatarUrl(person)" :src="employeeAvatarUrl(person)" alt="" style="border-color:#dcfce7;" />
+                              <span v-else class="profile-avatar" style="background:#dcfce7; color:#16a34a;">{{ initialsFromText(person.full_name) }}</span>
+                            </span>
+                            <span v-if="!fn.learned_employees.length" class="empty compact" style="padding:0;">—</span>
+                          </div>
+                        </div>
+                        <div class="status-subaction-col">
+                          <div class="avatar-stack">
+                            <span v-for="person in fn.not_learned_employees.slice(0, 4)" :key="`moduledetail-action-not-learned-${fn.event_id}-${action.id}-${person.id}`"
+                              class="avatar-stack-item" :title="`${person.full_name} — o‘rganmagan`">
+                              <img v-if="employeeAvatarUrl(person)" :src="employeeAvatarUrl(person)" alt="" style="border-color:#fee2e2;" />
+                              <span v-else class="profile-avatar" style="background:#fee2e2; color:#dc2626;">{{ initialsFromText(person.full_name) }}</span>
+                            </span>
+                            <span v-if="!fn.not_learned_employees.length" class="empty compact" style="padding:0;">—</span>
+                          </div>
+                        </div>
+                        <div class="status-subaction-col">
+                          <span class="days-pill" :class="{ new: fn.days_since_launch != null && fn.days_since_launch <= 3 }">
+                            {{ fn.days_since_launch != null ? `${fn.days_since_launch} kun` : '—' }}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
+          <button class="btn primary" type="button" @click="closeModal">Yopish</button>
+        </div>
+      </Modal>
+    </Transition>
+    <Transition name="modal-fade">
+      <Modal v-if="modal === 'functionsByStatus' && functionsByStatus"
+        :title="`${functionsByStatus.title} (${fmtNumber(functionsByStatus.total)})`" wide xlarge
+        @close="closeModal">
+        <DataTable class="status-functions-table" :columns="functionsByStatusColumns" :rows="functionsByStatus.functions"
+          :page-size="15" empty="Funksiya topilmadi">
+          <template #moduleTag="{ row }">
+            <span class="module-tag" :style="{ background: moduleIconMeta(row.module_name).bg, color: moduleIconMeta(row.module_name).color }">
+              <span class="module-tag-icon" v-html="moduleIconSvg(row.module_name)"></span>
+              {{ row.module_name }}
+            </span>
+          </template>
+          <template #submoduleName="{ row }">
+            <div>
+              <div class="submodule-name-row" :class="{ clickable: (row.actions || []).length }"
+                @click="(row.actions || []).length && toggleFunctionsByStatusExpanded(row)">
+                <span>{{ row.submodule_name }}</span>
+                <span v-if="(row.actions || []).length" class="uyqur-functions-card-count">{{ row.actions.length }}</span>
+              </div>
+              <div v-if="isFunctionsByStatusExpanded(row) && (row.actions || []).length" class="uyqur-functions-subactions status-subactions">
+                <div v-for="action in row.actions" :key="'status-action-' + row.event_id + '-' + action.id"
+                  class="uyqur-functions-subaction status-subaction">
+                  <span class="status-subaction-name">{{ action.name || action.key }}</span>
+                  <div class="status-subaction-col">
+                    <div class="avatar-stack">
+                      <span v-for="person in row.learned_employees.slice(0, 4)" :key="`status-action-learned-${row.event_id}-${action.id}-${person.id}`"
+                        class="avatar-stack-item" :title="`${person.full_name} — o‘rgangan`">
+                        <img v-if="employeeAvatarUrl(person)" :src="employeeAvatarUrl(person)" alt="" style="border-color:#dcfce7;" />
+                        <span v-else class="profile-avatar" style="background:#dcfce7; color:#16a34a;">{{ initialsFromText(person.full_name) }}</span>
+                      </span>
+                      <span v-if="!row.learned_employees.length" class="empty compact" style="padding:0;">—</span>
+                    </div>
+                  </div>
+                  <div class="status-subaction-col">
+                    <div class="avatar-stack">
+                      <span v-for="person in row.not_learned_employees.slice(0, 4)" :key="`status-action-not-learned-${row.event_id}-${action.id}-${person.id}`"
+                        class="avatar-stack-item" :title="`${person.full_name} — o‘rganmagan`">
+                        <img v-if="employeeAvatarUrl(person)" :src="employeeAvatarUrl(person)" alt="" style="border-color:#fee2e2;" />
+                        <span v-else class="profile-avatar" style="background:#fee2e2; color:#dc2626;">{{ initialsFromText(person.full_name) }}</span>
+                      </span>
+                      <span v-if="!row.not_learned_employees.length" class="empty compact" style="padding:0;">—</span>
+                    </div>
+                  </div>
+                  <div class="status-subaction-col">
+                    <span class="days-pill" :class="{ new: row.days_since_launch != null && row.days_since_launch <= 3 }">
+                      {{ row.days_since_launch != null ? `${row.days_since_launch} kun` : '—' }}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </template>
+        </DataTable>
+        <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
+          <button class="btn primary" type="button" @click="closeModal">Yopish</button>
+        </div>
+      </Modal>
+    </Transition>
+    <Transition name="modal-fade">
+      <Modal v-if="modal === 'employeeProfile' && employeeKnowledgeProfile"
+        :title="employeeKnowledgeProfile.employee.full_name" wide @close="closeModal">
+        <div class="employee-profile-mini-stats">
+          <span>
+            <small>Bilim progresi</small>
+            <b>{{ employeeKnowledgeProfile.overall_percent }}%</b>
+          </span>
+          <span>
+            <small>Biladigan funksiyalar</small>
+            <b>{{ employeeKnowledgeProfile.learned_functions.length }}</b>
+          </span>
+          <span>
+            <small>Bilmaydigan funksiyalar</small>
+            <b>{{ employeeKnowledgeProfile.not_learned_functions.length }}</b>
+          </span>
+        </div>
+        <div class="drilldown-columns" style="margin:16px 0;">
+          <div class="drilldown-chart-panel" style="display:flex; align-items:center; justify-content:center;">
+            <RadarChart
+              :axes="employeeKnowledgeProfile.module_percents.map(module => ({ label: module.module_name, value: module.percent }))"
+              :size="260" />
+          </div>
+          <div class="drilldown-chart-panel">
+            <div class="drilldown-label">Bilim darajasi dinamikasi</div>
+            <div style="display:flex; justify-content:center;">
+              <LineChart
+                :points="employeeKnowledgeProfile.daily_progress.map(day => ({ label: fmtShortDayMonth(day.date), value: day.percent }))"
+                :width="420" :height="220" />
+            </div>
+          </div>
+        </div>
+        <div class="drilldown-columns">
+          <div class="drilldown-panel">
+            <div class="drilldown-label">O‘rganilgan funksiyalar</div>
+            <DataTable :columns="employeeLearnedFunctionColumns" :rows="employeeKnowledgeProfile.learned_functions"
+              empty="Hali yo‘q" :page-size="10" />
+          </div>
+          <div class="drilldown-panel">
+            <div class="drilldown-label">O‘rganilmagan funksiyalar</div>
+            <DataTable :columns="employeeNotLearnedFunctionColumns" :rows="employeeKnowledgeProfile.not_learned_functions"
+              empty="Yo‘q" :page-size="10" />
+          </div>
+        </div>
+      </Modal>
+    </Transition>
+
     <Transition name="fade">
       <div v-if="loading" class="app-loader" role="status" aria-live="polite">
         <span class="spinner" aria-hidden="true"></span>
@@ -4956,7 +5248,7 @@ const COMPANY_ACTIVITY_SYNC_INTERVAL_MS = 60 * 60 * 1000;
 const SETTINGS_SECTION_KEYS = ['bot', 'integrations', 'telegram', 'admin'];
 const tabs = [
   { key: 'stats', label: 'Support faoliyati', icon: '📊' },
-  { key: 'uyqurPermissions', label: 'Uyqur Funksiyalari', icon: '🧩' },
+  { key: 'knowledgeDashboard', label: 'Bilim darajasi', icon: '🎓' },
   { key: 'companyActivity', label: 'Kompaniya faoliyati', icon: '🏢' },
   { key: 'productAnalytics', label: 'Mahsulot tahlili', icon: '📈' },
   { key: 'groups', label: 'Bot ulangan guruhlar', icon: '👥' },
@@ -4965,10 +5257,11 @@ const tabs = [
   { key: 'clickup', label: 'ClickUp', icon: '✅' },
   { key: 'privates', label: 'Mijozlar', icon: '💬' },
   { key: 'knowledgeBase', label: 'Bilim bazasi', icon: '📚' },
+  { key: 'uyqurPermissions', label: 'Uyqur Funksiyalari', icon: '🧩' },
   { key: 'settings', label: 'Sozlamalar', icon: '⚙️' }
 ];
-const mainTabKeys = ['stats', 'uyqurPermissions', 'companyActivity', 'productAnalytics'];
-const otherTabKeys = ['groups', 'employees', 'companies', 'clickup', 'privates', 'knowledgeBase'];
+const mainTabKeys = ['stats', 'knowledgeDashboard', 'companyActivity', 'productAnalytics'];
+const otherTabKeys = ['groups', 'employees', 'companies', 'clickup', 'privates', 'knowledgeBase', 'uyqurPermissions'];
 
 function isValidTab(key) {
   return tabs.some(tab => tab.key === key);
@@ -10892,6 +11185,7 @@ async function refresh() {
     if (activeTab.value === 'uyqurPermissions') {
       await Promise.all([loadPermissionView(), loadSupportOverview()]);
     }
+    if (activeTab.value === 'knowledgeDashboard') await loadKnowledgeDashboard();
     if (activeTab.value === 'settings') await loadSettings();
     if (activeTab.value === 'settings') checkTelegramWebhook(false).catch(() => null);
   } catch (error) {
@@ -11734,6 +12028,7 @@ async function setTab(key) {
     if (activeTab.value === 'uyqurPermissions') {
       await Promise.all([loadPermissionView(), loadSupportOverview()]);
     }
+    if (activeTab.value === 'knowledgeDashboard') await loadKnowledgeDashboard();
     if (activeTab.value === 'settings') await loadSettings();
     if (activeTab.value === 'settings') checkTelegramWebhook(false).catch(() => null);
   } catch (error) {
@@ -12635,6 +12930,7 @@ async function openModuleFunctionsDetail(moduleName) {
     moduleFunctionsDetail.value = await api.moduleFunctionsDetail({ module_name: moduleName });
     functionsByStatusExpanded.value = new Set();
     managementModal.value = 'moduleDetail';
+    modal.value = 'moduleDetail';
     (moduleFunctionsDetail.value.functions || []).forEach(fn => {
       [...fn.learned_employees, ...fn.not_learned_employees].forEach(person => loadEmployeeAvatar(person));
     });
@@ -12652,6 +12948,7 @@ async function openFunctionsByStatus(status) {
     functionsByStatus.value = await api.functionsByStatus(status);
     functionsByStatusExpanded.value = new Set();
     managementModal.value = 'functionsByStatus';
+    modal.value = 'functionsByStatus';
     (functionsByStatus.value.functions || []).forEach(fn => {
       [...fn.learned_employees, ...fn.not_learned_employees].forEach(person => loadEmployeeAvatar(person));
     });
@@ -12668,6 +12965,7 @@ async function openEmployeeKnowledgeProfile(employeeId) {
   try {
     employeeKnowledgeProfile.value = await api.employeeKnowledgeProfile({ employee_id: employeeId });
     managementModal.value = 'employeeProfile';
+    modal.value = 'employeeProfile';
   } catch (error) {
     showToast(error.message);
   } finally {
@@ -12915,6 +13213,11 @@ const NAV_ICON_META = {
     bg: '#f3e8ff',
     color: '#9333ea',
     shape: '<rect x="3" y="3" width="7.5" height="7.5" rx="1.6"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.6"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.6"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.6"/>'
+  },
+  knowledgeDashboard: {
+    bg: '#ede9fe',
+    color: '#7c3aed',
+    shape: '<path d="M2.5 8.5 12 4l9.5 4.5L12 13z"/><path d="M6 10.5v4.7c0 1.4 2.7 2.6 6 2.6s6-1.2 6-2.6v-4.7"/><path d="M21.5 8.5v6.5"/>'
   },
   companyActivity: {
     bg: '#e0edff',
