@@ -1100,10 +1100,17 @@
             <div class="uyqur-functions-group-title">
               <div class="card-title">Uyqur Funksiyalari</div>
             </div>
-            <button type="button" class="btn primary" :disabled="!permissionSelectedActionCount || loadingAction === 'sendPermissionActions'"
-              @click="sendSelectedPermissionActions">
-              {{ loadingAction === 'sendPermissionActions' ? 'Yuborilmoqda...' : (permissionSelectedActionCount ? `Yuborish (${permissionSelectedActionCount})` : 'Yuborish') }}
-            </button>
+            <div style="display:flex; align-items:center; gap:14px;">
+              <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:var(--muted-strong); cursor:pointer;">
+                <input class="row-check" type="checkbox" :checked="isAllPermissionActionsSelected"
+                  :disabled="!permissionAllSelectableActionIds.length" @change="toggleSelectAllPermissionActions" />
+                Hammasini tanlash
+              </label>
+              <button type="button" class="btn primary" :disabled="!permissionSelectedActionCount || loadingAction === 'sendPermissionActions'"
+                @click="sendSelectedPermissionActions">
+                {{ loadingAction === 'sendPermissionActions' ? 'Yuborilmoqda...' : (permissionSelectedActionCount ? `Yuborish (${permissionSelectedActionCount})` : 'Yuborish') }}
+              </button>
+            </div>
           </div>
           <div class="uyqur-functions-groups" ref="permissionGroupsRef" v-if="permissionModulesMerged.length">
             <div class="uyqur-functions-group" :class="{ collapsed: !isPermissionModuleExpanded(module) }"
@@ -3200,10 +3207,17 @@
                 <div class="uyqur-functions-group-title">
                   <div class="card-title">Uyqur Funksiyalari</div>
                 </div>
-                <button type="button" class="btn primary" :disabled="!permissionSelectedActionCount || loadingAction === 'sendPermissionActions'"
-                  @click="sendSelectedPermissionActions">
-                  {{ loadingAction === 'sendPermissionActions' ? 'Yuborilmoqda...' : (permissionSelectedActionCount ? `Yuborish (${permissionSelectedActionCount})` : 'Yuborish') }}
-                </button>
+                <div style="display:flex; align-items:center; gap:14px;">
+                  <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:var(--muted-strong); cursor:pointer;">
+                    <input class="row-check" type="checkbox" :checked="isAllPermissionActionsSelected"
+                      :disabled="!permissionAllSelectableActionIds.length" @change="toggleSelectAllPermissionActions" />
+                    Hammasini tanlash
+                  </label>
+                  <button type="button" class="btn primary" :disabled="!permissionSelectedActionCount || loadingAction === 'sendPermissionActions'"
+                    @click="sendSelectedPermissionActions">
+                    {{ loadingAction === 'sendPermissionActions' ? 'Yuborilmoqda...' : (permissionSelectedActionCount ? `Yuborish (${permissionSelectedActionCount})` : 'Yuborish') }}
+                  </button>
+                </div>
               </div>
               <div class="uyqur-functions-groups" ref="permissionGroupsRef" v-if="permissionModulesMerged.length">
                 <div class="uyqur-functions-group" :class="{ collapsed: !isPermissionModuleExpanded(module) }"
@@ -5477,6 +5491,31 @@ function toggleActionSelected(action = {}) {
   permissionSelectedActionIds.value = next;
 }
 const permissionSelectedActionCount = computed(() => permissionSelectedActionIds.value.size);
+// "Uyqur Funksiyalari" boardidagi BARCHA (hali yuborilmagan) action'larni
+// bir bosishda belgilash/bekor qilish uchun — modul/submodule ochiq yoki
+// yopiq bo'lishidan qat'iy nazar, butun daraxt bo'yicha ishlaydi.
+const permissionAllSelectableActionIds = computed(() => {
+  const ids = [];
+  permissionModulesMerged.value.forEach(module => {
+    (module.submodules || []).forEach(submodule => {
+      (submodule.actions || []).forEach(action => {
+        if (!isActionSent(action)) ids.push(actionUid(action));
+      });
+    });
+  });
+  return ids;
+});
+const isAllPermissionActionsSelected = computed(() => {
+  const ids = permissionAllSelectableActionIds.value;
+  return ids.length > 0 && ids.every(id => permissionSelectedActionIds.value.has(id));
+});
+function toggleSelectAllPermissionActions() {
+  if (isAllPermissionActionsSelected.value) {
+    permissionSelectedActionIds.value = new Set();
+    return;
+  }
+  permissionSelectedActionIds.value = new Set(permissionAllSelectableActionIds.value);
+}
 function populateSentActionIds(sentActionKeys = []) {
   const sentSet = new Set((sentActionKeys || []).map(String));
   const nextSentIds = new Set();
