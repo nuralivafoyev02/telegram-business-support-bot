@@ -1432,7 +1432,7 @@
                   </td>
                   <td class="select-cell">
                     <input class="row-check" type="checkbox"
-                      :checked="row.confirmed || isSupportHistoryEventSelected(row)" :disabled="!row.learned || row.confirmed"
+                      :checked="isSupportHistoryEventSelected(row)" :disabled="!row.learned"
                       @change="toggleSupportHistoryEventSelected(row)" />
                   </td>
                 </tr>
@@ -1440,10 +1440,15 @@
             </table>
             <div v-else class="empty">Bu supportga hali hech narsa yuborilmagan</div>
           </div>
-          <div style="display:flex; justify-content:flex-end;">
+          <div style="display:flex; justify-content:flex-end; gap:8px;">
+            <button v-if="supportHistoryFilter === 'pending'" type="button" class="btn danger-menu-item"
+              :disabled="!supportHistorySelectedCount || loadingAction === 'confirmSupportHistory'"
+              @click="rejectSelectedSupportHistory">
+              {{ loadingAction === 'confirmSupportHistory' ? 'Bajarilmoqda...' : (supportHistorySelectedCount ? `Bekor qilish (${supportHistorySelectedCount})` : 'Bekor qilish') }}
+            </button>
             <button type="button" class="btn primary" :disabled="!supportHistorySelectedCount || loadingAction === 'confirmSupportHistory'"
               @click="confirmSelectedSupportHistory">
-              {{ loadingAction === 'confirmSupportHistory' ? 'Tasdiqlanmoqda...' : (supportHistorySelectedCount ? `Tasdiqlash (${supportHistorySelectedCount})` : 'Tasdiqlash') }}
+              {{ loadingAction === 'confirmSupportHistory' ? 'Bajarilmoqda...' : (supportHistorySelectedCount ? `${supportHistoryActionLabel} (${supportHistorySelectedCount})` : supportHistoryActionLabel) }}
             </button>
           </div>
         </section>
@@ -3342,7 +3347,7 @@
                   </td>
                   <td class="select-cell">
                     <input class="row-check" type="checkbox"
-                      :checked="row.confirmed || isSupportHistoryEventSelected(row)" :disabled="!row.learned || row.confirmed"
+                      :checked="isSupportHistoryEventSelected(row)" :disabled="!row.learned"
                       @change="toggleSupportHistoryEventSelected(row)" />
                   </td>
                 </tr>
@@ -3350,10 +3355,15 @@
             </table>
             <div v-else class="empty">Bu supportga hali hech narsa yuborilmagan</div>
           </div>
-          <div style="display:flex; justify-content:flex-end;">
+          <div style="display:flex; justify-content:flex-end; gap:8px;">
+            <button v-if="supportHistoryFilter === 'pending'" type="button" class="btn danger-menu-item"
+              :disabled="!supportHistorySelectedCount || loadingAction === 'confirmSupportHistory'"
+              @click="rejectSelectedSupportHistory">
+              {{ loadingAction === 'confirmSupportHistory' ? 'Bajarilmoqda...' : (supportHistorySelectedCount ? `Bekor qilish (${supportHistorySelectedCount})` : 'Bekor qilish') }}
+            </button>
             <button type="button" class="btn primary" :disabled="!supportHistorySelectedCount || loadingAction === 'confirmSupportHistory'"
               @click="confirmSelectedSupportHistory">
-              {{ loadingAction === 'confirmSupportHistory' ? 'Tasdiqlanmoqda...' : (supportHistorySelectedCount ? `Tasdiqlash (${supportHistorySelectedCount})` : 'Tasdiqlash') }}
+              {{ loadingAction === 'confirmSupportHistory' ? 'Bajarilmoqda...' : (supportHistorySelectedCount ? `${supportHistoryActionLabel} (${supportHistorySelectedCount})` : supportHistoryActionLabel) }}
             </button>
           </div>
         </section>
@@ -5527,13 +5537,19 @@ function isSupportHistoryEventSelected(row = {}) {
   return supportHistorySelectedEvents.value.has(row.event_id);
 }
 function toggleSupportHistoryEventSelected(row = {}) {
-  if (!row.learned || row.confirmed) return;
+  // O'rganilmagan (hali "learned" bo'lmagan) qatorlar tanlanmaydi — tasdiqlash
+  // yoki qaytarish faqat kamida bir marta o'rganilgan funksiyalarga tegishli.
+  if (!row.learned) return;
   const next = new Set(supportHistorySelectedEvents.value);
   if (next.has(row.event_id)) next.delete(row.event_id);
   else next.add(row.event_id);
   supportHistorySelectedEvents.value = next;
 }
 const supportHistorySelectedCount = computed(() => supportHistorySelectedEvents.value.size);
+// "Tasdiqlanganlar" (done) ro'yxatini ko'rayotganda tugma "Qaytarish" deb
+// nomlanadi — tanlanganlar tasdiqlanish bekor qilinadi. Boshqa holatlarda
+// "Tasdiqlash" (yangi tasdiqlash).
+const supportHistoryActionLabel = computed(() => supportHistoryFilter.value === 'done' ? 'Qaytarish' : 'Tasdiqlash');
 const companyInfo = ref({ summary: {}, companies: [], fetched_at: '', source: '' });
 const companyModuleReports = ref({ companies: [], report_dates: [], period: 'all' });
 const companyModuleChartSource = ref({ period: 'week', daily_companies: [], report_dates: [] });
@@ -11856,7 +11872,10 @@ async function submitEmployeeFunctionChanges() {
 }
 
 async function refreshKnowledgeDashboardIfLoaded() {
-  if (!isManagementAccount.value) return;
+  // Support (employee) panelida bu dashboard umuman ko'rsatilmaydi — faqat
+  // boshqaruv va superadmin panellarida (ikkalasida ham "Bilim darajasi"
+  // sahifasi bor) yangilanadi.
+  if (isEmployeeAccount.value) return;
   try {
     knowledgeDashboard.value = await api.knowledgeDashboard({ days: knowledgePeriodDays.value });
   } catch (error) {
@@ -11890,11 +11909,48 @@ async function confirmSelectedSupportHistory() {
   startLoading('confirmSupportHistory');
   try {
     const eventIds = Array.from(supportHistorySelectedEvents.value);
-    await Promise.all(eventIds.map(eventId => api.confirmUyqurReview({
+    // Har bir belgilangan qator o'zining hozirgi holatiga qarab TESKARIGA
+    // o'giriladi — hali tasdiqlanmagan bo'lsa tasdiqlanadi, allaqachon
+    // tasdiqlangan bo'lsa qaytariladi (bekor qilinadi). Shu orqali bitta
+    // tugma bilan ham "Tasdiqlash", ham "Qaytarish" ishlaydi.
+    const rowsById = new Map(supportHistoryRows.value.map(row => [row.event_id, row]));
+    await Promise.all(eventIds.map(eventId => {
+      const row = rowsById.get(eventId);
+      return api.confirmUyqurReview({
+        event_id: eventId,
+        employee_id: selectedSupportId.value,
+        confirmed: !(row && row.confirmed),
+        manager_username: ''
+      });
+    }));
+    supportHistorySelectedEvents.value = new Set();
+    await Promise.all([
+      loadSupportOverview(),
+      refreshSupportHistoryIfOpen(selectedSupportId.value),
+      refreshKnowledgeDashboardIfLoaded()
+    ]);
+    showToast('Bajarildi');
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    stopLoading('confirmSupportHistory');
+  }
+}
+
+// "Jarayonda" (o'rganilgan-u hali tasdiqlanmagan) funksiyalarni butunlay
+// bekor qilish — support o'zi belgilagan "o'rgandim" holatini ham olib
+// tashlaydi, natijada funksiya "Boshlanmagan" (0) holatiga qaytadi. Bu
+// faqat tasdiqni bekor qiladigan "Qaytarish"dan farqli — u faqat
+// "Jarayonda"ga qaytaradi, buni esa to'g'ridan-to'g'ri nolga tushiradi.
+async function rejectSelectedSupportHistory() {
+  if (!supportHistorySelectedEvents.value.size || !selectedSupportId.value) return;
+  startLoading('confirmSupportHistory');
+  try {
+    const eventIds = Array.from(supportHistorySelectedEvents.value);
+    await Promise.all(eventIds.map(eventId => api.markUyqurLearned({
       event_id: eventId,
       employee_id: selectedSupportId.value,
-      confirmed: true,
-      manager_username: ''
+      learned: false
     })));
     supportHistorySelectedEvents.value = new Set();
     await Promise.all([
@@ -11902,7 +11958,7 @@ async function confirmSelectedSupportHistory() {
       refreshSupportHistoryIfOpen(selectedSupportId.value),
       refreshKnowledgeDashboardIfLoaded()
     ]);
-    showToast('Tasdiqlandi');
+    showToast('Bekor qilindi');
   } catch (error) {
     showToast(error.message);
   } finally {
