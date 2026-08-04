@@ -560,6 +560,9 @@
                 <div class="uyqur-functions-group-head" @click.stop="toggleEmployeeModuleExpanded(module)">
                   <span class="uyqur-functions-collapse-icon">›</span>
                   <span class="uyqur-functions-group-title">
+                    <span class="uyqur-functions-module-icon"
+                      :style="{ background: moduleIconMeta(module.name || module.key).bg, color: moduleIconMeta(module.name || module.key).color }"
+                      v-html="moduleIconSvg(module.name || module.key)"></span>
                     <b>{{ module.name || module.key }}</b>
                   </span>
                 </div>
@@ -1074,6 +1077,9 @@
               <div class="uyqur-functions-group-head" @click.stop="togglePermissionModuleExpanded(module)">
                 <span class="uyqur-functions-collapse-icon">›</span>
                 <span class="uyqur-functions-group-title">
+                  <span class="uyqur-functions-module-icon"
+                    :style="{ background: moduleIconMeta(module.name || module.key).bg, color: moduleIconMeta(module.name || module.key).color }"
+                    v-html="moduleIconSvg(module.name || module.key)"></span>
                   <b>{{ module.name || module.key }} ({{ module.submodules.length }})</b>
                 </span>
               </div>
@@ -3027,6 +3033,9 @@
                   <div class="uyqur-functions-group-head" @click.stop="togglePermissionModuleExpanded(module)">
                     <span class="uyqur-functions-collapse-icon">›</span>
                     <span class="uyqur-functions-group-title">
+                      <span class="uyqur-functions-module-icon"
+                        :style="{ background: moduleIconMeta(module.name || module.key).bg, color: moduleIconMeta(module.name || module.key).color }"
+                        v-html="moduleIconSvg(module.name || module.key)"></span>
                       <b>{{ module.name || module.key }}</b>
                     </span>
                   </div>

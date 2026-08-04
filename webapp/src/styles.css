@@ -3815,6 +3815,21 @@ body {
   transform: rotate(90deg);
 }
 
+.uyqur-functions-module-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+
+.uyqur-functions-module-icon svg {
+  width: 15px;
+  height: 15px;
+}
+
 .uyqur-functions-group.collapsed .uyqur-functions-collapse-icon {
   display: none;
 }
