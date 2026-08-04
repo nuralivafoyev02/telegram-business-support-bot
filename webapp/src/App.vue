@@ -1397,8 +1397,10 @@
     </Transition>
   </div>
 
-  <div v-else class="app-shell">
-    <aside class="sidebar">
+  <div v-else class="app-shell" :class="{ 'sidebar-collapsed': !adminSidebarExpanded }">
+    <aside class="sidebar" :class="{ 'icon-only': !adminSidebarExpanded }"
+      :title="adminSidebarExpanded ? 'Yig‘ish uchun bo‘sh joyni bosing' : 'Ochish uchun bo‘sh joyni bosing'"
+      @click="adminSidebarExpanded = !adminSidebarExpanded">
       <div class="brand">
         <img class="logo" :src="uyqurLogoUrl" alt="Uyqur" width="42" height="42" />
         <div class="brand-wrapper">
@@ -1408,14 +1410,14 @@
 
       <nav class="nav">
         <button v-for="item in mainTabs" :key="item.key" :class="{ active: activeTab === item.key }"
-          :title="item.label" @click="setTab(item.key)">
+          :title="item.label" @click.stop="setTab(item.key)">
           <span class="nav-icon" :style="{ background: navIconMeta(item.key).bg, color: navIconMeta(item.key).color }"
             v-html="navIconSvg(item.key)"></span>
           <b>{{ item.label }}</b>
         </button>
         <div class="nav-group" :class="{ open: otherMenuOpen }">
           <button class="nav-disclosure" :class="{ active: isOtherTabActive }" type="button"
-            :aria-expanded="otherMenuOpen ? 'true' : 'false'" @click="otherMenuOpen = !otherMenuOpen">
+            :aria-expanded="otherMenuOpen ? 'true' : 'false'" @click.stop="otherMenuOpen = !otherMenuOpen">
             <span class="nav-icon" :style="{ background: navIconMeta('more').bg, color: navIconMeta('more').color }"
               v-html="navIconSvg('more')"></span>
             <b>Boshqa menyular</b>
@@ -1424,7 +1426,7 @@
           <Transition name="fade">
             <div v-if="otherMenuOpen" class="nav-submenu">
               <button v-for="item in otherTabs" :key="item.key" :class="{ active: activeTab === item.key }"
-                :title="item.label" @click="setTab(item.key)">
+                :title="item.label" @click.stop="setTab(item.key)">
                 <span class="nav-icon" :style="{ background: navIconMeta(item.key).bg, color: navIconMeta(item.key).color }"
                   v-html="navIconSvg(item.key)"></span>
                 <b>{{ item.label }}</b>
@@ -1435,7 +1437,7 @@
       </nav>
 
       <nav class="nav nav-bottom">
-        <button :class="{ active: activeTab === settingsTab.key }" :title="settingsTab.label" @click="setTab(settingsTab.key)">
+        <button :class="{ active: activeTab === settingsTab.key }" :title="settingsTab.label" @click.stop="setTab(settingsTab.key)">
           <span class="nav-icon" :style="{ background: navIconMeta(settingsTab.key).bg, color: navIconMeta(settingsTab.key).color }"
             v-html="navIconSvg(settingsTab.key)"></span>
           <b>{{ settingsTab.label }}</b>
@@ -4976,6 +4978,7 @@ const managementTabs = [
 const managementActiveTab = ref('dashboard');
 // Sidebar default holatda yopiq (faqat iconkalar) — foydalanuvchi bosganda ochiladi.
 const managementSidebarExpanded = ref(false);
+const adminSidebarExpanded = ref(false);
 const moduleFunctionsDetail = ref(null);
 const functionsByStatus = ref(null);
 const functionsByStatusColumns = [
