@@ -3979,14 +3979,22 @@ body {
 
 .avatar-stack-item img,
 .avatar-stack-item .profile-avatar {
-  display: block;
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  object-fit: cover;
   font-size: 10px;
   border: 2px solid var(--surface, #fff);
   box-shadow: 0 0 0 1px var(--line);
+}
+
+.avatar-stack-item img {
+  display: block;
+  object-fit: cover;
+}
+
+.avatar-stack-item .profile-avatar {
+  display: inline-grid;
+  place-items: center;
 }
 
 .avatar-stack-more {
@@ -4049,13 +4057,15 @@ body {
 .status-subaction {
   display: flex;
   align-items: center;
+  justify-content: flex-start;
   gap: 0;
 }
 
 .status-subaction-name {
-  flex: 1;
+  flex: 0 1 auto;
   min-width: 0;
-  padding-right: 10px;
+  max-width: 320px;
+  margin-right: 16px;
 }
 
 /* Tashqi jadvaldagi "O'rgangan/O'rganmagan xodimlar/Chiqqaniga" ustunlariga
