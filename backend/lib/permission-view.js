@@ -1052,6 +1052,42 @@ async function getEmployeeKnowledgeProfile(employeeId) {
   }, { total: 0, learned: 0 });
   const overallPercent = overallWeight.total ? Math.round((overallWeight.learned / overallWeight.total) * 100) : 0;
 
+  // "O'rganilgan/Jarayondagi/Boshlanmagan funksiyalar" KPI kartochkalari —
+  // getKnowledgeDashboard'dagi jamoaviy donut bilan BIR XIL qoida, faqat shu
+  // BITTA xodim uchun: butun modul daraxti asos qilinadi (hali hodisasi
+  // yo'q submodule ham "boshlanmagan"ga kiradi), tasdiqlangan — o'rganilgan,
+  // o'rganilgan-u tasdiqlanmagan — jarayonda.
+  const allSubmoduleKeys = [];
+  (Array.isArray(permissionRecord.modules) ? permissionRecord.modules : []).forEach(module => {
+    (module.submodules || []).forEach(submodule => {
+      allSubmoduleKeys.push(String(submodule.key));
+    });
+  });
+  const eventBySubmoduleKey = new Map(events.map(event => [String(event.submodule_key), event]));
+  let donutLearned = 0;
+  let donutInProgress = 0;
+  let donutNotStarted = 0;
+  let donutTotal = 0;
+  allSubmoduleKeys.forEach(key => {
+    const weight = actionsCountFor(key);
+    donutTotal += weight;
+    const event = eventBySubmoduleKey.get(key);
+    if (!event) {
+      donutNotStarted += weight;
+      return;
+    }
+    const progress = progressFor(record, event.id, employee.id);
+    if (progress.confirmed_at) donutLearned += weight;
+    else if (progress.learned_at) donutInProgress += weight;
+    else donutNotStarted += weight;
+  });
+  const donut = {
+    learned_count: donutLearned,
+    in_progress_count: donutInProgress,
+    not_learned_count: donutNotStarted,
+    total_count: donutTotal
+  };
+
   // "Jamoa" uchun alohida ustun yo'q — xodim eng ko'p ishlagan (eng ko'p
   // hodisaga ega) moduli asosida chiqariladi.
   const team = modulePercents.slice().sort((a, b) => b.event_count - a.event_count)[0]?.module_name || '';
@@ -1116,6 +1152,7 @@ async function getEmployeeKnowledgeProfile(employeeId) {
       team
     },
     overall_percent: overallPercent,
+    donut,
     module_percents: modulePercents,
     daily_progress: dailyProgress,
     learned_functions: learnedFunctions.sort((a, b) => String(b.learned_at || '').localeCompare(String(a.learned_at || ''))),

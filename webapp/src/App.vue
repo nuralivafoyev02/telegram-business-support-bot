@@ -333,6 +333,67 @@
           </section>
         </template>
 
+        <template v-else-if="employeeActiveTab === 'knowledgeDashboard'">
+          <div v-if="myKnowledgeProfile" class="support-summary-grid">
+            <article class="card support-summary-card">
+              <div class="support-summary-content">
+                <div class="support-summary-title">Umumiy bilim darajasi</div>
+                <div class="support-summary-value-row">
+                  <div class="support-summary-value">{{ fmtPercent(myKnowledgeProfile.overall_percent) }}</div>
+                </div>
+              </div>
+            </article>
+            <article class="card support-summary-card">
+              <div class="support-summary-content">
+                <div class="support-summary-title">O‘rganilgan funksiyalar</div>
+                <div class="support-summary-value-row">
+                  <div class="support-summary-value" style="color:#16a34a;">{{ fmtNumber(myKnowledgeProfile.donut?.learned_count) }}</div>
+                </div>
+              </div>
+            </article>
+            <article class="card support-summary-card">
+              <div class="support-summary-content">
+                <div class="support-summary-title">Jarayondagi funksiyalar</div>
+                <div class="support-summary-value-row">
+                  <div class="support-summary-value" style="color:#f59e0b;">{{ fmtNumber(myKnowledgeProfile.donut?.in_progress_count) }}</div>
+                </div>
+              </div>
+            </article>
+            <article class="card support-summary-card">
+              <div class="support-summary-content">
+                <div class="support-summary-title">Boshlanmagan funksiyalar</div>
+                <div class="support-summary-value-row">
+                  <div class="support-summary-value" style="color:#dc2626;">{{ fmtNumber(myKnowledgeProfile.donut?.not_learned_count) }}</div>
+                </div>
+              </div>
+            </article>
+          </div>
+
+          <section v-if="myKnowledgeProfile" class="card pad" style="margin-top:16px;">
+            <div class="card-header">
+              <div class="card-title">Modullar bo‘yicha bilim darajasi</div>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:16px;">
+              <div v-for="module in myKnowledgeProfile.module_percents" :key="module.module_name"
+                style="display:flex; align-items:center; gap:12px;">
+                <span style="display:flex; align-items:center; gap:10px; width:150px; flex-shrink:0;">
+                  <span
+                    :style="{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', borderRadius: '10px', flexShrink: 0, background: moduleIconMeta(module.module_name).bg, color: moduleIconMeta(module.module_name).color }"
+                    v-html="moduleIconSvg(module.module_name)"
+                  ></span>
+                  <span style="font-size:15px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ module.module_name }}</span>
+                </span>
+                <div style="flex:1; height:10px; border-radius:5px; background:#f1f5f9; overflow:hidden;">
+                  <div :style="{ width: module.percent + '%', height: '100%', borderRadius: '5px', background: module.percent >= 70 ? '#16a34a' : (module.percent >= 40 ? '#f59e0b' : '#dc2626') }"></div>
+                </div>
+                <span style="width:48px; text-align:right; font-size:15px; font-weight:600;">{{ module.percent }}%</span>
+              </div>
+              <div v-if="!myKnowledgeProfile.module_percents.length" class="empty compact">Modul ma’lumoti yo‘q</div>
+            </div>
+          </section>
+          <div v-if="!myKnowledgeProfile" class="empty">{{ loadingAction === 'employeeRefresh' ? 'Yuklanmoqda...' : 'Ma’lumot topilmadi' }}</div>
+        </template>
+
         <template v-else-if="employeeActiveTab === 'companyModules'">
           <section class="card company-module-table-card" ref="moduleCompareMenuRef">
             <div class="card-header company-module-table-head">
@@ -1100,10 +1161,21 @@
             <div class="uyqur-functions-group-title">
               <div class="card-title">Uyqur Funksiyalari</div>
             </div>
-            <button type="button" class="btn primary" :disabled="!permissionSelectedActionCount || loadingAction === 'sendPermissionActions'"
-              @click="sendSelectedPermissionActions">
-              {{ loadingAction === 'sendPermissionActions' ? 'Yuborilmoqda...' : (permissionSelectedActionCount ? `Yuborish (${permissionSelectedActionCount})` : 'Yuborish') }}
-            </button>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <button type="button" class="btn primary" :disabled="!permissionSelectedActionCount || loadingAction === 'sendPermissionActions'"
+                @click="sendSelectedPermissionActions">
+                {{ loadingAction === 'sendPermissionActions' ? 'Yuborilmoqda...' : (permissionSelectedActionCount ? `Yuborish (${permissionSelectedActionCount})` : 'Yuborish') }}
+              </button>
+              <button type="button" class="btn" title="Belgilash rejimi" :class="{ active: permissionSelectModeOpen }"
+                style="display:inline-flex; align-items:center; justify-content:center; padding:0; width:38px; height:38px; flex-shrink:0;"
+                @click="permissionSelectModeOpen = !permissionSelectModeOpen">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                  <line x1="4" y1="7" x2="20" y2="7" />
+                  <line x1="7" y1="12" x2="17" y2="12" />
+                  <line x1="10" y1="17" x2="14" y2="17" />
+                </svg>
+              </button>
+            </div>
           </div>
           <div class="uyqur-functions-groups" ref="permissionGroupsRef" v-if="permissionModulesMerged.length">
             <div class="uyqur-functions-group" :class="{ collapsed: !isPermissionModuleExpanded(module) }"
@@ -1114,7 +1186,7 @@
               <div class="uyqur-functions-group-head" @click.stop="togglePermissionModuleExpanded(module)">
                 <span class="uyqur-functions-collapse-icon">›</span>
                 <span class="uyqur-functions-group-title">
-                  <input class="row-check" type="checkbox" :checked="isModuleActionsSelected(module)"
+                  <input v-if="permissionSelectModeOpen" class="row-check" type="checkbox" :checked="isModuleActionsSelected(module)"
                     :disabled="!moduleSelectableActionIds(module).length" @click.stop
                     @change="toggleModuleActionsSelected(module)" />
                   <span class="uyqur-functions-module-icon"
@@ -1127,7 +1199,7 @@
                 <template v-for="(submodule, submoduleIndex) in module.submodules" :key="'all-functions-submodule-' + submodule.id">
                   <div class="uyqur-functions-card" :class="{ expandable: (submodule.actions || []).length }"
                     @click="(submodule.actions || []).length && toggleSubmoduleActionsExpanded(submodule, module, submoduleIndex)">
-                    <input class="row-check" type="checkbox" :checked="isSubmoduleAllActionsSelected(submodule)"
+                    <input v-if="permissionSelectModeOpen" class="row-check" type="checkbox" :checked="isSubmoduleAllActionsSelected(submodule)"
                       :disabled="!submoduleSelectableActionIds(submodule).length" @click.stop
                       @change="toggleSubmoduleAllActionsSelected(submodule)" />
                     <span>{{ submodule.name || submodule.key }}</span>
@@ -1137,7 +1209,7 @@
                     class="uyqur-functions-subactions">
                     <label v-for="action in submodule.actions" :key="'all-functions-action-' + action.id"
                       class="uyqur-functions-subaction status-subaction" :class="{ sent: isActionSent(action) }" @click.stop>
-                      <input type="checkbox" class="row-check"
+                      <input v-if="permissionSelectModeOpen" type="checkbox" class="row-check"
                         :checked="isActionSent(action) || isActionSelected(action)"
                         :disabled="isActionSent(action)"
                         @change="toggleActionSelected(action)" />
@@ -3206,10 +3278,21 @@
                 <div class="uyqur-functions-group-title">
                   <div class="card-title">Uyqur Funksiyalari</div>
                 </div>
-                <button type="button" class="btn primary" :disabled="!permissionSelectedActionCount || loadingAction === 'sendPermissionActions'"
-                  @click="sendSelectedPermissionActions">
-                  {{ loadingAction === 'sendPermissionActions' ? 'Yuborilmoqda...' : (permissionSelectedActionCount ? `Yuborish (${permissionSelectedActionCount})` : 'Yuborish') }}
-                </button>
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <button type="button" class="btn primary" :disabled="!permissionSelectedActionCount || loadingAction === 'sendPermissionActions'"
+                    @click="sendSelectedPermissionActions">
+                    {{ loadingAction === 'sendPermissionActions' ? 'Yuborilmoqda...' : (permissionSelectedActionCount ? `Yuborish (${permissionSelectedActionCount})` : 'Yuborish') }}
+                  </button>
+                  <button type="button" class="btn" title="Belgilash rejimi" :class="{ active: permissionSelectModeOpen }"
+                    style="display:inline-flex; align-items:center; justify-content:center; padding:0; width:38px; height:38px; flex-shrink:0;"
+                    @click="permissionSelectModeOpen = !permissionSelectModeOpen">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                      <line x1="4" y1="7" x2="20" y2="7" />
+                      <line x1="7" y1="12" x2="17" y2="12" />
+                      <line x1="10" y1="17" x2="14" y2="17" />
+                    </svg>
+                  </button>
+                </div>
               </div>
               <div class="uyqur-functions-groups" ref="permissionGroupsRef" v-if="permissionModulesMerged.length">
                 <div class="uyqur-functions-group" :class="{ collapsed: !isPermissionModuleExpanded(module) }"
@@ -3219,7 +3302,7 @@
                   <div class="uyqur-functions-group-head" @click.stop="togglePermissionModuleExpanded(module)">
                     <span class="uyqur-functions-collapse-icon">›</span>
                     <span class="uyqur-functions-group-title">
-                      <input class="row-check" type="checkbox" :checked="isModuleActionsSelected(module)"
+                      <input v-if="permissionSelectModeOpen" class="row-check" type="checkbox" :checked="isModuleActionsSelected(module)"
                         :disabled="!moduleSelectableActionIds(module).length" @click.stop
                         @change="toggleModuleActionsSelected(module)" />
                       <span class="uyqur-functions-module-icon"
@@ -3232,7 +3315,7 @@
                     <template v-for="(submodule, submoduleIndex) in module.submodules" :key="'submodule-' + submodule.id">
                       <div class="uyqur-functions-card" :class="{ expandable: (submodule.actions || []).length }"
                         @click="(submodule.actions || []).length && toggleSubmoduleActionsExpanded(submodule, module, submoduleIndex)">
-                        <input class="row-check" type="checkbox" :checked="isSubmoduleAllActionsSelected(submodule)"
+                        <input v-if="permissionSelectModeOpen" class="row-check" type="checkbox" :checked="isSubmoduleAllActionsSelected(submodule)"
                           :disabled="!submoduleSelectableActionIds(submodule).length" @click.stop
                           @change="toggleSubmoduleAllActionsSelected(submodule)" />
                         <span>{{ submodule.name || submodule.key }}</span>
@@ -3242,7 +3325,7 @@
                         class="uyqur-functions-subactions">
                         <label v-for="action in submodule.actions" :key="'settings-action-' + action.id"
                           class="uyqur-functions-subaction status-subaction" :class="{ sent: isActionSent(action) }" @click.stop>
-                          <input type="checkbox" class="row-check"
+                          <input v-if="permissionSelectModeOpen" type="checkbox" class="row-check"
                             :checked="isActionSent(action) || isActionSelected(action)"
                             :disabled="isActionSent(action)"
                             @change="toggleActionSelected(action)" />
@@ -5350,6 +5433,7 @@ const isEmployeeAccount = computed(() => account.value?.type === 'employee' && a
 const isManagementAccount = computed(() => account.value?.type === 'employee' && account.value?.role === 'management');
 const employeeTabs = [
   { key: 'performance', label: 'Natijalarim', icon: '📊' },
+  { key: 'knowledgeDashboard', label: 'Bilim darajasi', icon: '🎓' },
   { key: 'companyModules', label: 'Bo‘limlar statistikasi', icon: '🏢' },
   { key: 'notifications', label: 'Uyqur Funksiyalari', icon: '🧩' }
 ];
@@ -5383,6 +5467,7 @@ const functionsByStatusColumns = [
   { key: 'submodule_name', label: 'Funksiya nomi', slot: 'submoduleName' }
 ];
 const employeeKnowledgeProfile = ref(null);
+const myKnowledgeProfile = ref(null);
 const managementModal = ref('');
 const activeTab = ref(getStoredActiveTab());
 const loading = ref(false);
@@ -5469,6 +5554,9 @@ function toggleSubmoduleActionsExpanded(submodule, module, submoduleIndex) {
 // Boshqaruv/admin panelida har bir action oldida checkbox — belgilab
 // "Yuborish" bosilganda TANLANGAN action'lar backendga "yuborilgan" deb
 // yoziladi (submodule darajasidagi bilim-daraja tizimidan mustaqil).
+// Checkbox'lar default holatda YASHIRIN — faqat "☰" bosilib "belgilash
+// rejimi" yoqilganda ko'rinadi, aks holda board oddiy ko'rinishda turadi.
+const permissionSelectModeOpen = ref(false);
 const permissionSentActionIds = ref(new Set());
 const permissionSelectedActionIds = ref(new Set());
 function actionUid(action = {}) {
@@ -13022,6 +13110,20 @@ async function loadEmployeeCompanyModuleStats() {
   }
 }
 
+// Support o'zining shaxsiy "Bilim darajasi" sahifasi uchun — admin/boshqaruv
+// panelidagi jamoaviy dashboard bilan bir xil ko'rinishda, lekin FAQAT shu
+// xodimning o'z ma'lumotlari asosida (getEmployeeKnowledgeProfile — xuddi
+// shu funksiya admin panelda boshqa xodimni ko'rish uchun ham ishlatiladi).
+async function loadMyKnowledgeProfile() {
+  const employeeId = account.value?.employee_id;
+  if (!employeeId) return;
+  try {
+    myKnowledgeProfile.value = await api.employeeKnowledgeProfile({ employee_id: employeeId });
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
 async function refreshMyDashboard() {
   startLoading('employeeRefresh');
   try {
@@ -13030,7 +13132,8 @@ async function refreshMyDashboard() {
       loadMyNotifications(),
       loadMyTickets(),
       loadPermissionView(),
-      loadEmployeeCompanyModuleStats()
+      loadEmployeeCompanyModuleStats(),
+      loadMyKnowledgeProfile()
     ]);
   } finally {
     stopLoading('employeeRefresh');

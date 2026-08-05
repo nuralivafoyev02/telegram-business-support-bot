@@ -6514,7 +6514,7 @@ async function updateAdmin(body, currentAdmin) {
 // boshqa hamma narsa 403 bilan rad etiladi. employee_id/tg_user_id/id har
 // doim sessiyaning o'z employee_id'si bilan majburan almashtiriladi, mijoz
 // tomonidan yuborilgan qiymat hech qachon ishonilmaydi.
-const EMPLOYEE_GET_ACTIONS = new Set(['employeeActivity', 'uyqurSupportHistory', 'uyqurPermissions', 'groups', 'privates', 'requests', 'chatDetail', 'companyInfo', 'companyModuleReports']);
+const EMPLOYEE_GET_ACTIONS = new Set(['employeeActivity', 'uyqurSupportHistory', 'uyqurPermissions', 'uyqurEmployeeKnowledgeProfile', 'groups', 'privates', 'requests', 'chatDetail', 'companyInfo', 'companyModuleReports']);
 const EMPLOYEE_POST_ACTIONS = new Set(['uyqurMarkLearned', 'sendMessage', 'replyRequest', 'managementProfile', 'managementAvatarUpload', 'managementAvatarRemove']);
 
 // "Boshqaruv paneli" (role='management') xodimlari — o'z chatiga emas,
