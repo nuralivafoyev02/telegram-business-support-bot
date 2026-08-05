@@ -1504,13 +1504,13 @@
                       <div class="uyqur-functions-subactions status-subactions" style="margin:0;">
                         <label v-for="action in row.actions" :key="'support-history-action-' + row.event_id + '-' + action.id"
                           class="uyqur-functions-subaction status-subaction">
-                          <input class="row-check" type="checkbox"
-                            :checked="isSupportHistoryActionSelected(row, action)" :disabled="!action.learned"
-                            @change="toggleSupportHistoryActionSelected(row, action)" />
                           <span class="status-subaction-name" style="flex:1;">{{ action.name }}</span>
                           <span class="badge" :class="action.confirmed ? 'green' : (action.learned ? 'blue' : 'orange')">
                             {{ action.confirmed ? '✓ Qabul qilindi' : (action.learned ? 'O‘rganildi' : 'Kutilmoqda') }}
                           </span>
+                          <input class="row-check" type="checkbox"
+                            :checked="isSupportHistoryActionSelected(row, action)"
+                            @change="toggleSupportHistoryActionSelected(row, action)" />
                         </label>
                       </div>
                     </td>
@@ -3462,13 +3462,13 @@
                       <div class="uyqur-functions-subactions status-subactions" style="margin:0;">
                         <label v-for="action in row.actions" :key="'support-history-action-' + row.event_id + '-' + action.id"
                           class="uyqur-functions-subaction status-subaction">
-                          <input class="row-check" type="checkbox"
-                            :checked="isSupportHistoryActionSelected(row, action)" :disabled="!action.learned"
-                            @change="toggleSupportHistoryActionSelected(row, action)" />
                           <span class="status-subaction-name" style="flex:1;">{{ action.name }}</span>
                           <span class="badge" :class="action.confirmed ? 'green' : (action.learned ? 'blue' : 'orange')">
                             {{ action.confirmed ? '✓ Qabul qilindi' : (action.learned ? 'O‘rganildi' : 'Kutilmoqda') }}
                           </span>
+                          <input class="row-check" type="checkbox"
+                            :checked="isSupportHistoryActionSelected(row, action)"
+                            @change="toggleSupportHistoryActionSelected(row, action)" />
                         </label>
                       </div>
                     </td>
@@ -5736,7 +5736,6 @@ function isSupportHistoryActionSelected(row, action) {
   return supportHistorySelectedActions.value.has(actionSelectionKey(row, action));
 }
 function toggleSupportHistoryActionSelected(row, action) {
-  if (!action.learned) return;
   const key = actionSelectionKey(row, action);
   const next = new Map(supportHistorySelectedActions.value);
   if (next.has(key)) next.delete(key);
