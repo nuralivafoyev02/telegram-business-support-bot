@@ -178,6 +178,7 @@ export const api = {
   markUyqurLearned: payload => request('uyqurMarkLearned', { method: 'POST', body: payload }).then(r => r.data),
   markUyqurActionLearned: payload => request('uyqurActionMarkLearned', { method: 'POST', body: payload }).then(r => r.data),
   confirmUyqurReview: payload => request('uyqurConfirmReview', { method: 'POST', body: payload }).then(r => r.data),
+  confirmUyqurActionReview: payload => request('uyqurActionConfirmReview', { method: 'POST', body: payload }).then(r => r.data),
   knowledgeDashboard: (query = {}) => request('uyqurKnowledgeDashboard', { query }).then(r => r.data),
   moduleFunctionsDetail: (query = {}) => request('uyqurModuleFunctionsDetail', { query }).then(r => r.data),
   functionsByStatus: status => request('uyqurFunctionsByStatus', { query: { status } }).then(r => r.data),

@@ -302,10 +302,37 @@ async function setActionLearned(submoduleKey, actionKey, employeeId, learned = t
   const progress = await getActionLearnedRecord();
   const key = actionCompositeKey(normalizedSubmoduleKey, normalizedActionKey);
   if (!progress[key]) progress[key] = {};
-  if (learned) progress[key][employeeId] = { learned_at: new Date().toISOString() };
-  else delete progress[key][employeeId];
+  const current = progress[key][employeeId] || {};
+  progress[key][employeeId] = {
+    learned_at: learned ? new Date().toISOString() : null,
+    confirmed_at: learned ? current.confirmed_at || null : null,
+    confirmed_by: learned ? current.confirmed_by || null : null
+  };
   await saveActionLearnedRecord(progress);
-  return { key, employee_id: employeeId, learned: !!learned };
+  return progress[key][employeeId];
+}
+
+// Boshqaruv/admin panelida support yuborgan (o'rgandim deb belgilagan)
+// action'ni ko'rib chiqib "Tasdiqlash"/"Qaytarish" qilish uchun — submodule
+// darajasidagi setManagerConfirmation bilan bir xil mantiq, faqat alohida
+// action-progress yozuvida saqlanadi.
+async function setActionConfirmed(submoduleKey, actionKey, employeeId, confirmed = true, managerName = '') {
+  const normalizedSubmoduleKey = String(submoduleKey || '');
+  const normalizedActionKey = String(actionKey || '');
+  if (!normalizedSubmoduleKey || !normalizedActionKey || !employeeId) {
+    throw new Error('submodule_key, action_key va employee_id majburiy');
+  }
+  const progress = await getActionLearnedRecord();
+  const key = actionCompositeKey(normalizedSubmoduleKey, normalizedActionKey);
+  if (!progress[key]) progress[key] = {};
+  const current = progress[key][employeeId] || {};
+  progress[key][employeeId] = {
+    ...current,
+    confirmed_at: confirmed ? new Date().toISOString() : null,
+    confirmed_by: confirmed ? (managerName || null) : null
+  };
+  await saveActionLearnedRecord(progress);
+  return progress[key][employeeId];
 }
 
 async function sendPermissionActions(items = []) {
@@ -442,13 +469,15 @@ async function getSupportEventHistory(employeeId) {
     const rawActions = actionsBySubmoduleKey.get(String(event.submodule_key)) || [];
     const actions = rawActions.map(action => {
       const key = actionCompositeKey(String(event.submodule_key), String(action.key || action.id));
-      const learnedAt = actionProgress[key] && actionProgress[key][employeeId] && actionProgress[key][employeeId].learned_at;
+      const actionEntry = (actionProgress[key] && actionProgress[key][employeeId]) || {};
       return {
         id: action.id,
         key: action.key,
         name: action.name || action.key,
-        learned: Boolean(learnedAt),
-        learned_at: learnedAt || null
+        learned: Boolean(actionEntry.learned_at),
+        learned_at: actionEntry.learned_at || null,
+        confirmed: Boolean(actionEntry.confirmed_at),
+        confirmed_at: actionEntry.confirmed_at || null
       };
     });
     return {
@@ -1271,5 +1300,6 @@ module.exports = {
   getFunctionsByLearningStatus,
   getEmployeeKnowledgeProfile,
   sendPermissionActions,
-  setActionLearned
+  setActionLearned,
+  setActionConfirmed
 };

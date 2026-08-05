@@ -1502,13 +1502,16 @@
                   <tr v-if="isSupportHistoryRowExpanded(row) && (row.actions || []).length">
                     <td colspan="4" style="padding:0 0 10px;">
                       <div class="uyqur-functions-subactions status-subactions" style="margin:0;">
-                        <div v-for="action in row.actions" :key="'support-history-action-' + row.event_id + '-' + action.id"
+                        <label v-for="action in row.actions" :key="'support-history-action-' + row.event_id + '-' + action.id"
                           class="uyqur-functions-subaction status-subaction">
+                          <input class="row-check" type="checkbox"
+                            :checked="isSupportHistoryActionSelected(row, action)" :disabled="!action.learned"
+                            @change="toggleSupportHistoryActionSelected(row, action)" />
                           <span class="status-subaction-name" style="flex:1;">{{ action.name }}</span>
-                          <span class="badge" :class="action.learned ? 'blue' : 'orange'">
-                            {{ action.learned ? 'O‘rganildi' : 'Kutilmoqda' }}
+                          <span class="badge" :class="action.confirmed ? 'green' : (action.learned ? 'blue' : 'orange')">
+                            {{ action.confirmed ? '✓ Qabul qilindi' : (action.learned ? 'O‘rganildi' : 'Kutilmoqda') }}
                           </span>
-                        </div>
+                        </label>
                       </div>
                     </td>
                   </tr>
@@ -3457,13 +3460,16 @@
                   <tr v-if="isSupportHistoryRowExpanded(row) && (row.actions || []).length">
                     <td colspan="4" style="padding:0 0 10px;">
                       <div class="uyqur-functions-subactions status-subactions" style="margin:0;">
-                        <div v-for="action in row.actions" :key="'support-history-action-' + row.event_id + '-' + action.id"
+                        <label v-for="action in row.actions" :key="'support-history-action-' + row.event_id + '-' + action.id"
                           class="uyqur-functions-subaction status-subaction">
+                          <input class="row-check" type="checkbox"
+                            :checked="isSupportHistoryActionSelected(row, action)" :disabled="!action.learned"
+                            @change="toggleSupportHistoryActionSelected(row, action)" />
                           <span class="status-subaction-name" style="flex:1;">{{ action.name }}</span>
-                          <span class="badge" :class="action.learned ? 'blue' : 'orange'">
-                            {{ action.learned ? 'O‘rganildi' : 'Kutilmoqda' }}
+                          <span class="badge" :class="action.confirmed ? 'green' : (action.learned ? 'blue' : 'orange')">
+                            {{ action.confirmed ? '✓ Qabul qilindi' : (action.learned ? 'O‘rganildi' : 'Kutilmoqda') }}
                           </span>
-                        </div>
+                        </label>
                       </div>
                     </td>
                   </tr>
@@ -5720,7 +5726,24 @@ function toggleSupportHistoryRowExpanded(row = {}) {
   else next.add(row.event_id);
   expandedSupportHistoryKeys.value = next;
 }
-const supportHistorySelectedCount = computed(() => supportHistorySelectedEvents.value.size);
+// Submodule ichidagi HAR BIR action'ni ham alohida tanlab, "Tasdiqlash"/
+// "Bekor qilish" qilish uchun — key -> { event_id, submodule_key, action_key }.
+const supportHistorySelectedActions = ref(new Map());
+function actionSelectionKey(row, action) {
+  return `${row.event_id}::${action.key}`;
+}
+function isSupportHistoryActionSelected(row, action) {
+  return supportHistorySelectedActions.value.has(actionSelectionKey(row, action));
+}
+function toggleSupportHistoryActionSelected(row, action) {
+  if (!action.learned) return;
+  const key = actionSelectionKey(row, action);
+  const next = new Map(supportHistorySelectedActions.value);
+  if (next.has(key)) next.delete(key);
+  else next.set(key, { event_id: row.event_id, submodule_key: row.submodule_key, action_key: action.key });
+  supportHistorySelectedActions.value = next;
+}
+const supportHistorySelectedCount = computed(() => supportHistorySelectedEvents.value.size + supportHistorySelectedActions.value.size);
 // Joriy filtrlangan ro'yxatdagi (masalan faqat "Jarayonda") o'rganilgan
 // qatorlarning HAMMASINI bir bosishda belgilash/bekor qilish uchun.
 const supportHistorySelectableRows = computed(() => filteredSupportHistoryRows.value.filter(row => row.learned));
@@ -11961,6 +11984,7 @@ async function openSupportHistory(row, filter = 'all') {
   selectedSupportName.value = row.full_name || 'Support';
   supportHistoryFilter.value = filter;
   supportHistorySelectedEvents.value = new Set();
+  supportHistorySelectedActions.value = new Map();
   modal.value = 'supportHistory';
   try {
     supportHistoryRows.value = await api.uyqurSupportHistory({ employee_id: row.id });
@@ -11975,6 +11999,7 @@ function closeSupportHistory() {
   supportHistoryRows.value = [];
   supportHistoryFilter.value = 'all';
   supportHistorySelectedEvents.value = new Set();
+  supportHistorySelectedActions.value = new Map();
 }
 
 async function refreshSupportHistoryIfOpen(employeeId) {
@@ -12127,7 +12152,7 @@ async function toggleConfirmed(row) {
 }
 
 async function confirmSelectedSupportHistory() {
-  if (!supportHistorySelectedEvents.value.size || !selectedSupportId.value) return;
+  if ((!supportHistorySelectedEvents.value.size && !supportHistorySelectedActions.value.size) || !selectedSupportId.value) return;
   startLoading('confirmSupportHistory');
   try {
     const eventIds = Array.from(supportHistorySelectedEvents.value);
@@ -12136,7 +12161,7 @@ async function confirmSelectedSupportHistory() {
     // tasdiqlangan bo'lsa qaytariladi (bekor qilinadi). Shu orqali bitta
     // tugma bilan ham "Tasdiqlash", ham "Qaytarish" ishlaydi.
     const rowsById = new Map(supportHistoryRows.value.map(row => [row.event_id, row]));
-    await Promise.all(eventIds.map(eventId => {
+    const eventPromises = eventIds.map(eventId => {
       const row = rowsById.get(eventId);
       return api.confirmUyqurReview({
         event_id: eventId,
@@ -12144,8 +12169,21 @@ async function confirmSelectedSupportHistory() {
         confirmed: !(row && row.confirmed),
         manager_username: ''
       });
-    }));
+    });
+    const actionPromises = Array.from(supportHistorySelectedActions.value.values()).map(entry => {
+      const row = rowsById.get(entry.event_id);
+      const action = row && (row.actions || []).find(item => String(item.key) === String(entry.action_key));
+      return api.confirmUyqurActionReview({
+        submodule_key: entry.submodule_key,
+        action_key: entry.action_key,
+        employee_id: selectedSupportId.value,
+        confirmed: !(action && action.confirmed),
+        manager_username: ''
+      });
+    });
+    await Promise.all([...eventPromises, ...actionPromises]);
     supportHistorySelectedEvents.value = new Set();
+    supportHistorySelectedActions.value = new Map();
     await Promise.all([
       loadSupportOverview(),
       refreshSupportHistoryIfOpen(selectedSupportId.value),
@@ -12165,16 +12203,24 @@ async function confirmSelectedSupportHistory() {
 // faqat tasdiqni bekor qiladigan "Qaytarish"dan farqli — u faqat
 // "Jarayonda"ga qaytaradi, buni esa to'g'ridan-to'g'ri nolga tushiradi.
 async function rejectSelectedSupportHistory() {
-  if (!supportHistorySelectedEvents.value.size || !selectedSupportId.value) return;
+  if ((!supportHistorySelectedEvents.value.size && !supportHistorySelectedActions.value.size) || !selectedSupportId.value) return;
   startLoading('confirmSupportHistory');
   try {
     const eventIds = Array.from(supportHistorySelectedEvents.value);
-    await Promise.all(eventIds.map(eventId => api.markUyqurLearned({
+    const eventPromises = eventIds.map(eventId => api.markUyqurLearned({
       event_id: eventId,
       employee_id: selectedSupportId.value,
       learned: false
-    })));
+    }));
+    const actionPromises = Array.from(supportHistorySelectedActions.value.values()).map(entry => api.markUyqurActionLearned({
+      submodule_key: entry.submodule_key,
+      action_key: entry.action_key,
+      employee_id: selectedSupportId.value,
+      learned: false
+    }));
+    await Promise.all([...eventPromises, ...actionPromises]);
     supportHistorySelectedEvents.value = new Set();
+    supportHistorySelectedActions.value = new Map();
     await Promise.all([
       loadSupportOverview(),
       refreshSupportHistoryIfOpen(selectedSupportId.value),
@@ -13276,6 +13322,7 @@ async function openManagementSupportHistory(row, filter = 'all') {
   selectedSupportName.value = row.full_name || 'Support';
   supportHistoryFilter.value = filter;
   supportHistorySelectedEvents.value = new Set();
+  supportHistorySelectedActions.value = new Map();
   managementModal.value = 'supportHistory';
   try {
     supportHistoryRows.value = await api.uyqurSupportHistory({ employee_id: row.id });

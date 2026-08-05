@@ -48,7 +48,8 @@ const {
   getFunctionsByLearningStatus,
   getEmployeeKnowledgeProfile,
   sendPermissionActions,
-  setActionLearned
+  setActionLearned,
+  setActionConfirmed
 } = require('../lib/permission-view');
 const {
   syncCompanyReport,
@@ -6525,7 +6526,7 @@ const EMPLOYEE_POST_ACTIONS = new Set(['uyqurMarkLearned', 'uyqurActionMarkLearn
 // bilan bitta umumiy ro'yxatni tahrirlaydi va supportlarga xuddi shu bildirishnoma
 // mexanizmi orqali (recordPermissionToggleEvents) xabar boradi.
 const MANAGEMENT_GET_ACTIONS = new Set(['uyqurKnowledgeDashboard', 'uyqurModuleFunctionsDetail', 'uyqurFunctionsByStatus', 'uyqurEmployeeKnowledgeProfile', 'uyqurPermissions', 'uyqurSupportOverview', 'uyqurSupportHistory']);
-const MANAGEMENT_POST_ACTIONS = new Set(['uyqurPermissionsSave', 'managementProfile', 'managementAvatarUpload', 'managementAvatarRemove', 'uyqurConfirmReview', 'uyqurMarkLearned', 'uyqurActionsSend']);
+const MANAGEMENT_POST_ACTIONS = new Set(['uyqurPermissionsSave', 'managementProfile', 'managementAvatarUpload', 'managementAvatarRemove', 'uyqurConfirmReview', 'uyqurMarkLearned', 'uyqurActionsSend', 'uyqurActionMarkLearned', 'uyqurActionConfirmReview']);
 
 // Profil rasmi uchun ruxsat etilgan formatlar va hajm chegarasi — base64
 // belgilar soni (~4/3 nisbat), taxminan 2 MB rasm faylga to'g'ri keladi.
@@ -6693,6 +6694,7 @@ async function handlePost(action, body, currentAdmin) {
     case 'managementAvatarRemove': return removeManagementAvatar(body, currentAdmin);
     case 'uyqurMarkLearned': return setEventLearned(body.event_id, body.employee_id, body.learned !== false);
     case 'uyqurActionMarkLearned': return setActionLearned(body.submodule_key, body.action_key, body.employee_id, body.learned !== false);
+    case 'uyqurActionConfirmReview': return setActionConfirmed(body.submodule_key, body.action_key, body.employee_id, body.confirmed !== false, body.manager_username || '');
     case 'uyqurConfirmReview': return setManagerConfirmation(body.event_id, body.employee_id, body.confirmed !== false, body.manager_username || '');
     case 'uyqurManagerConfirmersSave': return saveManagerConfirmers(body.usernames);
     case 'uyqurResetNotifications': return resetPermissionNotifications();
