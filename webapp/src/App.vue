@@ -5730,7 +5730,7 @@ function toggleSupportHistoryRowExpanded(row = {}) {
 // "Bekor qilish" qilish uchun — key -> { event_id, submodule_key, action_key }.
 const supportHistorySelectedActions = ref(new Map());
 function actionSelectionKey(row, action) {
-  return `${row.event_id}::${action.key}`;
+  return `${row.event_id}::${action.key || action.id}`;
 }
 function isSupportHistoryActionSelected(row, action) {
   return supportHistorySelectedActions.value.has(actionSelectionKey(row, action));
@@ -5739,7 +5739,7 @@ function toggleSupportHistoryActionSelected(row, action) {
   const key = actionSelectionKey(row, action);
   const next = new Map(supportHistorySelectedActions.value);
   if (next.has(key)) next.delete(key);
-  else next.set(key, { event_id: row.event_id, submodule_key: row.submodule_key, action_key: action.key });
+  else next.set(key, { event_id: row.event_id, submodule_key: row.submodule_key, action_key: String(action.key || action.id) });
   supportHistorySelectedActions.value = next;
 }
 const supportHistorySelectedCount = computed(() => supportHistorySelectedEvents.value.size + supportHistorySelectedActions.value.size);
@@ -12171,7 +12171,7 @@ async function confirmSelectedSupportHistory() {
     });
     const actionPromises = Array.from(supportHistorySelectedActions.value.values()).map(entry => {
       const row = rowsById.get(entry.event_id);
-      const action = row && (row.actions || []).find(item => String(item.key) === String(entry.action_key));
+      const action = row && (row.actions || []).find(item => String(item.key || item.id) === String(entry.action_key));
       return api.confirmUyqurActionReview({
         submodule_key: entry.submodule_key,
         action_key: entry.action_key,
