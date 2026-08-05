@@ -2831,7 +2831,13 @@ async function processMessage(updateKind, message, options = {}) {
       metrics.upsertChat(chat, sourceType, {
         business_connection_id: message.business_connection_id || null
       }, { onReadError: notifyChatReadError }),
-      metrics.getKnownEmployeeByTelegramId(from.id)
+      // Faqat ID bo'yicha qidiruv (getKnownEmployeeByTelegramId) xodimning
+      // tg_user_id'i hali bog'lanmagan bo'lsa (masalan admin panelda faqat
+      // ism/username bilan qo'shilgan va u hali reaksiya/tugma bosmagan)
+      // uni "noma'lum" deb hisoblab, xabarini mijoz so'rovi sifatida
+      // ro'yxatga olardi. getKnownEmployeeByTelegramUser esa username/ism
+      // bo'yicha ham qidirib, topilsa tg_user_id'ni avtomatik bog'laydi.
+      metrics.getKnownEmployeeByTelegramUser(from)
     ]);
     chatRow = resolvedChatRow;
     employee = resolvedEmployee;
