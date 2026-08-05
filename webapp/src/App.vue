@@ -888,9 +888,9 @@
     <Transition name="modal-fade">
       <Modal v-if="managementModal === 'myOpenRequests'" title="Yopilmagan so‘rovlar" wide @close="closeManagementModal">
         <DataTable :columns="employeeOpenRequestColumns" :rows="employeeOpenRequests" empty="Ochiq so‘rov yo‘q"
-          :on-cell-action="handleTableCellAction" :page-size="10">
+          :on-cell-action="handleMyRequestCellAction" :page-size="10">
           <template #requestReply="{ row }">
-            <button class="btn small primary" type="button" @click.stop="loadChatDetail(row)">Ko‘rish</button>
+            <button class="btn small primary" type="button" @click.stop="openMyChatDetail(row)">Ko‘rish</button>
           </template>
         </DataTable>
       </Modal>
@@ -899,9 +899,9 @@
     <Transition name="modal-fade">
       <Modal v-if="managementModal === 'myClosedRequests'" :title="myClosedRequestsTitle" wide @close="closeManagementModal">
         <DataTable :columns="employeeOpenRequestColumns" :rows="employeeActivity.closed_requests || []" empty="Yopilgan so‘rov yo‘q"
-          :on-cell-action="handleTableCellAction" :page-size="10">
+          :on-cell-action="handleMyRequestCellAction" :page-size="10">
           <template #requestReply="{ row }">
-            <button class="btn small primary" type="button" @click.stop="loadChatDetail(row)">Ko‘rish</button>
+            <button class="btn small primary" type="button" @click.stop="openMyChatDetail(row)">Ko‘rish</button>
           </template>
         </DataTable>
       </Modal>
@@ -5845,6 +5845,38 @@ const myCompanyColumns = [
   { key: 'expired', label: 'Obuna', format: (_, row) => expiryStatusLabel(row) },
   { key: 'phone', label: 'Telefon', format: v => v || '—' }
 ];
+// "Yopilgan"/"Ochiq" ro'yxatlaridan "Ko'rish" bosilganda, chat tafsiloti
+// (`modal`) ro'yxat oynasi (`managementModal`) ustiga emas, ORQASIDA ochilib
+// qolardi — ikkalasi ham alohida ref bo'lgani uchun. Shu sababli ro'yxat
+// oynasi vaqtincha YOPILADI (holati saqlanadi) va chat tafsiloti yopilganda
+// avtomatik qaytariladi — shu orqali bir vaqtda faqat bitta oyna ochiq bo'ladi.
+const myChatDetailReturnModal = ref('');
+async function openMyChatDetail(row) {
+  // Ro'yxat oynasi ma'lumot yuklanayotgan payt ham ochiq qoladi (sahifa
+  // qulfi uzilib, orqa fon sakramasligi uchun) — faqat chat tafsiloti
+  // TAYYOR bo'lgach, ikkalasi bir vaqtda almashtiriladi.
+  const previousManagementModal = managementModal.value;
+  await loadChatDetail(row);
+  if (modal.value === 'chatDetail') {
+    managementModal.value = '';
+    myChatDetailReturnModal.value = previousManagementModal;
+  }
+}
+function handleMyRequestCellAction({ action, row }) {
+  if (action === 'chatDetail') {
+    const chatRow = tableActionChatRow(row);
+    if (!chatRow) return showToast('Chat tafsiloti uchun chat raqami topilmadi');
+    openMyChatDetail(chatRow);
+    return;
+  }
+  handleTableCellAction({ action, row });
+}
+watch(modal, (value, oldValue) => {
+  if (!value && oldValue === 'chatDetail' && myChatDetailReturnModal.value) {
+    managementModal.value = myChatDetailReturnModal.value;
+    myChatDetailReturnModal.value = '';
+  }
+});
 const companyGroupDetail = ref({ company: null, summary: {}, groups: [] });
 const companyModuleEmployeeDetail = ref(null);
 const companyGroupSelectedChatKey = ref('');
