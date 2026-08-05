@@ -138,16 +138,11 @@
                     :value="period.key">{{ period.label }}</option>
                 </select>
               </label>
-              <div class="employee-profile-pills">
-                <span class="profile-pill" style="background:var(--info-bg); color:var(--info-text); border-color:transparent;">🛡️ SLA <b style="color:inherit;">{{ fmtPercent(employeeProfile.summary?.sla) }}</b></span>
-                <span class="profile-pill" style="background:var(--success-bg); color:var(--success-text); border-color:transparent;">✅ Yopish foizi <b style="color:inherit;">{{ fmtPercent(employeeProfile.summary?.close_rate)
-                    }}</b></span>
-              </div>
             </div>
             <div class="employee-profile-mini-stats">
               <span role="button" tabindex="0" style="cursor:pointer;" title="Yopilgan so‘rovlar tafsiloti"
-                @click="openMyActivityDetail" @keydown.enter.prevent="openMyActivityDetail"
-                @keydown.space.prevent="openMyActivityDetail">
+                @click="openMyClosedRequests('Yopilgan so‘rovlar')" @keydown.enter.prevent="openMyClosedRequests('Yopilgan so‘rovlar')"
+                @keydown.space.prevent="openMyClosedRequests('Yopilgan so‘rovlar')">
                 <small>Yopilgan</small>
                 <b>{{ fmtNumber(employeeActivity.summary?.closed_requests) }}</b>
               </span>
@@ -157,15 +152,15 @@
                 <small>Ochiq</small>
                 <b>{{ fmtNumber(employeeActivity.summary?.open_requests) }}</b>
               </span>
-              <span role="button" tabindex="0" style="cursor:pointer;" title="Guruhlar bo‘yicha tafsilot"
-                @click="openMyActivityDetail" @keydown.enter.prevent="openMyActivityDetail"
-                @keydown.space.prevent="openMyActivityDetail">
+              <span role="button" tabindex="0" style="cursor:pointer;" title="Kompaniyalarim ro‘yxati"
+                @click="openMyCompanies" @keydown.enter.prevent="openMyCompanies"
+                @keydown.space.prevent="openMyCompanies">
                 <small>Kompaniya</small>
                 <b>{{ fmtNumber(employeeActivity.summary?.company_total) }}</b>
               </span>
-              <span role="button" tabindex="0" style="cursor:pointer;" title="Yopilgan so‘rovlar tafsiloti"
-                @click="openMyActivityDetail" @keydown.enter.prevent="openMyActivityDetail"
-                @keydown.space.prevent="openMyActivityDetail">
+              <span role="button" tabindex="0" style="cursor:pointer;" title="O‘rtacha javob vaqti tafsiloti"
+                @click="openMyClosedRequests('O‘rtacha javob vaqti tafsiloti')" @keydown.enter.prevent="openMyClosedRequests('O‘rtacha javob vaqti tafsiloti')"
+                @keydown.space.prevent="openMyClosedRequests('O‘rtacha javob vaqti tafsiloti')">
                 <small>O‘rtacha</small>
                 <b>{{ fmtMinutes(employeeActivity.summary?.avg_close_minutes) }}</b>
               </span>
@@ -898,6 +893,37 @@
             <button class="btn small primary" type="button" @click.stop="loadChatDetail(row)">Ko‘rish</button>
           </template>
         </DataTable>
+      </Modal>
+    </Transition>
+
+    <Transition name="modal-fade">
+      <Modal v-if="managementModal === 'myClosedRequests'" :title="myClosedRequestsTitle" wide @close="closeManagementModal">
+        <DataTable :columns="employeeOpenRequestColumns" :rows="employeeActivity.closed_requests || []" empty="Yopilgan so‘rov yo‘q"
+          :on-cell-action="handleTableCellAction" :page-size="10">
+          <template #requestReply="{ row }">
+            <button class="btn small primary" type="button" @click.stop="loadChatDetail(row)">Ko‘rish</button>
+          </template>
+        </DataTable>
+      </Modal>
+    </Transition>
+
+    <Transition name="modal-fade">
+      <Modal v-if="managementModal === 'myCompanies'" title="Mening kompaniyalarim" wide @close="closeManagementModal">
+        <div class="detail-stack">
+          <section class="detail-summary">
+            <div><span>Kompaniya</span><b>{{ fmtNumber(myCompanyPack.summary?.total) }}</b></div>
+            <div><span>Aktiv</span><b>{{ fmtNumber(myCompanyPack.summary?.active) }}</b></div>
+            <div><span>Obuna xavfi</span><b>{{ fmtNumber(myCompanyPack.summary?.expiring_soon) }}</b></div>
+            <div><span>Churn/Pauza</span><b>{{ fmtNumber(myCompanyPack.summary?.churn) }}</b></div>
+          </section>
+          <DataTable :columns="myCompanyColumns" :rows="myCompanyPack.companies || []"
+            empty="Kompaniya topilmadi" :page-size="12">
+            <template #businessStatus="{ row }">
+              <span class="status-pill mini" :class="businessStatusClass(row.business_status)">{{
+                businessStatusLabel(row.business_status) }}</span>
+            </template>
+          </DataTable>
+        </div>
       </Modal>
     </Transition>
 
@@ -5806,6 +5832,19 @@ const metricDetail = ref({ title: '', columns: [], rows: [], empty: 'Ma’lumot 
 const employeeGroupActivity = ref([]);
 const employeeGroupTicketVisibility = ref({});
 const employeeOpenRequests = ref([]);
+// Support o'zining "Mening faoliyatim" kartochkasidagi "Yopilgan"/"O'rtacha"
+// bosilganda — aynan shu xodimning yopilgan so'rovlari ro'yxati uchun.
+const myClosedRequestsTitle = ref('Yopilgan so‘rovlar');
+// "Kompaniya" bosilganda — aynan shu xodimga biriktirilgan kompaniyalar uchun.
+const myAssignedCompanies = ref([]);
+const myCompanyPack = computed(() => employeeAssignedCompaniesPack(myAssignedCompanies.value));
+const myCompanyColumns = [
+  { key: 'name', label: 'Kompaniya' },
+  { key: 'brand', label: 'Brend', format: v => v || '—' },
+  { key: 'business_status', label: 'Biznes holati', slot: 'businessStatus' },
+  { key: 'expired', label: 'Obuna', format: (_, row) => expiryStatusLabel(row) },
+  { key: 'phone', label: 'Telefon', format: v => v || '—' }
+];
 const companyGroupDetail = ref({ company: null, summary: {}, groups: [] });
 const companyModuleEmployeeDetail = ref(null);
 const companyGroupSelectedChatKey = ref('');
@@ -13159,6 +13198,7 @@ async function loadMyActivity() {
       closed_requests: data.closed_requests || [],
       messages: data.messages || []
     };
+    myAssignedCompanies.value = data.assigned_companies || [];
     const closed = Number(data.summary?.closed_requests || 0);
     const open = Number(data.summary?.open_requests || 0);
     const total = closed + open;
@@ -13227,6 +13267,17 @@ async function openMyOpenRequests() {
   } catch (error) {
     showToast(error.message);
   }
+}
+
+function openMyClosedRequests(title = 'Yopilgan so‘rovlar') {
+  if (!(employeeActivity.value.closed_requests || []).length) return showToast('Yopilgan so‘rov topilmadi');
+  myClosedRequestsTitle.value = title;
+  managementModal.value = 'myClosedRequests';
+}
+
+function openMyCompanies() {
+  if (!myAssignedCompanies.value.length) return showToast('Sizga biriktirilgan kompaniya topilmadi');
+  managementModal.value = 'myCompanies';
 }
 
 async function loadEmployeeCompanyModuleStats() {
