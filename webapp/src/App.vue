@@ -81,17 +81,6 @@
       <div class="page-body">
         <template v-if="employeeActiveTab === 'performance'">
           <div class="support-summary-grid">
-            <article class="card support-summary-card" role="button" tabindex="0" title="Xabarlar bo‘yicha tafsilot"
-              @click="openMyActivityDetail" @keydown.enter.prevent="openMyActivityDetail"
-              @keydown.space.prevent="openMyActivityDetail">
-              <div class="support-summary-content">
-                <div class="support-summary-title">Xabarlar</div>
-                <div class="support-summary-value-row">
-                  <div class="support-summary-value">{{ fmtNumber(employeeActivity.summary?.message_count) }}</div>
-                </div>
-                <div class="support-summary-note">{{ fmtNumber(employeeActivity.summary?.company_total) }} ta kompaniya</div>
-              </div>
-            </article>
             <article class="card support-summary-card" role="button" tabindex="0" title="So‘rovlar (ticket) bo‘yicha tafsilot"
               @click="openMyActivityDetail" @keydown.enter.prevent="openMyActivityDetail"
               @keydown.space.prevent="openMyActivityDetail">
@@ -114,6 +103,17 @@
                 <div class="support-summary-note">Hal qilingan so‘rovlar</div>
               </div>
             </article>
+            <article class="card support-summary-card" role="button" tabindex="0" title="Javob berilmagan so‘rovlar bo‘yicha tafsilot"
+              @click="openMyOpenRequests" @keydown.enter.prevent="openMyOpenRequests"
+              @keydown.space.prevent="openMyOpenRequests">
+              <div class="support-summary-content">
+                <div class="support-summary-title">Javob berilmagan</div>
+                <div class="support-summary-value-row">
+                  <div class="support-summary-value">{{ fmtNumber(employeeActivity.summary?.open_requests) }}</div>
+                </div>
+                <div class="support-summary-note">Hal qilinmagan so‘rovlar</div>
+              </div>
+            </article>
             <article class="card support-summary-card">
               <div class="support-summary-content">
                 <div class="support-summary-title">O‘rtacha javob vaqti</div>
@@ -131,6 +131,13 @@
                 <div class="card-title">Mening faoliyatim</div>
                 <div class="card-note">Davr: {{ selectedPeriodLabel }}</div>
               </div>
+              <label class="company-module-filter company-detail-period-filter">
+                <span>Davr</span>
+                <select v-model="selectedStatsPeriod" class="select mini-select" @change="handleMyStatsPeriodChange">
+                  <option v-for="period in periodOptions.filter(item => item.key !== 'custom')" :key="'my-period-' + period.key"
+                    :value="period.key">{{ period.label }}</option>
+                </select>
+              </label>
               <div class="employee-profile-pills">
                 <span class="profile-pill" style="background:var(--info-bg); color:var(--info-text); border-color:transparent;">🛡️ SLA <b style="color:inherit;">{{ fmtPercent(employeeProfile.summary?.sla) }}</b></span>
                 <span class="profile-pill" style="background:var(--success-bg); color:var(--success-text); border-color:transparent;">✅ Yopish foizi <b style="color:inherit;">{{ fmtPercent(employeeProfile.summary?.close_rate)
@@ -13123,6 +13130,22 @@ async function openEmployeeActivity(row = {}) {
     showToast(error.message);
   } finally {
     stopLoading('employeeActivity');
+  }
+}
+
+async function handleMyStatsPeriodChange() {
+  customPeriodForm.appliedStart = '';
+  customPeriodForm.appliedEnd = '';
+  customPeriodForm.start = '';
+  customPeriodForm.end = '';
+  previousStatsPeriod.value = selectedStatsPeriod.value;
+  startLoading('period');
+  try {
+    await loadMyActivity();
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    stopLoading('period');
   }
 }
 

@@ -6564,6 +6564,17 @@ tbody tr:hover {
 .employee-performance-card .employee-profile-mini-stats span:nth-child(4) { background: #f3e8ff; }
 .employee-performance-card .employee-profile-mini-stats span:nth-child(4) b { color: #9333ea; }
 
+.employee-performance-card .employee-profile-mini-stats span[role="button"] {
+  cursor: pointer;
+  transition: transform .15s ease, box-shadow .15s ease;
+}
+.employee-performance-card .employee-profile-mini-stats span[role="button"]:hover,
+.employee-performance-card .employee-profile-mini-stats span[role="button"]:focus-visible {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(15, 23, 42, .1);
+  outline: none;
+}
+
 .employee-performance-card .employee-chat-tabs {
   display: inline-flex;
   gap: 4px;
