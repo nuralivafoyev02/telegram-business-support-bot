@@ -718,18 +718,23 @@ async function getKnowledgeDashboard({ days = 7 } = {}) {
     return submoduleActionsCountByKey.get(String(key)) || 1;
   }
 
+  // Faqat TASDIQLANGAN (confirmed_at) funksiyalar "Daraja"/foizga qo'shiladi —
+  // "Qaytarish" bosilganda (confirmed_at olib tashlanadi-yu, learned_at
+  // qoladi, ya'ni "jarayonda"ga qaytadi) foiz ham darhol pasayishi kerak,
+  // aks holda hali tasdiqlanmagan/qaytarilgan funksiya foizga qo'shilib
+  // qolaverardi.
   function percentAsOf(employeeId, cutoffMs) {
     const relevant = events.filter(event => new Date(event.created_at).getTime() <= cutoffMs);
     if (!relevant.length) return 0;
     let totalWeight = 0;
-    let learnedWeight = 0;
+    let confirmedWeight = 0;
     relevant.forEach(event => {
       const weight = actionsCountFor(event.submodule_key);
       totalWeight += weight;
       const progress = progressFor(record, event.id, employeeId);
-      if (progress.learned_at && new Date(progress.learned_at).getTime() <= cutoffMs) learnedWeight += weight;
+      if (progress.confirmed_at && new Date(progress.confirmed_at).getTime() <= cutoffMs) confirmedWeight += weight;
     });
-    return totalWeight ? Math.round((learnedWeight / totalWeight) * 100) : 0;
+    return totalWeight ? Math.round((confirmedWeight / totalWeight) * 100) : 0;
   }
 
   // "Barcha funksiyalar"dagi BUTUN daraxt (tanlangan + tanlanmagan) — xodimlar
