@@ -1408,6 +1408,10 @@
             <small>Bilmaydigan funksiyalar</small>
             <b>{{ employeeKnowledgeProfile.not_learned_functions.length }}</b>
           </span>
+          <span>
+            <small>Jarayonda</small>
+            <b>{{ employeeKnowledgeProfile.donut?.in_progress_count || 0 }}</b>
+          </span>
         </div>
         <div class="drilldown-columns" style="margin:16px 0;">
           <div class="drilldown-chart-panel" style="display:flex; align-items:center; justify-content:center;">
@@ -5354,6 +5358,10 @@
           <span>
             <small>Bilmaydigan funksiyalar</small>
             <b>{{ employeeKnowledgeProfile.not_learned_functions.length }}</b>
+          </span>
+          <span>
+            <small>Jarayonda</small>
+            <b>{{ employeeKnowledgeProfile.donut?.in_progress_count || 0 }}</b>
           </span>
         </div>
         <div class="drilldown-columns" style="margin:16px 0;">
