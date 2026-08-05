@@ -13298,9 +13298,11 @@ function openMyActivityDetail() {
 async function openMyOpenRequests() {
   try {
     // Davr (period) qo'llanmaydi — ochiq so'rov qachon yaratilganidan qat'i
-    // nazar, hozir hal qilinmagan bo'lsa ro'yxatda ko'rinishi kerak.
+    // nazar, hozir hal qilinmagan bo'lsa ro'yxatda ko'rinishi kerak. Lichka
+    // (shaxsiy) chatlar bu hisobga kirmaydi — faqat guruh (kompaniya)
+    // chatlaridagi ochiq so'rovlar sanaladi.
     const rows = await api.requests({ limit: 5000 });
-    employeeOpenRequests.value = (rows || []).filter(row => row.status === 'open');
+    employeeOpenRequests.value = (rows || []).filter(row => row.status === 'open' && row.source_type === 'group');
     if (!employeeOpenRequests.value.length) return showToast('Ochiq so‘rov topilmadi');
     managementModal.value = 'myOpenRequests';
   } catch (error) {

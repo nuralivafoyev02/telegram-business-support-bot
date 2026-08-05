@@ -4635,12 +4635,22 @@ async function getEmployeeActivity(query = {}) {
     const messageEmployee = employeeMaps.byId.get(message.employee_id) || employeeMaps.byTgId.get(telegramIdKey(message.from_tg_user_id));
     return Boolean(messageEmployee && !isSelectedEmployeeMessage(message));
   }
+  // "Ochiq" hisobiga faqat GURUH (kompaniya) chatlaridagi so'rovlar kiradi —
+  // shaxsiy/lichka (private, business) chatlardagi yozishmalar ko'pincha
+  // oddiy suhbat javoblarini ("rahmat" va h.k) ham alohida "so'rov" sifatida
+  // ro'yxatga olib qo'yishi mumkin va bu haqiqiy hal qilinishi kerak bo'lgan
+  // ticketlar sonini sun'iy oshirib yuborardi.
+  function isGroupSourceRequest(request = {}) {
+    const sourceType = request.source_type || chatMap.get(telegramIdKey(request.chat_id))?.source_type || '';
+    return sourceType === 'group';
+  }
   // Diqqat: "ochiq" so'rovlar davr (period) bo'yicha SUZILMAYDI — hali
   // yopilmagan ticket qachon yaratilgan bo'lishidan qat'i nazar, hozirgi
   // paytda dolzarb (kutilayotgan) hisoblanadi. Davr bo'yicha filtrlash faqat
   // "yopilgan"/"xabarlar" kabi davr ICHIDA sodir bo'lgan hodisalarga tegishli.
   const periodOpenRequests = openRequestCandidates
     .filter(request => request.status === 'open')
+    .filter(isGroupSourceRequest)
     .filter(requestResponsibleMatchesEmployee);
   const visibleClosedRequests = closedRequests.filter(request => !isEmployeePrivateChatId(request.chat_id));
   const visibleMessages = messages.filter(message => !isEmployeePrivateChatId(message.chat_id));
