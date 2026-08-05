@@ -3369,8 +3369,15 @@ async function listRequests(query) {
       resolveOptions
     });
     const responsibleName = responsible?.full_name || request.closed_by_name || '';
+    // Chat (tg_chats) darajasidagi source_type ustuvor olinadi — ba'zi eski
+    // support_requests yozuvlarida bu maydon noto'g'ri/bo'sh saqlangan
+    // bo'lishi mumkin, chat esa "guruh/lichka" turi uchun asosiy manba.
+    const resolvedSourceType = (request.business_connection_id || chat.business_connection_id)
+      ? 'business'
+      : (chat.source_type || request.source_type || 'private');
     return {
       ...request,
+      source_type: resolvedSourceType,
       company_id: companyId,
       company_name: company?.name || '',
       company_brand: company?.brand || company?.legal_name || '',
@@ -4549,8 +4556,12 @@ async function getEmployeeActivity(query = {}) {
   const chatIds = [...new Set([
     ...closedRequests.map(request => request.chat_id),
     ...messages.map(message => message.chat_id),
+    // "Ochiq" so'rovlar davr bo'yicha suzilmagani uchun, bu yerda ham
+    // BARCHA ochiq so'rovlarning chat ma'lumoti olinishi kerak — aks holda
+    // davrdan tashqaridagi eski ochiq so'rovlar uchun chat topilmay,
+    // guruh/lichka turi noto'g'ri (yoki bo'sh) aniqlanib qolardi.
     ...openRequestCandidates
-      .filter(request => request.status === 'open' && inCurrentPeriod(request.created_at, periodKey, keys))
+      .filter(request => request.status === 'open')
       .map(request => request.chat_id)
   ].filter(value => value !== undefined && value !== null))];
   const [chats, allChatMessages, allEmployees] = chatIds.length
@@ -4641,7 +4652,12 @@ async function getEmployeeActivity(query = {}) {
   // ro'yxatga olib qo'yishi mumkin va bu haqiqiy hal qilinishi kerak bo'lgan
   // ticketlar sonini sun'iy oshirib yuborardi.
   function isGroupSourceRequest(request = {}) {
-    const sourceType = request.source_type || chatMap.get(telegramIdKey(request.chat_id))?.source_type || '';
+    const chat = chatMap.get(telegramIdKey(request.chat_id));
+    if (request.business_connection_id || chat?.business_connection_id) return false;
+    // Chat (tg_chats) darajasidagi source_type ustuvor — so'rov (request)
+    // yozuvidagi source_type ba'zi eski yozuvlarda noto'g'ri/bo'sh bo'lishi
+    // mumkin, chat esa "Guruhlar"/"Lichka" bo'linishida ham asosiy manba.
+    const sourceType = chat?.source_type || request.source_type || '';
     return sourceType === 'group';
   }
   // Diqqat: "ochiq" so'rovlar davr (period) bo'yicha SUZILMAYDI — hali
