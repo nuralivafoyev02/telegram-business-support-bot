@@ -176,6 +176,7 @@ export const api = {
   sendUyqurPermissionActions: payload => request('uyqurActionsSend', { method: 'POST', body: payload }).then(r => r.data),
   verifyUyqurManagerPassword: payload => request('uyqurVerifyManagerPassword', { method: 'POST', body: payload }).then(r => r.data),
   markUyqurLearned: payload => request('uyqurMarkLearned', { method: 'POST', body: payload }).then(r => r.data),
+  markUyqurActionLearned: payload => request('uyqurActionMarkLearned', { method: 'POST', body: payload }).then(r => r.data),
   confirmUyqurReview: payload => request('uyqurConfirmReview', { method: 'POST', body: payload }).then(r => r.data),
   knowledgeDashboard: (query = {}) => request('uyqurKnowledgeDashboard', { query }).then(r => r.data),
   moduleFunctionsDetail: (query = {}) => request('uyqurModuleFunctionsDetail', { query }).then(r => r.data),

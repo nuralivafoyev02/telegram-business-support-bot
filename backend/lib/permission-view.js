@@ -11,6 +11,7 @@ const PERMISSION_NOTIFICATIONS_KEY = 'uyqur_permission_notifications';
 const MAX_NOTIFICATION_EVENTS = 200;
 const MANAGER_CONFIRMERS_KEY = 'uyqur_manager_confirmers';
 const PERMISSION_ACTION_SENT_KEY = 'uyqur_permission_action_sent';
+const PERMISSION_ACTION_LEARNED_KEY = 'uyqur_permission_action_learned';
 
 // "Kontragent balansi" alohida modul sifatida ko'rsatilmaydi — uning
 // funksiyalari/hodisalari "Kontragent" ostiga birlashtiriladi (nomi bilan
@@ -269,6 +270,44 @@ function actionCompositeKey(submoduleKey, actionKey) {
   return `${submoduleKey}::${actionKey}`;
 }
 
+// Support xodimi submodule ichidagi HAR BIR action'ni alohida "o'rgandim"
+// deb belgilashi mumkin — bu submodule darajasidagi (getNotificationRecord)
+// hisob-kitobdan mustaqil, alohida bot_settings yozuvida saqlanadi, chunki
+// action'lar submodule bilan bir xil event_id'ga ega emas.
+async function getActionLearnedRecord() {
+  const rows = await supabase.select('bot_settings', {
+    select: 'key,value',
+    key: supabase.eq(PERMISSION_ACTION_LEARNED_KEY),
+    limit: '1'
+  }).catch(() => []);
+  const row = rows[0] || null;
+  const value = row && row.value && typeof row.value === 'object' ? row.value : {};
+  return value.progress && typeof value.progress === 'object' ? value.progress : {};
+}
+
+async function saveActionLearnedRecord(progress) {
+  await supabase.insert('bot_settings', [{
+    key: PERMISSION_ACTION_LEARNED_KEY,
+    value: { progress },
+    updated_at: new Date().toISOString()
+  }], { upsert: true, onConflict: 'key', prefer: 'return=minimal' });
+}
+
+async function setActionLearned(submoduleKey, actionKey, employeeId, learned = true) {
+  const normalizedSubmoduleKey = String(submoduleKey || '');
+  const normalizedActionKey = String(actionKey || '');
+  if (!normalizedSubmoduleKey || !normalizedActionKey || !employeeId) {
+    throw new Error('submodule_key, action_key va employee_id majburiy');
+  }
+  const progress = await getActionLearnedRecord();
+  const key = actionCompositeKey(normalizedSubmoduleKey, normalizedActionKey);
+  if (!progress[key]) progress[key] = {};
+  if (learned) progress[key][employeeId] = { learned_at: new Date().toISOString() };
+  else delete progress[key][employeeId];
+  await saveActionLearnedRecord(progress);
+  return { key, employee_id: employeeId, learned: !!learned };
+}
+
 async function sendPermissionActions(items = []) {
   const normalized = (Array.isArray(items) ? items : [])
     .map(item => ({
@@ -492,7 +531,11 @@ async function autoRegisterNewSubmodules(modules = [], previousSelected = []) {
 // biriktiriladi. "Uyqur Funksiyalari" boardida har bir ficha (submodule)
 // oldida ko'rsatish uchun ishlatiladi.
 async function attachSubmoduleProgress(modules = []) {
-  const [employees, record] = await Promise.all([getSupportEmployees(), getNotificationRecord()]);
+  const [employees, record, actionProgress] = await Promise.all([
+    getSupportEmployees(),
+    getNotificationRecord(),
+    getActionLearnedRecord()
+  ]);
   const eventBySubmoduleKey = new Map(record.events.map(event => [String(event.submodule_key), event]));
   const now = Date.now();
   const dayMs = 24 * 60 * 60 * 1000;
@@ -516,8 +559,33 @@ async function attachSubmoduleProgress(modules = []) {
         else not_learned_employees.push(row);
       });
       const createdAt = event ? event.created_at : null;
+      const actions = (submodule.actions || []).map(action => {
+        const actionKey = actionCompositeKey(String(submodule.key), String(action.key || action.id));
+        const actionEmployeeProgress = actionProgress[actionKey] || {};
+        const action_learned_employees = [];
+        const action_not_learned_employees = [];
+        employees.forEach(employee => {
+          const learnedAt = actionEmployeeProgress[employee.id] && actionEmployeeProgress[employee.id].learned_at;
+          const row = {
+            id: employee.id,
+            full_name: employee.full_name || employee.username || 'Xodim',
+            tg_user_id: employee.tg_user_id || null,
+            has_avatar: !!employee.avatar_path,
+            avatar_updated_at: employee.avatar_updated_at || null,
+            learned_at: learnedAt || null
+          };
+          if (learnedAt) action_learned_employees.push(row);
+          else action_not_learned_employees.push(row);
+        });
+        return {
+          ...action,
+          learned_employees: action_learned_employees,
+          not_learned_employees: action_not_learned_employees
+        };
+      });
       return {
         ...submodule,
+        actions,
         created_at: createdAt,
         days_since_launch: createdAt ? Math.floor((now - new Date(createdAt).getTime()) / dayMs) : null,
         learned_employees,
@@ -1179,5 +1247,6 @@ module.exports = {
   getModuleFunctionsDetail,
   getFunctionsByLearningStatus,
   getEmployeeKnowledgeProfile,
-  sendPermissionActions
+  sendPermissionActions,
+  setActionLearned
 };

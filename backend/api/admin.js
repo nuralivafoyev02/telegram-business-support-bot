@@ -47,7 +47,8 @@ const {
   getModuleFunctionsDetail,
   getFunctionsByLearningStatus,
   getEmployeeKnowledgeProfile,
-  sendPermissionActions
+  sendPermissionActions,
+  setActionLearned
 } = require('../lib/permission-view');
 const {
   syncCompanyReport,
@@ -6515,7 +6516,7 @@ async function updateAdmin(body, currentAdmin) {
 // doim sessiyaning o'z employee_id'si bilan majburan almashtiriladi, mijoz
 // tomonidan yuborilgan qiymat hech qachon ishonilmaydi.
 const EMPLOYEE_GET_ACTIONS = new Set(['employeeActivity', 'uyqurSupportHistory', 'uyqurPermissions', 'uyqurEmployeeKnowledgeProfile', 'groups', 'privates', 'requests', 'chatDetail', 'companyInfo', 'companyModuleReports']);
-const EMPLOYEE_POST_ACTIONS = new Set(['uyqurMarkLearned', 'sendMessage', 'replyRequest', 'managementProfile', 'managementAvatarUpload', 'managementAvatarRemove']);
+const EMPLOYEE_POST_ACTIONS = new Set(['uyqurMarkLearned', 'uyqurActionMarkLearned', 'sendMessage', 'replyRequest', 'managementProfile', 'managementAvatarUpload', 'managementAvatarRemove']);
 
 // "Boshqaruv paneli" (role='management') xodimlari — o'z chatiga emas,
 // balki BUTUN jamoaning bilim-darajasi statistikasiga kirish huquqiga ega.
@@ -6691,6 +6692,7 @@ async function handlePost(action, body, currentAdmin) {
     case 'managementAvatarUpload': return uploadManagementAvatar(body, currentAdmin);
     case 'managementAvatarRemove': return removeManagementAvatar(body, currentAdmin);
     case 'uyqurMarkLearned': return setEventLearned(body.event_id, body.employee_id, body.learned !== false);
+    case 'uyqurActionMarkLearned': return setActionLearned(body.submodule_key, body.action_key, body.employee_id, body.learned !== false);
     case 'uyqurConfirmReview': return setManagerConfirmation(body.event_id, body.employee_id, body.confirmed !== false, body.manager_username || '');
     case 'uyqurManagerConfirmersSave': return saveManagerConfirmers(body.usernames);
     case 'uyqurResetNotifications': return resetPermissionNotifications();

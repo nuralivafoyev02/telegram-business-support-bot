@@ -588,7 +588,7 @@
               </div>
               <div style="display:flex; align-items:center; gap:10px;">
                 <button class="btn primary" type="button"
-                  :disabled="!employeeFunctionPending.size || loadingAction === 'employeeSendLearned'"
+                  :disabled="(!employeeFunctionPending.size && !employeeActionPending.size) || loadingAction === 'employeeSendLearned'"
                   @click="submitEmployeeFunctionChanges">
                   {{ loadingAction === 'employeeSendLearned' ? (employeeRevertMode ? 'Qaytarilmoqda...' : 'Yuborilmoqda...') : (employeeRevertMode ? 'Ortga qaytarish' : 'Yuborish') }}
                 </button>
@@ -630,44 +630,47 @@
                 <div class="uyqur-functions-card-list" v-if="isEmployeeModuleExpanded(module)">
                   <template v-for="(submodule, submoduleIndex) in module.submodules.filter(sm => isEmployeeFunctionVisible(String(sm.key)))"
                     :key="'employee-functions-submodule-' + submodule.id">
-                    <label class="uyqur-functions-card"
-                      :class="{ confirmed: isEmployeeFunctionConfirmed(String(submodule.key)) }"
-                      :style="{ cursor: isEmployeeFunctionDisabled(String(submodule.key)) ? 'default' : 'pointer', justifyContent: 'flex-start' }">
-                      <input type="checkbox" class="row-check"
+                    <div class="uyqur-functions-card"
+                      :class="{ confirmed: isEmployeeFunctionConfirmed(String(submodule.key)), expandable: (submodule.actions || []).length }"
+                      :style="{ justifyContent: 'flex-start' }"
+                      @click="(submodule.actions || []).length && toggleSubmoduleActionsExpanded(submodule, module, submoduleIndex)">
+                      <input type="checkbox" class="row-check" @click.stop
                         :checked="isEmployeeFunctionChecked(String(submodule.key))"
                         :disabled="isEmployeeFunctionDisabled(String(submodule.key))"
                         @change="toggleEmployeeFunctionSelected(String(submodule.key))" />
                       <span>{{ submodule.name || submodule.key }}</span>
-                      <button v-if="(submodule.actions || []).length" type="button" class="uyqur-functions-card-count"
-                        style="border:0; cursor:pointer;" @click.stop="toggleSubmoduleActionsExpanded(submodule, module, submoduleIndex)">
+                      <span v-if="(submodule.actions || []).length" class="uyqur-functions-card-count">
                         {{ submodule.actions.length }}
-                      </button>
-                    </label>
+                      </span>
+                    </div>
                     <div v-if="isSubmoduleActionsExpanded(submodule, module, submoduleIndex) && (submodule.actions || []).length"
                       class="uyqur-functions-subactions">
-                      <div v-for="action in submodule.actions" :key="'employee-functions-action-' + action.id"
-                        class="uyqur-functions-subaction status-subaction" :class="{ sent: isActionSent(action) }">
+                      <label v-for="action in submodule.actions" :key="'employee-functions-action-' + action.id"
+                        class="uyqur-functions-subaction status-subaction" :class="{ sent: isActionSent(action) }" @click.stop>
+                        <input type="checkbox" class="row-check"
+                          :checked="isEmployeeActionChecked(submodule, action)"
+                          @change="toggleEmployeeActionSelected(submodule, action)" />
                         <span class="status-subaction-name">{{ action.name || action.key }}</span>
                         <div class="status-subaction-col">
                           <div class="avatar-stack">
-                            <span v-for="person in (submodule.learned_employees || []).slice(0, 3)"
+                            <span v-for="person in (action.learned_employees || []).slice(0, 3)"
                               :key="'emp-action-learned-' + submodule.id + '-' + action.id + '-' + person.id"
                               class="avatar-stack-item" :title="`${person.full_name} — o‘rgangan`">
                               <img v-if="employeeAvatarUrl(person)" :src="employeeAvatarUrl(person)" alt="" style="border-color:#dcfce7;" />
                               <span v-else class="profile-avatar" style="background:#dcfce7; color:#16a34a;">{{ initialsFromText(person.full_name) }}</span>
                             </span>
-                            <span v-if="!(submodule.learned_employees || []).length" class="empty compact" style="padding:0;">—</span>
+                            <span v-if="!(action.learned_employees || []).length" class="empty compact" style="padding:0;">—</span>
                           </div>
                         </div>
                         <div class="status-subaction-col">
                           <div class="avatar-stack">
-                            <span v-for="person in (submodule.not_learned_employees || []).slice(0, 3)"
+                            <span v-for="person in (action.not_learned_employees || []).slice(0, 3)"
                               :key="'emp-action-not-learned-' + submodule.id + '-' + action.id + '-' + person.id"
                               class="avatar-stack-item" :title="`${person.full_name} — o‘rganmagan`">
                               <img v-if="employeeAvatarUrl(person)" :src="employeeAvatarUrl(person)" alt="" style="border-color:#fee2e2;" />
                               <span v-else class="profile-avatar" style="background:#fee2e2; color:#dc2626;">{{ initialsFromText(person.full_name) }}</span>
                             </span>
-                            <span v-if="!(submodule.not_learned_employees || []).length" class="empty compact" style="padding:0;">—</span>
+                            <span v-if="!(action.not_learned_employees || []).length" class="empty compact" style="padding:0;">—</span>
                           </div>
                         </div>
                         <div class="status-subaction-col">
@@ -675,7 +678,7 @@
                             {{ formatDaysAgo(submodule.days_since_launch) }}
                           </span>
                         </div>
-                      </div>
+                      </label>
                     </div>
                   </template>
                 </div>
@@ -11964,6 +11967,9 @@ const employeeHistoryByKey = computed(() => {
 // key -> maqsad holat (true = yubormoqchi, false = qaytarmoqchi) — faqat
 // serverdagi joriy `learned` holatidan farq qilganda saqlanadi.
 const employeeFunctionPending = ref(new Map());
+// submodule ichidagi HAR BIR action uchun alohida "o'rgandim" belgisi —
+// key -> { submodule_key, action_key, learned }.
+const employeeActionPending = ref(new Map());
 // 'all' | 'sent' | 'confirmed' | 'not_learned' — faqat qaysi kartalar ko'rinishini
 // boshqaradi. 'revert' esa alohida rejim: belgilangan (tasdiqlangan +
 // topshirilgan-lekin-tasdiqlanmagan) fichalarning barchasi ko'rinadi, lekin
@@ -11972,7 +11978,10 @@ const employeeFunctionViewMode = ref('not_learned');
 const employeeFunctionMenuOpen = ref(false);
 const employeeFunctionMenuRef = ref(null);
 const employeeRevertMode = computed(() => employeeFunctionViewMode.value === 'revert');
-watch(employeeFunctionViewMode, () => { employeeFunctionPending.value = new Map(); });
+watch(employeeFunctionViewMode, () => {
+  employeeFunctionPending.value = new Map();
+  employeeActionPending.value = new Map();
+});
 
 function isEmployeeFunctionConfirmed(key) {
   return Boolean(employeeHistoryByKey.value.get(key)?.confirmed);
@@ -12004,6 +12013,26 @@ function toggleEmployeeFunctionSelected(key) {
   else next.set(key, nextValue);
   employeeFunctionPending.value = next;
 }
+function employeeActionKey(submodule, action) {
+  return `${submodule.key}::${action.key || action.id}`;
+}
+function isEmployeeActionServerLearned(action) {
+  return (action.learned_employees || []).some(person => String(person.id) === selectedSupportId.value);
+}
+function isEmployeeActionChecked(submodule, action) {
+  const key = employeeActionKey(submodule, action);
+  if (employeeActionPending.value.has(key)) return employeeActionPending.value.get(key).learned;
+  return isEmployeeActionServerLearned(action);
+}
+function toggleEmployeeActionSelected(submodule, action) {
+  const key = employeeActionKey(submodule, action);
+  const serverValue = isEmployeeActionServerLearned(action);
+  const nextValue = !isEmployeeActionChecked(submodule, action);
+  const next = new Map(employeeActionPending.value);
+  if (nextValue === serverValue) next.delete(key);
+  else next.set(key, { submodule_key: String(submodule.key), action_key: String(action.key || action.id), learned: nextValue });
+  employeeActionPending.value = next;
+}
 function chooseEmployeeFunctionMenuOption(mode) {
   employeeFunctionViewMode.value = mode;
   employeeFunctionMenuOpen.value = false;
@@ -12012,7 +12041,8 @@ async function submitEmployeeFunctionChanges() {
   const entries = Array.from(employeeFunctionPending.value.entries())
     .map(([key, learned]) => ({ row: employeeHistoryByKey.value.get(key), learned }))
     .filter(item => item.row);
-  if (!entries.length) return;
+  const actionEntries = Array.from(employeeActionPending.value.values());
+  if (!entries.length && !actionEntries.length) return;
   const wasRevert = employeeRevertMode.value;
   startLoading('employeeSendLearned');
   try {
@@ -12023,8 +12053,13 @@ async function submitEmployeeFunctionChanges() {
     for (const { row, learned } of entries) {
       await api.markUyqurLearned({ event_id: row.event_id, employee_id: selectedSupportId.value, learned });
     }
+    for (const { submodule_key, action_key, learned } of actionEntries) {
+      await api.markUyqurActionLearned({ submodule_key, action_key, employee_id: selectedSupportId.value, learned });
+    }
     await refreshSupportHistoryIfOpen(selectedSupportId.value);
+    if (actionEntries.length) await loadPermissionView();
     employeeFunctionPending.value = new Map();
+    employeeActionPending.value = new Map();
     if (wasRevert) employeeFunctionViewMode.value = 'all';
     showToast(wasRevert ? 'Qaytarildi' : 'Yuborildi');
   } catch (error) {
