@@ -4519,31 +4519,44 @@ async function getEmployeeActivity(query = {}) {
     prevCustomEnd: prevCustomPeriod?.end || ''
   };
   const requestSelect = 'id,source_type,chat_id,company_id,customer_tg_id,customer_name,customer_username,initial_message_id,initial_text,status,open_source,opened_by_employee_id,assigned_to_employee_id,business_connection_id,closed_at,closed_by_employee_id,closed_by_tg_id,closed_by_name,done_message_id,created_at,raw';
+  // Tanlangan davr bo'yicha SQL darajasida cheklab qo'yiladi ("all" bo'lsa
+  // cheklanmaydi) — aks holda har safar shu xodimning HAMMA vaqtdagi
+  // yozuvlari (minglab qator) to'liq o'qib olinib, keyin JS'da filtrlanardi,
+  // bu esa "Mening faoliyatim" sahifasini sekinlashtirar edi.
+  const activityWindow = periodKey === 'all' ? null : { start: isoFromTashkentDateStart(
+    periodKey === 'today' ? keys.today : periodKey === 'week' ? keys.weekStart : periodKey === 'month' ? keys.monthStart : keys.customStart
+  ), end: isoAfterTashkentDate(periodKey === 'custom' ? keys.customEnd : keys.today) };
+  const createdAtRange = activityWindow && activityWindow.start && activityWindow.end ? rangeQuery('created_at', activityWindow) : {};
   const [requestsByEmployeeId, requestsByTgId, employeeMessagesById, employeeMessagesByTg, openRequestCandidates] = await Promise.all([
     selectPaged('support_requests', {
       select: requestSelect,
       closed_by_employee_id: supabase.eq(employee.id),
-      order: supabase.order('closed_at', false)
+      order: supabase.order('closed_at', false),
+      ...createdAtRange
     }, { maxRows: 20000 }),
     employee.tg_user_id ? selectPaged('support_requests', {
       select: requestSelect,
       closed_by_tg_id: supabase.eq(employee.tg_user_id),
-      order: supabase.order('closed_at', false)
+      order: supabase.order('closed_at', false),
+      ...createdAtRange
     }, { maxRows: 20000 }) : Promise.resolve([]),
     selectPaged('messages', {
       select: 'id,tg_message_id,chat_id,from_tg_user_id,from_name,from_username,employee_id,source_type,classification,text,business_connection_id,raw,created_at',
       employee_id: supabase.eq(employee.id),
-      order: supabase.order('created_at', false)
+      order: supabase.order('created_at', false),
+      ...createdAtRange
     }, { maxRows: 20000 }),
     employee.tg_user_id ? selectPaged('messages', {
       select: 'id,tg_message_id,chat_id,from_tg_user_id,from_name,from_username,employee_id,source_type,classification,text,business_connection_id,raw,created_at',
       from_tg_user_id: supabase.eq(employee.tg_user_id),
-      order: supabase.order('created_at', false)
+      order: supabase.order('created_at', false),
+      ...createdAtRange
     }, { maxRows: 20000 }) : Promise.resolve([]),
     selectPaged('support_requests', {
       select: requestSelect,
       status: supabase.eq('open'),
-      order: supabase.order('created_at', false)
+      order: supabase.order('created_at', false),
+      ...createdAtRange
     }, { maxRows: 20000 })
   ]);
 
@@ -4556,9 +4569,8 @@ async function getEmployeeActivity(query = {}) {
   const chatIds = [...new Set([
     ...closedRequests.map(request => request.chat_id),
     ...messages.map(message => message.chat_id),
-    // Guruh/lichka turini (source_type) aniq aniqlash uchun BARCHA ochiq
-    // so'rovlarning chat ma'lumoti olib qo'yiladi (keyinroq davr bo'yicha
-    // filtrlanadi) — aks holda chat topilmay, turi noto'g'ri chiqib qolardi.
+    // Guruh/lichka turini (source_type) aniq aniqlash uchun ochiq
+    // so'rovlarning chat ma'lumoti ham olib qo'yiladi.
     ...openRequestCandidates
       .filter(request => request.status === 'open')
       .map(request => request.chat_id)
