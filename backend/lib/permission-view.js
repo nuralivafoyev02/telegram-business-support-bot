@@ -1151,39 +1151,56 @@ async function getEmployeeKnowledgeProfile(employeeId) {
     return submoduleActionsCountByKey.get(String(key)) || 1;
   }
 
-  // Modul foizi va umumiy foiz faqat MENEJER/ADMIN tasdiqlagandan (confirmed_at)
-  // keyin oshadi — "jarayonda" (xodim o'rgandim deb belgilagan-u hali
-  // tasdiqlanmagan) holat bu yerga kirmaydi, donutdagi "O'rganilgan
-  // funksiyalar" bilan bir xil qoidaga mos bo'lishi uchun.
-  const moduleNames = [...new Set(events.map(event => canonicalModuleName(event.module_name)).filter(Boolean))];
-  const modulePercents = moduleNames.map(moduleName => {
-    const moduleEvents = events.filter(event => canonicalModuleName(event.module_name) === moduleName);
+  // "O'rganilgan/Jarayondagi/Boshlanmagan funksiyalar" KPI kartochkalari —
+  // getKnowledgeDashboard'dagi jamoaviy donut bilan BIR XIL qoida: butun
+  // modul daraxti asos qilinadi (hali hodisasi yo'q submodule ham
+  // "boshlanmagan"ga kiradi), tasdiqlangan — o'rganilgan, o'rganilgan-u
+  // tasdiqlanmagan — jarayonda. Quyidagi HAMMA hisob-kitob (modul foizlari,
+  // "O'rganilgan"/"O'rganilmagan" ro'yxatlari) ham shu BIR XIL to'liq
+  // to'plamdan foydalanadi — avval ular faqat "events" (bildirishnoma
+  // yuborilgan, torroq) to'plamidan hisoblanib, sonlar (masalan 461 o'rniga
+  // 80) mos kelmasdi.
+  const allSubmoduleKeys = [];
+  const submoduleInfoByKey = new Map();
+  (Array.isArray(permissionRecord.modules) ? permissionRecord.modules : []).forEach(module => {
+    (module.submodules || []).forEach(submodule => {
+      const key = String(submodule.key);
+      allSubmoduleKeys.push(key);
+      submoduleInfoByKey.set(key, {
+        submodule_name: submodule.name || submodule.key,
+        module_name: module.name || module.key
+      });
+    });
+  });
+  const eventBySubmoduleKey = new Map(events.map(event => [String(event.submodule_key), event]));
+
+  const moduleSubmoduleKeys = new Map();
+  (Array.isArray(permissionRecord.modules) ? permissionRecord.modules : []).forEach(module => {
+    const moduleName = canonicalModuleName(module.name || module.key);
+    if (!moduleName) return;
+    const list = moduleSubmoduleKeys.get(moduleName) || [];
+    (module.submodules || []).forEach(submodule => list.push(String(submodule.key)));
+    moduleSubmoduleKeys.set(moduleName, list);
+  });
+  const modulePercents = [...moduleSubmoduleKeys.entries()].map(([moduleName, keys]) => {
     let totalWeight = 0;
     let confirmedWeight = 0;
-    moduleEvents.forEach(event => {
-      const weight = actionsCountFor(event.submodule_key);
+    let eventCount = 0;
+    keys.forEach(key => {
+      const weight = actionsCountFor(key);
       totalWeight += weight;
+      const event = eventBySubmoduleKey.get(key);
+      if (!event) return;
+      eventCount += 1;
       if (progressFor(record, event.id, employee.id).confirmed_at) confirmedWeight += weight;
     });
     return {
       module_name: moduleName,
       percent: totalWeight ? Math.round((confirmedWeight / totalWeight) * 100) : 0,
-      event_count: moduleEvents.length
+      event_count: eventCount
     };
   });
 
-  // "O'rganilgan/Jarayondagi/Boshlanmagan funksiyalar" KPI kartochkalari —
-  // getKnowledgeDashboard'dagi jamoaviy donut bilan BIR XIL qoida, faqat shu
-  // BITTA xodim uchun: butun modul daraxti asos qilinadi (hali hodisasi
-  // yo'q submodule ham "boshlanmagan"ga kiradi), tasdiqlangan — o'rganilgan,
-  // o'rganilgan-u tasdiqlanmagan — jarayonda.
-  const allSubmoduleKeys = [];
-  (Array.isArray(permissionRecord.modules) ? permissionRecord.modules : []).forEach(module => {
-    (module.submodules || []).forEach(submodule => {
-      allSubmoduleKeys.push(String(submodule.key));
-    });
-  });
-  const eventBySubmoduleKey = new Map(events.map(event => [String(event.submodule_key), event]));
   let donutLearned = 0;
   let donutInProgress = 0;
   let donutNotStarted = 0;
@@ -1244,25 +1261,31 @@ async function getEmployeeKnowledgeProfile(employeeId) {
     return { date: dayKey, percent: totalWeight ? Math.round((learnedWeight / totalWeight) * 100) : 0 };
   });
 
+  // "Biladigan"/"Bilmaydigan" ro'yxatlari — BUTUN modul daraxti bo'yicha,
+  // donut bilan bir xil "tasdiqlangan" mezoni bilan: faqat confirmed_at
+  // bo'lgan submodule "O'rganilgan"ga kiradi, qolgani ("jarayonda" va hali
+  // umuman tegilmagan) — "O'rganilmagan"ga.
   const learnedFunctions = [];
   const notLearnedFunctions = [];
-  events.forEach(event => {
-    const progress = progressFor(record, event.id, employee.id);
-    if (progress.learned_at) {
-      const daysToLearn = (new Date(progress.learned_at).getTime() - new Date(event.created_at).getTime()) / DAY_MS;
+  allSubmoduleKeys.forEach(key => {
+    const info = submoduleInfoByKey.get(key) || { submodule_name: key, module_name: '' };
+    const event = eventBySubmoduleKey.get(key);
+    const progress = event ? progressFor(record, event.id, employee.id) : {};
+    if (progress.confirmed_at) {
+      const daysToLearn = event ? (new Date(progress.confirmed_at).getTime() - new Date(event.created_at).getTime()) / DAY_MS : null;
       learnedFunctions.push({
-        submodule_name: event.submodule_name,
-        module_name: event.module_name,
-        created_at: event.created_at,
-        learned_at: progress.learned_at,
+        submodule_name: info.submodule_name,
+        module_name: info.module_name,
+        created_at: event ? event.created_at : null,
+        learned_at: progress.confirmed_at,
         days_to_learn: Number.isFinite(daysToLearn) ? Math.round(daysToLearn * 10) / 10 : null
       });
     } else {
       notLearnedFunctions.push({
-        submodule_name: event.submodule_name,
-        module_name: event.module_name,
-        created_at: event.created_at,
-        days_since_launch: Math.floor((Date.now() - new Date(event.created_at).getTime()) / DAY_MS)
+        submodule_name: info.submodule_name,
+        module_name: info.module_name,
+        created_at: event ? event.created_at : null,
+        days_since_launch: event ? Math.floor((Date.now() - new Date(event.created_at).getTime()) / DAY_MS) : null
       });
     }
   });
