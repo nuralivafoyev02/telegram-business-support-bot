@@ -650,34 +650,7 @@
                         <input type="checkbox" class="row-check"
                           :checked="isEmployeeActionChecked(submodule, action)"
                           @change="toggleEmployeeActionSelected(submodule, action)" />
-                        <span class="status-subaction-name">{{ action.name || action.key }}</span>
-                        <div class="status-subaction-col">
-                          <div class="avatar-stack">
-                            <span v-for="person in (action.learned_employees || []).slice(0, 3)"
-                              :key="'emp-action-learned-' + submodule.id + '-' + action.id + '-' + person.id"
-                              class="avatar-stack-item" :title="`${person.full_name} — o‘rgangan`">
-                              <img v-if="employeeAvatarUrl(person)" :src="employeeAvatarUrl(person)" alt="" style="border-color:#dcfce7;" />
-                              <span v-else class="profile-avatar" style="background:#dcfce7; color:#16a34a;">{{ initialsFromText(person.full_name) }}</span>
-                            </span>
-                            <span v-if="!(action.learned_employees || []).length" class="empty compact" style="padding:0;">—</span>
-                          </div>
-                        </div>
-                        <div class="status-subaction-col">
-                          <div class="avatar-stack">
-                            <span v-for="person in (action.not_learned_employees || []).slice(0, 3)"
-                              :key="'emp-action-not-learned-' + submodule.id + '-' + action.id + '-' + person.id"
-                              class="avatar-stack-item" :title="`${person.full_name} — o‘rganmagan`">
-                              <img v-if="employeeAvatarUrl(person)" :src="employeeAvatarUrl(person)" alt="" style="border-color:#fee2e2;" />
-                              <span v-else class="profile-avatar" style="background:#fee2e2; color:#dc2626;">{{ initialsFromText(person.full_name) }}</span>
-                            </span>
-                            <span v-if="!(action.not_learned_employees || []).length" class="empty compact" style="padding:0;">—</span>
-                          </div>
-                        </div>
-                        <div class="status-subaction-col">
-                          <span class="days-pill" :class="{ new: submodule.days_since_launch != null && submodule.days_since_launch <= 3 }">
-                            {{ formatDaysAgo(submodule.days_since_launch) }}
-                          </span>
-                        </div>
+                        <span class="status-subaction-name" style="flex:1;">{{ action.name || action.key }}</span>
                       </label>
                     </div>
                   </template>
