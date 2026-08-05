@@ -1395,23 +1395,39 @@
     <Transition name="modal-fade">
       <Modal v-if="managementModal === 'employeeProfile' && employeeKnowledgeProfile"
         :title="employeeKnowledgeProfile.employee.full_name" wide @close="closeManagementModal">
-        <div class="employee-profile-mini-stats">
-          <span>
-            <small>Bilim progresi</small>
-            <b>{{ employeeKnowledgeProfile.overall_percent }}%</b>
-          </span>
-          <span>
-            <small>Biladigan funksiyalar</small>
-            <b>{{ employeeKnowledgeProfile.learned_functions.length }}</b>
-          </span>
-          <span>
-            <small>Bilmaydigan funksiyalar</small>
-            <b>{{ employeeKnowledgeProfile.not_learned_functions.length }}</b>
-          </span>
-          <span>
-            <small>Jarayonda</small>
-            <b>{{ employeeKnowledgeProfile.donut?.in_progress_count || 0 }}</b>
-          </span>
+        <div class="support-summary-grid">
+          <article class="card support-summary-card">
+            <div class="support-summary-content">
+              <div class="support-summary-title">Bilim progresi</div>
+              <div class="support-summary-value-row">
+                <div class="support-summary-value">{{ employeeKnowledgeProfile.overall_percent }}%</div>
+              </div>
+            </div>
+          </article>
+          <article class="card support-summary-card">
+            <div class="support-summary-content">
+              <div class="support-summary-title">Biladigan funksiyalar</div>
+              <div class="support-summary-value-row">
+                <div class="support-summary-value" style="color:#16a34a;">{{ employeeKnowledgeProfile.learned_functions.length }}</div>
+              </div>
+            </div>
+          </article>
+          <article class="card support-summary-card">
+            <div class="support-summary-content">
+              <div class="support-summary-title">Jarayonda</div>
+              <div class="support-summary-value-row">
+                <div class="support-summary-value" style="color:#f59e0b;">{{ employeeKnowledgeProfile.donut?.in_progress_count || 0 }}</div>
+              </div>
+            </div>
+          </article>
+          <article class="card support-summary-card">
+            <div class="support-summary-content">
+              <div class="support-summary-title">Bilmaydigan funksiyalar</div>
+              <div class="support-summary-value-row">
+                <div class="support-summary-value" style="color:#dc2626;">{{ employeeKnowledgeProfile.not_learned_functions.length }}</div>
+              </div>
+            </div>
+          </article>
         </div>
         <div class="drilldown-columns" style="margin:16px 0;">
           <div class="drilldown-chart-panel" style="display:flex; align-items:center; justify-content:center;">
@@ -5346,23 +5362,39 @@
     <Transition name="modal-fade">
       <Modal v-if="modal === 'employeeProfile' && employeeKnowledgeProfile"
         :title="employeeKnowledgeProfile.employee.full_name" wide @close="closeModal">
-        <div class="employee-profile-mini-stats">
-          <span>
-            <small>Bilim progresi</small>
-            <b>{{ employeeKnowledgeProfile.overall_percent }}%</b>
-          </span>
-          <span>
-            <small>Biladigan funksiyalar</small>
-            <b>{{ employeeKnowledgeProfile.learned_functions.length }}</b>
-          </span>
-          <span>
-            <small>Bilmaydigan funksiyalar</small>
-            <b>{{ employeeKnowledgeProfile.not_learned_functions.length }}</b>
-          </span>
-          <span>
-            <small>Jarayonda</small>
-            <b>{{ employeeKnowledgeProfile.donut?.in_progress_count || 0 }}</b>
-          </span>
+        <div class="support-summary-grid">
+          <article class="card support-summary-card">
+            <div class="support-summary-content">
+              <div class="support-summary-title">Bilim progresi</div>
+              <div class="support-summary-value-row">
+                <div class="support-summary-value">{{ employeeKnowledgeProfile.overall_percent }}%</div>
+              </div>
+            </div>
+          </article>
+          <article class="card support-summary-card">
+            <div class="support-summary-content">
+              <div class="support-summary-title">Biladigan funksiyalar</div>
+              <div class="support-summary-value-row">
+                <div class="support-summary-value" style="color:#16a34a;">{{ employeeKnowledgeProfile.learned_functions.length }}</div>
+              </div>
+            </div>
+          </article>
+          <article class="card support-summary-card">
+            <div class="support-summary-content">
+              <div class="support-summary-title">Jarayonda</div>
+              <div class="support-summary-value-row">
+                <div class="support-summary-value" style="color:#f59e0b;">{{ employeeKnowledgeProfile.donut?.in_progress_count || 0 }}</div>
+              </div>
+            </div>
+          </article>
+          <article class="card support-summary-card">
+            <div class="support-summary-content">
+              <div class="support-summary-title">Bilmaydigan funksiyalar</div>
+              <div class="support-summary-value-row">
+                <div class="support-summary-value" style="color:#dc2626;">{{ employeeKnowledgeProfile.not_learned_functions.length }}</div>
+              </div>
+            </div>
+          </article>
         </div>
         <div class="drilldown-columns" style="margin:16px 0;">
           <div class="drilldown-chart-panel" style="display:flex; align-items:center; justify-content:center;">
