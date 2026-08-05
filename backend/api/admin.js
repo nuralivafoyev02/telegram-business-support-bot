@@ -4635,8 +4635,12 @@ async function getEmployeeActivity(query = {}) {
     const messageEmployee = employeeMaps.byId.get(message.employee_id) || employeeMaps.byTgId.get(telegramIdKey(message.from_tg_user_id));
     return Boolean(messageEmployee && !isSelectedEmployeeMessage(message));
   }
+  // Diqqat: "ochiq" so'rovlar davr (period) bo'yicha SUZILMAYDI — hali
+  // yopilmagan ticket qachon yaratilgan bo'lishidan qat'i nazar, hozirgi
+  // paytda dolzarb (kutilayotgan) hisoblanadi. Davr bo'yicha filtrlash faqat
+  // "yopilgan"/"xabarlar" kabi davr ICHIDA sodir bo'lgan hodisalarga tegishli.
   const periodOpenRequests = openRequestCandidates
-    .filter(request => request.status === 'open' && inCurrentPeriod(request.created_at, periodKey, keys))
+    .filter(request => request.status === 'open')
     .filter(requestResponsibleMatchesEmployee);
   const visibleClosedRequests = closedRequests.filter(request => !isEmployeePrivateChatId(request.chat_id));
   const visibleMessages = messages.filter(message => !isEmployeePrivateChatId(message.chat_id));
