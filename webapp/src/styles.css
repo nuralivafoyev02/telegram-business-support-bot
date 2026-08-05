@@ -1170,6 +1170,14 @@ tbody tr:hover {
   padding: 6px;
 }
 
+/* Support panelida ro'yxat oynasi ("Yopilgan so'rovlar" va h.k, managementModal
+   orqali) ochiq turganida "Ko'rish" bosilsa, ustiga chat tafsiloti (`modal`
+   orqali) ochiladi — ikkalasi ham bir xil z-index bo'lgani uchun avval DOM'ga
+   chiqqani (ro'yxat) tepada qolib, chat tafsiloti orqada "yashiringan" edi. */
+.modal-backdrop.modal-top {
+  z-index: 40;
+}
+
 .company-detail-dashboard {
   display: flex;
   flex-direction: column;

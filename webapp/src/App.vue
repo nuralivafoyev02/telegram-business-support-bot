@@ -683,7 +683,7 @@
     </Transition>
 
     <Transition name="modal-fade">
-      <Modal v-if="modal === 'chatDetail'" :title="chatDetailTitle" wide xlarge @close="closeModal">
+      <Modal v-if="modal === 'chatDetail'" class="modal-top" :title="chatDetailTitle" wide xlarge @close="closeModal">
         <div class="detail-stack">
           <section class="detail-summary">
             <div>
