@@ -8180,7 +8180,17 @@ const COMPANY_MODULE_CHART_VIEW = Object.freeze({ width: 820, height: 360 });
 const companyModuleChartAxisTitleY = (COMPANY_MODULE_CHART_DIMS.top + COMPANY_MODULE_CHART_DIMS.bottom) / 2;
 const companyModuleKeys = companyModuleColumns.map(column => column.key);
 const companyModulePeriod = ref('today');
-const companyModuleFilterKeys = ref(['business:ACTIVE']);
+// Support (management bo'lmagan) hisobda bu sahifa DEFAULT holatda faqat
+// shu xodimning o'z mas'ul bo'lgan kompaniyalarini (+ Aktiv) ko'rsatadi —
+// boshqa xodimlarning kompaniyalari aralashib ketmasligi uchun.
+const companyModuleFilterKeys = ref((() => {
+  const defaults = ['business:ACTIVE'];
+  if (isEmployeeAccount.value) {
+    const ownUsername = normalizeSupportUsername(account.value?.username);
+    if (ownUsername) defaults.push(`support:${ownUsername}`);
+  }
+  return defaults;
+})());
 const companyModuleSort = ref('modules_desc');
 const companyModuleSortOptions = [
   { key: 'modules_desc', label: 'Ko‘p ishlatilgan' },
