@@ -5921,8 +5921,13 @@ function setModalScrollLock(locked) {
   window.scrollTo(0, modalScrollY);
 }
 
-watch(modal, value => {
-  setModalScrollLock(Boolean(value));
+// `modal` (admin/support) va `managementModal` (boshqaruv/support) alohida
+// ref'lar, lekin BITTASI ustiga IKKINCHISI ochilishi mumkin (masalan
+// "Mening faoliyatim" ichidagi ro'yxatdan "Ko'rish" bosilganda `modal`
+// `managementModal` ustiga ochiladi) — faqat bittasini kuzatilsa, ikkinchisi
+// hali ochiq turganida sahifa qulfi yechilib, orqa fon "sakrab" ketardi.
+watch([modal, managementModal], ([modalValue, managementModalValue]) => {
+  setModalScrollLock(Boolean(modalValue || managementModalValue));
 });
 
 const loginForm = reactive({ username: 'admin', password: '' });
