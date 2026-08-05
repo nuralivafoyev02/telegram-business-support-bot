@@ -12556,6 +12556,13 @@ function resetTenantScopedState() {
   employees.value = [];
   clickupTasks.value = [];
   companyInfo.value = { summary: {}, companies: [], fetched_at: '', source: '' };
+  // Oldingi sessiyadan (login/logout) `modal`/`managementModal` ochiq
+  // qolib ketishi mumkin edi — o'sha modal ekranda umuman ko'rinmasa ham
+  // (masalan boshqa panel/rol uchun mo'ljallangan nom bo'lgani uchun),
+  // sahifa qulfi (scroll-lock) hech qachon yechilmay, BUTUN sahifa
+  // "qotib" qolardi. Har bir yangi kirish/chiqishda ikkalasi ham tozalanadi.
+  modal.value = '';
+  managementModal.value = '';
 }
 
 function logout() {
