@@ -4556,10 +4556,9 @@ async function getEmployeeActivity(query = {}) {
   const chatIds = [...new Set([
     ...closedRequests.map(request => request.chat_id),
     ...messages.map(message => message.chat_id),
-    // "Ochiq" so'rovlar davr bo'yicha suzilmagani uchun, bu yerda ham
-    // BARCHA ochiq so'rovlarning chat ma'lumoti olinishi kerak — aks holda
-    // davrdan tashqaridagi eski ochiq so'rovlar uchun chat topilmay,
-    // guruh/lichka turi noto'g'ri (yoki bo'sh) aniqlanib qolardi.
+    // Guruh/lichka turini (source_type) aniq aniqlash uchun BARCHA ochiq
+    // so'rovlarning chat ma'lumoti olib qo'yiladi (keyinroq davr bo'yicha
+    // filtrlanadi) — aks holda chat topilmay, turi noto'g'ri chiqib qolardi.
     ...openRequestCandidates
       .filter(request => request.status === 'open')
       .map(request => request.chat_id)
@@ -4660,12 +4659,11 @@ async function getEmployeeActivity(query = {}) {
     const sourceType = chat?.source_type || request.source_type || '';
     return sourceType === 'group';
   }
-  // Diqqat: "ochiq" so'rovlar davr (period) bo'yicha SUZILMAYDI — hali
-  // yopilmagan ticket qachon yaratilgan bo'lishidan qat'i nazar, hozirgi
-  // paytda dolzarb (kutilayotgan) hisoblanadi. Davr bo'yicha filtrlash faqat
-  // "yopilgan"/"xabarlar" kabi davr ICHIDA sodir bo'lgan hodisalarga tegishli.
+  // "Ochiq" ham xuddi "Yopilgan"/"Javobsiz" kabi TANLANGAN DAVR bo'yicha
+  // suziladi (superadmin bosh sahifasidagi "Javobsiz" kartasi bilan bir xil
+  // qoida) — aks holda ikkalasi turli sonlarni ko'rsatib, chalkashtirardi.
   const periodOpenRequests = openRequestCandidates
-    .filter(request => request.status === 'open')
+    .filter(request => request.status === 'open' && inCurrentPeriod(request.created_at, periodKey, keys))
     .filter(isGroupSourceRequest)
     .filter(requestResponsibleMatchesEmployee);
   const visibleClosedRequests = closedRequests.filter(request => !isEmployeePrivateChatId(request.chat_id));
