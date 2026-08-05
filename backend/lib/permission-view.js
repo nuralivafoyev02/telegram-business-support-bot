@@ -862,15 +862,19 @@ async function getKnowledgeDashboard({ days = 7 } = {}) {
         .filter(event => canonicalModuleName(event.module_name) === moduleName)
         .map(event => ({ key: event.submodule_key }));
 
+    // "O'rganilgan funksiyalar" KPI kartasi va donut bilan bir xil qoidaga
+    // amal qilinadi: submodule faqat BARCHA faol support'lar tasdiqlagandan
+    // keyin hisobga kiradi — bitta xodim tasdiqlashi yoki hali "jarayonda"
+    // (tasdiqlanmagan) bo'lishi modul foizini oshirmasligi kerak.
     let confirmedWeight = 0;
     let totalWeight = 0;
     submodules.forEach(submodule => {
       const weight = actionsCountFor(submodule.key);
+      totalWeight += weight;
       const event = eventBySubmoduleKey.get(String(submodule.key));
-      employees.forEach(employee => {
-        totalWeight += weight;
-        if (event && progressFor(record, event.id, employee.id).confirmed_at) confirmedWeight += weight;
-      });
+      const confirmedByAll = Boolean(event) && employees.length > 0
+        && employees.every(employee => Boolean(progressFor(record, event.id, employee.id).confirmed_at));
+      if (confirmedByAll) confirmedWeight += weight;
     });
     return {
       module_name: moduleName,
@@ -1147,19 +1151,23 @@ async function getEmployeeKnowledgeProfile(employeeId) {
     return submoduleActionsCountByKey.get(String(key)) || 1;
   }
 
+  // Modul foizi va umumiy foiz faqat MENEJER/ADMIN tasdiqlagandan (confirmed_at)
+  // keyin oshadi — "jarayonda" (xodim o'rgandim deb belgilagan-u hali
+  // tasdiqlanmagan) holat bu yerga kirmaydi, donutdagi "O'rganilgan
+  // funksiyalar" bilan bir xil qoidaga mos bo'lishi uchun.
   const moduleNames = [...new Set(events.map(event => canonicalModuleName(event.module_name)).filter(Boolean))];
   const modulePercents = moduleNames.map(moduleName => {
     const moduleEvents = events.filter(event => canonicalModuleName(event.module_name) === moduleName);
     let totalWeight = 0;
-    let learnedWeight = 0;
+    let confirmedWeight = 0;
     moduleEvents.forEach(event => {
       const weight = actionsCountFor(event.submodule_key);
       totalWeight += weight;
-      if (progressFor(record, event.id, employee.id).learned_at) learnedWeight += weight;
+      if (progressFor(record, event.id, employee.id).confirmed_at) confirmedWeight += weight;
     });
     return {
       module_name: moduleName,
-      percent: totalWeight ? Math.round((learnedWeight / totalWeight) * 100) : 0,
+      percent: totalWeight ? Math.round((confirmedWeight / totalWeight) * 100) : 0,
       event_count: moduleEvents.length
     };
   });
@@ -1167,10 +1175,10 @@ async function getEmployeeKnowledgeProfile(employeeId) {
   const overallWeight = events.reduce((acc, event) => {
     const weight = actionsCountFor(event.submodule_key);
     acc.total += weight;
-    if (progressFor(record, event.id, employee.id).learned_at) acc.learned += weight;
+    if (progressFor(record, event.id, employee.id).confirmed_at) acc.confirmed += weight;
     return acc;
-  }, { total: 0, learned: 0 });
-  const overallPercent = overallWeight.total ? Math.round((overallWeight.learned / overallWeight.total) * 100) : 0;
+  }, { total: 0, confirmed: 0 });
+  const overallPercent = overallWeight.total ? Math.round((overallWeight.confirmed / overallWeight.total) * 100) : 0;
 
   // "O'rganilgan/Jarayondagi/Boshlanmagan funksiyalar" KPI kartochkalari —
   // getKnowledgeDashboard'dagi jamoaviy donut bilan BIR XIL qoida, faqat shu
