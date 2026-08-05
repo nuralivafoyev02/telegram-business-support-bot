@@ -8183,14 +8183,23 @@ const companyModulePeriod = ref('today');
 // Support (management bo'lmagan) hisobda bu sahifa DEFAULT holatda faqat
 // shu xodimning o'z mas'ul bo'lgan kompaniyalarini (+ Aktiv) ko'rsatadi —
 // boshqa xodimlarning kompaniyalari aralashib ketmasligi uchun.
-const companyModuleFilterKeys = ref((() => {
+function defaultCompanyModuleFilterKeys() {
   const defaults = ['business:ACTIVE'];
   if (isEmployeeAccount.value) {
     const ownUsername = normalizeSupportUsername(account.value?.username);
     if (ownUsername) defaults.push(`support:${ownUsername}`);
   }
   return defaults;
-})());
+}
+const companyModuleFilterKeys = ref(defaultCompanyModuleFilterKeys());
+// `account.value` ilova ochilganda hali to'liq tayyor bo'lmasligi (yoki
+// login/logout orqali almashishi) mumkin — shu sababli username haqiqatan
+// o'zgarganda (yangi xodim tizimga kirganda) filtr ham qayta hisoblanadi,
+// aks holda oldingi xodimning username'i "yopishib qolgan" bo'lib qolardi.
+watch(() => account.value?.username, (newUsername, oldUsername) => {
+  if (newUsername === oldUsername || !isEmployeeAccount.value) return;
+  companyModuleFilterKeys.value = defaultCompanyModuleFilterKeys();
+});
 const companyModuleSort = ref('modules_desc');
 const companyModuleSortOptions = [
   { key: 'modules_desc', label: 'Ko‘p ishlatilgan' },
