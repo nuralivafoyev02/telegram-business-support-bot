@@ -1172,14 +1172,6 @@ async function getEmployeeKnowledgeProfile(employeeId) {
     };
   });
 
-  const overallWeight = events.reduce((acc, event) => {
-    const weight = actionsCountFor(event.submodule_key);
-    acc.total += weight;
-    if (progressFor(record, event.id, employee.id).confirmed_at) acc.confirmed += weight;
-    return acc;
-  }, { total: 0, confirmed: 0 });
-  const overallPercent = overallWeight.total ? Math.round((overallWeight.confirmed / overallWeight.total) * 100) : 0;
-
   // "O'rganilgan/Jarayondagi/Boshlanmagan funksiyalar" KPI kartochkalari —
   // getKnowledgeDashboard'dagi jamoaviy donut bilan BIR XIL qoida, faqat shu
   // BITTA xodim uchun: butun modul daraxti asos qilinadi (hali hodisasi
@@ -1215,6 +1207,11 @@ async function getEmployeeKnowledgeProfile(employeeId) {
     not_learned_count: donutNotStarted,
     total_count: donutTotal
   };
+  // "Bilim progresi" ham donut bilan BIR XIL (butun modul daraxti, actions
+  // og'irligi bilan) asosda hisoblanadi — dashboarddagi "O'rtacha umumiy
+  // bilim darajasi" bilan mos kelishi uchun (avval faqat "events" asosida,
+  // torroq to'plamdan hisoblanardi va sonlar mos kelmasdi).
+  const overallPercent = donutTotal ? Math.round((donutLearned / donutTotal) * 100) : 0;
 
   // "Jamoa" uchun alohida ustun yo'q — xodim eng ko'p ishlagan (eng ko'p
   // hodisaga ega) moduli asosida chiqariladi.

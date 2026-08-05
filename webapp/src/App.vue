@@ -1408,7 +1408,7 @@
             <div class="support-summary-content">
               <div class="support-summary-title">Biladigan funksiyalar</div>
               <div class="support-summary-value-row">
-                <div class="support-summary-value" style="color:#16a34a;">{{ employeeKnowledgeProfile.learned_functions.length }}</div>
+                <div class="support-summary-value" style="color:#16a34a;">{{ fmtNumber(employeeKnowledgeProfile.donut?.learned_count) }}</div>
               </div>
             </div>
           </article>
@@ -1416,7 +1416,7 @@
             <div class="support-summary-content">
               <div class="support-summary-title">Jarayonda</div>
               <div class="support-summary-value-row">
-                <div class="support-summary-value" style="color:#f59e0b;">{{ employeeKnowledgeProfile.donut?.in_progress_count || 0 }}</div>
+                <div class="support-summary-value" style="color:#f59e0b;">{{ fmtNumber(employeeKnowledgeProfile.donut?.in_progress_count) }}</div>
               </div>
             </div>
           </article>
@@ -1424,7 +1424,7 @@
             <div class="support-summary-content">
               <div class="support-summary-title">Bilmaydigan funksiyalar</div>
               <div class="support-summary-value-row">
-                <div class="support-summary-value" style="color:#dc2626;">{{ employeeKnowledgeProfile.not_learned_functions.length }}</div>
+                <div class="support-summary-value" style="color:#dc2626;">{{ fmtNumber(employeeKnowledgeProfile.donut?.not_learned_count) }}</div>
               </div>
             </div>
           </article>
@@ -5375,7 +5375,7 @@
             <div class="support-summary-content">
               <div class="support-summary-title">Biladigan funksiyalar</div>
               <div class="support-summary-value-row">
-                <div class="support-summary-value" style="color:#16a34a;">{{ employeeKnowledgeProfile.learned_functions.length }}</div>
+                <div class="support-summary-value" style="color:#16a34a;">{{ fmtNumber(employeeKnowledgeProfile.donut?.learned_count) }}</div>
               </div>
             </div>
           </article>
@@ -5383,7 +5383,7 @@
             <div class="support-summary-content">
               <div class="support-summary-title">Jarayonda</div>
               <div class="support-summary-value-row">
-                <div class="support-summary-value" style="color:#f59e0b;">{{ employeeKnowledgeProfile.donut?.in_progress_count || 0 }}</div>
+                <div class="support-summary-value" style="color:#f59e0b;">{{ fmtNumber(employeeKnowledgeProfile.donut?.in_progress_count) }}</div>
               </div>
             </div>
           </article>
@@ -5391,7 +5391,7 @@
             <div class="support-summary-content">
               <div class="support-summary-title">Bilmaydigan funksiyalar</div>
               <div class="support-summary-value-row">
-                <div class="support-summary-value" style="color:#dc2626;">{{ employeeKnowledgeProfile.not_learned_functions.length }}</div>
+                <div class="support-summary-value" style="color:#dc2626;">{{ fmtNumber(employeeKnowledgeProfile.donut?.not_learned_count) }}</div>
               </div>
             </div>
           </article>
