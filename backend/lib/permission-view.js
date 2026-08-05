@@ -426,9 +426,31 @@ async function setEventLearned(eventId, employeeId, learned = true) {
 
 async function getSupportEventHistory(employeeId) {
   if (!employeeId) return [];
-  const record = await getNotificationRecord();
+  const [record, viewRecord, actionProgress] = await Promise.all([
+    getNotificationRecord(),
+    getPermissionViewRecord(),
+    getActionLearnedRecord()
+  ]);
+  const actionsBySubmoduleKey = new Map();
+  (Array.isArray(viewRecord.modules) ? viewRecord.modules : []).forEach(module => {
+    (module.submodules || []).forEach(submodule => {
+      actionsBySubmoduleKey.set(String(submodule.key), submodule.actions || []);
+    });
+  });
   return record.events.slice().reverse().map(event => {
     const progress = progressFor(record, event.id, employeeId);
+    const rawActions = actionsBySubmoduleKey.get(String(event.submodule_key)) || [];
+    const actions = rawActions.map(action => {
+      const key = actionCompositeKey(String(event.submodule_key), String(action.key || action.id));
+      const learnedAt = actionProgress[key] && actionProgress[key][employeeId] && actionProgress[key][employeeId].learned_at;
+      return {
+        id: action.id,
+        key: action.key,
+        name: action.name || action.key,
+        learned: Boolean(learnedAt),
+        learned_at: learnedAt || null
+      };
+    });
     return {
       event_id: event.id,
       module_name: event.module_name,
@@ -438,7 +460,8 @@ async function getSupportEventHistory(employeeId) {
       learned: Boolean(progress.learned_at),
       learned_at: progress.learned_at || null,
       confirmed: Boolean(progress.confirmed_at),
-      confirmed_at: progress.confirmed_at || null
+      confirmed_at: progress.confirmed_at || null,
+      actions
     };
   });
 }

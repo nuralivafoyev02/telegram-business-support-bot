@@ -1480,20 +1480,39 @@
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="row in filteredSupportHistoryRows" :key="row.event_id">
-                  <td>{{ row.submodule_name || row.submodule_key }}</td>
-                  <td>{{ fmtDate(row.created_at) }}</td>
-                  <td>
-                    <span class="badge" :class="row.confirmed ? 'green' : (row.learned ? 'blue' : 'orange')">
-                      {{ row.confirmed ? '✓ Qabul qilindi' : (row.learned ? 'O‘rganildi' : 'Kutilmoqda') }}
-                    </span>
-                  </td>
-                  <td class="select-cell">
-                    <input class="row-check" type="checkbox"
-                      :checked="isSupportHistoryEventSelected(row)" :disabled="!row.learned"
-                      @change="toggleSupportHistoryEventSelected(row)" />
-                  </td>
-                </tr>
+                <template v-for="row in filteredSupportHistoryRows" :key="row.event_id">
+                  <tr :class="{ 'clickable-row': (row.actions || []).length }"
+                    @click="(row.actions || []).length && toggleSupportHistoryRowExpanded(row)">
+                    <td>
+                      {{ row.submodule_name || row.submodule_key }}
+                      <span v-if="(row.actions || []).length" class="uyqur-functions-card-count">{{ row.actions.length }}</span>
+                    </td>
+                    <td>{{ fmtDate(row.created_at) }}</td>
+                    <td>
+                      <span class="badge" :class="row.confirmed ? 'green' : (row.learned ? 'blue' : 'orange')">
+                        {{ row.confirmed ? '✓ Qabul qilindi' : (row.learned ? 'O‘rganildi' : 'Kutilmoqda') }}
+                      </span>
+                    </td>
+                    <td class="select-cell" @click.stop>
+                      <input class="row-check" type="checkbox"
+                        :checked="isSupportHistoryEventSelected(row)" :disabled="!row.learned"
+                        @change="toggleSupportHistoryEventSelected(row)" />
+                    </td>
+                  </tr>
+                  <tr v-if="isSupportHistoryRowExpanded(row) && (row.actions || []).length">
+                    <td colspan="4" style="padding:0 0 10px;">
+                      <div class="uyqur-functions-subactions status-subactions" style="margin:0;">
+                        <div v-for="action in row.actions" :key="'support-history-action-' + row.event_id + '-' + action.id"
+                          class="uyqur-functions-subaction status-subaction">
+                          <span class="status-subaction-name" style="flex:1;">{{ action.name }}</span>
+                          <span class="badge" :class="action.learned ? 'blue' : 'orange'">
+                            {{ action.learned ? 'O‘rganildi' : 'Kutilmoqda' }}
+                          </span>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                </template>
               </tbody>
             </table>
             <div v-else class="empty">Bu supportga hali hech narsa yuborilmagan</div>
@@ -3416,20 +3435,39 @@
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="row in filteredSupportHistoryRows" :key="row.event_id">
-                  <td>{{ row.submodule_name || row.submodule_key }}</td>
-                  <td>{{ fmtDate(row.created_at) }}</td>
-                  <td>
-                    <span class="badge" :class="row.confirmed ? 'green' : (row.learned ? 'blue' : 'orange')">
-                      {{ row.confirmed ? '✓ Qabul qilindi' : (row.learned ? 'O‘rganildi' : 'Kutilmoqda') }}
-                    </span>
-                  </td>
-                  <td class="select-cell">
-                    <input class="row-check" type="checkbox"
-                      :checked="isSupportHistoryEventSelected(row)" :disabled="!row.learned"
-                      @change="toggleSupportHistoryEventSelected(row)" />
-                  </td>
-                </tr>
+                <template v-for="row in filteredSupportHistoryRows" :key="row.event_id">
+                  <tr :class="{ 'clickable-row': (row.actions || []).length }"
+                    @click="(row.actions || []).length && toggleSupportHistoryRowExpanded(row)">
+                    <td>
+                      {{ row.submodule_name || row.submodule_key }}
+                      <span v-if="(row.actions || []).length" class="uyqur-functions-card-count">{{ row.actions.length }}</span>
+                    </td>
+                    <td>{{ fmtDate(row.created_at) }}</td>
+                    <td>
+                      <span class="badge" :class="row.confirmed ? 'green' : (row.learned ? 'blue' : 'orange')">
+                        {{ row.confirmed ? '✓ Qabul qilindi' : (row.learned ? 'O‘rganildi' : 'Kutilmoqda') }}
+                      </span>
+                    </td>
+                    <td class="select-cell" @click.stop>
+                      <input class="row-check" type="checkbox"
+                        :checked="isSupportHistoryEventSelected(row)" :disabled="!row.learned"
+                        @change="toggleSupportHistoryEventSelected(row)" />
+                    </td>
+                  </tr>
+                  <tr v-if="isSupportHistoryRowExpanded(row) && (row.actions || []).length">
+                    <td colspan="4" style="padding:0 0 10px;">
+                      <div class="uyqur-functions-subactions status-subactions" style="margin:0;">
+                        <div v-for="action in row.actions" :key="'support-history-action-' + row.event_id + '-' + action.id"
+                          class="uyqur-functions-subaction status-subaction">
+                          <span class="status-subaction-name" style="flex:1;">{{ action.name }}</span>
+                          <span class="badge" :class="action.learned ? 'blue' : 'orange'">
+                            {{ action.learned ? 'O‘rganildi' : 'Kutilmoqda' }}
+                          </span>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                </template>
               </tbody>
             </table>
             <div v-else class="empty">Bu supportga hali hech narsa yuborilmagan</div>
@@ -5668,6 +5706,19 @@ function toggleSupportHistoryEventSelected(row = {}) {
   if (next.has(row.event_id)) next.delete(row.event_id);
   else next.add(row.event_id);
   supportHistorySelectedEvents.value = next;
+}
+// "Bildirishnomalar tarixi" jadvalida submodule ichidagi action'larni
+// (agar bo'lsa) ko'rsatish uchun — qator ustiga bosilganda ochiladi/yopiladi.
+const expandedSupportHistoryKeys = ref(new Set());
+function isSupportHistoryRowExpanded(row = {}) {
+  return expandedSupportHistoryKeys.value.has(row.event_id);
+}
+function toggleSupportHistoryRowExpanded(row = {}) {
+  if (!(row.actions || []).length) return;
+  const next = new Set(expandedSupportHistoryKeys.value);
+  if (next.has(row.event_id)) next.delete(row.event_id);
+  else next.add(row.event_id);
+  expandedSupportHistoryKeys.value = next;
 }
 const supportHistorySelectedCount = computed(() => supportHistorySelectedEvents.value.size);
 // Joriy filtrlangan ro'yxatdagi (masalan faqat "Jarayonda") o'rganilgan
