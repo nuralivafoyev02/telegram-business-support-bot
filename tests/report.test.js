@@ -133,10 +133,8 @@ async function testBuildMainStatsReportUsesTodayEmployeeClosures() {
   try {
     const text = await buildMainStatsReport();
     assert.match(text, /Bugungi xodimlar statistikasi/);
-    assert.match(text, /Bugun tushgan so‘rovlar: <b>2<\/b>/);
     assert.match(text, /Ali Valiyev @ali/);
     assert.match(text, /✅ 1/);
-    assert.match(text, /Main support/);
   } finally {
     supabase.select = originalSelect;
   }

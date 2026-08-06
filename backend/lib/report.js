@@ -336,69 +336,31 @@ async function buildMainStatsQuestionReply(text = '') {
 }
 
 async function buildMainStatsReport() {
-  const { summaryRows, employees, chats, requests, companyInfoCache } = await loadMainStatsData();
+  const { employees, requests, companyInfoCache } = await loadMainStatsData();
 
-  const summary = summaryRows[0] || {};
-  // Kunlik hisobotning "bugungi" sonlari tungi 00:00'dan emas, ish kuni
-  // boshlanishi (ertalab 9:00, Toshkent)dan boshlab sanaladi — shuning uchun
-  // bu yerda `summary.*`ga (butun kun bo'yicha, DB view'dan) qaytmaydi, aks
-  // holda ertalabki haqiqiy 0 qiymat butun kunlik son bilan almashtirilib,
-  // 9:00 chegarasi ma'nosiz bo'lib qolardi.
-  const todayCreated = requests.filter(request => isTodayFromNine(request.created_at));
-  const todayClosed = requests.filter(request => request.status === 'closed' && isTodayFromNine(request.closed_at));
-  const todayCreatedClosed = todayCreated.filter(request => request.status === 'closed');
-  // "Hozir ochiq ticketlar" — barcha vaqt bo'yicha to'plangan qoldiq emas,
-  // faqat BUGUN (9:00'dan) ochilib hali javob berilmagan GURUH ticketlari
-  // (shaxsiy/business chatlardagi oddiy suhbatlar hisobga kirmaydi).
-  const openRequests = todayCreated.filter(request => request.status === 'open' && request.source_type === 'group');
-  const groupToday = todayCreated.filter(request => request.source_type === 'group');
+  // Kunlik hisobot ataylab MINIMAL — faqat sana/vaqt va har bir support
+  // bo'yicha bugun (soat 9:00'dan) nechtasiga javob bergani/nechtasi
+  // qolgani. Boshqa hech narsa (umumiy holat, guruhlar ro'yxati) kerak
+  // emas deb ayting so'ralgan.
   const chatToEmployeeMap = buildChatToEmployeeMap(companyInfoCache, employees);
   const supportRows = buildTodaySupportRows(requests, employees, chatToEmployeeMap);
-  const openGroupRows = buildOpenGroupRows(todayCreated, chats);
   const divider = '▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬';
   const lines = [];
   lines.push('📊 <b>Bugungi xodimlar statistikasi</b>');
   lines.push(`🗓 ${escapeHtml(todayUz())} (soat 09:00 dan)`);
   lines.push(divider);
   lines.push('');
-  lines.push('📌 <b>UMUMIY HOLAT</b>');
-  lines.push('');
-  lines.push(`📄 Bugun tushgan so‘rovlar: <b>${formatNumber(todayCreated.length)}</b>`);
-  lines.push(`✅ Bugun yopilgan ticketlar: <b>${formatNumber(todayClosed.length)}</b>`);
-  lines.push(`⏳ Hozir ochiq ticketlar: <b>${formatNumber(openRequests.length)}</b>`);
-  lines.push(`📈 Bugungi yopilish foizi: <b>${formatNumber(percent(todayCreatedClosed.length, todayCreated.length))}%</b>`);
-  lines.push(`👥 Guruhlardan tushgan: <b>${formatNumber(groupToday.length)}</b>`);
-  lines.push('');
-  lines.push(divider);
-  lines.push('');
-  lines.push('👤 <b>XODIMLAR KESIMI</b>');
-  lines.push('📥 tushgan  ·  ✅ yopgan  ·  🔴 qolgan');
-  lines.push('');
 
   if (!supportRows.length) {
     lines.push('Bugun hech bir xodimga ticket biriktirilmagan.');
   } else {
-    supportRows.slice(0, 10).forEach((row, index) => {
-      lines.push(`<b>${index + 1}. ${escapeHtml(employeeLabel(row))}</b>`);
-      lines.push(`   📥 ${formatNumber(row.incoming)}  ·  ✅ ${formatNumber(row.closed)}  ·  🔴 ${formatNumber(row.open)}`);
+    supportRows.slice(0, 20).forEach((row, index) => {
+      lines.push(`<b>${index + 1}. ${escapeHtml(employeeLabel(row))}</b> — ✅ ${formatNumber(row.closed)} javob berdi · 🔴 ${formatNumber(row.open)} qoldi`);
     });
   }
 
   lines.push('');
   lines.push(divider);
-  lines.push('');
-  lines.push('🏢 <b>OCHIQ QOLGAN GURUHLAR</b>');
-  lines.push('');
-  if (!openGroupRows.length) {
-    lines.push('Guruhlarda ochiq ticket yo‘q.');
-  } else {
-    openGroupRows.forEach(row => {
-      lines.push(`• ${escapeHtml(row.title || String(row.chat_id))} — <b>${formatNumber(row.open_requests)} ochiq</b>`);
-    });
-  }
-  lines.push('');
-  lines.push(divider);
-  lines.push(`🕐 Yangilanish vaqti: ${escapeHtml(todayUz())}`);
   return lines.join('\n');
 }
 
