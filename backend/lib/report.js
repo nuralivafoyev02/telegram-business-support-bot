@@ -69,14 +69,19 @@ function employeeLabel(employee = {}) {
 
 function buildTodayEmployeeRows(requests, employees) {
   const employeeMap = new Map(employees.map(employee => [employee.id || employee.employee_id, employee]));
-  const todayClosed = requests.filter(request => request.status === 'closed' && isToday(request.closed_at) && request.closed_by_employee_id);
+  // Ba'zi ticketlar (masalan reaksiya orqali yopilgan) da closed_by_employee_id
+  // bo'sh qolib, faqat closed_by_name to'ldirilgan bo'lishi mumkin — shu
+  // ticketlar ilgari umumiy sonda hisoblanib, xodimlar ro'yxatidan tushib
+  // qolardi ("Bugun yopilgan: 1" lekin "hech kim yopmagan" degan qarama-
+  // qarshilik). Endi closed_by_name bo'yicha ham guruhlanadi.
+  const todayClosed = requests.filter(request => request.status === 'closed' && isToday(request.closed_at) && (request.closed_by_employee_id || request.closed_by_name));
   const grouped = new Map();
 
   todayClosed.forEach(request => {
-    const key = request.closed_by_employee_id;
-    const employee = employeeMap.get(key) || {};
+    const key = request.closed_by_employee_id || `name:${request.closed_by_name}`;
+    const employee = request.closed_by_employee_id ? (employeeMap.get(request.closed_by_employee_id) || {}) : {};
     const row = grouped.get(key) || {
-      employee_id: key,
+      employee_id: request.closed_by_employee_id || '',
       full_name: employee.full_name || request.closed_by_name || 'Xodim',
       username: employee.username || '',
       closed_requests: 0,

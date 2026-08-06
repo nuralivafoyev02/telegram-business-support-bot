@@ -68,7 +68,20 @@ function isOriginAllowed(origin, allowList) {
   return false;
 }
 
+// API javob (JSON va fayl oqimi) hech qachon sahifa sifatida render qilinishi
+// kerak emas — shuning uchun eng qattiq CSP/frame himoyasi qo'yiladi. Bu
+// vercel.json'dagi statik headerlardan mustaqil, funksiyaning o'zida
+// kafolatlanadi.
+function applySecurityHeaders(res) {
+  res.setHeader('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'");
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=()');
+}
+
 function allowCors(req, res) {
+  applySecurityHeaders(res);
   const origin = req.headers.origin || '';
   const allowList = String(process.env.ALLOWED_ORIGINS || '')
     .split(',')

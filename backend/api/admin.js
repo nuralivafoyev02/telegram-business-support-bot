@@ -8,7 +8,7 @@ const { streamStorageObject, uploadStorageObject, buildStoragePath, contentTypeF
 
 const TELEGRAM_FILE_PROXY_MAX_BYTES = 20 * 1024 * 1024;
 const { allowCors, sendJson, readBody, getQuery } = require('../lib/http');
-const { login, requireAdmin, hashPassword, isEmployeeSession, sanitizeEmployeeAccount } = require('../lib/auth');
+const { login, requireAdmin, hashPassword, assertPasswordPolicy, isEmployeeSession, sanitizeEmployeeAccount } = require('../lib/auth');
 const { DEFAULT_TENANT_ID, runWithTenant, normalizeTenantId, getCurrentTenantId, shouldAttachTenantQuery } = require('../lib/tenant');
 const { sendMessage, sendBusinessMessage, getWebhookInfo, setWebhook, deleteWebhook, getUpdates, getMe, getFile, getFileWithToken, getUserProfilePhotos, downloadFile, downloadFileWithToken, resolveBotToken, tgUserName, escapeHtml } = require('../lib/telegram');
 const { optionalEnv } = require('../lib/env');
@@ -6001,7 +6001,10 @@ async function upsertEmployee(body) {
   };
   if (!values.full_name) throw new Error('Xodim ismi majburiy');
   if (tgUserId) values.tg_user_id = tgUserId;
-  if (body.new_password) values.password_hash = hashPassword(body.new_password);
+  if (body.new_password) {
+    assertPasswordPolicy(body.new_password);
+    values.password_hash = hashPassword(body.new_password);
+  }
 
   if (tgUserId) {
     const existingTgUsers = await supabase.select('tg_users', {
@@ -6564,6 +6567,7 @@ async function updateAdmin(body, currentAdmin) {
   const admins = await supabase.select('admins', { select: 'id,username,full_name,role,is_active', username: supabase.eq(currentAdmin.username), limit: '1' }).catch(() => []);
   const admin = admins[0];
   if (!admin) {
+    if (body.new_password) assertPasswordPolicy(body.new_password);
     const values = {
       username: body.username || currentAdmin.username || optionalEnv('ADMIN_USERNAME', 'admin'),
       full_name: body.full_name || 'Admin',
@@ -6577,7 +6581,10 @@ async function updateAdmin(body, currentAdmin) {
   const values = {};
   if (body.username) values.username = body.username;
   if (body.full_name) values.full_name = body.full_name;
-  if (body.new_password) values.password_hash = hashPassword(body.new_password);
+  if (body.new_password) {
+    assertPasswordPolicy(body.new_password);
+    values.password_hash = hashPassword(body.new_password);
+  }
   const rows = await supabase.patch('admins', { id: supabase.eq(admin.id) }, values);
   return rows[0];
 }
@@ -6610,7 +6617,10 @@ async function updateManagementProfile(body, currentAdmin) {
   const values = {};
   if (body.full_name) values.full_name = body.full_name;
   if (body.username) values.username = String(body.username).replace(/^@/, '');
-  if (body.new_password) values.password_hash = hashPassword(body.new_password);
+  if (body.new_password) {
+    assertPasswordPolicy(body.new_password);
+    values.password_hash = hashPassword(body.new_password);
+  }
   if (!Object.keys(values).length) throw new Error('Yangilanadigan maydon topilmadi');
   const rows = await supabase.patch('employees', { id: supabase.eq(currentAdmin.employee_id) }, values);
   const employee = rows[0];

@@ -26,6 +26,19 @@ function hashPassword(password, salt = crypto.randomBytes(16).toString('hex')) {
   return `scrypt:${salt}:${digest}`;
 }
 
+const MIN_PASSWORD_LENGTH = 8;
+
+// Yangi/o'zgartirilgan parolga eng kam uzunlik talabi — avval bu tekshiruv
+// umuman yo'q edi, hattoki 3 belgili parol ham qabul qilinardi.
+function assertPasswordPolicy(password) {
+  const value = String(password || '');
+  if (value.length < MIN_PASSWORD_LENGTH) {
+    const error = new Error(`Parol kamida ${MIN_PASSWORD_LENGTH} ta belgidan iborat bo‘lishi kerak.`);
+    error.status = 400;
+    throw error;
+  }
+}
+
 function timingSafeBufferEqual(bufA, bufB) {
   if (bufA.length !== bufB.length || bufA.length === 0) return false;
   return crypto.timingSafeEqual(bufA, bufB);
@@ -297,6 +310,7 @@ function requireAdmin(req) {
 module.exports = {
   hashPassword,
   verifyPassword,
+  assertPasswordPolicy,
   createToken,
   createEmployeeToken,
   isEmployeeSession,
