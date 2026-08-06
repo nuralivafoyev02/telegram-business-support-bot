@@ -3290,6 +3290,18 @@ async function listRequests(query) {
 
   const maxRows = Math.min(parseIntSafe(query.limit, 1000), 5000);
   const periodContext = query.period ? queryPeriodContext(query) : null;
+  // Davr SQL darajasida ham cheklanadi (JS filtri natijasi bilan bir xil,
+  // shu bilan har safar butun jadval o'qib olinishi shart bo'lmaydi) — faqat
+  // "all" bo'lmagan davrlar uchun, JS filtri xavfsizlik uchun saqlab qolinadi.
+  if (periodContext && periodContext.period !== 'all') {
+    const pk = periodContext.period;
+    const keys = periodContext.keys;
+    const startDateKey = pk === 'today' ? keys.today : pk === 'week' ? keys.weekStart : pk === 'month' ? keys.monthStart : keys.customStart;
+    const endDateKey = pk === 'custom' ? keys.customEnd : keys.today;
+    const start = isoFromTashkentDateStart(startDateKey);
+    const end = isoAfterTashkentDate(endDateKey);
+    if (start && end) Object.assign(params, rangeQuery('created_at', { start, end }));
+  }
   const requests = (await selectPaged('support_requests', params, { maxRows }))
     .filter(request => !periodContext || inCurrentPeriod(request.created_at, periodContext.period, periodContext.keys));
 
@@ -3708,6 +3720,18 @@ async function getCompanyGroupActivity(query = {}) {
   const scopedChats = isUnassignedFilter ? activityChats.filter(chat => !chat.company_id) : linkedChats;
   const chatIds = scopedChats.map(chat => chat.chat_id).filter(value => value !== undefined && value !== null);
 
+  // Xabarlar (messages) davr bo'yicha SQL darajasida ham cheklanadi — natija
+  // pastda JS'dagi `inCurrentPeriod` filtridan keyingisi bilan bir xil, faqat
+  // avval har safar 80 mingtagacha qator to'liq o'qib olinardi. Diqqat:
+  // `requests` esa ATAYLAB cheklanmaydi — xabarlar ba'zan davrdan oldingi
+  // (eski) so'rovga tegishli bo'lishi mumkin, va pastdagi requestByInitialMessageId
+  // kabi xaritalar to'g'ri ishlashi uchun TO'LIQ so'rovlar to'plami kerak.
+  const messagesDateRange = period !== 'all'
+    ? rangeQuery('created_at', {
+      start: isoFromTashkentDateStart(period === 'today' ? keys.today : period === 'week' ? keys.weekStart : period === 'month' ? keys.monthStart : keys.customStart),
+      end: isoAfterTashkentDate(period === 'custom' ? keys.customEnd : keys.today)
+    })
+    : {};
   const [requests, messages] = chatIds.length
     ? await Promise.all([
       selectPagedByChunks('support_requests', {
@@ -3717,7 +3741,8 @@ async function getCompanyGroupActivity(query = {}) {
       }, 'chat_id', chatIds, { maxRows: 50000 }),
       selectPagedByChunks('messages', {
         select: 'id,tg_message_id,chat_id,from_tg_user_id,from_name,from_username,employee_id,source_type,classification,text,raw,created_at',
-        order: supabase.order('created_at', false)
+        order: supabase.order('created_at', false),
+        ...messagesDateRange
       }, 'chat_id', chatIds, { maxRows: 80000 })
     ])
     : [[], []];

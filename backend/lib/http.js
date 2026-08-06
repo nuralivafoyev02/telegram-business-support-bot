@@ -49,9 +49,36 @@ function getQuery(req) {
   return Object.fromEntries(url.searchParams.entries());
 }
 
+// ALLOWED_ORIGINS sozlanmasa (bo'sh), avvalgidek so'ragan har qanday
+// manbaga ruxsat beriladi — bu ataylab shunday, chunki domen nomini bilmay
+// turib qattiq cheklab qo'ysak, joriy ishlab turgan webapp login qila
+// olmay qolishi mumkin. ALLOWED_ORIGINS="https://siz-domeningiz.uz,https://boshqa.uz"
+// kabi sozlansa, faqat shu ro'yxatdagi (va *.vercel.app preview'lar)
+// manbalarga ruxsat beriladi.
+function isOriginAllowed(origin, allowList) {
+  if (!allowList.length) return true;
+  if (!origin) return false;
+  if (allowList.includes(origin)) return true;
+  try {
+    const host = new URL(origin).hostname;
+    if (host.endsWith('.vercel.app')) return true;
+  } catch (_error) {
+    return false;
+  }
+  return false;
+}
+
 function allowCors(req, res) {
-  const origin = req.headers.origin || '*';
-  res.setHeader('Access-Control-Allow-Origin', origin);
+  const origin = req.headers.origin || '';
+  const allowList = String(process.env.ALLOWED_ORIGINS || '')
+    .split(',')
+    .map(value => value.trim())
+    .filter(Boolean);
+  if (origin && isOriginAllowed(origin, allowList)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  } else if (!allowList.length) {
+    res.setHeader('Access-Control-Allow-Origin', origin || '*');
+  }
   res.setHeader('Vary', 'Origin');
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Telegram-Bot-Api-Secret-Token');
