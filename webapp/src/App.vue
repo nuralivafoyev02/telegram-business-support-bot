@@ -3035,6 +3035,13 @@
                   <label class="label">Asosiy guruh raqami
                     <input v-model.trim="settingsForm.main_group_id" class="input" placeholder="-1001234567890" />
                   </label>
+                  <label class="label">Kunlik hisobot guruhi
+                    <input v-model.trim="settingsForm.daily_report_group_id" class="input" placeholder="-1001234567890" />
+                  </label>
+                  <p class="card-note wide">
+                    Har kuni soat 18:05 da shu guruhga xodimlar bo‘yicha kunlik hisobot (kim nechta ticketga javob
+                    berdi, nechtasi ochiq qoldi) avtomatik yuboriladi. Bo‘sh qoldirilsa, "Asosiy guruh" ishlatiladi.
+                  </p>
                   <label class="label">Ticket xabarnomalari
                     <select v-model="settingsForm.ticket_notifications" class="select">
                       <option value="false">O‘chirilgan</option>
@@ -6027,7 +6034,7 @@ const floatingTooltipStyle = computed(() => ({
   transform: floatingTooltip.value.placement === 'top' ? 'translate(-50%, -100%)' : 'translate(-50%, 0)'
 }));
 
-const settingsForm = reactive({ ai_mode: 'false', auto_reply: 'true', message_reactions: 'true', ticket_notifications: 'false', ticket_group_id: '', ticket_topic_id: '', done_tag: '#done', main_group_id: '', group_message_audit: 'main_group', group_message_audit_channel_id: '', request_detection: 'keyword' });
+const settingsForm = reactive({ ai_mode: 'false', auto_reply: 'true', message_reactions: 'true', ticket_notifications: 'false', ticket_group_id: '', ticket_topic_id: '', done_tag: '#done', main_group_id: '', daily_report_group_id: '', group_message_audit: 'main_group', group_message_audit_channel_id: '', request_detection: 'keyword' });
 const isManagerMode = computed(() => false);
 const mainTabs = computed(() => tabs.filter(tab => mainTabKeys.includes(tab.key)));
 const otherTabs = computed(() => tabs.filter(tab => otherTabKeys.includes(tab.key) && (tab.key !== 'clickup' || clickUpIntegrationReady.value)));
@@ -12042,6 +12049,7 @@ async function loadSettings() {
   const ticketNotifications = data.settings?.find(s => s.key === 'ticket_notifications')?.value;
   const done = data.settings?.find(s => s.key === 'done_tag')?.value;
   const mainGroup = data.settings?.find(s => s.key === 'main_group')?.value;
+  const dailyReportGroup = data.settings?.find(s => s.key === 'daily_report_group')?.value;
   const detect = data.settings?.find(s => s.key === 'request_detection')?.value;
   Object.assign(integrationForm, {
     enabled: integration?.enabled !== false,
@@ -12097,6 +12105,7 @@ async function loadSettings() {
   settingsForm.ticket_topic_id = String(ticketNotifications?.message_thread_id ?? ticketNotifications?.messageThreadId ?? '').trim();
   settingsForm.done_tag = done?.tag || '#done';
   settingsForm.main_group_id = mainGroup?.chat_id || '';
+  settingsForm.daily_report_group_id = dailyReportGroup?.chat_id || '';
   settingsForm.group_message_audit = groupMessageAudit === undefined
     ? 'main_group'
     : groupMessageAudit?.enabled === false
@@ -15401,6 +15410,7 @@ async function saveSettings() {
         },
         { key: 'done_tag', value: { tag: settingsForm.done_tag, auto_reply: true } },
         { key: 'main_group', value: { chat_id: settingsForm.main_group_id } },
+        { key: 'daily_report_group', value: { chat_id: settingsForm.daily_report_group_id } },
         {
           key: 'group_message_audit',
           value: {

@@ -281,6 +281,19 @@ async function getMainGroupFromSettings() {
   return normalizeChatId(value && (value.chat_id || value.chatId));
 }
 
+// Kunlik "Bugungi xodimlar statistikasi" hisoboti uchun — ataylab "Asosiy
+// guruh"dan ALOHIDA sozlama, chunki Asosiy guruh log/audit bildirishnomalari
+// uchun ham ishlatiladi va ularni aralashtirmaslik so'ralgan edi.
+async function getDailyReportGroupFromSettings() {
+  const rows = await supabase.select('bot_settings', {
+    select: 'value',
+    key: 'eq.daily_report_group',
+    limit: '1'
+  }).catch(() => []);
+  const value = rows[0] && rows[0].value;
+  return normalizeChatId(value && (value.chat_id || value.chatId));
+}
+
 async function getSingleActiveGroup() {
   const groups = await supabase.select('tg_chats', {
     select: 'chat_id,title',
@@ -295,6 +308,9 @@ async function getSingleActiveGroup() {
 async function resolveMainStatsChatId(chatId) {
   const explicit = normalizeChatId(chatId);
   if (explicit) return explicit;
+
+  const dailyReportGroup = await getDailyReportGroupFromSettings();
+  if (dailyReportGroup) return dailyReportGroup;
 
   const settingsGroup = await getMainGroupFromSettings();
   if (settingsGroup) return settingsGroup;
