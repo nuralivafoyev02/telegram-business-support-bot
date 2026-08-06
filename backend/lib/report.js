@@ -28,6 +28,18 @@ function isToday(value) {
   return value ? todayKey(value) === todayKey() : false;
 }
 
+// Kunlik hisobot uchun — "bugungi" sonlar tungi 00:00'dan emas, ish kuni
+// boshlanishi (ertalab soat 9:00, Toshkent) dan boshlab sanaladi. Boshqa
+// joylarda (masalan guruh ichida savolga javob berishda) ishlatiladigan
+// oddiy isToday()'ga tegilmaydi — bu faqat kunlik hisobotga xos.
+function isTodayFromNine(value) {
+  if (!value) return false;
+  const time = new Date(value).getTime();
+  if (!Number.isFinite(time)) return false;
+  const nineAmToday = new Date(`${todayKey()}T09:00:00+05:00`).getTime();
+  return time >= nineAmToday;
+}
+
 function round(value, precision = 1) {
   const factor = 10 ** precision;
   return Math.round((Number(value) || 0) * factor) / factor;
@@ -67,22 +79,24 @@ function employeeLabel(employee = {}) {
   return `${employee.full_name || employee.closed_by_name || 'Xodim'}${username}`;
 }
 
-function buildTodayEmployeeRows(requests, employees) {
+function buildTodayEmployeeRows(requests, employees, { fromNine = false } = {}) {
   const employeeMap = new Map(employees.map(employee => [employee.id || employee.employee_id, employee]));
-  // Ba'zi ticketlar (masalan reaksiya orqali yopilgan) da closed_by_employee_id
-  // bo'sh qolib, faqat closed_by_name to'ldirilgan bo'lishi mumkin — shu
-  // ticketlar ilgari umumiy sonda hisoblanib, xodimlar ro'yxatidan tushib
-  // qolardi ("Bugun yopilgan: 1" lekin "hech kim yopmagan" degan qarama-
-  // qarshilik). Endi closed_by_name bo'yicha ham guruhlanadi.
-  const todayClosed = requests.filter(request => request.status === 'closed' && isToday(request.closed_at) && (request.closed_by_employee_id || request.closed_by_name));
+  const matchesToday = fromNine ? isTodayFromNine : isToday;
+  // "Bugun yopilgan ticketlar" umumiy soni (buildMainStatsReport'da) HECH
+  // QANDAY attribution talab qilmaydi — shuning uchun bu yerda ham xuddi
+  // shu to'plam (barcha bugun yopilgan) olinadi, aks holda "Bugun yopilgan: 1"
+  // lekin "hech kim yopmagan" degan qarama-qarshilik chiqadi. closed_by_employee_id
+  // yoki closed_by_name topilmasa — "Aniqlanmagan" nomi bilan alohida
+  // ko'rsatiladi, sonlar hech qachon "yo'qolib qolmasin" uchun.
+  const todayClosed = requests.filter(request => request.status === 'closed' && matchesToday(request.closed_at));
   const grouped = new Map();
 
   todayClosed.forEach(request => {
-    const key = request.closed_by_employee_id || `name:${request.closed_by_name}`;
+    const key = request.closed_by_employee_id || (request.closed_by_name ? `name:${request.closed_by_name}` : 'unattributed');
     const employee = request.closed_by_employee_id ? (employeeMap.get(request.closed_by_employee_id) || {}) : {};
     const row = grouped.get(key) || {
       employee_id: request.closed_by_employee_id || '',
-      full_name: employee.full_name || request.closed_by_name || 'Xodim',
+      full_name: employee.full_name || request.closed_by_name || 'Aniqlanmagan',
       username: employee.username || '',
       closed_requests: 0,
       chats: new Set(),
@@ -225,22 +239,27 @@ async function buildMainStatsReport() {
   const { summaryRows, employees, chats, requests } = await loadMainStatsData();
 
   const summary = summaryRows[0] || {};
-  const todayCreated = requests.filter(request => isToday(request.created_at));
-  const todayClosed = requests.filter(request => request.status === 'closed' && isToday(request.closed_at));
+  // Kunlik hisobotning "bugungi" sonlari tungi 00:00'dan emas, ish kuni
+  // boshlanishi (ertalab 9:00, Toshkent)dan boshlab sanaladi — shuning uchun
+  // bu yerda `summary.*`ga (butun kun bo'yicha, DB view'dan) qaytmaydi, aks
+  // holda ertalabki haqiqiy 0 qiymat butun kunlik son bilan almashtirilib,
+  // 9:00 chegarasi ma'nosiz bo'lib qolardi.
+  const todayCreated = requests.filter(request => isTodayFromNine(request.created_at));
+  const todayClosed = requests.filter(request => request.status === 'closed' && isTodayFromNine(request.closed_at));
   const todayCreatedClosed = todayCreated.filter(request => request.status === 'closed');
   const openRequests = requests.filter(request => request.status === 'open');
   const groupToday = todayCreated.filter(request => request.source_type === 'group');
   const privateToday = todayCreated.filter(request => ['private', 'business'].includes(request.source_type));
-  const employeeRows = buildTodayEmployeeRows(requests, employees);
+  const employeeRows = buildTodayEmployeeRows(requests, employees, { fromNine: true });
   const openGroupRows = buildOpenGroupRows(requests, chats);
   const lines = [];
   lines.push('📊 <b>Bugungi xodimlar statistikasi</b>');
-  lines.push(`🗓 ${escapeHtml(todayUz())}`);
+  lines.push(`🗓 ${escapeHtml(todayUz())} (soat 09:00 dan)`);
   lines.push('━━━━━━━━━━━━━━━━');
   lines.push('');
   lines.push('📌 <b>Umumiy holat</b>');
-  lines.push(`• Bugun tushgan so‘rovlar: <b>${formatNumber(todayCreated.length || summary.total_requests || 0)}</b>`);
-  lines.push(`• Bugun yopilgan ticketlar: <b>${formatNumber(todayClosed.length || summary.closed_requests || 0)}</b>`);
+  lines.push(`• Bugun tushgan so‘rovlar: <b>${formatNumber(todayCreated.length)}</b>`);
+  lines.push(`• Bugun yopilgan ticketlar: <b>${formatNumber(todayClosed.length)}</b>`);
   lines.push(`• Hozir ochiq ticketlar: <b>${formatNumber(openRequests.length || summary.open_requests || 0)}</b>`);
   lines.push(`• Bugungi yopilish foizi: <b>${formatNumber(percent(todayCreatedClosed.length, todayCreated.length))}%</b>`);
   lines.push(`• Guruhlardan tushgan: <b>${formatNumber(groupToday.length)}</b>`);
