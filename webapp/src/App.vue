@@ -1453,7 +1453,20 @@
           <div class="drilldown-panel">
             <div class="drilldown-label">O‘rganilmagan funksiyalar</div>
             <DataTable :columns="employeeNotLearnedFunctionColumns" :rows="employeeKnowledgeProfile.not_learned_functions"
-              empty="Yo‘q" :page-size="10" />
+              empty="Yo‘q" :page-size="10" :row-key="employeeFunctionRowKey" :is-expandable="employeeFunctionRowIsExpandable"
+              :is-expanded="isEmployeeFunctionRowExpanded" :on-toggle-expand="toggleEmployeeFunctionRowExpanded">
+              <template #expanded="{ row }">
+                <div class="uyqur-functions-subactions status-subactions" style="margin:0;">
+                  <div v-for="action in row.actions" :key="'not-learned-action-' + employeeFunctionRowKey(row) + '-' + action.id"
+                    class="uyqur-functions-subaction status-subaction">
+                    <span class="status-subaction-name" style="flex:1;">{{ action.name }}</span>
+                    <span class="badge" :class="action.confirmed ? 'green' : (action.learned ? 'blue' : 'orange')">
+                      {{ action.confirmed ? '✓ Qabul qilindi' : (action.learned ? 'O‘rganildi' : 'Kutilmoqda') }}
+                    </span>
+                  </div>
+                </div>
+              </template>
+            </DataTable>
           </div>
         </div>
       </Modal>
@@ -5420,7 +5433,20 @@
           <div class="drilldown-panel">
             <div class="drilldown-label">O‘rganilmagan funksiyalar</div>
             <DataTable :columns="employeeNotLearnedFunctionColumns" :rows="employeeKnowledgeProfile.not_learned_functions"
-              empty="Yo‘q" :page-size="10" />
+              empty="Yo‘q" :page-size="10" :row-key="employeeFunctionRowKey" :is-expandable="employeeFunctionRowIsExpandable"
+              :is-expanded="isEmployeeFunctionRowExpanded" :on-toggle-expand="toggleEmployeeFunctionRowExpanded">
+              <template #expanded="{ row }">
+                <div class="uyqur-functions-subactions status-subactions" style="margin:0;">
+                  <div v-for="action in row.actions" :key="'not-learned-action-' + employeeFunctionRowKey(row) + '-' + action.id"
+                    class="uyqur-functions-subaction status-subaction">
+                    <span class="status-subaction-name" style="flex:1;">{{ action.name }}</span>
+                    <span class="badge" :class="action.confirmed ? 'green' : (action.learned ? 'blue' : 'orange')">
+                      {{ action.confirmed ? '✓ Qabul qilindi' : (action.learned ? 'O‘rganildi' : 'Kutilmoqda') }}
+                    </span>
+                  </div>
+                </div>
+              </template>
+            </DataTable>
           </div>
         </div>
       </Modal>
@@ -5782,9 +5808,23 @@ function toggleSupportHistoryEventSelected(row = {}) {
   // yoki qaytarish faqat kamida bir marta o'rganilgan funksiyalarga tegishli.
   if (!row.learned) return;
   const next = new Set(supportHistorySelectedEvents.value);
-  if (next.has(row.event_id)) next.delete(row.event_id);
-  else next.add(row.event_id);
+  const selecting = !next.has(row.event_id);
+  if (selecting) next.add(row.event_id);
+  else next.delete(row.event_id);
   supportHistorySelectedEvents.value = next;
+
+  // Submodule qatorining o'zi belgilansa/bekor qilinsa, ichidagi barcha
+  // action'lar ham bir vaqtda birga belgilanadi/bekor qilinadi.
+  const actions = row.actions || [];
+  if (actions.length) {
+    const nextActions = new Map(supportHistorySelectedActions.value);
+    actions.forEach(action => {
+      const key = actionSelectionKey(row, action);
+      if (selecting) nextActions.set(key, { event_id: row.event_id, submodule_key: row.submodule_key, action_key: String(action.key || action.id) });
+      else nextActions.delete(key);
+    });
+    supportHistorySelectedActions.value = nextActions;
+  }
 }
 // "Bildirishnomalar tarixi" jadvalida submodule ichidagi action'larni
 // (agar bo'lsa) ko'rsatish uchun — qator ustiga bosilganda ochiladi/yopiladi.
@@ -5798,6 +5838,27 @@ function toggleSupportHistoryRowExpanded(row = {}) {
   if (next.has(row.event_id)) next.delete(row.event_id);
   else next.add(row.event_id);
   expandedSupportHistoryKeys.value = next;
+}
+// "Bilim darajasi" profilidagi "O'rganilmagan funksiyalar" jadvalida ham
+// submodule ichidagi action'larni ko'rsatish uchun — qator ustiga bosilganda
+// ochiladi/yopiladi (faqat ko'rsatish, checkbox/tasdiqlash yo'q).
+function employeeFunctionRowKey(row = {}) {
+  return `${row.module_name || ''}::${row.submodule_name || ''}`;
+}
+const expandedEmployeeFunctionKeys = ref(new Set());
+function isEmployeeFunctionRowExpanded(row = {}) {
+  return expandedEmployeeFunctionKeys.value.has(employeeFunctionRowKey(row));
+}
+function toggleEmployeeFunctionRowExpanded(row = {}) {
+  if (!(row.actions || []).length) return;
+  const key = employeeFunctionRowKey(row);
+  const next = new Set(expandedEmployeeFunctionKeys.value);
+  if (next.has(key)) next.delete(key);
+  else next.add(key);
+  expandedEmployeeFunctionKeys.value = next;
+}
+function employeeFunctionRowIsExpandable(row = {}) {
+  return (row.actions || []).length > 0;
 }
 // Submodule ichidagi HAR BIR action'ni ham alohida tanlab, "Tasdiqlash"/
 // "Bekor qilish" qilish uchun — key -> { event_id, submodule_key, action_key }.
@@ -5827,9 +5888,20 @@ function toggleSelectAllSupportHistory() {
   const rows = supportHistorySelectableRows.value;
   if (isAllSupportHistorySelected.value) {
     supportHistorySelectedEvents.value = new Set();
+    supportHistorySelectedActions.value = new Map();
     return;
   }
   supportHistorySelectedEvents.value = new Set(rows.map(row => row.event_id));
+  // Har bir qatorning ichidagi action'lari ham birga belgilanadi — toggleSupportHistoryEventSelected'dagi
+  // bir xil naqsh (qator o'zi belgilansa, ichidagi hammasi ham belgilanadi).
+  const nextActions = new Map(supportHistorySelectedActions.value);
+  rows.forEach(row => {
+    (row.actions || []).forEach(action => {
+      const key = actionSelectionKey(row, action);
+      nextActions.set(key, { event_id: row.event_id, submodule_key: row.submodule_key, action_key: String(action.key || action.id) });
+    });
+  });
+  supportHistorySelectedActions.value = nextActions;
 }
 // "Tasdiqlanganlar" (done) ro'yxatini ko'rayotganda tugma "Qaytarish" deb
 // nomlanadi — tanlanganlar tasdiqlanish bekor qilinadi. Boshqa holatlarda
@@ -15846,7 +15918,15 @@ const DataTable = defineComponent({
     empty: String,
     onCellAction: Function,
     rowClass: Function,
-    pageSize: { type: Number, default: 20 }
+    pageSize: { type: Number, default: 20 },
+    // Ixtiyoriy — qatorni ochib, ichidagi qo'shimcha kontentni (masalan
+    // submodule ichidagi action'lar ro'yxatini) ko'rsatish uchun. Berilmasa,
+    // jadval avvalgidek ishlayveradi (boshqa joylardagi DataTable'larga
+    // ta'sir qilmaydi).
+    rowKey: Function,
+    isExpandable: Function,
+    isExpanded: Function,
+    onToggleExpand: Function
   },
   setup(props, { slots }) {
     const page = ref(1);
@@ -15938,32 +16018,45 @@ const DataTable = defineComponent({
       ]);
     };
 
+    const canExpand = row => typeof props.isExpandable === 'function' && props.isExpandable(row);
+    const rowIsExpanded = row => typeof props.isExpanded === 'function' && props.isExpanded(row);
+    const buildRow = (row, index) => {
+      const expandable = canExpand(row);
+      const mainRow = h('tr', {
+        class: [typeof props.rowClass === 'function' ? props.rowClass(row) : '', expandable ? 'clickable-row' : ''].filter(Boolean).join(' '),
+        onClick: expandable ? () => props.onToggleExpand(row) : undefined
+      }, props.columns.map(col => {
+        const action = resolveAction(col, row);
+        const cellProps = {
+          class: [
+            col.key === 'select' ? 'select-cell' : '',
+            action ? 'cell-action' : ''
+          ].filter(Boolean).join(' ')
+        };
+        if (action) {
+          cellProps.role = 'button';
+          cellProps.tabindex = 0;
+          cellProps.title = 'Ochish';
+          cellProps.onClick = event => { event.stopPropagation(); triggerAction(event, col, row); };
+          cellProps.onKeydown = event => {
+            if (event.key === 'Enter' || event.key === ' ') triggerAction(event, col, row);
+          };
+        }
+        return h('td', cellProps, renderValue(col, row));
+      }));
+      if (!expandable || !rowIsExpanded(row)) return [mainRow];
+      const expandedRow = h('tr', { key: `expanded-${typeof props.rowKey === 'function' ? props.rowKey(row) : index}` }, [
+        h('td', { colspan: props.columns.length, style: 'padding:0 0 10px;' },
+          slots.expanded ? slots.expanded({ row }) : null)
+      ]);
+      return [mainRow, expandedRow];
+    };
     return () => h('div', { class: 'data-table' }, [
       h('div', { class: 'table-wrap' }, [
         safeRows.value.length
           ? h('table', [
             h('thead', h('tr', props.columns.map(col => h('th', { class: col.key === 'select' ? 'select-cell' : '' }, renderHeader(col))))),
-            h('tbody', pagedRows.value.map(row => h('tr', {
-              class: typeof props.rowClass === 'function' ? props.rowClass(row) : ''
-            }, props.columns.map(col => {
-              const action = resolveAction(col, row);
-              const cellProps = {
-                class: [
-                  col.key === 'select' ? 'select-cell' : '',
-                  action ? 'cell-action' : ''
-                ].filter(Boolean).join(' ')
-              };
-              if (action) {
-                cellProps.role = 'button';
-                cellProps.tabindex = 0;
-                cellProps.title = 'Ochish';
-                cellProps.onClick = event => triggerAction(event, col, row);
-                cellProps.onKeydown = event => {
-                  if (event.key === 'Enter' || event.key === ' ') triggerAction(event, col, row);
-                };
-              }
-              return h('td', cellProps, renderValue(col, row));
-            }))))
+            h('tbody', pagedRows.value.flatMap((row, index) => buildRow(row, index)))
           ])
           : h('div', { class: 'empty' }, props.empty || 'Ma’lumot yo‘q')
       ]),

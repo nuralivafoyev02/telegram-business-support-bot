@@ -1134,10 +1134,11 @@ async function getFunctionsByLearningStatus(status) {
 
 async function getEmployeeKnowledgeProfile(employeeId) {
   if (!employeeId) throw new Error('employee_id majburiy');
-  const [employees, record, permissionRecord] = await Promise.all([
+  const [employees, record, permissionRecord, actionProgress] = await Promise.all([
     getSupportEmployees(),
     getNotificationRecord(),
-    getPermissionView()
+    getPermissionView(),
+    getActionLearnedRecord()
   ]);
   const employee = employees.find(row => String(row.id) === String(employeeId));
   if (!employee) throw new Error('Xodim topilmadi');
@@ -1167,6 +1168,7 @@ async function getEmployeeKnowledgeProfile(employeeId) {
   // 80) mos kelmasdi.
   const allSubmoduleKeys = [];
   const submoduleInfoByKey = new Map();
+  const actionsBySubmoduleKey = new Map();
   (Array.isArray(permissionRecord.modules) ? permissionRecord.modules : []).forEach(module => {
     (module.submodules || []).forEach(submodule => {
       const key = String(submodule.key);
@@ -1175,9 +1177,32 @@ async function getEmployeeKnowledgeProfile(employeeId) {
         submodule_name: submodule.name || submodule.key,
         module_name: module.name || module.key
       });
+      actionsBySubmoduleKey.set(key, submodule.actions || []);
     });
   });
   const eventBySubmoduleKey = new Map(events.map(event => [String(event.submodule_key), event]));
+
+  // Har bir submodule ichidagi action'larning ("Loyiha yaratish" va h.k.)
+  // xodim uchun alohida o'rganilgan/tasdiqlangan holatini olish — "O'rganilgan
+  // funksiyalar"/"O'rganilmagan funksiyalar" jadvalidagi qatorlarni ochib,
+  // ichidagi action'larni ko'rsatish uchun (getSupportEventHistory bilan
+  // bir xil naqsh).
+  function actionsForSubmodule(submoduleKey) {
+    const rawActions = actionsBySubmoduleKey.get(submoduleKey) || [];
+    return rawActions.map(action => {
+      const compositeKey = actionCompositeKey(submoduleKey, String(action.key || action.id));
+      const actionEntry = (actionProgress[compositeKey] && actionProgress[compositeKey][employeeId]) || {};
+      return {
+        id: action.id,
+        key: action.key,
+        name: action.name || action.key,
+        learned: Boolean(actionEntry.learned_at),
+        learned_at: actionEntry.learned_at || null,
+        confirmed: Boolean(actionEntry.confirmed_at),
+        confirmed_at: actionEntry.confirmed_at || null
+      };
+    });
+  }
 
   const moduleSubmoduleKeys = new Map();
   (Array.isArray(permissionRecord.modules) ? permissionRecord.modules : []).forEach(module => {
@@ -1283,14 +1308,16 @@ async function getEmployeeKnowledgeProfile(employeeId) {
         module_name: info.module_name,
         created_at: event ? event.created_at : null,
         learned_at: progress.confirmed_at,
-        days_to_learn: Number.isFinite(daysToLearn) ? Math.round(daysToLearn * 10) / 10 : null
+        days_to_learn: Number.isFinite(daysToLearn) ? Math.round(daysToLearn * 10) / 10 : null,
+        actions: actionsForSubmodule(key)
       });
     } else {
       notLearnedFunctions.push({
         submodule_name: info.submodule_name,
         module_name: info.module_name,
         created_at: event ? event.created_at : null,
-        days_since_launch: event ? Math.floor((Date.now() - new Date(event.created_at).getTime()) / DAY_MS) : null
+        days_since_launch: event ? Math.floor((Date.now() - new Date(event.created_at).getTime()) / DAY_MS) : null,
+        actions: actionsForSubmodule(key)
       });
     }
   });
