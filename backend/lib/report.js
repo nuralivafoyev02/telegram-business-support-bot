@@ -5,7 +5,12 @@ const stats = require('./stats');
 const { sendMessage, escapeHtml } = require('./telegram');
 const { optionalEnv } = require('./env');
 const { getCachedCompanyInfo, resolveCachedCompanyInfoCompanies } = require('./company-info');
-const { groupChatKeys, telegramIdKey } = require('./company-resolution');
+const {
+  telegramIdKey,
+  findCompanyInfoByGroupChatId,
+  findCompanyInfoRow,
+  companyNameFromChatTitle
+} = require('./company-resolution');
 
 function todayUz() {
   return new Intl.DateTimeFormat('uz-UZ', {
@@ -145,7 +150,7 @@ function buildOpenGroupRows(requests, chats) {
 }
 
 async function loadMainStatsData() {
-  const [summaryRows, employees, chats, requests, companyInfoCache] = await Promise.all([
+  const [summaryRows, employees, chats, requests, companyInfoCache, groupChats] = await Promise.all([
     stats.selectTodaySummary({ select: '*', limit: '1' }),
     supabase.select('employees', { select: 'id,full_name,username,role,is_active', is_active: 'eq.true', limit: '1000' }).catch(() => []),
     stats.selectChatStatistics({ select: '*', order: 'open_requests.desc', limit: '50' }).catch(() => []),
@@ -154,10 +159,14 @@ async function loadMainStatsData() {
       order: 'created_at.desc',
       limit: '10000'
     }).catch(() => []),
-    getCachedCompanyInfo().catch(() => null)
+    getCachedCompanyInfo().catch(() => null),
+    // Guruh nomi ("China House (6-kotej)" kabi) orqali kompaniyani topish
+    // zaxira usuli uchun kerak — "Hodimlar reytingi"dagi bilan bir xil
+    // usulda ishlashi uchun.
+    supabase.select('tg_chats', { select: 'chat_id,title,company_id', source_type: 'eq.group', limit: '5000' }).catch(() => [])
   ]);
 
-  return { summaryRows, employees, chats, requests, companyInfoCache };
+  return { summaryRows, employees, chats, requests, companyInfoCache, groupChats };
 }
 
 // Kompaniyaga tayinlangan support (company.uyqur_support_username) qaysi
@@ -190,19 +199,37 @@ function findEmployeeForCompanySupport(company = {}, supportEmployees = []) {
   }) || null;
 }
 
+// Berilgan chat qaysi kompaniyaga tegishli ekanini topadi — avval kompaniya
+// ma'lumotlar keshidagi TO'G'RIDAN-TO'G'RI chat_id bog'lanishi (eng
+// ishonchli), topilmasa guruh nomidan ("China House (6-kotej)" kabi)
+// kompaniya nomini chiqarib moslashtiradi — "Hodimlar reytingi" jadvalida
+// ishlatiladigan bilan BIR XIL ikki bosqichli qidiruv.
+function resolveChatCompany(chatId, chatTitleMap, companyInfoCompanies) {
+  const chatKey = telegramIdKey(chatId);
+  const byId = findCompanyInfoByGroupChatId(companyInfoCompanies, chatKey);
+  if (byId) return byId;
+  const title = chatTitleMap.get(chatKey) || '';
+  const companyName = companyNameFromChatTitle(title);
+  if (!companyName) return null;
+  return findCompanyInfoRow(companyInfoCompanies, { companyName }, []);
+}
+
 // Har bir xodim qaysi kompaniya(lar)ning guruh chatlariga mas'ul ekanini
 // chat_id -> employee xaritasiga yig'ib beradi — "tushgan"/"qolgan" sonlarini
-// shu chatlar bo'yicha hisoblash uchun.
-function buildChatToEmployeeMap(companyInfoCache, employees) {
+// shu chatlar bo'yicha hisoblash uchun. Faqat SO'ROVLARDA uchraydigan
+// chat_id'lar uchun hisoblanadi (butun kompaniyalar ro'yxatini emas).
+function buildChatToEmployeeMap(companyInfoCache, employees, requests, groupChats = []) {
   const companyInfoCompanies = resolveCachedCompanyInfoCompanies(companyInfoCache);
   const supportEmployees = employees.filter(employee => String(employee.role || '').trim().toLowerCase() === 'support');
+  const chatTitleMap = new Map(groupChats.map(chat => [telegramIdKey(chat.chat_id), chat.title || '']));
+  const chatIds = [...new Set(requests.map(request => telegramIdKey(request.chat_id)).filter(Boolean))];
   const map = new Map();
-  companyInfoCompanies.forEach(company => {
+  chatIds.forEach(chatKey => {
+    const company = resolveChatCompany(chatKey, chatTitleMap, companyInfoCompanies);
+    if (!company) return;
     const employee = findEmployeeForCompanySupport(company, supportEmployees);
     if (!employee) return;
-    (Array.isArray(company.groups) ? company.groups : []).forEach(group => {
-      groupChatKeys(group).forEach(chatId => map.set(chatId, employee));
-    });
+    map.set(chatKey, employee);
   });
   return map;
 }
@@ -336,13 +363,13 @@ async function buildMainStatsQuestionReply(text = '') {
 }
 
 async function buildMainStatsReport() {
-  const { employees, requests, companyInfoCache } = await loadMainStatsData();
+  const { employees, requests, companyInfoCache, groupChats } = await loadMainStatsData();
 
   // Kunlik hisobot ataylab MINIMAL — faqat sana/vaqt va har bir support
   // bo'yicha bugun (soat 9:00'dan) nechtasiga javob bergani/nechtasi
   // qolgani. Boshqa hech narsa (umumiy holat, guruhlar ro'yxati) kerak
   // emas deb ayting so'ralgan.
-  const chatToEmployeeMap = buildChatToEmployeeMap(companyInfoCache, employees);
+  const chatToEmployeeMap = buildChatToEmployeeMap(companyInfoCache, employees, requests, groupChats);
   const supportRows = buildTodaySupportRows(requests, employees, chatToEmployeeMap);
   const divider = '▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬';
   const lines = [];
