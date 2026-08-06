@@ -4,6 +4,8 @@ const supabase = require('./supabase');
 const stats = require('./stats');
 const { sendMessage, escapeHtml } = require('./telegram');
 const { optionalEnv } = require('./env');
+const { getCachedCompanyInfo, resolveCachedCompanyInfoCompanies } = require('./company-info');
+const { groupChatKeys, telegramIdKey } = require('./company-resolution');
 
 function todayUz() {
   return new Intl.DateTimeFormat('uz-UZ', {
@@ -143,18 +145,112 @@ function buildOpenGroupRows(requests, chats) {
 }
 
 async function loadMainStatsData() {
-  const [summaryRows, employees, chats, requests] = await Promise.all([
+  const [summaryRows, employees, chats, requests, companyInfoCache] = await Promise.all([
     stats.selectTodaySummary({ select: '*', limit: '1' }),
-    supabase.select('employees', { select: 'id,full_name,username,is_active', is_active: 'eq.true', limit: '1000' }).catch(() => []),
+    supabase.select('employees', { select: 'id,full_name,username,role,is_active', is_active: 'eq.true', limit: '1000' }).catch(() => []),
     stats.selectChatStatistics({ select: '*', order: 'open_requests.desc', limit: '50' }).catch(() => []),
     supabase.select('support_requests', {
       select: 'id,source_type,chat_id,status,closed_by_employee_id,closed_by_name,created_at,closed_at',
       order: 'created_at.desc',
       limit: '10000'
-    }).catch(() => [])
+    }).catch(() => []),
+    getCachedCompanyInfo().catch(() => null)
   ]);
 
-  return { summaryRows, employees, chats, requests };
+  return { summaryRows, employees, chats, requests, companyInfoCache };
+}
+
+// Kompaniyaga tayinlangan support (company.uyqur_support_username) qaysi
+// xodimga tegishli ekanini aniqlash — "Hodimlar reytingi"dagi bilan bir xil
+// (username yoki to'liq ism bo'yicha) moslashtirish mantig'i, faqat shu
+// yerga xos ixcham nusxasi.
+function supportIdentityKey(value = '') {
+  return String(value || '')
+    .trim()
+    .replace(/^@/, '')
+    .toLowerCase()
+    .replace(/[|_]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function supportIdentitiesMatch(left = '', right = '') {
+  const a = supportIdentityKey(left);
+  const b = supportIdentityKey(right);
+  if (!a || !b) return false;
+  return a === b || a.includes(b) || b.includes(a);
+}
+
+function findEmployeeForCompanySupport(company = {}, supportEmployees = []) {
+  const target = supportIdentityKey(company.uyqur_support_username || '');
+  if (!target) return null;
+  return supportEmployees.find(employee => {
+    const keys = [supportIdentityKey(employee.username), supportIdentityKey(employee.full_name)].filter(Boolean);
+    return keys.some(key => supportIdentitiesMatch(key, target));
+  }) || null;
+}
+
+// Har bir xodim qaysi kompaniya(lar)ning guruh chatlariga mas'ul ekanini
+// chat_id -> employee xaritasiga yig'ib beradi — "tushgan"/"qolgan" sonlarini
+// shu chatlar bo'yicha hisoblash uchun.
+function buildChatToEmployeeMap(companyInfoCache, employees) {
+  const companyInfoCompanies = resolveCachedCompanyInfoCompanies(companyInfoCache);
+  const supportEmployees = employees.filter(employee => String(employee.role || '').trim().toLowerCase() === 'support');
+  const map = new Map();
+  companyInfoCompanies.forEach(company => {
+    const employee = findEmployeeForCompanySupport(company, supportEmployees);
+    if (!employee) return;
+    (Array.isArray(company.groups) ? company.groups : []).forEach(group => {
+      groupChatKeys(group).forEach(chatId => map.set(chatId, employee));
+    });
+  });
+  return map;
+}
+
+// Har bir support xodimi bo'yicha: bugun (soat 9:00'dan) nechta so'rov
+// tushgani, nechtasi yopilgani va hozir nechtasi ochiq qolgani.
+// "Tushgan"/"qolgan" — chat qaysi xodimning kompaniyasiga tegishli ekaniga
+// qarab (chatToEmployeeMap). "Yopgan" — birinchi navbatda TO'G'RIDAN-TO'G'RI
+// closed_by_employee_id (kim aniq yopgani ma'lum bo'lsa, eng ishonchli manba),
+// faqat u bo'sh bo'lsa chat egasiga yoziladi — shu bilan kompaniya-support
+// moslashuvi sozlanmagan bo'lsa ham "yopgan" son yo'qolib qolmaydi.
+function buildTodaySupportRows(requests, employees, chatToEmployeeMap) {
+  const employeeById = new Map(employees.map(employee => [employee.id || employee.employee_id, employee]));
+  const grouped = new Map();
+  const ensureRow = (key, fallbackEmployee = {}) => {
+    if (!grouped.has(key)) {
+      const employee = employeeById.get(key) || fallbackEmployee;
+      grouped.set(key, {
+        employee_id: key,
+        full_name: employee.full_name || 'Xodim',
+        username: employee.username || '',
+        incoming: 0,
+        closed: 0,
+        open: 0
+      });
+    }
+    return grouped.get(key);
+  };
+
+  requests.forEach(request => {
+    const chatEmployee = chatToEmployeeMap.get(telegramIdKey(request.chat_id));
+    const chatEmployeeKey = chatEmployee ? (chatEmployee.id || chatEmployee.employee_id) : '';
+    if (chatEmployee) {
+      if (isTodayFromNine(request.created_at)) ensureRow(chatEmployeeKey, chatEmployee).incoming += 1;
+      if (request.status === 'open') ensureRow(chatEmployeeKey, chatEmployee).open += 1;
+    }
+    if (request.status === 'closed' && isTodayFromNine(request.closed_at)) {
+      if (request.closed_by_employee_id) {
+        ensureRow(request.closed_by_employee_id).closed += 1;
+      } else if (chatEmployee) {
+        ensureRow(chatEmployeeKey, chatEmployee).closed += 1;
+      }
+    }
+  });
+
+  return [...grouped.values()]
+    .filter(row => row.incoming || row.closed || row.open)
+    .sort((a, b) => b.closed - a.closed || b.incoming - a.incoming || a.full_name.localeCompare(b.full_name));
 }
 
 function mainStatsQuestionIntents(text = '') {
@@ -236,7 +332,7 @@ async function buildMainStatsQuestionReply(text = '') {
 }
 
 async function buildMainStatsReport() {
-  const { summaryRows, employees, chats, requests } = await loadMainStatsData();
+  const { summaryRows, employees, chats, requests, companyInfoCache } = await loadMainStatsData();
 
   const summary = summaryRows[0] || {};
   // Kunlik hisobotning "bugungi" sonlari tungi 00:00'dan emas, ish kuni
@@ -250,7 +346,8 @@ async function buildMainStatsReport() {
   const openRequests = requests.filter(request => request.status === 'open');
   const groupToday = todayCreated.filter(request => request.source_type === 'group');
   const privateToday = todayCreated.filter(request => ['private', 'business'].includes(request.source_type));
-  const employeeRows = buildTodayEmployeeRows(requests, employees, { fromNine: true });
+  const chatToEmployeeMap = buildChatToEmployeeMap(companyInfoCache, employees);
+  const supportRows = buildTodaySupportRows(requests, employees, chatToEmployeeMap);
   const openGroupRows = buildOpenGroupRows(requests, chats);
   const lines = [];
   lines.push('📊 <b>Bugungi xodimlar statistikasi</b>');
@@ -265,14 +362,13 @@ async function buildMainStatsReport() {
   lines.push(`• Guruhlardan tushgan: <b>${formatNumber(groupToday.length)}</b>`);
   lines.push(`• Shaxsiy chatlardan: <b>${formatNumber(privateToday.length)}</b>`);
   lines.push('');
-  lines.push('👥 <b>Xodimlar kesimi</b>');
+  lines.push('👥 <b>Xodimlar kesimi</b> (tushgan · yopgan · qolgan)');
 
-  if (!employeeRows.length) {
-    lines.push('Bugun hali hech kim ticket yopmagan.');
+  if (!supportRows.length) {
+    lines.push('Bugun hech bir xodimga ticket biriktirilmagan.');
   } else {
-    employeeRows.slice(0, 10).forEach((employee, index) => {
-      lines.push(`${index + 1}. <b>${escapeHtml(employeeLabel(employee))}</b>`);
-      lines.push(`   ✅ ${formatNumber(employee.closed_requests)} ta yopildi · ulush ${formatNumber(employee.close_share_pct)}% · o‘rtacha ${formatNumber(employee.avg_close_minutes)} min`);
+    supportRows.slice(0, 10).forEach((row, index) => {
+      lines.push(`${index + 1}. <b>${escapeHtml(employeeLabel(row))}</b> — 📥 ${formatNumber(row.incoming)} · ✅ ${formatNumber(row.closed)} · 🔴 ${formatNumber(row.open)}`);
     });
   }
 

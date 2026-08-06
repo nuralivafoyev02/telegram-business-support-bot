@@ -77,9 +77,13 @@ async function testChatNotFoundMessage() {
 
 async function testBuildMainStatsReportUsesTodayEmployeeClosures() {
   const originalSelect = supabase.select;
-  const now = new Date();
-  const yesterday = new Date(now.getTime() - 36 * 60 * 60 * 1000).toISOString();
-  const today = now.toISOString();
+  // Aniq (ish vaqti ichidagi, 09:00 Toshkentdan keyingi) vaqt ishlatiladi —
+  // haqiqiy joriy vaqtdan (new Date()) foydalanilsa, test ish vaqtidan
+  // tashqarida (masalan ertalab 9dan oldin) ishga tushirilganda tasodifan
+  // muvaffaqiyatsiz bo'lardi (kunlik hisobot endi 9:00'dan sanaydi).
+  const todayDateKey = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tashkent', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  const today = `${todayDateKey}T10:00:00+05:00`;
+  const yesterday = new Date(new Date(today).getTime() - 36 * 60 * 60 * 1000).toISOString();
 
   supabase.select = async table => {
     if (table === 'v_today_summary') {
@@ -131,7 +135,7 @@ async function testBuildMainStatsReportUsesTodayEmployeeClosures() {
     assert.match(text, /Bugungi xodimlar statistikasi/);
     assert.match(text, /Bugun tushgan so‘rovlar: <b>2<\/b>/);
     assert.match(text, /Ali Valiyev @ali/);
-    assert.match(text, /1 ta yopildi/);
+    assert.match(text, /✅ 1/);
     assert.match(text, /Main support/);
   } finally {
     supabase.select = originalSelect;
