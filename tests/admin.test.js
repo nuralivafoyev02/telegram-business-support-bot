@@ -2948,6 +2948,9 @@ async function testSyncTelegramUpdatesIgnoresStaleOffsetAndAcknowledgesFetchedUp
   };
   global.fetch = async (url, options = {}) => {
     const body = JSON.parse(options.body || '{}');
+    if (/getWebhookInfo$/.test(url)) {
+      return { ok: true, json: async () => ({ ok: true, result: { url: '' } }) };
+    }
     calls.push({ url, body });
     if (/getUpdates$/.test(url) && body.offset === undefined) {
       return {
@@ -3245,7 +3248,7 @@ async function testDeleteEmployeeRemovesEmployeeRow() {
 
 async function testEmployeeActivityReturnsGroupsAndCustomers() {
   const originalSelect = supabase.select;
-  const today = new Date().toISOString();
+  const today = '2026-01-15T06:00:00.000Z';
   const closedAt = new Date(Date.parse(today) + 7 * 60000).toISOString();
   const employeeMessages = Array.from({ length: 35 }, (_, index) => ({
     id: `m${index + 1}`,
@@ -3365,8 +3368,8 @@ async function testEmployeeActivityIsolatesSelectedEmployeeChats() {
   const originalSelect = supabase.select;
   const today = new Date('2026-04-30T08:00:00.000Z').toISOString();
   const employees = [
-    { id: 'emp-1', tg_user_id: 777, full_name: 'Mirshod', username: 'mirshod', is_active: true },
-    { id: 'emp-2', tg_user_id: 888, full_name: 'Ozodbek', username: 'ozodbek', is_active: true }
+    { id: 'emp-1', tg_user_id: 777, full_name: 'Mirshod', username: 'mirshod', role: 'support', is_active: true },
+    { id: 'emp-2', tg_user_id: 888, full_name: 'Ozodbek', username: 'ozodbek', role: 'support', is_active: true }
   ];
   const requests = [
     { id: 'r1', source_type: 'group', chat_id: -1001, customer_name: 'Mijoz A', initial_text: 'Emp1 ticket', status: 'closed', closed_by_employee_id: 'emp-1', created_at: today, closed_at: today },

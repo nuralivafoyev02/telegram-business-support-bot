@@ -433,6 +433,7 @@ async function buildNotificationText({ request, chat, company, openedByEmployee,
   const link = telegramMessageLink(chat, request.initial_message_id);
   const statusLabel = closedStatusLabel(request, options);
   const closedByName = String(options.closedByName || request.closed_by_name || '').trim();
+  const solutionText = String(options.solutionText || '').trim();
   const isClosed = request.status === 'closed' && isAnsweredCloseSource(options.closeSource);
   const lines = [
     `<b>${statusLabel}</b>`,
@@ -440,6 +441,7 @@ async function buildNotificationText({ request, chat, company, openedByEmployee,
     `👤 <b>Kompaniya mas'uli:</b> ${escapeHtml(employeeLabel(company.supportEmployee, '—'))}`,
     `👥 <b>Mijoz:</b> ${escapeHtml(request.customer_name || request.customer_username || '—')}`,
     isClosed && closedByName ? `💬 <b>Javob berdi:</b> ${escapeHtml(closedByName)}` : null,
+    isClosed && solutionText ? `📝 <b>Javob matni:</b> ${escapeHtml(solutionText)}` : null,
     link ? `🔗 <a href="${escapeHtml(link)}">Xabarni Telegramda ochish</a>` : null,
     assignedEmployee ? `✅ <b>Mas'ul (ishlayapti):</b> ${escapeHtml(assigned)}` : null
   ].filter(line => line !== null);
