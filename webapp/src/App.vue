@@ -7881,7 +7881,12 @@ function companyNameFromChatTitle(value = '') {
   const text = String(value || '').trim();
   if (!text) return '';
   const parts = text.split('|').map(part => part.trim()).filter(Boolean);
-  return parts[0] || text;
+  if (parts.length <= 1) return parts[0] || text;
+  // Guruh nomlari ikki xil tartibda bo'lishi mumkin: "Kompaniya | Uyqur" yoki
+  // "Uyqur | Kompaniya" — shuning uchun "Uyqur" brend qismi tashlab, qolgan
+  // qismi kompaniya nomi sifatida olinadi (o'rniga qarab emas).
+  const nonBrandParts = parts.filter(part => part.toLowerCase() !== 'uyqur');
+  return nonBrandParts[0] || parts[0];
 }
 
 function companyGroupChatIds(company = {}) {
@@ -10517,7 +10522,12 @@ function companyNameFromGroupTitle(value = '') {
   const text = String(value || '').trim();
   if (!text) return '';
   const parts = text.split('|').map(part => part.trim()).filter(Boolean);
-  return parts.length > 1 ? parts.at(-1) : text;
+  if (parts.length <= 1) return text;
+  // Guruh nomlari ikki xil tartibda bo'lishi mumkin: "Kompaniya | Uyqur" yoki
+  // "Uyqur | Kompaniya" — shuning uchun "Uyqur" brend qismi tashlab, qolgan
+  // qismi kompaniya nomi sifatida olinadi (o'rniga qarab emas).
+  const nonBrandParts = parts.filter(part => part.toLowerCase() !== 'uyqur');
+  return nonBrandParts[0] || parts.at(-1);
 }
 
 function resolvedCompanyGroupName(detail = {}) {
@@ -12302,27 +12312,31 @@ async function confirmSelectedSupportHistory() {
     // tasdiqlangan bo'lsa qaytariladi (bekor qilinadi). Shu orqali bitta
     // tugma bilan ham "Tasdiqlash", ham "Qaytarish" ishlaydi.
     const rowsById = new Map(supportHistoryRows.value.map(row => [row.event_id, row]));
-    const eventPromises = eventIds.map(eventId => {
+    // MUHIM: bu so'rovlar backendda BITTA umumiy bot_settings yozuvini
+    // o'qib-o'zgartirib-qayta yozadi (read-modify-write) — Promise.all bilan
+    // parallel yuborilsa, so'rovlar bir-birining yozganini "poyga holati"da
+    // ustidan bosib, ba'zi action'lar tasdiqlanmay/qaytarilmay qolardi.
+    // Shuning uchun KETMA-KET (sequential) yuboriladi.
+    for (const eventId of eventIds) {
       const row = rowsById.get(eventId);
-      return api.confirmUyqurReview({
+      await api.confirmUyqurReview({
         event_id: eventId,
         employee_id: selectedSupportId.value,
         confirmed: !(row && row.confirmed),
         manager_username: ''
       });
-    });
-    const actionPromises = Array.from(supportHistorySelectedActions.value.values()).map(entry => {
+    }
+    for (const entry of supportHistorySelectedActions.value.values()) {
       const row = rowsById.get(entry.event_id);
       const action = row && (row.actions || []).find(item => String(item.key || item.id) === String(entry.action_key));
-      return api.confirmUyqurActionReview({
+      await api.confirmUyqurActionReview({
         submodule_key: entry.submodule_key,
         action_key: entry.action_key,
         employee_id: selectedSupportId.value,
         confirmed: !(action && action.confirmed),
         manager_username: ''
       });
-    });
-    await Promise.all([...eventPromises, ...actionPromises]);
+    }
     supportHistorySelectedEvents.value = new Set();
     supportHistorySelectedActions.value = new Map();
     await Promise.all([
@@ -12348,18 +12362,24 @@ async function rejectSelectedSupportHistory() {
   startLoading('confirmSupportHistory');
   try {
     const eventIds = Array.from(supportHistorySelectedEvents.value);
-    const eventPromises = eventIds.map(eventId => api.markUyqurLearned({
-      event_id: eventId,
-      employee_id: selectedSupportId.value,
-      learned: false
-    }));
-    const actionPromises = Array.from(supportHistorySelectedActions.value.values()).map(entry => api.markUyqurActionLearned({
-      submodule_key: entry.submodule_key,
-      action_key: entry.action_key,
-      employee_id: selectedSupportId.value,
-      learned: false
-    }));
-    await Promise.all([...eventPromises, ...actionPromises]);
+    // MUHIM: yuqoridagi confirmSelectedSupportHistory'dagi izohga qarang —
+    // bu so'rovlar ham bitta umumiy yozuvni o'qib-yozadi, shuning uchun
+    // parallel emas, ketma-ket yuboriladi (poyga holatini oldini olish uchun).
+    for (const eventId of eventIds) {
+      await api.markUyqurLearned({
+        event_id: eventId,
+        employee_id: selectedSupportId.value,
+        learned: false
+      });
+    }
+    for (const entry of supportHistorySelectedActions.value.values()) {
+      await api.markUyqurActionLearned({
+        submodule_key: entry.submodule_key,
+        action_key: entry.action_key,
+        employee_id: selectedSupportId.value,
+        learned: false
+      });
+    }
     supportHistorySelectedEvents.value = new Set();
     supportHistorySelectedActions.value = new Map();
     await Promise.all([

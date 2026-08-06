@@ -2061,7 +2061,12 @@ function companyNameFromChatTitle(title = '') {
   const text = String(title || '').trim();
   if (!text) return '';
   const parts = text.split('|').map(part => part.trim()).filter(Boolean);
-  return parts[0] || text;
+  if (parts.length <= 1) return parts[0] || text;
+  // Guruh nomlari ikki xil tartibda bo'lishi mumkin: "Kompaniya | Uyqur" yoki
+  // "Uyqur | Kompaniya" — shuning uchun "Uyqur" brend qismi tashlab, qolgan
+  // qismi kompaniya nomi sifatida olinadi (o'rniga qarab emas).
+  const nonBrandParts = parts.filter(part => part.toLowerCase() !== 'uyqur');
+  return nonBrandParts[0] || parts[0];
 }
 
 function normalizeCompanyDirectoryName(value = '') {
