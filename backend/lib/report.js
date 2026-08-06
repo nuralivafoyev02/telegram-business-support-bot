@@ -241,9 +241,13 @@ function buildTodaySupportRows(requests, employees, chatToEmployeeMap) {
     }
     if (request.status === 'closed' && isTodayFromNine(request.closed_at)) {
       if (request.closed_by_employee_id) {
-        ensureRow(request.closed_by_employee_id).closed += 1;
+        ensureRow(request.closed_by_employee_id, { full_name: request.closed_by_name }).closed += 1;
       } else if (chatEmployee) {
         ensureRow(chatEmployeeKey, chatEmployee).closed += 1;
+      } else if (request.closed_by_name) {
+        ensureRow(`name:${request.closed_by_name}`, { full_name: request.closed_by_name }).closed += 1;
+      } else {
+        ensureRow('unattributed', { full_name: 'Aniqlanmagan' }).closed += 1;
       }
     }
   });
@@ -343,7 +347,11 @@ async function buildMainStatsReport() {
   const todayCreated = requests.filter(request => isTodayFromNine(request.created_at));
   const todayClosed = requests.filter(request => request.status === 'closed' && isTodayFromNine(request.closed_at));
   const todayCreatedClosed = todayCreated.filter(request => request.status === 'closed');
-  const openRequests = requests.filter(request => request.status === 'open');
+  // Faqat GURUH ticketlari hisoblanadi — pastdagi "Ochiq qolgan guruhlar"
+  // ro'yxati bilan bir xil qoida (shaxsiy/business chatlardagi oddiy
+  // suhbatlar alohida "so'rov" sifatida hisoblanib, sonni sun'iy oshirib
+  // yubormasligi uchun).
+  const openRequests = requests.filter(request => request.status === 'open' && request.source_type === 'group');
   const groupToday = todayCreated.filter(request => request.source_type === 'group');
   const privateToday = todayCreated.filter(request => ['private', 'business'].includes(request.source_type));
   const chatToEmployeeMap = buildChatToEmployeeMap(companyInfoCache, employees);
@@ -357,7 +365,7 @@ async function buildMainStatsReport() {
   lines.push('📌 <b>Umumiy holat</b>');
   lines.push(`• Bugun tushgan so‘rovlar: <b>${formatNumber(todayCreated.length)}</b>`);
   lines.push(`• Bugun yopilgan ticketlar: <b>${formatNumber(todayClosed.length)}</b>`);
-  lines.push(`• Hozir ochiq ticketlar: <b>${formatNumber(openRequests.length || summary.open_requests || 0)}</b>`);
+  lines.push(`• Hozir ochiq ticketlar: <b>${formatNumber(openRequests.length)}</b>`);
   lines.push(`• Bugungi yopilish foizi: <b>${formatNumber(percent(todayCreatedClosed.length, todayCreated.length))}%</b>`);
   lines.push(`• Guruhlardan tushgan: <b>${formatNumber(groupToday.length)}</b>`);
   lines.push(`• Shaxsiy chatlardan: <b>${formatNumber(privateToday.length)}</b>`);

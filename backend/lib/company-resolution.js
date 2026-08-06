@@ -87,6 +87,15 @@ function findCompanyInfoByGroupChatId(companyInfoCompanies = [], chatKey = '') {
   return null;
 }
 
+// Guruh nomida ko'pincha filial/manzil izohi qavs ichida qo'shiladi (masalan
+// "China House (6-kotej)"), lekin kompaniya ro'yxatda qavssiz ("China House")
+// saqlanadi — aynan shu holatda to'liq mos kelish (exact match) muvaffaqiyatsiz
+// bo'lib, guruh "Biriktirilmagan"ga tushib qolardi. Shuning uchun to'liq nom
+// mos kelmasa, oxiridagi qavsli qismni olib tashlab yana bir marta solishtiriladi.
+function stripTrailingQualifier(value = '') {
+  return String(value || '').replace(/\s*\([^)]*\)\s*$/, '').trim();
+}
+
 function findCompanyInfoRow(companies = [], { companyId = '', companyName = '' } = {}, directoryCompanies = []) {
   const normalizedId = String(companyId || '').trim();
   const normalizedName = normalizeCompanyDirectoryName(companyName);
@@ -102,7 +111,11 @@ function findCompanyInfoRow(companies = [], { companyId = '', companyName = '' }
     }
   }
   if (!normalizedName) return null;
-  return companies.find(company => normalizeCompanyDirectoryName(company.name) === normalizedName) || null;
+  const exact = companies.find(company => normalizeCompanyDirectoryName(company.name) === normalizedName);
+  if (exact) return exact;
+  const strippedName = normalizeCompanyDirectoryName(stripTrailingQualifier(companyName));
+  if (!strippedName || strippedName === normalizedName) return null;
+  return companies.find(company => normalizeCompanyDirectoryName(company.name) === strippedName) || null;
 }
 
 function buildCompanyInfoChatMap(companyInfoCompanies = []) {
