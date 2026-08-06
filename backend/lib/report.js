@@ -235,8 +235,8 @@ function buildTodaySupportRows(requests, employees, chatToEmployeeMap) {
   requests.forEach(request => {
     const chatEmployee = chatToEmployeeMap.get(telegramIdKey(request.chat_id));
     const chatEmployeeKey = chatEmployee ? (chatEmployee.id || chatEmployee.employee_id) : '';
-    if (chatEmployee) {
-      if (isTodayFromNine(request.created_at)) ensureRow(chatEmployeeKey, chatEmployee).incoming += 1;
+    if (chatEmployee && isTodayFromNine(request.created_at)) {
+      ensureRow(chatEmployeeKey, chatEmployee).incoming += 1;
       if (request.status === 'open') ensureRow(chatEmployeeKey, chatEmployee).open += 1;
     }
     if (request.status === 'closed' && isTodayFromNine(request.closed_at)) {
@@ -347,50 +347,58 @@ async function buildMainStatsReport() {
   const todayCreated = requests.filter(request => isTodayFromNine(request.created_at));
   const todayClosed = requests.filter(request => request.status === 'closed' && isTodayFromNine(request.closed_at));
   const todayCreatedClosed = todayCreated.filter(request => request.status === 'closed');
-  // Faqat GURUH ticketlari hisoblanadi — pastdagi "Ochiq qolgan guruhlar"
-  // ro'yxati bilan bir xil qoida (shaxsiy/business chatlardagi oddiy
-  // suhbatlar alohida "so'rov" sifatida hisoblanib, sonni sun'iy oshirib
-  // yubormasligi uchun).
-  const openRequests = requests.filter(request => request.status === 'open' && request.source_type === 'group');
+  // "Hozir ochiq ticketlar" — barcha vaqt bo'yicha to'plangan qoldiq emas,
+  // faqat BUGUN (9:00'dan) ochilib hali javob berilmagan GURUH ticketlari
+  // (shaxsiy/business chatlardagi oddiy suhbatlar hisobga kirmaydi).
+  const openRequests = todayCreated.filter(request => request.status === 'open' && request.source_type === 'group');
   const groupToday = todayCreated.filter(request => request.source_type === 'group');
-  const privateToday = todayCreated.filter(request => ['private', 'business'].includes(request.source_type));
   const chatToEmployeeMap = buildChatToEmployeeMap(companyInfoCache, employees);
   const supportRows = buildTodaySupportRows(requests, employees, chatToEmployeeMap);
-  const openGroupRows = buildOpenGroupRows(requests, chats);
+  const openGroupRows = buildOpenGroupRows(todayCreated, chats);
+  const divider = '▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬';
   const lines = [];
   lines.push('📊 <b>Bugungi xodimlar statistikasi</b>');
   lines.push(`🗓 ${escapeHtml(todayUz())} (soat 09:00 dan)`);
-  lines.push('━━━━━━━━━━━━━━━━');
+  lines.push(divider);
   lines.push('');
-  lines.push('📌 <b>Umumiy holat</b>');
-  lines.push(`• Bugun tushgan so‘rovlar: <b>${formatNumber(todayCreated.length)}</b>`);
-  lines.push(`• Bugun yopilgan ticketlar: <b>${formatNumber(todayClosed.length)}</b>`);
-  lines.push(`• Hozir ochiq ticketlar: <b>${formatNumber(openRequests.length)}</b>`);
-  lines.push(`• Bugungi yopilish foizi: <b>${formatNumber(percent(todayCreatedClosed.length, todayCreated.length))}%</b>`);
-  lines.push(`• Guruhlardan tushgan: <b>${formatNumber(groupToday.length)}</b>`);
-  lines.push(`• Shaxsiy chatlardan: <b>${formatNumber(privateToday.length)}</b>`);
+  lines.push('📌 <b>UMUMIY HOLAT</b>');
   lines.push('');
-  lines.push('👥 <b>Xodimlar kesimi</b> (tushgan · yopgan · qolgan)');
+  lines.push(`📄 Bugun tushgan so‘rovlar: <b>${formatNumber(todayCreated.length)}</b>`);
+  lines.push(`✅ Bugun yopilgan ticketlar: <b>${formatNumber(todayClosed.length)}</b>`);
+  lines.push(`⏳ Hozir ochiq ticketlar: <b>${formatNumber(openRequests.length)}</b>`);
+  lines.push(`📈 Bugungi yopilish foizi: <b>${formatNumber(percent(todayCreatedClosed.length, todayCreated.length))}%</b>`);
+  lines.push(`👥 Guruhlardan tushgan: <b>${formatNumber(groupToday.length)}</b>`);
+  lines.push('');
+  lines.push(divider);
+  lines.push('');
+  lines.push('👤 <b>XODIMLAR KESIMI</b>');
+  lines.push('📥 tushgan  ·  ✅ yopgan  ·  🔴 qolgan');
+  lines.push('');
 
   if (!supportRows.length) {
     lines.push('Bugun hech bir xodimga ticket biriktirilmagan.');
   } else {
     supportRows.slice(0, 10).forEach((row, index) => {
-      lines.push(`${index + 1}. <b>${escapeHtml(employeeLabel(row))}</b> — 📥 ${formatNumber(row.incoming)} · ✅ ${formatNumber(row.closed)} · 🔴 ${formatNumber(row.open)}`);
+      lines.push(`<b>${index + 1}. ${escapeHtml(employeeLabel(row))}</b>`);
+      lines.push(`   📥 ${formatNumber(row.incoming)}  ·  ✅ ${formatNumber(row.closed)}  ·  🔴 ${formatNumber(row.open)}`);
     });
   }
 
   lines.push('');
-  lines.push('🧾 <b>Ochiq qolgan guruhlar</b>');
+  lines.push(divider);
+  lines.push('');
+  lines.push('🏢 <b>OCHIQ QOLGAN GURUHLAR</b>');
+  lines.push('');
   if (!openGroupRows.length) {
     lines.push('Guruhlarda ochiq ticket yo‘q.');
   } else {
     openGroupRows.forEach(row => {
-      lines.push(`• ${escapeHtml(row.title || String(row.chat_id))}: <b>${formatNumber(row.open_requests)}</b> ochiq`);
+      lines.push(`• ${escapeHtml(row.title || String(row.chat_id))} — <b>${formatNumber(row.open_requests)} ochiq</b>`);
     });
   }
   lines.push('');
-  lines.push('━━━━━━━━━━━━━━━━');
+  lines.push(divider);
+  lines.push(`🕐 Yangilanish vaqti: ${escapeHtml(todayUz())}`);
   return lines.join('\n');
 }
 

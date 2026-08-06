@@ -2355,7 +2355,14 @@ function resolveOpenRequestSupportEmployee(request = {}, employeeMaps = buildEmp
   if (company && hasCompanySupportAssignment(company)) {
     const employee = findEmployeeForCompanySupport(company, employeeMaps);
     if (employee) return employeeSummary(employee);
-    return null;
+    // MUHIM: bu yerda avval darhol "null" qaytarilib, pastdagi zaxira
+    // usullar (masalan chatCompanySupportByChatId/companyGroupSupportByChatId
+    // — bular kompaniyalarni BOSHQA tartibda, har birini alohida tekshirib
+    // chiqadi) umuman sinalmasdan qolardi. Natijada, agar resolveCompanyInfoForRequest
+    // noto'g'ri/mos kelmaydigan kompaniya yozuvini topib qolsa (masalan bir xil
+    // nomli takroriy yozuv), chat ANIQ mas'ul xodimga (masalan "Guruhlar"
+    // ro'yxatida ko'ringan) biriktirilgan bo'lsa ham "Biriktirilmagan"ga
+    // tushib qolardi. Endi izlash davom etadi.
   }
 
   const sourceType = String(request.source_type || chat.source_type || '').toLowerCase();

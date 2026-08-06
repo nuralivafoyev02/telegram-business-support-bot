@@ -328,6 +328,10 @@ async function setActionConfirmed(submoduleKey, actionKey, employeeId, confirmed
   const current = progress[key][employeeId] || {};
   progress[key][employeeId] = {
     ...current,
+    // Tasdiq qaytarilsa ("Qaytarish"), "O'rganildi" oraliq holatida
+    // qolmasdan, to'g'ridan-to'g'ri "Kutilmoqda"ga (learned_at ham bo'sh)
+    // qaytariladi — support qayta "o'rgandim" deb belgilashi kerak bo'ladi.
+    learned_at: confirmed ? current.learned_at : null,
     confirmed_at: confirmed ? new Date().toISOString() : null,
     confirmed_by: confirmed ? (managerName || null) : null
   };
@@ -555,6 +559,10 @@ async function setManagerConfirmation(eventId, employeeId, confirmed = true, man
   const current = record.progress[eventId][employeeId] || {};
   record.progress[eventId][employeeId] = {
     ...current,
+    // Tasdiq qaytarilsa ("Qaytarish"), "O'rganildi" oraliq holatida
+    // qolmasdan, to'g'ridan-to'g'ri "Kutilmoqda"ga (learned_at ham bo'sh)
+    // qaytariladi — support qayta "o'rgandim" deb belgilashi kerak bo'ladi.
+    learned_at: confirmed ? current.learned_at : null,
     confirmed_at: confirmed ? new Date().toISOString() : null,
     confirmed_by: confirmed ? (managerName || null) : null
   };
