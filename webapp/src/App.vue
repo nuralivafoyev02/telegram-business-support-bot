@@ -13486,7 +13486,7 @@ async function loadMyNotifications() {
   selectedSupportName.value = account.value?.full_name || 'Support';
   supportHistoryFilter.value = 'all';
   try {
-    supportHistoryRows.value = await api.uyqurSupportHistory({});
+    supportHistoryRows.value = await api.uyqurSupportHistory({ employee_id: selectedSupportId.value });
   } catch (error) {
     showToast(error.message);
   }

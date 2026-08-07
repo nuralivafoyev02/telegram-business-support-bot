@@ -329,25 +329,27 @@ async function syncEventStatusWithActions(submoduleKey, employeeId) {
   // "hech narsa o'rganilmagan" deb xato xulosa chiqarib, submodule'ning o'z
   // (to'g'ridan-to'g'ri belgilangan) holatini buzib qo'ymaslik kerak — sinxronlash
   // faqat kamida bitta action ALOHIDA qo'lda belgilangan submodule'larga tegishli.
+  //
+  // Qoida (uch bosqichli holat: Kutilmoqda -> Jarayonda -> O'rgangan):
+  // kamida BITTA action o'rganilgan/tasdiqlangan bo'lsa — submodule ham
+  // "Jarayonda" (o'rganildi) bo'ladi (support biror narsa yubordi); BARCHA
+  // action'lar tasdiqlangandagina submodule "O'rgangan" (tasdiqlandi) bo'ladi.
   let anyActionTouched = false;
+  let anyLearned = false;
   let allConfirmed = true;
-  let allLearned = true;
   actions.forEach(action => {
     const key = actionCompositeKey(normalizedSubmoduleKey, String(action.key || action.id));
     const entry = (actionProgress[key] && actionProgress[key][employeeId]) || null;
     if (entry) anyActionTouched = true;
     const learnedAt = entry && entry.learned_at;
     const confirmedAt = entry && entry.confirmed_at;
-    if (!learnedAt && !confirmedAt) allLearned = false;
+    if (learnedAt || confirmedAt) anyLearned = true;
     if (!confirmedAt) allConfirmed = false;
   });
   if (!anyActionTouched) return;
 
-  // Barcha action'lar o'rganilgandagina submodule ham "O'rganildi" bo'lishi
-  // kerak — bittasi o'rganilishi bilanoq submodule'ni "O'rganildi" qilib
-  // qo'yish, hali "Kutilmoqda" turgan boshqa action'lar bilan zid ko'rinardi.
   const current = (record.progress[event.id] && record.progress[event.id][employeeId]) || {};
-  const nextLearned = allLearned;
+  const nextLearned = anyLearned || allConfirmed;
   const nextConfirmed = allConfirmed;
   if (Boolean(current.learned_at) === nextLearned && Boolean(current.confirmed_at) === nextConfirmed) return;
 
@@ -399,19 +401,19 @@ function repairEventStatusFromActionProgress(record, viewRecord, actionProgress)
     const actions = actionsBySubmoduleKey.get(submoduleKey) || [];
     if (!event || !actions.length) return;
 
+    let anyLearned = false;
     let allConfirmed = true;
-    let allLearned = true;
     actions.forEach(action => {
       const key = actionCompositeKey(submoduleKey, String(action.key || action.id));
       const entry = (actionProgress[key] && actionProgress[key][employeeId]) || null;
       const learnedAt = entry && entry.learned_at;
       const confirmedAt = entry && entry.confirmed_at;
-      if (!learnedAt && !confirmedAt) allLearned = false;
+      if (learnedAt || confirmedAt) anyLearned = true;
       if (!confirmedAt) allConfirmed = false;
     });
 
     const current = (record.progress[event.id] && record.progress[event.id][employeeId]) || {};
-    const nextLearned = allLearned;
+    const nextLearned = anyLearned || allConfirmed;
     const nextConfirmed = allConfirmed;
     if (Boolean(current.learned_at) === nextLearned && Boolean(current.confirmed_at) === nextConfirmed) return;
 
@@ -493,9 +495,13 @@ async function setActionConfirmed(submoduleKey, actionKey, employeeId, confirmed
   const current = progress[key][employeeId] || {};
   progress[key][employeeId] = {
     ...current,
-    // Tasdiq qaytarilsa ("Qaytarish"), "Jarayonda" (O'rganildi) holatiga
-    // qaytadi — support "o'rgandim" deb belgilagani (learned_at) saqlanib
-    // qoladi, faqat menejer tasdig'i (confirmed_at) bekor qilinadi.
+    // Tasdiqlash uchun action avvaldan "o'rganilgan" bo'lishi shart — agar bu
+    // action hali ALOHIDA "o'rgandim" deb belgilanmagan bo'lsa (faqat butun
+    // submodule orqali meros qilingan bo'lsa), shu yerda ham backfill
+    // qilinadi. Aks holda, tasdiq qaytarilganda ("Qaytarish") learned_at
+    // bo'sh qolib, action "Jarayonda" o'rniga to'g'ridan-to'g'ri
+    // "Kutilmoqda"ga tushib ketardi.
+    learned_at: current.learned_at || new Date().toISOString(),
     confirmed_at: confirmed ? new Date().toISOString() : null,
     confirmed_by: confirmed ? (managerName || null) : null
   };
@@ -779,7 +785,9 @@ async function setManagerConfirmation(eventId, employeeId, confirmed = true, man
     ...current,
     // Tasdiq qaytarilsa ("Qaytarish"), "Jarayonda" (O'rganildi) holatiga
     // qaytadi — support "o'rgandim" deb belgilagani (learned_at) saqlanib
-    // qoladi, faqat menejer tasdig'i (confirmed_at) bekor qilinadi.
+    // qoladi (yoki hali bo'lmasa shu yerda backfill qilinadi), faqat
+    // menejer tasdig'i (confirmed_at) bekor qilinadi.
+    learned_at: current.learned_at || new Date().toISOString(),
     confirmed_at: confirmed ? new Date().toISOString() : null,
     confirmed_by: confirmed ? (managerName || null) : null
   };
