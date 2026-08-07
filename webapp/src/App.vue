@@ -43,7 +43,7 @@
 
       <nav class="nav">
         <button v-for="item in employeeTabs" :key="item.key" :class="{ active: employeeActiveTab === item.key }"
-          :title="item.label" @click.stop="employeeActiveTab = item.key">
+          :title="item.label" @click.stop="setEmployeeTab(item.key)">
           <span class="nav-icon" :style="{ background: navIconMeta(item.key).bg, color: navIconMeta(item.key).color }"
             v-html="navIconSvg(item.key)"></span>
           <b>{{ item.label }}</b>
@@ -5479,6 +5479,7 @@ import { api, getToken, setToken, getAccount, setAccount } from './api';
 import uyqurLogoUrl from './assets/uyqur-logo.png';
 
 const ACTIVE_TAB_STORAGE_KEY = 'uyqur_support_active_tab';
+const EMPLOYEE_ACTIVE_TAB_STORAGE_KEY = 'uyqur_employee_active_tab';
 const SETTINGS_SECTION_STORAGE_KEY = 'uyqur_support_settings_section';
 const THEME_STORAGE_KEY = 'uyqur_support_theme';
 const COMPARISON_STORAGE_KEY = 'uyqur_support_comparison_enabled';
@@ -5522,6 +5523,17 @@ function storeActiveTab(key) {
   window.localStorage.setItem(ACTIVE_TAB_STORAGE_KEY, key);
 }
 
+function getStoredEmployeeActiveTab() {
+  if (typeof window === 'undefined') return 'performance';
+  const stored = window.localStorage.getItem(EMPLOYEE_ACTIVE_TAB_STORAGE_KEY);
+  return employeeTabs.some(tab => tab.key === stored) ? stored : 'performance';
+}
+
+function storeEmployeeActiveTab(key) {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(EMPLOYEE_ACTIVE_TAB_STORAGE_KEY, key);
+}
+
 function getStoredSettingsSection() {
   if (typeof window === 'undefined') return 'bot';
   const stored = window.localStorage.getItem(SETTINGS_SECTION_STORAGE_KEY);
@@ -5563,8 +5575,12 @@ const employeeTabs = [
   { key: 'companyModules', label: 'Bo‘limlar statistikasi', icon: '🏢' },
   { key: 'notifications', label: 'Uyqur Funksiyalari', icon: '🧩' }
 ];
-const employeeActiveTab = ref('performance');
+const employeeActiveTab = ref(getStoredEmployeeActiveTab());
 const employeeCurrentTitle = computed(() => employeeTabs.find(tab => tab.key === employeeActiveTab.value)?.label || 'Natijalarim');
+function setEmployeeTab(key) {
+  employeeActiveTab.value = employeeTabs.some(tab => tab.key === key) ? key : 'performance';
+  storeEmployeeActiveTab(employeeActiveTab.value);
+}
 const employeeSidebarExpanded = ref(false);
 const knowledgeDashboard = ref({ kpis: {}, module_bars: [], employee_ranking: [], daily_dynamics: { days: [], series: [] }, quadrant_points: [], function_status: [], period_days: 7 });
 const knowledgePeriodDays = ref(7);
