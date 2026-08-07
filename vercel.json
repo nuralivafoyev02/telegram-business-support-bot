@@ -19,7 +19,7 @@
     },
     {
       "path": "/api/cron",
-      "schedule": "5 13 * * *"
+      "schedule": "30 12 * * *"
     }
   ],
   "headers": [
