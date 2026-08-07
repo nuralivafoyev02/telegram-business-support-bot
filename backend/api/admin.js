@@ -40,6 +40,7 @@ const {
   setEventsLearnedBatch,
   getManagerReviewQueue,
   setManagerConfirmation,
+  setManagerConfirmationBatch,
   getManagerConfirmers,
   saveManagerConfirmers,
   getManagerEmployees,
@@ -51,7 +52,8 @@ const {
   sendPermissionActions,
   setActionLearned,
   setActionsLearnedBatch,
-  setActionConfirmed
+  setActionConfirmed,
+  setActionsConfirmedBatch
 } = require('../lib/permission-view');
 const {
   syncCompanyReport,
@@ -6622,7 +6624,7 @@ const EMPLOYEE_POST_ACTIONS = new Set(['uyqurMarkLearned', 'uyqurMarkLearnedBatc
 // bilan bitta umumiy ro'yxatni tahrirlaydi va supportlarga xuddi shu bildirishnoma
 // mexanizmi orqali (recordPermissionToggleEvents) xabar boradi.
 const MANAGEMENT_GET_ACTIONS = new Set(['uyqurKnowledgeDashboard', 'uyqurModuleFunctionsDetail', 'uyqurFunctionsByStatus', 'uyqurEmployeeKnowledgeProfile', 'uyqurPermissions', 'uyqurSupportOverview', 'uyqurSupportHistory']);
-const MANAGEMENT_POST_ACTIONS = new Set(['uyqurPermissionsSave', 'managementProfile', 'managementAvatarUpload', 'managementAvatarRemove', 'uyqurConfirmReview', 'uyqurMarkLearned', 'uyqurMarkLearnedBatch', 'uyqurActionsSend', 'uyqurActionMarkLearned', 'uyqurActionMarkLearnedBatch', 'uyqurActionConfirmReview']);
+const MANAGEMENT_POST_ACTIONS = new Set(['uyqurPermissionsSave', 'managementProfile', 'managementAvatarUpload', 'managementAvatarRemove', 'uyqurConfirmReview', 'uyqurConfirmReviewBatch', 'uyqurMarkLearned', 'uyqurMarkLearnedBatch', 'uyqurActionsSend', 'uyqurActionMarkLearned', 'uyqurActionMarkLearnedBatch', 'uyqurActionConfirmReview', 'uyqurActionConfirmReviewBatch']);
 
 // Profil rasmi uchun ruxsat etilgan formatlar va hajm chegarasi — base64
 // belgilar soni (~4/3 nisbat), taxminan 2 MB rasm faylga to'g'ri keladi.
@@ -6796,7 +6798,9 @@ async function handlePost(action, body, currentAdmin) {
     case 'uyqurActionMarkLearned': return setActionLearned(body.submodule_key, body.action_key, body.employee_id, body.learned !== false);
     case 'uyqurActionMarkLearnedBatch': return setActionsLearnedBatch(body.items, body.employee_id);
     case 'uyqurActionConfirmReview': return setActionConfirmed(body.submodule_key, body.action_key, body.employee_id, body.confirmed !== false, body.manager_username || '');
+    case 'uyqurActionConfirmReviewBatch': return setActionsConfirmedBatch(body.items, body.manager_username || '');
     case 'uyqurConfirmReview': return setManagerConfirmation(body.event_id, body.employee_id, body.confirmed !== false, body.manager_username || '');
+    case 'uyqurConfirmReviewBatch': return setManagerConfirmationBatch(body.items, body.manager_username || '');
     case 'uyqurManagerConfirmersSave': return saveManagerConfirmers(body.usernames);
     case 'uyqurResetNotifications': return resetPermissionNotifications();
     case 'uyqurActionsSend': return sendPermissionActions(body.actions);

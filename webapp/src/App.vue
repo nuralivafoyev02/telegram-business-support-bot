@@ -1576,6 +1576,7 @@
                           </span>
                           <input class="row-check" type="checkbox"
                             :checked="isSupportHistoryActionSelected(row, action)"
+                            :disabled="!action.learned"
                             @change="toggleSupportHistoryActionSelected(row, action)" />
                         </label>
                       </div>
@@ -3541,6 +3542,7 @@
                           </span>
                           <input class="row-check" type="checkbox"
                             :checked="isSupportHistoryActionSelected(row, action)"
+                            :disabled="!action.learned"
                             @change="toggleSupportHistoryActionSelected(row, action)" />
                         </label>
                       </div>
@@ -5837,8 +5839,12 @@ function toggleSupportHistoryEventSelected(row = {}) {
   supportHistorySelectedEvents.value = next;
 
   // Submodule qatorining o'zi belgilansa/bekor qilinsa, ichidagi barcha
-  // action'lar ham bir vaqtda birga belgilanadi/bekor qilinadi.
-  const actions = row.actions || [];
+  // action'lar ham bir vaqtda birga belgilanadi/bekor qilinadi — lekin
+  // FAQAT hali o'rganilgan (action.learned) action'lar; hali "Kutilmoqda"
+  // (umuman o'rganilmagan) action'lar tanlanmaydi, aks holda "Tasdiqlash"
+  // support hech qachon o'rganmagan narsani ham noto'g'ri tasdiqlab
+  // qo'yardi.
+  const actions = (row.actions || []).filter(action => action.learned);
   if (actions.length) {
     const nextActions = new Map(supportHistorySelectedActions.value);
     actions.forEach(action => {
@@ -5916,10 +5922,11 @@ function toggleSelectAllSupportHistory() {
   }
   supportHistorySelectedEvents.value = new Set(rows.map(row => row.event_id));
   // Har bir qatorning ichidagi action'lari ham birga belgilanadi — toggleSupportHistoryEventSelected'dagi
-  // bir xil naqsh (qator o'zi belgilansa, ichidagi hammasi ham belgilanadi).
+  // bir xil naqsh (qator o'zi belgilansa, ichidagi hammasi ham belgilanadi),
+  // lekin faqat hali O'RGANILGAN action'lar (Kutilmoqda turganlari emas).
   const nextActions = new Map(supportHistorySelectedActions.value);
   rows.forEach(row => {
-    (row.actions || []).forEach(action => {
+    (row.actions || []).filter(action => action.learned).forEach(action => {
       const key = actionSelectionKey(row, action);
       nextActions.set(key, { event_id: row.event_id, submodule_key: row.submodule_key, action_key: String(action.key || action.id) });
     });
@@ -12420,22 +12427,19 @@ async function confirmSelectedSupportHistory() {
     // tasdiqlangan bo'lishi mumkin — shuning uchun filtr nomiga emas, har
     // bir elementning O'Z holatiga qarab yo'nalish tanlanishi SHART.)
     const rowsById = new Map(supportHistoryRows.value.map(row => [row.event_id, row]));
-    // MUHIM: bu so'rovlar backendda BITTA umumiy bot_settings yozuvini
-    // o'qib-o'zgartirib-qayta yozadi (read-modify-write) — Promise.all bilan
-    // parallel yuborilsa, so'rovlar bir-birining yozganini "poyga holati"da
-    // ustidan bosib, ba'zi action'lar tasdiqlanmay/qaytarilmay qolardi.
-    // Shuning uchun KETMA-KET (sequential) yuboriladi.
-    for (const eventId of eventIds) {
-      const row = rowsById.get(eventId);
-      await api.confirmUyqurReview({
-        event_id: eventId,
-        employee_id: selectedSupportId.value,
-        confirmed: !(row && row.confirmed),
+    // Har bir belgilangan submodule/action uchun bitta batch so'rov
+    // yuboriladi — backend yagona umumiy recordni bir marta o'qib, hammasini
+    // birga yozadi (avvalgi ketma-ket, bittalab so'rov yo'lidan tezroq).
+    if (eventIds.length) {
+      await api.confirmUyqurReviewBatch({
+        items: eventIds.map(eventId => {
+          const row = rowsById.get(eventId);
+          return { event_id: eventId, employee_id: selectedSupportId.value, confirmed: !(row && row.confirmed) };
+        }),
         manager_username: ''
       });
     }
-    for (const entry of supportHistorySelectedActions.value.values()) {
-      const row = rowsById.get(entry.event_id);
+    if (supportHistorySelectedActions.value.size) {
       // Agar bu action submodule qatorining o'zi orqali (cascade) tanlangan
       // bo'lsa — uning yo'nalishi O'ZINING alohida holatidan emas, balki
       // SUBMODULE qaysi tomonga o'zgarayotganidan olinadi. Aks holda (agar
@@ -12446,21 +12450,19 @@ async function confirmSelectedSupportHistory() {
       // mumkin) — ularning "o'z holati" har doim bo'sh/false bo'ladi, shuning
       // uchun submodule "Qaytarish" qilinsa ham, ular xato ravishda aksincha
       // tasdiqlanib ketmasligi kerak.
-      const cascadedFromEvent = supportHistorySelectedEvents.value.has(entry.event_id);
-      let confirmed;
-      if (cascadedFromEvent) {
-        confirmed = !(row && row.confirmed);
-      } else {
-        const action = row && (row.actions || []).find(item => String(item.key || item.id) === String(entry.action_key));
-        confirmed = !(action && action.confirmed);
-      }
-      await api.confirmUyqurActionReview({
-        submodule_key: entry.submodule_key,
-        action_key: entry.action_key,
-        employee_id: selectedSupportId.value,
-        confirmed,
-        manager_username: ''
+      const items = Array.from(supportHistorySelectedActions.value.values()).map(entry => {
+        const row = rowsById.get(entry.event_id);
+        const cascadedFromEvent = supportHistorySelectedEvents.value.has(entry.event_id);
+        let confirmed;
+        if (cascadedFromEvent) {
+          confirmed = !(row && row.confirmed);
+        } else {
+          const action = row && (row.actions || []).find(item => String(item.key || item.id) === String(entry.action_key));
+          confirmed = !(action && action.confirmed);
+        }
+        return { submodule_key: entry.submodule_key, action_key: entry.action_key, employee_id: selectedSupportId.value, confirmed };
       });
+      await api.confirmUyqurActionReviewBatch({ items, manager_username: '' });
     }
     supportHistorySelectedEvents.value = new Set();
     supportHistorySelectedActions.value = new Map();
@@ -12487,22 +12489,22 @@ async function rejectSelectedSupportHistory() {
   startLoading('confirmSupportHistory');
   try {
     const eventIds = Array.from(supportHistorySelectedEvents.value);
-    // MUHIM: yuqoridagi confirmSelectedSupportHistory'dagi izohga qarang —
-    // bu so'rovlar ham bitta umumiy yozuvni o'qib-yozadi, shuning uchun
-    // parallel emas, ketma-ket yuboriladi (poyga holatini oldini olish uchun).
-    for (const eventId of eventIds) {
-      await api.markUyqurLearned({
-        event_id: eventId,
-        employee_id: selectedSupportId.value,
-        learned: false
+    // Bitta batch so'rov bilan hammasi birga: yuqoridagi
+    // confirmSelectedSupportHistory'dagi bilan bir xil sabab.
+    if (eventIds.length) {
+      await api.markUyqurLearnedBatch({
+        items: eventIds.map(eventId => ({ event_id: eventId, learned: false })),
+        employee_id: selectedSupportId.value
       });
     }
-    for (const entry of supportHistorySelectedActions.value.values()) {
-      await api.markUyqurActionLearned({
-        submodule_key: entry.submodule_key,
-        action_key: entry.action_key,
-        employee_id: selectedSupportId.value,
-        learned: false
+    if (supportHistorySelectedActions.value.size) {
+      await api.markUyqurActionLearnedBatch({
+        items: Array.from(supportHistorySelectedActions.value.values()).map(entry => ({
+          submodule_key: entry.submodule_key,
+          action_key: entry.action_key,
+          learned: false
+        })),
+        employee_id: selectedSupportId.value
       });
     }
     supportHistorySelectedEvents.value = new Set();

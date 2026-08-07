@@ -510,6 +510,41 @@ async function setActionConfirmed(submoduleKey, actionKey, employeeId, confirmed
   return progress[key][employeeId];
 }
 
+// setActionsLearnedBatch/setEventsLearnedBatch bilan bir xil sabab —
+// "Bildirishnomalar tarixi"da bir nechta funksiyani birga tasdiqlash/
+// qaytarishda, HAR biri uchun alohida o'qish+yozish o'rniga BITTA o'qish
+// va BITTA yozish bilan hammasi birga saqlanadi.
+async function setActionsConfirmedBatch(items = [], managerName = '') {
+  if (!Array.isArray(items) || !items.length) return [];
+  const progress = await getActionLearnedRecord();
+  const touchedPairs = new Set();
+  const results = [];
+  items.forEach(({ submodule_key: submoduleKey, action_key: actionKey, employee_id: employeeId, confirmed = true }) => {
+    const normalizedSubmoduleKey = String(submoduleKey || '');
+    const normalizedActionKey = String(actionKey || '');
+    if (!normalizedSubmoduleKey || !normalizedActionKey || !employeeId) return;
+    const key = actionCompositeKey(normalizedSubmoduleKey, normalizedActionKey);
+    if (!progress[key]) progress[key] = {};
+    const current = progress[key][employeeId] || {};
+    progress[key][employeeId] = {
+      ...current,
+      learned_at: current.learned_at || new Date().toISOString(),
+      confirmed_at: confirmed ? new Date().toISOString() : null,
+      confirmed_by: confirmed ? (managerName || null) : null
+    };
+    touchedPairs.add(`${normalizedSubmoduleKey}::${employeeId}`);
+    results.push({ submodule_key: normalizedSubmoduleKey, action_key: normalizedActionKey, employee_id: employeeId, ...progress[key][employeeId] });
+  });
+  await saveActionLearnedRecord(progress);
+  for (const pairKey of touchedPairs) {
+    const separatorIndex = pairKey.indexOf('::');
+    const submoduleKey = pairKey.slice(0, separatorIndex);
+    const employeeId = pairKey.slice(separatorIndex + 2);
+    await syncEventStatusWithActions(submoduleKey, employeeId).catch(() => null);
+  }
+  return results;
+}
+
 async function sendPermissionActions(items = []) {
   const normalized = (Array.isArray(items) ? items : [])
     .map(item => ({
@@ -793,6 +828,29 @@ async function setManagerConfirmation(eventId, employeeId, confirmed = true, man
   };
   await saveNotificationRecord(record);
   return record.progress[eventId][employeeId];
+}
+
+// setActionsConfirmedBatch bilan bir xil sabab — submodule darajasidagi
+// (butun funksiya) tasdiqlash/qaytarish ham bir nechtasi birga
+// bajarilganda BITTA o'qish+yozish bilan amalga oshiriladi.
+async function setManagerConfirmationBatch(items = [], managerName = '') {
+  if (!Array.isArray(items) || !items.length) return [];
+  const record = await getNotificationRecord();
+  const results = [];
+  items.forEach(({ event_id: eventId, employee_id: employeeId, confirmed = true }) => {
+    if (!eventId || !employeeId) return;
+    if (!record.progress[eventId]) record.progress[eventId] = {};
+    const current = record.progress[eventId][employeeId] || {};
+    record.progress[eventId][employeeId] = {
+      ...current,
+      learned_at: current.learned_at || new Date().toISOString(),
+      confirmed_at: confirmed ? new Date().toISOString() : null,
+      confirmed_by: confirmed ? (managerName || null) : null
+    };
+    results.push({ event_id: eventId, employee_id: employeeId, ...record.progress[eventId][employeeId] });
+  });
+  await saveNotificationRecord(record);
+  return results;
 }
 
 // Tashqi daraxt yangilanganda (kesh muddati o'tib, qayta so'ralganda) topilgan
@@ -1635,6 +1693,7 @@ module.exports = {
   setEventsLearnedBatch,
   getManagerReviewQueue,
   setManagerConfirmation,
+  setManagerConfirmationBatch,
   getManagerConfirmers,
   saveManagerConfirmers,
   getManagerEmployees,
@@ -1646,5 +1705,6 @@ module.exports = {
   sendPermissionActions,
   setActionLearned,
   setActionsLearnedBatch,
-  setActionConfirmed
+  setActionConfirmed,
+  setActionsConfirmedBatch
 };
