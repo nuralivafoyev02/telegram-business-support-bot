@@ -283,31 +283,21 @@ function buildTodaySupportRows(requests, employees, chatToEmployeeMap) {
       const closerByName = request.closed_by_name
         ? employeeByName.get(String(request.closed_by_name).trim().toLowerCase())
         : null;
-      const knownCloser = closerById || closerByName;
-      if (closerById && isSupportRole(closerById)) {
-        ensureRow(request.closed_by_employee_id, closerById).closed += 1;
-      } else if (knownCloser && !isSupportRole(knownCloser)) {
-        // Ma'lum, lekin support BO'LMAGAN xodim — uning o'z nomiga yozilmaydi.
-        if (chatEmployee) ensureRow(chatEmployeeKey, chatEmployee).closed += 1;
-        else ensureRow('unattributed', { full_name: 'Aniqlanmagan' }).closed += 1;
-      } else if (chatEmployee) {
+      // Hisobotda FAQAT ma'lum (xodimlar ro'yxatida bor) va role='support'
+      // bo'lgan xodimlarga yoziladi — kim yopgani noma'lum yoki support
+      // bo'lmagan bo'lsa, "Aniqlanmagan" degan sun'iy qator YARATILMAYDI,
+      // shunchaki hisobga kirmaydi (kerak bo'lmagan qator ekrab qolmasin).
+      const closer = closerById || closerByName;
+      if (closer && isSupportRole(closer)) {
+        ensureRow(closer.id || closer.employee_id, closer).closed += 1;
+      } else if (isSupportRole(chatEmployee)) {
         ensureRow(chatEmployeeKey, chatEmployee).closed += 1;
-      } else if (request.closed_by_name) {
-        ensureRow(`name:${request.closed_by_name}`, { full_name: request.closed_by_name }).closed += 1;
-      } else {
-        ensureRow('unattributed', { full_name: 'Aniqlanmagan' }).closed += 1;
       }
     }
   });
 
   return [...grouped.values()]
     .filter(row => row.incoming || row.closed || row.open)
-    // Zaxira sifatida ham — agar `employee_id` haqiqiy (support bo'lmagan)
-    // xodimga to'g'ri kelib qolsa, hisobotdan tushirib qoldiriladi.
-    .filter(row => {
-      const employee = employeeById.get(row.employee_id) || employeeByName.get(String(row.full_name || '').trim().toLowerCase());
-      return !employee || isSupportRole(employee);
-    })
     .sort((a, b) => b.closed - a.closed || b.incoming - a.incoming || a.full_name.localeCompare(b.full_name));
 }
 
