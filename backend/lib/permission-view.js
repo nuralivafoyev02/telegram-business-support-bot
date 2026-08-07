@@ -293,6 +293,60 @@ async function saveActionLearnedRecord(progress) {
   }], { upsert: true, onConflict: 'key', prefer: 'return=minimal' });
 }
 
+// MUHIM: submodule (event) darajasidagi holat va ichidagi action'larning
+// holati ILGARI ikkita MUSTAQIL tizimda saqlanardi va bir-biriga hech qanday
+// ta'sir qilmasdi — shuning uchun action'lar tasdiqlansa ham, submodule'ning
+// o'zi ("Papkalar" kabi) hamon tasdiqlanmagan bo'lib qolardi, va "Xodimlar
+// reytingi"dagi hisob-kitob (bu FAQAT submodule darajasidan olinadi) bilan
+// "Bildirishnomalar tarixi"dagi ko'rinish bir-biriga zid chiqardi. Endi har
+// safar action tasdiqlansa/qaytarilsa, submodule'ning holati SHU action'lar
+// yig'indisidan avtomatik qayta hisoblanadi (barchasi tasdiqlansa — submodule
+// ham tasdiqlanadi; birortasi qaytarilsa — submodule ham "jarayonda"ga qaytadi).
+async function syncEventStatusWithActions(submoduleKey, employeeId) {
+  const normalizedSubmoduleKey = String(submoduleKey || '');
+  if (!normalizedSubmoduleKey || !employeeId) return;
+
+  const [record, viewRecord, actionProgress] = await Promise.all([
+    getNotificationRecord(),
+    getPermissionViewRecord(),
+    getActionLearnedRecord()
+  ]);
+
+  const event = record.events.find(item => String(item.submodule_key) === normalizedSubmoduleKey);
+  if (!event) return;
+
+  let actions = [];
+  (Array.isArray(viewRecord.modules) ? viewRecord.modules : []).forEach(module => {
+    (module.submodules || []).forEach(submodule => {
+      if (String(submodule.key) === normalizedSubmoduleKey) actions = submodule.actions || [];
+    });
+  });
+  if (!actions.length) return;
+
+  let allConfirmed = true;
+  let anyLearned = false;
+  actions.forEach(action => {
+    const key = actionCompositeKey(normalizedSubmoduleKey, String(action.key || action.id));
+    const entry = (actionProgress[key] && actionProgress[key][employeeId]) || {};
+    if (entry.learned_at || entry.confirmed_at) anyLearned = true;
+    if (!entry.confirmed_at) allConfirmed = false;
+  });
+
+  const current = (record.progress[event.id] && record.progress[event.id][employeeId]) || {};
+  const nextLearned = anyLearned || allConfirmed;
+  const nextConfirmed = allConfirmed;
+  if (Boolean(current.learned_at) === nextLearned && Boolean(current.confirmed_at) === nextConfirmed) return;
+
+  if (!record.progress[event.id]) record.progress[event.id] = {};
+  record.progress[event.id][employeeId] = {
+    ...current,
+    learned_at: nextLearned ? (current.learned_at || new Date().toISOString()) : null,
+    confirmed_at: nextConfirmed ? new Date().toISOString() : null,
+    confirmed_by: nextConfirmed ? (current.confirmed_by || null) : null
+  };
+  await saveNotificationRecord(record);
+}
+
 async function setActionLearned(submoduleKey, actionKey, employeeId, learned = true) {
   const normalizedSubmoduleKey = String(submoduleKey || '');
   const normalizedActionKey = String(actionKey || '');
@@ -309,6 +363,7 @@ async function setActionLearned(submoduleKey, actionKey, employeeId, learned = t
     confirmed_by: learned ? current.confirmed_by || null : null
   };
   await saveActionLearnedRecord(progress);
+  await syncEventStatusWithActions(normalizedSubmoduleKey, employeeId).catch(() => null);
   return progress[key][employeeId];
 }
 
@@ -335,6 +390,7 @@ async function setActionConfirmed(submoduleKey, actionKey, employeeId, confirmed
     confirmed_by: confirmed ? (managerName || null) : null
   };
   await saveActionLearnedRecord(progress);
+  await syncEventStatusWithActions(normalizedSubmoduleKey, employeeId).catch(() => null);
   return progress[key][employeeId];
 }
 
