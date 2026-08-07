@@ -331,20 +331,23 @@ async function syncEventStatusWithActions(submoduleKey, employeeId) {
   // faqat kamida bitta action ALOHIDA qo'lda belgilangan submodule'larga tegishli.
   let anyActionTouched = false;
   let allConfirmed = true;
-  let anyLearned = false;
+  let allLearned = true;
   actions.forEach(action => {
     const key = actionCompositeKey(normalizedSubmoduleKey, String(action.key || action.id));
     const entry = (actionProgress[key] && actionProgress[key][employeeId]) || null;
     if (entry) anyActionTouched = true;
     const learnedAt = entry && entry.learned_at;
     const confirmedAt = entry && entry.confirmed_at;
-    if (learnedAt || confirmedAt) anyLearned = true;
+    if (!learnedAt && !confirmedAt) allLearned = false;
     if (!confirmedAt) allConfirmed = false;
   });
   if (!anyActionTouched) return;
 
+  // Barcha action'lar o'rganilgandagina submodule ham "O'rganildi" bo'lishi
+  // kerak — bittasi o'rganilishi bilanoq submodule'ni "O'rganildi" qilib
+  // qo'yish, hali "Kutilmoqda" turgan boshqa action'lar bilan zid ko'rinardi.
   const current = (record.progress[event.id] && record.progress[event.id][employeeId]) || {};
-  const nextLearned = anyLearned || allConfirmed;
+  const nextLearned = allLearned;
   const nextConfirmed = allConfirmed;
   if (Boolean(current.learned_at) === nextLearned && Boolean(current.confirmed_at) === nextConfirmed) return;
 
