@@ -1128,7 +1128,7 @@
             </div>
             <div v-for="(row, index) in knowledgeDashboard.employee_ranking" :key="row.employee_id"
               style="display:flex; align-items:center; gap:8px; padding:10px 0; border-bottom:1px solid #f8fafc; cursor:pointer;"
-              @click="openEmployeeKnowledgeProfile(row.employee_id)">
+              @click="handleRankingRowClick($event, row.employee_id)">
               <span style="width:20px; flex-shrink:0; font-size:13px;">{{ index + 1 }}</span>
               <span style="flex:1; display:flex; align-items:center; gap:8px; min-width:0;">
                 <img v-if="employeeAvatarUrl(row)" :src="employeeAvatarUrl(row)" alt=""
@@ -1136,10 +1136,10 @@
                 <span v-else class="profile-avatar" style="width:30px; height:30px; font-size:12px; flex-shrink:0;">{{ initialsFromText(row.full_name) }}</span>
                 <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; font-size:15px;">{{ row.full_name }}</span>
               </span>
-              <span style="width:70px; text-align:right; flex-shrink:0; font-size:14px; font-weight:600; color:#16a34a; padding-left:12px; border-left:1px solid #f1f5f9; align-self:stretch; display:flex; align-items:center; justify-content:flex-end; cursor:pointer;"
+              <span class="ranking-stat-cell" style="width:70px; text-align:right; flex-shrink:0; font-size:14px; font-weight:600; color:#16a34a; padding-left:12px; border-left:1px solid #f1f5f9; align-self:stretch; display:flex; align-items:center; justify-content:flex-end; cursor:pointer;"
                 title="O‘rganilgan (tasdiqlangan) funksiyalar"
                 @click.stop="openManagementSupportHistory({ id: row.employee_id, full_name: row.full_name }, 'done')">{{ row.learned_count }}</span>
-              <span style="width:70px; flex-shrink:0; padding-left:12px; border-left:1px solid #f1f5f9; align-self:stretch; display:flex; align-items:center; justify-content:flex-end; cursor:pointer;"
+              <span class="ranking-stat-cell" style="width:70px; flex-shrink:0; padding-left:12px; border-left:1px solid #f1f5f9; align-self:stretch; display:flex; align-items:center; justify-content:flex-end; cursor:pointer;"
                 title="Jarayondagi funksiyalar (tasdiqlanmagan)"
                 @click.stop="openManagementSupportHistory({ id: row.employee_id, full_name: row.full_name }, 'pending')">
                 <span class="notif-bell">
@@ -1147,7 +1147,7 @@
                   <span v-if="row.in_progress_count" class="notif-badge">{{ row.in_progress_count }}</span>
                 </span>
               </span>
-              <span style="width:80px; text-align:right; flex-shrink:0; font-size:14px; font-weight:600; color:#dc2626; padding-left:12px; border-left:1px solid #f1f5f9; align-self:stretch; display:flex; align-items:center; justify-content:flex-end; cursor:pointer;"
+              <span class="ranking-stat-cell" style="width:80px; text-align:right; flex-shrink:0; font-size:14px; font-weight:600; color:#dc2626; padding-left:12px; border-left:1px solid #f1f5f9; align-self:stretch; display:flex; align-items:center; justify-content:flex-end; cursor:pointer;"
                 title="Boshlanmagan funksiyalar"
                 @click.stop="openManagementSupportHistory({ id: row.employee_id, full_name: row.full_name }, 'not_started')">{{ row.not_started_count }}</span>
               <span style="width:56px; text-align:right; flex-shrink:0; font-size:14px; font-weight:600; padding-left:12px; border-left:1px solid #f1f5f9; align-self:stretch; display:flex; align-items:center; justify-content:flex-end;">{{ row.percent }}%</span>
@@ -2050,7 +2050,7 @@
                 </div>
                 <div v-for="(row, index) in knowledgeDashboard.employee_ranking" :key="row.employee_id"
                   style="display:flex; align-items:center; gap:8px; padding:10px 0; border-bottom:1px solid #f8fafc; cursor:pointer;"
-                  @click="openEmployeeKnowledgeProfile(row.employee_id)">
+                  @click="handleRankingRowClick($event, row.employee_id)">
                   <span style="width:20px; flex-shrink:0; font-size:13px;">{{ index + 1 }}</span>
                   <span style="flex:1; display:flex; align-items:center; gap:8px; min-width:0;">
                     <img v-if="employeeAvatarUrl(row)" :src="employeeAvatarUrl(row)" alt=""
@@ -2058,10 +2058,10 @@
                     <span v-else class="profile-avatar" style="width:30px; height:30px; font-size:12px; flex-shrink:0;">{{ initialsFromText(row.full_name) }}</span>
                     <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; font-size:15px;">{{ row.full_name }}</span>
                   </span>
-                  <span style="width:70px; text-align:right; flex-shrink:0; font-size:14px; font-weight:600; color:#16a34a; padding-left:12px; border-left:1px solid #f1f5f9; align-self:stretch; display:flex; align-items:center; justify-content:flex-end; cursor:pointer;"
+                  <span class="ranking-stat-cell" style="width:70px; text-align:right; flex-shrink:0; font-size:14px; font-weight:600; color:#16a34a; padding-left:12px; border-left:1px solid #f1f5f9; align-self:stretch; display:flex; align-items:center; justify-content:flex-end; cursor:pointer;"
                     title="O‘rganilgan (tasdiqlangan) funksiyalar"
                     @click.stop="openSupportHistory({ id: row.employee_id, full_name: row.full_name }, 'done')">{{ row.learned_count }}</span>
-                  <span style="width:70px; flex-shrink:0; padding-left:12px; border-left:1px solid #f1f5f9; align-self:stretch; display:flex; align-items:center; justify-content:flex-end; cursor:pointer;"
+                  <span class="ranking-stat-cell" style="width:70px; flex-shrink:0; padding-left:12px; border-left:1px solid #f1f5f9; align-self:stretch; display:flex; align-items:center; justify-content:flex-end; cursor:pointer;"
                     title="Jarayondagi funksiyalar (tasdiqlanmagan)"
                     @click.stop="openSupportHistory({ id: row.employee_id, full_name: row.full_name }, 'pending')">
                     <span class="notif-bell">
@@ -2069,7 +2069,7 @@
                       <span v-if="row.in_progress_count" class="notif-badge">{{ row.in_progress_count }}</span>
                     </span>
                   </span>
-                  <span style="width:80px; text-align:right; flex-shrink:0; font-size:14px; font-weight:600; color:#dc2626; padding-left:12px; border-left:1px solid #f1f5f9; align-self:stretch; display:flex; align-items:center; justify-content:flex-end; cursor:pointer;"
+                  <span class="ranking-stat-cell" style="width:80px; text-align:right; flex-shrink:0; font-size:14px; font-weight:600; color:#dc2626; padding-left:12px; border-left:1px solid #f1f5f9; align-self:stretch; display:flex; align-items:center; justify-content:flex-end; cursor:pointer;"
                     title="Boshlanmagan funksiyalar"
                     @click.stop="openSupportHistory({ id: row.employee_id, full_name: row.full_name }, 'not_started')">{{ row.not_started_count }}</span>
                   <span style="width:56px; text-align:right; flex-shrink:0; font-size:14px; font-weight:600; padding-left:12px; border-left:1px solid #f1f5f9; align-self:stretch; display:flex; align-items:center; justify-content:flex-end;">{{ row.percent }}%</span>
@@ -13620,6 +13620,16 @@ async function openFunctionsByStatus(status) {
   } finally {
     stopLoading('functionsByStatus');
   }
+}
+
+// Qatorning o'zi (ism) bosilsa profil ochiladi, lekin "O‘rgangan/Jarayonda/
+// Boshlamagan" ustunlaridagi @click.stop bilan himoyalangan katakchalar
+// bosilganda ham ba'zan qatorning o'z click'i ishga tushib, profil sahifasi
+// noto'g'ri ochib qolardi — shu uchun bu yerda qo'shimcha himoya sifatida
+// bosilgan joy shu katakchalardan biri ekanini aniq tekshiramiz.
+function handleRankingRowClick(event, employeeId) {
+  if (event.target.closest('.ranking-stat-cell')) return;
+  openEmployeeKnowledgeProfile(employeeId);
 }
 
 async function openEmployeeKnowledgeProfile(employeeId) {
