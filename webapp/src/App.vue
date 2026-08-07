@@ -12391,7 +12391,12 @@ async function confirmSelectedSupportHistory() {
     // Har bir belgilangan qator o'zining hozirgi holatiga qarab TESKARIGA
     // o'giriladi — hali tasdiqlanmagan bo'lsa tasdiqlanadi, allaqachon
     // tasdiqlangan bo'lsa qaytariladi (bekor qilinadi). Shu orqali bitta
-    // tugma bilan ham "Tasdiqlash", ham "Qaytarish" ishlaydi.
+    // tugma bilan ham "Tasdiqlash", ham "Qaytarish" ishlaydi. (Bitta
+    // filtrlangan ko'rinishda ham tasdiqlangan, ham tasdiqlanmagan action'lar
+    // aralash bo'lishi mumkin — masalan "Jarayonda" filtri submodule
+    // darajasida tasdiqlanmagan, lekin ichidagi ayrim action'lar allaqachon
+    // tasdiqlangan bo'lishi mumkin — shuning uchun filtr nomiga emas, har
+    // bir elementning O'Z holatiga qarab yo'nalish tanlanishi SHART.)
     const rowsById = new Map(supportHistoryRows.value.map(row => [row.event_id, row]));
     // MUHIM: bu so'rovlar backendda BITTA umumiy bot_settings yozuvini
     // o'qib-o'zgartirib-qayta yozadi (read-modify-write) — Promise.all bilan

@@ -3,6 +3,7 @@
 const { optionalEnv } = require('./env');
 const supabase = require('./supabase');
 const { getCurrentTenantId, normalizeTenantId, DEFAULT_TENANT_ID } = require('./tenant');
+const { notifyOperationalLog } = require('./log-notifier');
 
 const DEFAULT_COMPANY_REPORT_URL = 'https://backend.app.uyqur.uz/dev/company/info-report-for-bot';
 const COMPANY_REPORT_CACHE_KEY = 'uyqur_company_report_cache';
@@ -915,6 +916,41 @@ async function saveCompanyReportDailyRows(result = {}) {
   return rows.length;
 }
 
+// Sinxronizatsiya soatlab (cron orqali) ishlaydi — agar biror sababdan
+// (masalan cron o'zi to'xtab qolsa) uzoq vaqt muvaffaqiyatli ishlamasa,
+// "Bo'limlar dinamikasi" grafigidagi bugungi kun soni jonli holatdan
+// sezilarli orqada qolib, chalkashtirib qo'yishi mumkin — shuning uchun
+// bunday holatda operatsion log orqali (Sozlamalar → Log yuborish yoqilgan
+// bo'lsa) ogohlantiriladi.
+const SYNC_STALE_ALERT_THRESHOLD_MS = 3 * 60 * 60 * 1000;
+
+async function checkCompanyReportSyncFreshness(tenantId, currentStartedAt) {
+  try {
+    const id = resolveTenantId(tenantId);
+    const rows = await supabase.select(COMPANY_MODULE_SYNC_RUNS_TABLE, {
+      select: 'finished_at,status',
+      tenant_id: supabase.eq(id),
+      status: supabase.eq('success'),
+      order: supabase.order('finished_at', false),
+      limit: '2'
+    }).catch(() => []);
+    // rows[0] — hozir saqlangan (joriy) muvaffaqiyatli yozuv, rows[1] — undan
+    // OLDINGI muvaffaqiyatli yozuv — ikkisi orasidagi tirqishni tekshiramiz.
+    const previous = rows[1];
+    if (!previous) return;
+    const gapMs = new Date(currentStartedAt).getTime() - new Date(previous.finished_at).getTime();
+    if (!Number.isFinite(gapMs) || gapMs <= SYNC_STALE_ALERT_THRESHOLD_MS) return;
+    const gapHours = Math.round(gapMs / 3600000);
+    await notifyOperationalLog('error', 'company-report:sync-stale',
+      `Kompaniya bo'limlar hisoboti (company-report) taxminan ${gapHours} soat davomida muvaffaqiyatli yangilanmagan edi. "Bo'limlar dinamikasi" grafigidagi so'nggi kunlar jonli holatdan orqada qolgan bo'lishi mumkin.`,
+      { tenant_id: id, gap_hours: gapHours, previous_success_at: previous.finished_at }
+    ).catch(() => null);
+  } catch (_error) {
+    // Ogohlantirishning o'zi muvaffaqiyatsiz bo'lsa ham, asosiy sinxronizatsiya
+    // jarayoni to'xtamasligi kerak.
+  }
+}
+
 async function saveCompanyReportSyncRun({
   tenantId,
   reportDate,
@@ -1451,6 +1487,7 @@ async function syncCompanyReport(options = {}) {
         sourceUrl: url,
         startedAt
       });
+      await checkCompanyReportSyncFreshness(tenantId, startedAt);
       const history = await getReportHistoryFromDaily({ tenantId });
       return {
         ...result,

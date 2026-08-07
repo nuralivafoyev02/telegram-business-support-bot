@@ -1,7 +1,7 @@
 'use strict';
 
 const { getBotSettings } = require('./bot-settings');
-const { resolveMainStatsChatId } = require('./report');
+const { getDailyReportGroupFromSettings } = require('./report');
 const { sendMessage, escapeHtml } = require('./telegram');
 
 const LEVEL_LABELS = {
@@ -204,7 +204,9 @@ function formatMeta(meta = {}) {
 
 async function resolveLogTarget(settings = {}) {
   if (settings.logNotifications?.target !== 'main_group') return '';
-  return settings.mainGroupId || await resolveMainStatsChatId().catch(() => '');
+  // FAQAT "Kunlik hisobot guruhi" — "Asosiy guruh"ga umuman tushmaydi
+  // (ataylab so'ralgan). Agar bu sozlanmagan bo'lsa, log yuborilmaydi.
+  return getDailyReportGroupFromSettings().catch(() => '');
 }
 
 async function notifyOperationalLog(level, label, message, meta = {}) {

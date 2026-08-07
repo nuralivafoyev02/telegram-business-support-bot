@@ -475,4 +475,4 @@ async function sendMainStatsReport(chatId) {
   return { chat_id: target, message_id: result.message_id, text };
 }
 
-module.exports = { buildMainStatsReport, buildMainStatsQuestionReply, isMainStatsQuestion, resolveMainStatsChatId, sendMainStatsReport };
+module.exports = { buildMainStatsReport, buildMainStatsQuestionReply, isMainStatsQuestion, resolveMainStatsChatId, sendMainStatsReport, getDailyReportGroupFromSettings };

@@ -61,12 +61,9 @@ Agar Vercel logida `PGRST205` va `Could not find the table 'public.v_chat_statis
 
 Default admin:
 
-```txt
-login: admin
-parol: Admin@12345
-```
+Birinchi kirish uchun `ADMIN_USERNAME` va `ADMIN_PASSWORD` environment o‘zgaruvchilarini **deploy qilishdan oldin** o‘zingiz xohlagan (kuchli, faqat sizga ma’lum) qiymatlarga o‘rnating — pastdagi "Vercel environment variables" bo‘limiga qarang. Bu ikkalasini sozlamasdan deploy qilmang.
 
-Deploydan keyin darhol `Sozlamalar → Admin profili` orqali parolni o‘zgartiring.
+Kirgandan keyin darhol `Sozlamalar → Admin profili` orqali parolni tekshiring/yangilang.
 
 ## Vercel environment variables
 
@@ -82,8 +79,8 @@ CRON_SECRET=change-me-cron-secret
 SUPABASE_URL=https://xxxx.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 
-ADMIN_USERNAME=admin
-ADMIN_PASSWORD=Admin@12345
+ADMIN_USERNAME=change-me-admin-username
+ADMIN_PASSWORD=change-me-strong-password
 ADMIN_JWT_SECRET=change-me-64-char-random-secret
 AI_MODE_DEFAULT=false
 BROADCAST_CONCURRENCY=8
