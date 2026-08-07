@@ -90,7 +90,7 @@ async function testBuildMainStatsReportUsesTodayEmployeeClosures() {
       return [{ total_requests: 2, open_requests: 1, closed_requests: 1, groups_count: 1 }];
     }
     if (table === 'employees') {
-      return [{ id: 'employee-1', full_name: 'Ali Valiyev', username: 'ali' }];
+      return [{ id: 'employee-1', full_name: 'Ali Valiyev', username: 'ali', role: 'support' }];
     }
     if (table === 'v_chat_statistics') {
       return [{ chat_id: -1001, title: 'Main support', open_requests: 1 }];

@@ -243,6 +243,12 @@ function buildChatToEmployeeMap(companyInfoCache, employees, requests, groupChat
 // moslashuvi sozlanmagan bo'lsa ham "yopgan" son yo'qolib qolmaydi.
 function buildTodaySupportRows(requests, employees, chatToEmployeeMap) {
   const employeeById = new Map(employees.map(employee => [employee.id || employee.employee_id, employee]));
+  const employeeByName = new Map(
+    employees
+      .map(employee => [String(employee.full_name || '').trim().toLowerCase(), employee])
+      .filter(([name]) => name)
+  );
+  const isSupportRole = employee => Boolean(employee) && String(employee.role || '').trim().toLowerCase() === 'support';
   const grouped = new Map();
   const ensureRow = (key, fallbackEmployee = {}) => {
     if (!grouped.has(key)) {
@@ -267,8 +273,23 @@ function buildTodaySupportRows(requests, employees, chatToEmployeeMap) {
       if (request.status === 'open') ensureRow(chatEmployeeKey, chatEmployee).open += 1;
     }
     if (request.status === 'closed' && isTodayFromNine(request.closed_at)) {
-      if (request.closed_by_employee_id) {
-        ensureRow(request.closed_by_employee_id, { full_name: request.closed_by_name }).closed += 1;
+      // Hisobot faqat SUPPORT (texnik yordam) xodimlari uchun — agar ticketni
+      // support bo'lmagan xodim (masalan rahbariyat) to'g'ridan-to'g'ri yopgan
+      // bo'lsa, uni o'z nomiga yozib qo'ymaymiz, boshqa manbaga o'tamiz. Ma'lum
+      // xodim closed_by_employee_id orqali TOPILMASA ham, closed_by_name
+      // (xodimlar ro'yxatidagi ism bilan) orqali ham tekshiriladi — chunki
+      // ba'zi yozuvlarda faqat ism saqlanib, employee_id bo'sh qoladi.
+      const closerById = request.closed_by_employee_id ? employeeById.get(request.closed_by_employee_id) : null;
+      const closerByName = request.closed_by_name
+        ? employeeByName.get(String(request.closed_by_name).trim().toLowerCase())
+        : null;
+      const knownCloser = closerById || closerByName;
+      if (closerById && isSupportRole(closerById)) {
+        ensureRow(request.closed_by_employee_id, closerById).closed += 1;
+      } else if (knownCloser && !isSupportRole(knownCloser)) {
+        // Ma'lum, lekin support BO'LMAGAN xodim — uning o'z nomiga yozilmaydi.
+        if (chatEmployee) ensureRow(chatEmployeeKey, chatEmployee).closed += 1;
+        else ensureRow('unattributed', { full_name: 'Aniqlanmagan' }).closed += 1;
       } else if (chatEmployee) {
         ensureRow(chatEmployeeKey, chatEmployee).closed += 1;
       } else if (request.closed_by_name) {
@@ -281,6 +302,12 @@ function buildTodaySupportRows(requests, employees, chatToEmployeeMap) {
 
   return [...grouped.values()]
     .filter(row => row.incoming || row.closed || row.open)
+    // Zaxira sifatida ham — agar `employee_id` haqiqiy (support bo'lmagan)
+    // xodimga to'g'ri kelib qolsa, hisobotdan tushirib qoldiriladi.
+    .filter(row => {
+      const employee = employeeById.get(row.employee_id) || employeeByName.get(String(row.full_name || '').trim().toLowerCase());
+      return !employee || isSupportRole(employee);
+    })
     .sort((a, b) => b.closed - a.closed || b.incoming - a.incoming || a.full_name.localeCompare(b.full_name));
 }
 

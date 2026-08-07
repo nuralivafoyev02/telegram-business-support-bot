@@ -13558,6 +13558,14 @@ async function loadMyKnowledgeProfile() {
 async function refreshMyDashboard() {
   startLoading('employeeRefresh');
   try {
+    // Har bir login/sahifa yangilanishida "Bo'limlar statistikasi"ning
+    // DEFAULT holati (Aktiv + shu xodimning o'zi + Bugun) qayta tiklanadi —
+    // `companyModuleFilterKeys`/`companyModulePeriod` ref'lari script setup
+    // vaqtida FAQAT bir marta hisoblangani uchun, ba'zan (masalan sahifa
+    // hali to'liq login qilinmagan holatda ochilib qolsa) noto'g'ri (bo'sh)
+    // qiymat bilan qolib ketishi mumkin edi.
+    companyModuleFilterKeys.value = defaultCompanyModuleFilterKeys();
+    companyModulePeriod.value = 'week';
     await Promise.all([
       loadMyActivity(),
       loadMyNotifications(),
