@@ -323,14 +323,25 @@ async function syncEventStatusWithActions(submoduleKey, employeeId) {
   });
   if (!actions.length) return;
 
+  // Ko'pgina funksiyalarda support xodimi FAQAT butun submodule'ni (alohida
+  // action'larsiz) "o'rgandim" deb belgilaydi — bunday hollarda action'larning
+  // HECH biriga hech qachon tegilmagan bo'ladi. Agar shunday bo'lsa, bu yerda
+  // "hech narsa o'rganilmagan" deb xato xulosa chiqarib, submodule'ning o'z
+  // (to'g'ridan-to'g'ri belgilangan) holatini buzib qo'ymaslik kerak — sinxronlash
+  // faqat kamida bitta action ALOHIDA qo'lda belgilangan submodule'larga tegishli.
+  let anyActionTouched = false;
   let allConfirmed = true;
   let anyLearned = false;
   actions.forEach(action => {
     const key = actionCompositeKey(normalizedSubmoduleKey, String(action.key || action.id));
-    const entry = (actionProgress[key] && actionProgress[key][employeeId]) || {};
-    if (entry.learned_at || entry.confirmed_at) anyLearned = true;
-    if (!entry.confirmed_at) allConfirmed = false;
+    const entry = (actionProgress[key] && actionProgress[key][employeeId]) || null;
+    if (entry) anyActionTouched = true;
+    const learnedAt = entry && entry.learned_at;
+    const confirmedAt = entry && entry.confirmed_at;
+    if (learnedAt || confirmedAt) anyLearned = true;
+    if (!confirmedAt) allConfirmed = false;
   });
+  if (!anyActionTouched) return;
 
   const current = (record.progress[event.id] && record.progress[event.id][employeeId]) || {};
   const nextLearned = anyLearned || allConfirmed;

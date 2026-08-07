@@ -12414,12 +12414,29 @@ async function confirmSelectedSupportHistory() {
     }
     for (const entry of supportHistorySelectedActions.value.values()) {
       const row = rowsById.get(entry.event_id);
-      const action = row && (row.actions || []).find(item => String(item.key || item.id) === String(entry.action_key));
+      // Agar bu action submodule qatorining o'zi orqali (cascade) tanlangan
+      // bo'lsa — uning yo'nalishi O'ZINING alohida holatidan emas, balki
+      // SUBMODULE qaysi tomonga o'zgarayotganidan olinadi. Aks holda (agar
+      // submodule qatori tanlanmagan, faqat shu action alohida belgilangan
+      // bo'lsa) action o'z holatiga qarab teskariga o'giriladi. Bu farq
+      // muhim: submodule ko'pincha alohida tegilmagan action'larni ham o'z
+      // ichiga oladi (support faqat butun funksiyani belgilagan bo'lishi
+      // mumkin) — ularning "o'z holati" har doim bo'sh/false bo'ladi, shuning
+      // uchun submodule "Qaytarish" qilinsa ham, ular xato ravishda aksincha
+      // tasdiqlanib ketmasligi kerak.
+      const cascadedFromEvent = supportHistorySelectedEvents.value.has(entry.event_id);
+      let confirmed;
+      if (cascadedFromEvent) {
+        confirmed = !(row && row.confirmed);
+      } else {
+        const action = row && (row.actions || []).find(item => String(item.key || item.id) === String(entry.action_key));
+        confirmed = !(action && action.confirmed);
+      }
       await api.confirmUyqurActionReview({
         submodule_key: entry.submodule_key,
         action_key: entry.action_key,
         employee_id: selectedSupportId.value,
-        confirmed: !(action && action.confirmed),
+        confirmed,
         manager_username: ''
       });
     }
