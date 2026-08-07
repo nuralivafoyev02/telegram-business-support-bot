@@ -5026,9 +5026,12 @@ td,
 }
 
 .company-module-table-wrap {
-  overflow: visible;
+  overflow: auto;
+  max-height: 640px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(142, 199, 255, .45) transparent;
 }
 
 .company-module-table {
