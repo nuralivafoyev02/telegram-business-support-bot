@@ -673,17 +673,33 @@ async function getSupportEventHistory(employeeId) {
   return record.events.slice().reverse().map(event => {
     const progress = progressFor(record, event.id, employeeId);
     const rawActions = actionsBySubmoduleKey.get(String(event.submodule_key)) || [];
+    const submoduleKey = String(event.submodule_key);
+    const anyActionTouched = rawActions.some(action => {
+      const key = actionCompositeKey(submoduleKey, String(action.key || action.id));
+      return Boolean(actionProgress[key] && actionProgress[key][employeeId]);
+    });
+    const eventLearned = Boolean(progress.learned_at);
+    const eventConfirmed = Boolean(progress.confirmed_at);
+    // Ko'pgina fichalar FAQAT butun submodule darajasida ("Papkalar" kabi)
+    // belgilanadi — action'larning hech biriga alohida tegilmagan bo'ladi.
+    // Bunday holda action'lar submodule'ning o'z holatini meros oladi,
+    // aks holda submodule "O'rganildi" bo'lsa-yu, ichidagi action'lar hamon
+    // "Kutilmoqda" bo'lib zid ko'rinardi (support hech qachon ularni ALOHIDA
+    // belgilamagani uchun ular haqiqatda ham tegilmagan — lekin ko'rinishda
+    // submodule bilan bir xil holatda bo'lishi kerak).
     const actions = rawActions.map(action => {
-      const key = actionCompositeKey(String(event.submodule_key), String(action.key || action.id));
+      const key = actionCompositeKey(submoduleKey, String(action.key || action.id));
       const actionEntry = (actionProgress[key] && actionProgress[key][employeeId]) || {};
+      const learned = anyActionTouched ? Boolean(actionEntry.learned_at) : eventLearned;
+      const confirmed = anyActionTouched ? Boolean(actionEntry.confirmed_at) : eventConfirmed;
       return {
         id: action.id,
         key: action.key,
         name: action.name || action.key,
-        learned: Boolean(actionEntry.learned_at),
-        learned_at: actionEntry.learned_at || null,
-        confirmed: Boolean(actionEntry.confirmed_at),
-        confirmed_at: actionEntry.confirmed_at || null
+        learned,
+        learned_at: anyActionTouched ? (actionEntry.learned_at || null) : (eventLearned ? progress.learned_at : null),
+        confirmed,
+        confirmed_at: anyActionTouched ? (actionEntry.confirmed_at || null) : (eventConfirmed ? progress.confirmed_at : null)
       };
     });
     return {
@@ -797,6 +813,9 @@ async function attachSubmoduleProgress(modules = []) {
     getNotificationRecord(),
     getActionLearnedRecord()
   ]);
+  if (repairEventStatusFromActionProgress(record, { modules }, actionProgress)) {
+    await saveNotificationRecord(record);
+  }
   const eventBySubmoduleKey = new Map(record.events.map(event => [String(event.submodule_key), event]));
   const now = Date.now();
   const dayMs = 24 * 60 * 60 * 1000;
@@ -804,6 +823,8 @@ async function attachSubmoduleProgress(modules = []) {
     ...module,
     submodules: (module.submodules || []).map(submodule => {
       const event = eventBySubmoduleKey.get(String(submodule.key)) || null;
+      const submoduleKey = String(submodule.key);
+      const submoduleActions = submodule.actions || [];
       const learned_employees = [];
       const not_learned_employees = [];
       employees.forEach(employee => {
@@ -820,13 +841,27 @@ async function attachSubmoduleProgress(modules = []) {
         else not_learned_employees.push(row);
       });
       const createdAt = event ? event.created_at : null;
-      const actions = (submodule.actions || []).map(action => {
-        const actionKey = actionCompositeKey(String(submodule.key), String(action.key || action.id));
+      // Xodim shu submodule ichidagi action'larning BIRORTASINI ham alohida
+      // belgilamagan bo'lsa (faqat butun submodule darajasida belgilagan
+      // bo'lsa), action'lar ro'yxatida ham submodule'ning o'z holatini
+      // meros oladi — aks holda bu yerda ham submodule "o'rganilgan" deb
+      // ko'rinib, action'lar "o'rganilmagan" bo'lib zid ko'rinardi.
+      const touchedEmployeeIds = new Set();
+      submoduleActions.forEach(action => {
+        const key = actionCompositeKey(submoduleKey, String(action.key || action.id));
+        Object.keys(actionProgress[key] || {}).forEach(employeeId => touchedEmployeeIds.add(employeeId));
+      });
+      const actions = submoduleActions.map(action => {
+        const actionKey = actionCompositeKey(submoduleKey, String(action.key || action.id));
         const actionEmployeeProgress = actionProgress[actionKey] || {};
         const action_learned_employees = [];
         const action_not_learned_employees = [];
         employees.forEach(employee => {
-          const learnedAt = actionEmployeeProgress[employee.id] && actionEmployeeProgress[employee.id].learned_at;
+          const anyActionTouched = touchedEmployeeIds.has(String(employee.id));
+          const eventProgress = event ? progressFor(record, event.id, employee.id) : {};
+          const learnedAt = anyActionTouched
+            ? (actionEmployeeProgress[employee.id] && actionEmployeeProgress[employee.id].learned_at)
+            : eventProgress.learned_at;
           const row = {
             id: employee.id,
             full_name: employee.full_name || employee.username || 'Xodim',
@@ -899,11 +934,15 @@ async function getKnowledgeDashboard({ days = 7 } = {}) {
   // shu orqali "Uyqur Funksiyalari" sahifasidagi kabi kesh eskirgan bo'lsa
   // avtomatik yangilanadi, aks holda bu yerdagi jami son ("allSubmodules")
   // o'sha sahifadagi haqiqiy daraxtdan orqada qolib ketishi mumkin edi.
-  const [employees, record, permissionRecord] = await Promise.all([
+  const [employees, record, permissionRecord, actionProgress] = await Promise.all([
     getSupportEmployees(),
     getNotificationRecord(),
-    getPermissionView()
+    getPermissionView(),
+    getActionLearnedRecord()
   ]);
+  if (repairEventStatusFromActionProgress(record, { modules: permissionRecord.modules }, actionProgress)) {
+    await saveNotificationRecord(record);
+  }
   const events = record.events;
   const now = Date.now();
   // "Hammasi" tanlansa, davr boshlanishi hodisalar tarixining eng boshigacha
@@ -1163,11 +1202,15 @@ async function getKnowledgeDashboard({ days = 7 } = {}) {
 
 async function getModuleFunctionsDetail(moduleName) {
   if (!moduleName) throw new Error('module_name majburiy');
-  const [employees, record, permissionRecord] = await Promise.all([
+  const [employees, record, permissionRecord, actionProgress] = await Promise.all([
     getSupportEmployees(),
     getNotificationRecord(),
-    getPermissionView()
+    getPermissionView(),
+    getActionLearnedRecord()
   ]);
+  if (repairEventStatusFromActionProgress(record, { modules: permissionRecord.modules }, actionProgress)) {
+    await saveNotificationRecord(record);
+  }
   const now = Date.now();
   const targetModuleName = canonicalModuleName(moduleName);
 
@@ -1279,11 +1322,15 @@ const FUNCTION_STATUS_LABELS = {
 // donut hisoblagichi bilan bir xil qoida asosida aniqlanadi.
 async function getFunctionsByLearningStatus(status) {
   if (!FUNCTION_STATUS_LABELS[status]) throw new Error('Noto‘g‘ri holat: ' + status);
-  const [employees, record, permissionRecord] = await Promise.all([
+  const [employees, record, permissionRecord, actionProgress] = await Promise.all([
     getSupportEmployees(),
     getNotificationRecord(),
-    getPermissionView()
+    getPermissionView(),
+    getActionLearnedRecord()
   ]);
+  if (repairEventStatusFromActionProgress(record, { modules: permissionRecord.modules }, actionProgress)) {
+    await saveNotificationRecord(record);
+  }
   const now = Date.now();
   const eventBySubmoduleKey = new Map(record.events.map(event => [String(event.submodule_key), event]));
 
@@ -1351,6 +1398,9 @@ async function getEmployeeKnowledgeProfile(employeeId) {
   ]);
   const employee = employees.find(row => String(row.id) === String(employeeId));
   if (!employee) throw new Error('Xodim topilmadi');
+  if (repairEventStatusFromActionProgress(record, { modules: permissionRecord.modules }, actionProgress)) {
+    await saveNotificationRecord(record);
+  }
   const events = record.events;
 
   // getKnowledgeDashboard'dagi bilan bir xil — ichki "actions" soniga qarab
@@ -1396,19 +1446,35 @@ async function getEmployeeKnowledgeProfile(employeeId) {
   // funksiyalar"/"O'rganilmagan funksiyalar" jadvalidagi qatorlarni ochib,
   // ichidagi action'larni ko'rsatish uchun (getSupportEventHistory bilan
   // bir xil naqsh).
+  // getSupportEventHistory'dagi bilan bir xil qoida: agar submodule ichidagi
+  // action'larning hech biriga alohida tegilmagan bo'lsa (faqat butun
+  // submodule darajasida belgilangan bo'lsa), action'lar submodule'ning
+  // o'z (progress) holatini meros oladi — aks holda bu yerda ham submodule
+  // "O'rganilgan" ro'yxatiga tushib, ichidagi action'lar "o'rganilmagan"
+  // bo'lib zid ko'rinardi.
   function actionsForSubmodule(submoduleKey) {
     const rawActions = actionsBySubmoduleKey.get(submoduleKey) || [];
+    const event = eventBySubmoduleKey.get(submoduleKey);
+    const eventProgress = event ? progressFor(record, event.id, employeeId) : {};
+    const eventLearned = Boolean(eventProgress.learned_at);
+    const eventConfirmed = Boolean(eventProgress.confirmed_at);
+    const anyActionTouched = rawActions.some(action => {
+      const key = actionCompositeKey(submoduleKey, String(action.key || action.id));
+      return Boolean(actionProgress[key] && actionProgress[key][employeeId]);
+    });
     return rawActions.map(action => {
       const compositeKey = actionCompositeKey(submoduleKey, String(action.key || action.id));
       const actionEntry = (actionProgress[compositeKey] && actionProgress[compositeKey][employeeId]) || {};
+      const learned = anyActionTouched ? Boolean(actionEntry.learned_at) : eventLearned;
+      const confirmed = anyActionTouched ? Boolean(actionEntry.confirmed_at) : eventConfirmed;
       return {
         id: action.id,
         key: action.key,
         name: action.name || action.key,
-        learned: Boolean(actionEntry.learned_at),
-        learned_at: actionEntry.learned_at || null,
-        confirmed: Boolean(actionEntry.confirmed_at),
-        confirmed_at: actionEntry.confirmed_at || null
+        learned,
+        learned_at: anyActionTouched ? (actionEntry.learned_at || null) : (eventLearned ? eventProgress.learned_at : null),
+        confirmed,
+        confirmed_at: anyActionTouched ? (actionEntry.confirmed_at || null) : (eventConfirmed ? eventProgress.confirmed_at : null)
       };
     });
   }
