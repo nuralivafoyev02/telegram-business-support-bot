@@ -378,6 +378,36 @@ async function setActionLearned(submoduleKey, actionKey, employeeId, learned = t
   return progress[key][employeeId];
 }
 
+// setEventsLearnedBatch bilan bir xil sabab — o'nlab action bir vaqtda
+// belgilanganda, har biri uchun alohida o'qish+yozish o'rniga BITTA o'qish
+// va BITTA yozish bilan hammasi birga saqlanadi.
+async function setActionsLearnedBatch(items = [], employeeId) {
+  if (!employeeId || !Array.isArray(items) || !items.length) return [];
+  const progress = await getActionLearnedRecord();
+  const touchedSubmodules = new Set();
+  const results = [];
+  items.forEach(({ submodule_key: submoduleKey, action_key: actionKey, learned = true }) => {
+    const normalizedSubmoduleKey = String(submoduleKey || '');
+    const normalizedActionKey = String(actionKey || '');
+    if (!normalizedSubmoduleKey || !normalizedActionKey) return;
+    const key = actionCompositeKey(normalizedSubmoduleKey, normalizedActionKey);
+    if (!progress[key]) progress[key] = {};
+    const current = progress[key][employeeId] || {};
+    progress[key][employeeId] = {
+      learned_at: learned ? new Date().toISOString() : null,
+      confirmed_at: learned ? current.confirmed_at || null : null,
+      confirmed_by: learned ? current.confirmed_by || null : null
+    };
+    touchedSubmodules.add(normalizedSubmoduleKey);
+    results.push({ submodule_key: normalizedSubmoduleKey, action_key: normalizedActionKey, ...progress[key][employeeId] });
+  });
+  await saveActionLearnedRecord(progress);
+  for (const submoduleKey of touchedSubmodules) {
+    await syncEventStatusWithActions(submoduleKey, employeeId).catch(() => null);
+  }
+  return results;
+}
+
 // Boshqaruv/admin panelida support yuborgan (o'rgandim deb belgilagan)
 // action'ni ko'rib chiqib "Tasdiqlash"/"Qaytarish" qilish uchun — submodule
 // darajasidagi setManagerConfirmation bilan bir xil mantiq, faqat alohida
@@ -519,6 +549,32 @@ async function setEventLearned(eventId, employeeId, learned = true) {
   };
   await saveNotificationRecord(record);
   return record.progress[eventId][employeeId];
+}
+
+// "Uyqur Funksiyalari" sahifasida support bir vaqtda o'nlab funksiyani
+// belgilab "Yuborish"ni bosganda, avvalgi (bittalab, ketma-ket so'rov
+// yuboruvchi) yo'l HAR BIR funksiya uchun umumiy bot_settings yozuvini
+// alohida o'qib-yozar edi — bu funksiyalar/xodimlar soni ortgani sari
+// tobora sekinlashib borardi. Endi BARCHASI bitta so'rovda, bitta
+// o'qish+yozish bilan amalga oshiriladi.
+async function setEventsLearnedBatch(items = [], employeeId) {
+  if (!employeeId || !Array.isArray(items) || !items.length) return [];
+  const record = await getNotificationRecord();
+  const results = [];
+  items.forEach(({ event_id: eventId, learned = true }) => {
+    if (!eventId) return;
+    if (!record.progress[eventId]) record.progress[eventId] = {};
+    const current = record.progress[eventId][employeeId] || {};
+    record.progress[eventId][employeeId] = {
+      ...current,
+      learned_at: learned ? new Date().toISOString() : null,
+      confirmed_at: learned ? current.confirmed_at || null : null,
+      confirmed_by: learned ? current.confirmed_by || null : null
+    };
+    results.push({ event_id: eventId, ...record.progress[eventId][employeeId] });
+  });
+  await saveNotificationRecord(record);
+  return results;
 }
 
 async function getSupportEventHistory(employeeId) {
@@ -1422,6 +1478,7 @@ module.exports = {
   listNotificationEvents,
   getEventLearningStatus,
   setEventLearned,
+  setEventsLearnedBatch,
   getManagerReviewQueue,
   setManagerConfirmation,
   getManagerConfirmers,
@@ -1434,5 +1491,6 @@ module.exports = {
   getEmployeeKnowledgeProfile,
   sendPermissionActions,
   setActionLearned,
+  setActionsLearnedBatch,
   setActionConfirmed
 };

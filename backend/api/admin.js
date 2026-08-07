@@ -37,6 +37,7 @@ const {
   listNotificationEvents,
   getEventLearningStatus,
   setEventLearned,
+  setEventsLearnedBatch,
   getManagerReviewQueue,
   setManagerConfirmation,
   getManagerConfirmers,
@@ -49,6 +50,7 @@ const {
   getEmployeeKnowledgeProfile,
   sendPermissionActions,
   setActionLearned,
+  setActionsLearnedBatch,
   setActionConfirmed
 } = require('../lib/permission-view');
 const {
@@ -6611,7 +6613,7 @@ async function updateAdmin(body, currentAdmin) {
 // doim sessiyaning o'z employee_id'si bilan majburan almashtiriladi, mijoz
 // tomonidan yuborilgan qiymat hech qachon ishonilmaydi.
 const EMPLOYEE_GET_ACTIONS = new Set(['employeeActivity', 'uyqurSupportHistory', 'uyqurPermissions', 'uyqurEmployeeKnowledgeProfile', 'groups', 'privates', 'requests', 'chatDetail', 'companyInfo', 'companyModuleReports']);
-const EMPLOYEE_POST_ACTIONS = new Set(['uyqurMarkLearned', 'uyqurActionMarkLearned', 'sendMessage', 'replyRequest', 'managementProfile', 'managementAvatarUpload', 'managementAvatarRemove']);
+const EMPLOYEE_POST_ACTIONS = new Set(['uyqurMarkLearned', 'uyqurMarkLearnedBatch', 'uyqurActionMarkLearned', 'uyqurActionMarkLearnedBatch', 'sendMessage', 'replyRequest', 'managementProfile', 'managementAvatarUpload', 'managementAvatarRemove']);
 
 // "Boshqaruv paneli" (role='management') xodimlari — o'z chatiga emas,
 // balki BUTUN jamoaning bilim-darajasi statistikasiga kirish huquqiga ega.
@@ -6620,7 +6622,7 @@ const EMPLOYEE_POST_ACTIONS = new Set(['uyqurMarkLearned', 'uyqurActionMarkLearn
 // bilan bitta umumiy ro'yxatni tahrirlaydi va supportlarga xuddi shu bildirishnoma
 // mexanizmi orqali (recordPermissionToggleEvents) xabar boradi.
 const MANAGEMENT_GET_ACTIONS = new Set(['uyqurKnowledgeDashboard', 'uyqurModuleFunctionsDetail', 'uyqurFunctionsByStatus', 'uyqurEmployeeKnowledgeProfile', 'uyqurPermissions', 'uyqurSupportOverview', 'uyqurSupportHistory']);
-const MANAGEMENT_POST_ACTIONS = new Set(['uyqurPermissionsSave', 'managementProfile', 'managementAvatarUpload', 'managementAvatarRemove', 'uyqurConfirmReview', 'uyqurMarkLearned', 'uyqurActionsSend', 'uyqurActionMarkLearned', 'uyqurActionConfirmReview']);
+const MANAGEMENT_POST_ACTIONS = new Set(['uyqurPermissionsSave', 'managementProfile', 'managementAvatarUpload', 'managementAvatarRemove', 'uyqurConfirmReview', 'uyqurMarkLearned', 'uyqurMarkLearnedBatch', 'uyqurActionsSend', 'uyqurActionMarkLearned', 'uyqurActionMarkLearnedBatch', 'uyqurActionConfirmReview']);
 
 // Profil rasmi uchun ruxsat etilgan formatlar va hajm chegarasi — base64
 // belgilar soni (~4/3 nisbat), taxminan 2 MB rasm faylga to'g'ri keladi.
@@ -6790,7 +6792,9 @@ async function handlePost(action, body, currentAdmin) {
     case 'managementAvatarUpload': return uploadManagementAvatar(body, currentAdmin);
     case 'managementAvatarRemove': return removeManagementAvatar(body, currentAdmin);
     case 'uyqurMarkLearned': return setEventLearned(body.event_id, body.employee_id, body.learned !== false);
+    case 'uyqurMarkLearnedBatch': return setEventsLearnedBatch(body.items, body.employee_id);
     case 'uyqurActionMarkLearned': return setActionLearned(body.submodule_key, body.action_key, body.employee_id, body.learned !== false);
+    case 'uyqurActionMarkLearnedBatch': return setActionsLearnedBatch(body.items, body.employee_id);
     case 'uyqurActionConfirmReview': return setActionConfirmed(body.submodule_key, body.action_key, body.employee_id, body.confirmed !== false, body.manager_username || '');
     case 'uyqurConfirmReview': return setManagerConfirmation(body.event_id, body.employee_id, body.confirmed !== false, body.manager_username || '');
     case 'uyqurManagerConfirmersSave': return saveManagerConfirmers(body.usernames);

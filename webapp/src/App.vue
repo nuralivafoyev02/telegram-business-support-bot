@@ -12327,15 +12327,21 @@ async function submitEmployeeFunctionChanges() {
   const wasRevert = employeeRevertMode.value;
   startLoading('employeeSendLearned');
   try {
-    // Bir vaqtda (Promise.all) yuborilsa, backenddagi bildirishnoma yozuvi
-    // yagona umumiy record bo'lgani uchun parallel yozishlar bir-birini
-    // ustidan yozib, faqat oxirgisi saqlanib qolardi — shuning uchun
-    // navbat bilan (ketma-ket) yuboriladi.
-    for (const { row, learned } of entries) {
-      await api.markUyqurLearned({ event_id: row.event_id, employee_id: selectedSupportId.value, learned });
+    // Har bir guruh (event/action) uchun bitta batch so'rov yuboriladi —
+    // backend yagona umumiy recordni bir marta o'qib, hammasini birga
+    // yozadi, shu bilan ham race condition, ham ko'p so'rovlar sekinligi
+    // oldi olinadi.
+    if (entries.length) {
+      await api.markUyqurLearnedBatch({
+        items: entries.map(({ row, learned }) => ({ event_id: row.event_id, learned })),
+        employee_id: selectedSupportId.value
+      });
     }
-    for (const { submodule_key, action_key, learned } of actionEntries) {
-      await api.markUyqurActionLearned({ submodule_key, action_key, employee_id: selectedSupportId.value, learned });
+    if (actionEntries.length) {
+      await api.markUyqurActionLearnedBatch({
+        items: actionEntries.map(({ submodule_key, action_key, learned }) => ({ submodule_key, action_key, learned })),
+        employee_id: selectedSupportId.value
+      });
     }
     await refreshSupportHistoryIfOpen(selectedSupportId.value);
     if (actionEntries.length) await loadPermissionView();
