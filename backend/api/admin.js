@@ -2836,6 +2836,14 @@ function chatServiceEvent(message = {}) {
     };
   }
 
+  if (raw.pinned_message) {
+    return {
+      service_type: 'pinned_message',
+      user_ids: [],
+      text: `Xabar qadab qo‘yildi`
+    };
+  }
+
   return null;
 }
 
@@ -3048,6 +3056,8 @@ function buildChatDetail({ chat, requests, events, messages, employeesById, empl
         request_text: relatedRequest ? relatedRequest.initial_text || '' : '',
         status: relatedRequest ? relatedRequest.status : null,
         classification: message.classification || '',
+        action_type: message.action_type || null,
+        reactions: message.reactions || null,
         created_at: message.created_at
       };
     })
@@ -3434,7 +3444,7 @@ async function getChatDetail(query) {
       order: supabase.order('created_at', false)
     }, { maxRows: 20000 }),
     selectPaged('messages', {
-      select: 'id,tg_message_id,chat_id,from_tg_user_id,from_name,from_username,source_type,update_kind,text,classification,employee_id,business_connection_id,raw,created_at',
+      select: 'id,tg_message_id,chat_id,from_tg_user_id,from_name,from_username,source_type,update_kind,action_type,reactions,text,classification,employee_id,business_connection_id,raw,created_at',
       chat_id: supabase.eq(chatId),
       ...businessConnectionFilter(businessConnectionId),
       // Chat juda uzun bo'lsa (minglab xabar), hammasini yuklash sekinlashtiradi —

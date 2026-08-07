@@ -50,6 +50,21 @@ function messageDisplayText(message = {}) {
   if (message.video_note) return MEDIA_TEXT.video_note;
   if (message.animation) return MEDIA_TEXT.animation;
   if (message.document) return MEDIA_TEXT.document;
+  
+  if (message.left_chat_member) {
+    const user = message.left_chat_member;
+    return `${tgUserName(user)} guruhdan chiqdi`;
+  }
+  if (Array.isArray(message.new_chat_members) && message.new_chat_members.length) {
+    const names = message.new_chat_members.filter(Boolean).map(user => tgUserName(user)).filter(Boolean).join(', ');
+    return `${names || 'Foydalanuvchi'} guruhga qo'shildi`;
+  }
+  if (message.new_chat_title) return `Guruh nomi "${message.new_chat_title}" ga o'zgardi`;
+  if (message.delete_chat_photo) return 'Guruh rasmi olib tashlandi';
+  if (message.group_chat_created || message.supergroup_chat_created) return 'Guruh yaratildi';
+  if (message.migrate_to_chat_id) return `Guruh superguruhga o'tdi: ${message.migrate_to_chat_id}`;
+  if (message.pinned_message) return `Xabar qadab qo'yildi`;
+
   return '';
 }
 
@@ -260,6 +275,16 @@ async function saveMessage({ message, updateKind, sourceType, classification, em
     : employee
       ? 'employee_message'
       : 'customer_message';
+      
+  let actionType = null;
+  if (message.new_chat_members) actionType = 'new_chat_members';
+  else if (message.left_chat_member) actionType = 'left_chat_member';
+  else if (message.pinned_message) actionType = 'pinned_message';
+  else if (message.new_chat_title) actionType = 'new_chat_title';
+  else if (message.delete_chat_photo) actionType = 'delete_chat_photo';
+  else if (message.group_chat_created || message.supergroup_chat_created) actionType = 'group_chat_created';
+  else if (message.migrate_to_chat_id) actionType = 'migrate_to_chat_id';
+
   const rows = await supabase.insert('messages', [{
     tg_message_id: message.message_id,
     chat_id: chat.id,
@@ -268,6 +293,7 @@ async function saveMessage({ message, updateKind, sourceType, classification, em
     from_username: from.username || null,
     source_type: sourceType,
     update_kind: updateKind,
+    action_type: actionType,
     text,
     classification,
     employee_id: employee ? employee.id : null,
@@ -292,7 +318,16 @@ async function saveMessage({ message, updateKind, sourceType, classification, em
       source: message.source || messageSource,
       source_type: sourceType,
       update_kind: updateKind,
-      classification
+      classification,
+      
+      new_chat_members: message.new_chat_members,
+      left_chat_member: message.left_chat_member,
+      pinned_message: message.pinned_message,
+      new_chat_title: message.new_chat_title,
+      delete_chat_photo: message.delete_chat_photo,
+      group_chat_created: message.group_chat_created,
+      supergroup_chat_created: message.supergroup_chat_created,
+      migrate_to_chat_id: message.migrate_to_chat_id
     },
     created_at: message.date ? new Date(message.date * 1000).toISOString() : nowIso()
   }], { upsert: true, onConflict: 'chat_id,tg_message_id', prefer: options.prefer || 'return=representation' });

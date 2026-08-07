@@ -462,11 +462,11 @@ async function loadStoredReactionCounts(chatId, messageId) {
   return raw.reaction_counts && typeof raw.reaction_counts === 'object' ? raw.reaction_counts : {};
 }
 
-async function saveStoredReactionCounts(chatId, messageId, counts = {}) {
+async function saveStoredReactionCounts(chatId, messageId, counts = {}, reactionsList = []) {
   const saved = await getSavedReactionMessage(chatId, messageId);
   if (!saved?.id) return;
   const raw = { ...jsonObject(saved.raw), reaction_counts: counts };
-  await supabase.patch('messages', { id: supabase.eq(saved.id) }, { raw }).catch(() => null);
+  await supabase.patch('messages', { id: supabase.eq(saved.id) }, { raw, reactions: reactionsList }).catch(() => null);
 }
 
 function bestPhotoSize(photo = []) {
@@ -1001,6 +1001,14 @@ async function handleMessageReaction(reaction = {}) {
     actor_username: reaction.user?.username || null,
     new_reaction: reaction.new_reaction || []
   });
+
+  if (reaction.chat && !isGroupChat(reaction.chat)) {
+    const syntheticReactions = (reaction.new_reaction || []).map(r => ({ ...r, total_count: 1 }));
+    const currentCounts = reactionCountMap(syntheticReactions);
+    await ensureReactionContext(reaction);
+    await ensureReactionTargetMessage(reaction, reaction.chat);
+    await saveStoredReactionCounts(reaction.chat.id, reaction.message_id, currentCounts, syntheticReactions);
+  }
   return { ok: true, handled: 'message_reaction_ignored' };
 }
 
@@ -1026,7 +1034,7 @@ async function handleMessageReactionCount(reactionCount = {}) {
 
   await ensureReactionContext(reactionCount);
   await ensureReactionTargetMessage(reactionCount, chat);
-  await saveStoredReactionCounts(chat.id, reactionCount.message_id, currentCounts);
+  await saveStoredReactionCounts(chat.id, reactionCount.message_id, currentCounts, reactionCount.reactions || []);
 
   const syntheticReaction = {
     chat,
