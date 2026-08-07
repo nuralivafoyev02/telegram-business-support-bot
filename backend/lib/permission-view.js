@@ -361,6 +361,72 @@ async function syncEventStatusWithActions(submoduleKey, employeeId) {
   await saveNotificationRecord(record);
 }
 
+// syncEventStatusWithActions faqat YANGI action yozuvlari kelganda ishlaydi —
+// bu esa syncEventStatusWithActions yaratilishidan OLDIN yozib qo'yilgan
+// (eski, noto'g'ri "bittasi o'rgansa hammasi o'rgangan" mantig'i bilan
+// saqlangan) submodule holatlarini tuzatmaydi. Shu sabab "Bildirishnomalar
+// tarixi" ba'zi eski yozuvlarda hamon submodule (masalan "Partiyalar") va
+// uning action'lari orasida zid holat ko'rsatib turardi. Bu funksiya HAR
+// safar tarix/umumiy ko'rinish o'qilganda BARCHA submodule/xodim juftlarini
+// action'lar yig'indisiga moslab qayta tekshiradi va kerak bo'lsa
+// saqlangan yozuvni ham to'g'irlaydi — shunda eski xato yozuvlar ham
+// birinchi o'qishdayoq avtomatik tuzalib qoladi (alohida migratsiya
+// skripti yozishga hojat qolmaydi).
+function repairEventStatusFromActionProgress(record, viewRecord, actionProgress) {
+  const actionsBySubmoduleKey = new Map();
+  (Array.isArray(viewRecord.modules) ? viewRecord.modules : []).forEach(module => {
+    (module.submodules || []).forEach(submodule => {
+      actionsBySubmoduleKey.set(String(submodule.key), submodule.actions || []);
+    });
+  });
+  const eventBySubmoduleKey = new Map();
+  record.events.forEach(event => eventBySubmoduleKey.set(String(event.submodule_key), event));
+
+  const touchedPairs = new Set();
+  Object.keys(actionProgress).forEach(compositeKey => {
+    const submoduleKey = compositeKey.split('::')[0];
+    Object.keys(actionProgress[compositeKey] || {}).forEach(employeeId => {
+      touchedPairs.add(`${submoduleKey}::${employeeId}`);
+    });
+  });
+
+  let changed = false;
+  touchedPairs.forEach(pairKey => {
+    const separatorIndex = pairKey.indexOf('::');
+    const submoduleKey = pairKey.slice(0, separatorIndex);
+    const employeeId = pairKey.slice(separatorIndex + 2);
+    const event = eventBySubmoduleKey.get(submoduleKey);
+    const actions = actionsBySubmoduleKey.get(submoduleKey) || [];
+    if (!event || !actions.length) return;
+
+    let allConfirmed = true;
+    let allLearned = true;
+    actions.forEach(action => {
+      const key = actionCompositeKey(submoduleKey, String(action.key || action.id));
+      const entry = (actionProgress[key] && actionProgress[key][employeeId]) || null;
+      const learnedAt = entry && entry.learned_at;
+      const confirmedAt = entry && entry.confirmed_at;
+      if (!learnedAt && !confirmedAt) allLearned = false;
+      if (!confirmedAt) allConfirmed = false;
+    });
+
+    const current = (record.progress[event.id] && record.progress[event.id][employeeId]) || {};
+    const nextLearned = allLearned;
+    const nextConfirmed = allConfirmed;
+    if (Boolean(current.learned_at) === nextLearned && Boolean(current.confirmed_at) === nextConfirmed) return;
+
+    if (!record.progress[event.id]) record.progress[event.id] = {};
+    record.progress[event.id][employeeId] = {
+      ...current,
+      learned_at: nextLearned ? (current.learned_at || new Date().toISOString()) : null,
+      confirmed_at: nextConfirmed ? new Date().toISOString() : null,
+      confirmed_by: nextConfirmed ? (current.confirmed_by || null) : null
+    };
+    changed = true;
+  });
+  return changed;
+}
+
 async function setActionLearned(submoduleKey, actionKey, employeeId, learned = true) {
   const normalizedSubmoduleKey = String(submoduleKey || '');
   const normalizedActionKey = String(actionKey || '');
@@ -487,7 +553,15 @@ function progressFor(record, eventId, employeeId) {
 }
 
 async function getSupportOverview() {
-  const [employees, record] = await Promise.all([getSupportEmployees(), getNotificationRecord()]);
+  const [employees, record, viewRecord, actionProgress] = await Promise.all([
+    getSupportEmployees(),
+    getNotificationRecord(),
+    getPermissionViewRecord(),
+    getActionLearnedRecord()
+  ]);
+  if (repairEventStatusFromActionProgress(record, viewRecord, actionProgress)) {
+    await saveNotificationRecord(record);
+  }
   const total = record.events.length;
   return employees.map(employee => {
     let confirmedCount = 0;
@@ -587,6 +661,9 @@ async function getSupportEventHistory(employeeId) {
     getPermissionViewRecord(),
     getActionLearnedRecord()
   ]);
+  if (repairEventStatusFromActionProgress(record, viewRecord, actionProgress)) {
+    await saveNotificationRecord(record);
+  }
   const actionsBySubmoduleKey = new Map();
   (Array.isArray(viewRecord.modules) ? viewRecord.modules : []).forEach(module => {
     (module.submodules || []).forEach(submodule => {
