@@ -641,6 +641,8 @@
                         :disabled="isEmployeeFunctionDisabled(String(submodule.key))"
                         @change="toggleEmployeeFunctionSelected(String(submodule.key))" />
                       <span>{{ submodule.name || submodule.key }}</span>
+                      <span v-if="employeeFunctionRevertReason(submodule.key)" class="revert-reason-badge"
+                        :title="`Qaytarish sababi: ${employeeFunctionRevertReason(submodule.key)}`" @click.stop>⚠️</span>
                       <span v-if="(submodule.actions || []).length" class="uyqur-functions-card-count">
                         {{ submodule.actions.length }}
                       </span>
@@ -653,6 +655,8 @@
                           :checked="isEmployeeActionChecked(submodule, action)"
                           @change="toggleEmployeeActionSelected(submodule, action)" />
                         <span class="status-subaction-name" style="flex:1;">{{ action.name || action.key }}</span>
+                        <span v-if="employeeActionRevertReason(submodule, action)" class="revert-reason-badge"
+                          :title="`Qaytarish sababi: ${employeeActionRevertReason(submodule, action)}`">⚠️</span>
                       </label>
                     </div>
                   </template>
@@ -1551,6 +1555,7 @@
                     @click="(row.actions || []).length && toggleSupportHistoryRowExpanded(row)">
                     <td>
                       {{ row.submodule_name || row.submodule_key }}
+                      <span v-if="row.revert_reason" class="revert-reason-badge" :title="`Qaytarish sababi: ${row.revert_reason}`">⚠️</span>
                       <span v-if="(row.actions || []).length" class="uyqur-functions-card-count">{{ row.actions.length }}</span>
                     </td>
                     <td>{{ fmtDate(row.created_at) }}</td>
@@ -1571,6 +1576,7 @@
                         <label v-for="action in row.actions" :key="'support-history-action-' + row.event_id + '-' + action.id"
                           class="uyqur-functions-subaction status-subaction">
                           <span class="status-subaction-name" style="flex:1;">{{ action.name }}</span>
+                          <span v-if="action.revert_reason" class="revert-reason-badge" :title="`Qaytarish sababi: ${action.revert_reason}`">⚠️</span>
                           <span class="badge" :class="action.confirmed ? 'green' : (action.learned ? 'blue' : 'orange')">
                             {{ action.confirmed ? '✓ Qabul qilindi' : (action.learned ? 'O‘rganildi' : 'Kutilmoqda') }}
                           </span>
@@ -3493,6 +3499,7 @@
                     @click="(row.actions || []).length && toggleSupportHistoryRowExpanded(row)">
                     <td>
                       {{ row.submodule_name || row.submodule_key }}
+                      <span v-if="row.revert_reason" class="revert-reason-badge" :title="`Qaytarish sababi: ${row.revert_reason}`">⚠️</span>
                       <span v-if="(row.actions || []).length" class="uyqur-functions-card-count">{{ row.actions.length }}</span>
                     </td>
                     <td>{{ fmtDate(row.created_at) }}</td>
@@ -3513,6 +3520,7 @@
                         <label v-for="action in row.actions" :key="'support-history-action-' + row.event_id + '-' + action.id"
                           class="uyqur-functions-subaction status-subaction">
                           <span class="status-subaction-name" style="flex:1;">{{ action.name }}</span>
+                          <span v-if="action.revert_reason" class="revert-reason-badge" :title="`Qaytarish sababi: ${action.revert_reason}`">⚠️</span>
                           <span class="badge" :class="action.confirmed ? 'green' : (action.learned ? 'blue' : 'orange')">
                             {{ action.confirmed ? '✓ Qabul qilindi' : (action.learned ? 'O‘rganildi' : 'Kutilmoqda') }}
                           </span>
@@ -12316,6 +12324,17 @@ function toggleEmployeeFunctionSelected(key) {
 function employeeActionKey(submodule, action) {
   return `${submodule.key}::${action.key || action.id}`;
 }
+// Menejer "Qaytarish" bosganda yozgan sababi — support paneldagi ro'yxatda
+// shu funksiya/action yonida ko'rsatish uchun (supportHistoryRows'dan,
+// getSupportEventHistory allaqachon shu maydonni qaytaradi).
+function employeeFunctionRevertReason(key) {
+  return employeeHistoryByKey.value.get(String(key))?.revert_reason || '';
+}
+function employeeActionRevertReason(submodule, action) {
+  const row = employeeHistoryByKey.value.get(String(submodule.key));
+  const actionEntry = row && (row.actions || []).find(item => String(item.key || item.id) === String(action.key || action.id));
+  return actionEntry?.revert_reason || '';
+}
 function isEmployeeActionServerLearned(action) {
   return (action.learned_employees || []).some(person => String(person.id) === selectedSupportId.value);
 }
@@ -12410,54 +12429,80 @@ async function toggleConfirmed(row) {
 
 async function confirmSelectedSupportHistory() {
   if ((!supportHistorySelectedEvents.value.size && !supportHistorySelectedActions.value.size) || !selectedSupportId.value) return;
+  // Har bir belgilangan qator o'zining hozirgi holatiga qarab TESKARIGA
+  // o'giriladi — hali tasdiqlanmagan bo'lsa tasdiqlanadi, allaqachon
+  // tasdiqlangan bo'lsa qaytariladi (bekor qilinadi). Shu orqali bitta
+  // tugma bilan ham "Tasdiqlash", ham "Qaytarish" ishlaydi. (Bitta
+  // filtrlangan ko'rinishda ham tasdiqlangan, ham tasdiqlanmagan action'lar
+  // aralash bo'lishi mumkin — masalan "Jarayonda" filtri submodule
+  // darajasida tasdiqlanmagan, lekin ichidagi ayrim action'lar allaqachon
+  // tasdiqlangan bo'lishi mumkin — shuning uchun filtr nomiga emas, har
+  // bir elementning O'Z holatiga qarab yo'nalish tanlanishi SHART.)
+  const rowsById = new Map(supportHistoryRows.value.map(row => [row.event_id, row]));
+  const eventIds = Array.from(supportHistorySelectedEvents.value);
+  const eventTargets = eventIds.map(eventId => {
+    const row = rowsById.get(eventId);
+    return { eventId, confirmed: !(row && row.confirmed) };
+  });
+  // Agar bu action submodule qatorining o'zi orqali (cascade) tanlangan
+  // bo'lsa — uning yo'nalishi O'ZINING alohida holatidan emas, balki
+  // SUBMODULE qaysi tomonga o'zgarayotganidan olinadi. Aks holda (agar
+  // submodule qatori tanlanmagan, faqat shu action alohida belgilangan
+  // bo'lsa) action o'z holatiga qarab teskariga o'giriladi. Bu farq
+  // muhim: submodule ko'pincha alohida tegilmagan action'larni ham o'z
+  // ichiga oladi (support faqat butun funksiyani belgilagan bo'lishi
+  // mumkin) — ularning "o'z holati" har doim bo'sh/false bo'ladi, shuning
+  // uchun submodule "Qaytarish" qilinsa ham, ular xato ravishda aksincha
+  // tasdiqlanib ketmasligi kerak.
+  const actionTargets = Array.from(supportHistorySelectedActions.value.values()).map(entry => {
+    const row = rowsById.get(entry.event_id);
+    const cascadedFromEvent = supportHistorySelectedEvents.value.has(entry.event_id);
+    let confirmed;
+    if (cascadedFromEvent) {
+      confirmed = !(row && row.confirmed);
+    } else {
+      const action = row && (row.actions || []).find(item => String(item.key || item.id) === String(entry.action_key));
+      confirmed = !(action && action.confirmed);
+    }
+    return { entry, confirmed };
+  });
+
+  // Agar hech bo'lmasa bitta element QAYTARILAYOTGAN bo'lsa (tasdiqlangandan
+  // tasdiqlanmaganga o'tayotgan bo'lsa), sababi so'raladi — support panelda
+  // ko'rsatish uchun. Sabab kiritilmasa yoki bekor qilinsa, amal to'xtatiladi.
+  const hasRevert = eventTargets.some(item => !item.confirmed) || actionTargets.some(item => !item.confirmed);
+  let revertReason = '';
+  if (hasRevert) {
+    const input = window.prompt('Nima uchun qaytarilyapti? Sababini yozing (support panelda ko‘rsatiladi):', '');
+    if (input === null) return;
+    revertReason = input.trim();
+    if (!revertReason) return showToast('Qaytarish sababi kiritilishi shart');
+  }
+
   startLoading('confirmSupportHistory');
   try {
-    const eventIds = Array.from(supportHistorySelectedEvents.value);
-    // Har bir belgilangan qator o'zining hozirgi holatiga qarab TESKARIGA
-    // o'giriladi — hali tasdiqlanmagan bo'lsa tasdiqlanadi, allaqachon
-    // tasdiqlangan bo'lsa qaytariladi (bekor qilinadi). Shu orqali bitta
-    // tugma bilan ham "Tasdiqlash", ham "Qaytarish" ishlaydi. (Bitta
-    // filtrlangan ko'rinishda ham tasdiqlangan, ham tasdiqlanmagan action'lar
-    // aralash bo'lishi mumkin — masalan "Jarayonda" filtri submodule
-    // darajasida tasdiqlanmagan, lekin ichidagi ayrim action'lar allaqachon
-    // tasdiqlangan bo'lishi mumkin — shuning uchun filtr nomiga emas, har
-    // bir elementning O'Z holatiga qarab yo'nalish tanlanishi SHART.)
-    const rowsById = new Map(supportHistoryRows.value.map(row => [row.event_id, row]));
     // Har bir belgilangan submodule/action uchun bitta batch so'rov
     // yuboriladi — backend yagona umumiy recordni bir marta o'qib, hammasini
     // birga yozadi (avvalgi ketma-ket, bittalab so'rov yo'lidan tezroq).
-    if (eventIds.length) {
+    if (eventTargets.length) {
       await api.confirmUyqurReviewBatch({
-        items: eventIds.map(eventId => {
-          const row = rowsById.get(eventId);
-          return { event_id: eventId, employee_id: selectedSupportId.value, confirmed: !(row && row.confirmed) };
-        }),
+        items: eventTargets.map(({ eventId, confirmed }) => ({
+          event_id: eventId,
+          employee_id: selectedSupportId.value,
+          confirmed,
+          reason: confirmed ? '' : revertReason
+        })),
         manager_username: ''
       });
     }
-    if (supportHistorySelectedActions.value.size) {
-      // Agar bu action submodule qatorining o'zi orqali (cascade) tanlangan
-      // bo'lsa — uning yo'nalishi O'ZINING alohida holatidan emas, balki
-      // SUBMODULE qaysi tomonga o'zgarayotganidan olinadi. Aks holda (agar
-      // submodule qatori tanlanmagan, faqat shu action alohida belgilangan
-      // bo'lsa) action o'z holatiga qarab teskariga o'giriladi. Bu farq
-      // muhim: submodule ko'pincha alohida tegilmagan action'larni ham o'z
-      // ichiga oladi (support faqat butun funksiyani belgilagan bo'lishi
-      // mumkin) — ularning "o'z holati" har doim bo'sh/false bo'ladi, shuning
-      // uchun submodule "Qaytarish" qilinsa ham, ular xato ravishda aksincha
-      // tasdiqlanib ketmasligi kerak.
-      const items = Array.from(supportHistorySelectedActions.value.values()).map(entry => {
-        const row = rowsById.get(entry.event_id);
-        const cascadedFromEvent = supportHistorySelectedEvents.value.has(entry.event_id);
-        let confirmed;
-        if (cascadedFromEvent) {
-          confirmed = !(row && row.confirmed);
-        } else {
-          const action = row && (row.actions || []).find(item => String(item.key || item.id) === String(entry.action_key));
-          confirmed = !(action && action.confirmed);
-        }
-        return { submodule_key: entry.submodule_key, action_key: entry.action_key, employee_id: selectedSupportId.value, confirmed };
-      });
+    if (actionTargets.length) {
+      const items = actionTargets.map(({ entry, confirmed }) => ({
+        submodule_key: entry.submodule_key,
+        action_key: entry.action_key,
+        employee_id: selectedSupportId.value,
+        confirmed,
+        reason: confirmed ? '' : revertReason
+      }));
       await api.confirmUyqurActionReviewBatch({ items, manager_username: '' });
     }
     supportHistorySelectedEvents.value = new Set();

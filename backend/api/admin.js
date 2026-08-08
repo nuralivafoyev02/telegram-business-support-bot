@@ -6836,9 +6836,9 @@ async function handlePost(action, body, currentAdmin) {
     case 'uyqurMarkLearnedBatch': return setEventsLearnedBatch(body.items, body.employee_id);
     case 'uyqurActionMarkLearned': return setActionLearned(body.submodule_key, body.action_key, body.employee_id, body.learned !== false);
     case 'uyqurActionMarkLearnedBatch': return setActionsLearnedBatch(body.items, body.employee_id);
-    case 'uyqurActionConfirmReview': return setActionConfirmed(body.submodule_key, body.action_key, body.employee_id, body.confirmed !== false, body.manager_username || '');
+    case 'uyqurActionConfirmReview': return setActionConfirmed(body.submodule_key, body.action_key, body.employee_id, body.confirmed !== false, body.manager_username || '', body.reason || '');
     case 'uyqurActionConfirmReviewBatch': return setActionsConfirmedBatch(body.items, body.manager_username || '');
-    case 'uyqurConfirmReview': return setManagerConfirmation(body.event_id, body.employee_id, body.confirmed !== false, body.manager_username || '');
+    case 'uyqurConfirmReview': return setManagerConfirmation(body.event_id, body.employee_id, body.confirmed !== false, body.manager_username || '', body.reason || '');
     case 'uyqurConfirmReviewBatch': return setManagerConfirmationBatch(body.items, body.manager_username || '');
     case 'uyqurManagerConfirmersSave': return saveManagerConfirmers(body.usernames);
     case 'uyqurResetNotifications': return resetPermissionNotifications();

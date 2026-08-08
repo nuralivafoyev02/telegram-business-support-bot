@@ -3900,6 +3900,13 @@ body {
   flex-shrink: 0;
 }
 
+.revert-reason-badge {
+  flex-shrink: 0;
+  font-size: 13px;
+  line-height: 1;
+  cursor: help;
+}
+
 .uyqur-functions-subactions {
   display: flex;
   flex-direction: column;

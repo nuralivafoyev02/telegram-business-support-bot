@@ -483,7 +483,7 @@ async function setActionsLearnedBatch(items = [], employeeId) {
 // action'ni ko'rib chiqib "Tasdiqlash"/"Qaytarish" qilish uchun — submodule
 // darajasidagi setManagerConfirmation bilan bir xil mantiq, faqat alohida
 // action-progress yozuvida saqlanadi.
-async function setActionConfirmed(submoduleKey, actionKey, employeeId, confirmed = true, managerName = '') {
+async function setActionConfirmed(submoduleKey, actionKey, employeeId, confirmed = true, managerName = '', reason = '') {
   const normalizedSubmoduleKey = String(submoduleKey || '');
   const normalizedActionKey = String(actionKey || '');
   if (!normalizedSubmoduleKey || !normalizedActionKey || !employeeId) {
@@ -503,7 +503,10 @@ async function setActionConfirmed(submoduleKey, actionKey, employeeId, confirmed
     // "Kutilmoqda"ga tushib ketardi.
     learned_at: current.learned_at || new Date().toISOString(),
     confirmed_at: confirmed ? new Date().toISOString() : null,
-    confirmed_by: confirmed ? (managerName || null) : null
+    confirmed_by: confirmed ? (managerName || null) : null,
+    // "Qaytarish" sababi — support panelda ko'rsatish uchun; qayta
+    // tasdiqlansa eskirgan sabab tozalanadi.
+    revert_reason: confirmed ? null : (String(reason || '').trim() || current.revert_reason || null)
   };
   await saveActionLearnedRecord(progress);
   await syncEventStatusWithActions(normalizedSubmoduleKey, employeeId).catch(() => null);
@@ -519,7 +522,7 @@ async function setActionsConfirmedBatch(items = [], managerName = '') {
   const progress = await getActionLearnedRecord();
   const touchedPairs = new Set();
   const results = [];
-  items.forEach(({ submodule_key: submoduleKey, action_key: actionKey, employee_id: employeeId, confirmed = true }) => {
+  items.forEach(({ submodule_key: submoduleKey, action_key: actionKey, employee_id: employeeId, confirmed = true, reason = '' }) => {
     const normalizedSubmoduleKey = String(submoduleKey || '');
     const normalizedActionKey = String(actionKey || '');
     if (!normalizedSubmoduleKey || !normalizedActionKey || !employeeId) return;
@@ -530,7 +533,8 @@ async function setActionsConfirmedBatch(items = [], managerName = '') {
       ...current,
       learned_at: current.learned_at || new Date().toISOString(),
       confirmed_at: confirmed ? new Date().toISOString() : null,
-      confirmed_by: confirmed ? (managerName || null) : null
+      confirmed_by: confirmed ? (managerName || null) : null,
+      revert_reason: confirmed ? null : (String(reason || '').trim() || current.revert_reason || null)
     };
     touchedPairs.add(`${normalizedSubmoduleKey}::${employeeId}`);
     results.push({ submodule_key: normalizedSubmoduleKey, action_key: normalizedActionKey, employee_id: employeeId, ...progress[key][employeeId] });
@@ -757,7 +761,10 @@ async function getSupportEventHistory(employeeId) {
         learned,
         learned_at: anyActionTouched ? (actionEntry.learned_at || null) : (eventLearned ? progress.learned_at : null),
         confirmed,
-        confirmed_at: anyActionTouched ? (actionEntry.confirmed_at || null) : (eventConfirmed ? progress.confirmed_at : null)
+        confirmed_at: anyActionTouched ? (actionEntry.confirmed_at || null) : (eventConfirmed ? progress.confirmed_at : null),
+        // "Qaytarish" bosilganda yozilgan sabab — support panelda shu
+        // funksiya nega qaytarilganini ko'rsatish uchun.
+        revert_reason: anyActionTouched ? (actionEntry.revert_reason || null) : (progress.revert_reason || null)
       };
     });
     return {
@@ -770,6 +777,7 @@ async function getSupportEventHistory(employeeId) {
       learned_at: eventLearned ? (progress.learned_at || null) : null,
       confirmed: eventConfirmed,
       confirmed_at: eventConfirmed ? (progress.confirmed_at || null) : null,
+      revert_reason: progress.revert_reason || null,
       actions
     };
   }
@@ -855,7 +863,7 @@ async function saveManagerConfirmers(usernames = []) {
   return { usernames: normalized };
 }
 
-async function setManagerConfirmation(eventId, employeeId, confirmed = true, managerName = '') {
+async function setManagerConfirmation(eventId, employeeId, confirmed = true, managerName = '', reason = '') {
   if (!eventId || !employeeId) throw new Error('event_id va employee_id majburiy');
   // "Menejerlar" bo'limi parol bilan himoyalangani uchun, tasdiqlashni kim
   // bosgani bo'yicha qo'shimcha cheklov qo'llanmaydi — cheklovsiz.
@@ -870,7 +878,10 @@ async function setManagerConfirmation(eventId, employeeId, confirmed = true, man
     // menejer tasdig'i (confirmed_at) bekor qilinadi.
     learned_at: current.learned_at || new Date().toISOString(),
     confirmed_at: confirmed ? new Date().toISOString() : null,
-    confirmed_by: confirmed ? (managerName || null) : null
+    confirmed_by: confirmed ? (managerName || null) : null,
+    // "Qaytarish" sababi — support panelda ko'rsatish uchun; qayta
+    // tasdiqlansa eskirgan sabab tozalanadi.
+    revert_reason: confirmed ? null : (String(reason || '').trim() || current.revert_reason || null)
   };
   await saveNotificationRecord(record);
   return record.progress[eventId][employeeId];
@@ -883,7 +894,7 @@ async function setManagerConfirmationBatch(items = [], managerName = '') {
   if (!Array.isArray(items) || !items.length) return [];
   const record = await getNotificationRecord();
   const results = [];
-  items.forEach(({ event_id: eventId, employee_id: employeeId, confirmed = true }) => {
+  items.forEach(({ event_id: eventId, employee_id: employeeId, confirmed = true, reason = '' }) => {
     if (!eventId || !employeeId) return;
     if (!record.progress[eventId]) record.progress[eventId] = {};
     const current = record.progress[eventId][employeeId] || {};
@@ -891,7 +902,8 @@ async function setManagerConfirmationBatch(items = [], managerName = '') {
       ...current,
       learned_at: current.learned_at || new Date().toISOString(),
       confirmed_at: confirmed ? new Date().toISOString() : null,
-      confirmed_by: confirmed ? (managerName || null) : null
+      confirmed_by: confirmed ? (managerName || null) : null,
+      revert_reason: confirmed ? null : (String(reason || '').trim() || current.revert_reason || null)
     };
     results.push({ event_id: eventId, employee_id: employeeId, ...record.progress[eventId][employeeId] });
   });
