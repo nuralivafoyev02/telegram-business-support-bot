@@ -9991,20 +9991,17 @@ function companyModuleChartModuleIsActive(row = {}, key = '', metricKeys = []) {
   return false;
 }
 
-function companyModuleChartTooltipMetricTexts(row = {}, key = '', metricKeys = []) {
-  const hasActivity = metricKeys.includes('activity');
-  const hasActions = metricKeys.includes('actions');
-  if (hasActivity && hasActions) {
-    return {
-      dual: true,
-      activityText: companyModuleChartValueText(companyModuleChartMetricValue(row, key, 'activity'), 'activity'),
-      actionsText: companyModuleChartValueText(companyModuleChartMetricValue(row, key, 'actions'), 'actions')
-    };
-  }
-  const metric = hasActions ? 'actions' : 'activity';
+// Bo'lim (Ta'minot, Kassa va h.k.) darajasida haqiqiy "amal soni" ma'lumoti
+// mavjud emas — tashqi Uyqur tizimi bo'lim uchun faqat "ishlatilganmi
+// (ha/yo'q)" beradi, sonli amal ma'lumoti yo'q. Shu sabab bu qatorlar
+// "Amallar soni" tugmasi yoqilgan bo'lsa ham HAR DOIM foiz (%) ko'rinishida
+// ko'rsatiladi — "N kompaniya" degan chalg'ituvchi yozuv o'rniga. Faqat
+// "O'rtacha" qatori (companyModuleChartAverageValueText) haqiqiy umumiy
+// amal soniga ega (barcha kompaniyalar bo'yicha yig'indi).
+function companyModuleChartTooltipMetricTexts(row = {}, key = '') {
   return {
     dual: false,
-    valueText: companyModuleChartValueText(companyModuleChartMetricValue(row, key, metric), metric)
+    valueText: companyModuleChartValueText(companyModuleChartMetricValue(row, key, 'activity'), 'activity')
   };
 }
 
