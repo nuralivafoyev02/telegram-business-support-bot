@@ -3461,53 +3461,6 @@
               <div v-else class="empty">{{ loadingAction === 'tab' ? 'Yuklanmoqda...' : 'Funksiyalar topilmadi' }}</div>
             </section>
 
-            <section class="card pad settings-card">
-              <div class="settings-head">
-                <div>
-                  <div class="card-title">Supportlar</div>
-                </div>
-              </div>
-              <div class="table-wrap">
-                <table v-if="supportOverview.length">
-                  <thead>
-                    <tr>
-                      <th>#</th>
-                      <th>Support</th>
-                      <th>%</th>
-                      <th>Bildirishnomalar</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="(row, index) in supportOverview" :key="row.id" class="clickable-row"
-                      :class="{ active: selectedSupportId === String(row.id) }" @click="openSupportHistory(row)">
-                      <td>{{ index + 1 }}</td>
-                      <td>
-                        <span class="employee-cell">
-                          <span class="employee-avatar fallback">{{ employeeInitials(row) }}</span>
-                          <span>
-                            <b>{{ row.full_name }}</b><br />
-                            <span class="muted">@{{ row.username || '—' }}</span>
-                          </span>
-                        </span>
-                      </td>
-                      <td>{{ row.percent }}%</td>
-                      <td>
-                        <span class="notif-bell" title="Hali tasdiqlanmaganlar" @click.stop="openSupportHistory(row, 'pending')">
-                          🔔
-                          <span v-if="row.unread" class="notif-badge">{{ row.unread }}</span>
-                        </span>
-                        <span class="notif-divider"></span>
-                        <span class="notif-done" title="Tasdiqlanganlar" @click.stop="openSupportHistory(row, 'done')">
-                          ✅
-                          <span v-if="row.confirmed" class="notif-done-badge">{{ row.confirmed }}</span>
-                        </span>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-                <div v-else class="empty">Support xodimlar topilmadi</div>
-              </div>
-            </section>
           </template>
         </div>
       </Transition>

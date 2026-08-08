@@ -2637,12 +2637,18 @@ function enrichOpenRequests({
 
 async function getOpenRequestInsights(options = {}) {
   const lite = Boolean(options.lite);
-  const requests = await supabase.select('support_requests', {
+  // "Statistikani boshidan boshlash" qo'llangan bo'lsa, hozir ochiq turgan,
+  // lekin reset vaqtidan OLDIN yaratilgan ticketlar ham "Ochiq qolgan"
+  // hisobiga (bazadan o'chirilmasdan) kirmay qo'yishi kerak.
+  const resetAt = await getStatsResetAt();
+  const rawRequests = await supabase.select('support_requests', {
     select: 'id,source_type,chat_id,company_id,customer_tg_id,customer_name,customer_username,initial_message_id,initial_text,status,open_source,opened_by_employee_id,assigned_to_employee_id,business_connection_id,created_at',
     status: 'eq.open',
     order: supabase.order('created_at', false),
-    limit: '500'
+    limit: '500',
+    ...rangeQuery('created_at', clampWindowStart(null, resetAt))
   }).catch(() => []);
+  const requests = resetAt ? rawRequests.filter(request => String(request.created_at || '') >= resetAt) : rawRequests;
 
   if (lite) {
     const now = new Date();
