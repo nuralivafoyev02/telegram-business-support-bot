@@ -8415,7 +8415,21 @@ function matchesCompanyModuleFilter(row = {}, filters = []) {
   if (supportKeys.length) {
     const usernames = supportKeys.map(key => key.slice(8));
     const rowUsername = normalizeSupportUsername(row.uyqur_support_username);
-    if (!usernames.includes(rowUsername)) return false;
+    // Aniq (exact) moslik yetarli bo'lmasligi mumkin — kompaniyadagi
+    // `uyqur_support_username` ba'zan xodimning login username'i bilan
+    // bir xil bo'lmaydi (masalan to'liq ism yozilgan bo'lishi mumkin).
+    // Shu sabab, aniq moslik topilmasa, xodimlar ro'yxatidagi shu
+    // username'ga mos xodimning username/full_name'i orqali ham
+    // (moslashuvchan taqqoslash bilan) tekshiriladi.
+    const matches = usernames.some(username => {
+      if (username === rowUsername) return true;
+      if (supportIdentitiesMatch(row.uyqur_support_username, username)) return true;
+      const employee = employees.value.find(item => normalizeSupportUsername(item.username) === username);
+      if (!employee) return false;
+      return supportIdentitiesMatch(row.uyqur_support_username, employee.username)
+        || supportIdentitiesMatch(row.uyqur_support_username, employee.full_name);
+    });
+    if (!matches) return false;
   }
   return true;
 }
