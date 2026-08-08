@@ -613,7 +613,7 @@
                 </div>
               </div>
             </div>
-            <div v-if="myLockedModuleName" class="empty compact" style="background:#fff7ed; color:#9a3412; border:1px solid #fed7aa; border-radius:8px; padding:10px 14px; margin-bottom:12px; text-align:left;">
+            <div v-if="myLockedModuleName && moduleLockBannerVisible" class="empty compact" style="background:#fff7ed; color:#9a3412; border:1px solid #fed7aa; border-radius:8px; padding:10px 14px; margin-bottom:12px; text-align:left;">
               ⚠️ "{{ myLockedModuleName }}" bo‘limidagi funksiyalar hali tasdiqlanmagan — avval shular tasdiqlanishi kerak, keyin boshqa bo‘limni yuborishingiz mumkin.
             </div>
             <div class="uyqur-functions-groups" ref="permissionGroupsRef"
@@ -12319,6 +12319,22 @@ const myLockedModuleName = computed(() => {
   const pending = supportHistoryRows.value.find(row => row.learned && !row.confirmed);
   return pending ? (pending.module_name || '') : '';
 });
+// Ogohlantirish banneri doim ilashib turmasin — qulflangan bo'lim
+// paydo bo'lganda (yoki o'zgarganda) 10 soniya ko'rinib, keyin o'zi
+// yopiladi. Checkboxlarni o'chirish (isEmployeeFunctionDisabled va h.k.)
+// esa myLockedModuleName'ning o'ziga bog'liq — bu faqat bannerning
+// ko'rinishiga tegishli, cheklovning o'ziga ta'sir qilmaydi.
+const moduleLockBannerVisible = ref(false);
+let moduleLockBannerTimer = null;
+watch(myLockedModuleName, value => {
+  if (moduleLockBannerTimer) clearTimeout(moduleLockBannerTimer);
+  if (!value) {
+    moduleLockBannerVisible.value = false;
+    return;
+  }
+  moduleLockBannerVisible.value = true;
+  moduleLockBannerTimer = setTimeout(() => { moduleLockBannerVisible.value = false; }, 10000);
+}, { immediate: true });
 function isEmployeeFunctionDisabled(key, moduleName = '') {
   if (isEmployeeFunctionConfirmed(key)) return true;
   const learned = Boolean(employeeHistoryByKey.value.get(key)?.learned);
