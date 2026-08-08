@@ -11,6 +11,7 @@ const {
   findCompanyInfoRow,
   companyNameFromChatTitle
 } = require('./company-resolution');
+const { getStatsResetAt } = require('./stats-reset');
 
 function todayUz() {
   return new Intl.DateTimeFormat('uz-UZ', {
@@ -150,7 +151,7 @@ function buildOpenGroupRows(requests, chats) {
 }
 
 async function loadMainStatsData() {
-  const [summaryRows, employees, chats, requests, companyInfoCache, groupChats] = await Promise.all([
+  const [summaryRows, employees, chats, rawRequests, companyInfoCache, groupChats, resetAt] = await Promise.all([
     stats.selectTodaySummary({ select: '*', limit: '1' }),
     supabase.select('employees', { select: 'id,full_name,username,role,is_active', is_active: 'eq.true', limit: '1000' }).catch(() => []),
     stats.selectChatStatistics({ select: '*', order: 'open_requests.desc', limit: '50' }).catch(() => []),
@@ -163,8 +164,12 @@ async function loadMainStatsData() {
     // Guruh nomi ("China House (6-kotej)" kabi) orqali kompaniyani topish
     // zaxira usuli uchun kerak — "Hodimlar reytingi"dagi bilan bir xil
     // usulda ishlashi uchun.
-    supabase.select('tg_chats', { select: 'chat_id,title,company_id', source_type: 'eq.group', limit: '5000' }).catch(() => [])
+    supabase.select('tg_chats', { select: 'chat_id,title,company_id', source_type: 'eq.group', limit: '5000' }).catch(() => []),
+    getStatsResetAt().catch(() => '')
   ]);
+  // "Statistikani boshidan boshlash" qo'llangan bo'lsa, shu vaqtdan oldingi
+  // ticketlar (bazadan o'chirilmasdan) kunlik hisobotga ham kirmaydi.
+  const requests = resetAt ? rawRequests.filter(request => String(request.created_at || '') >= resetAt) : rawRequests;
 
   return { summaryRows, employees, chats, requests, companyInfoCache, groupChats };
 }

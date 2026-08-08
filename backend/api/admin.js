@@ -65,6 +65,7 @@ const {
 } = require('../lib/company-report');
 const { getStoredClickUpCompanyLinks, syncClickUpCompanyLinks } = require('../lib/clickup-company-links');
 const { notifyOperationalLog, notifyOperationalError } = require('../lib/log-notifier');
+const { getStatsResetAt, setStatsResetAt, clampWindowStart } = require('../lib/stats-reset');
 const stats = require('../lib/stats');
 const { refreshTicketNotificationMessage, loadRequestById } = require('../lib/ticket-notifier');
 const botHandler = require('./bot');
@@ -1449,8 +1450,10 @@ function analyticsWindow(periods = [], keys = {}) {
 }
 
 function rangeQuery(field, window) {
-  if (!window || !window.start || !window.end) return {};
-  return { [field]: [`gte.${window.start}`, `lt.${window.end}`] };
+  if (!window || !window.start) return {};
+  const filters = [`gte.${window.start}`];
+  if (window.end) filters.push(`lt.${window.end}`);
+  return { [field]: filters };
 }
 
 async function selectAnalyticsRequests(window, options = {}) {
@@ -1460,9 +1463,10 @@ async function selectAnalyticsRequests(window, options = {}) {
     limit: String(options.limit || '10000')
   };
 
+  const effectiveWindow = clampWindowStart(window, options.resetAt || '');
   return supabase.select('support_requests', {
     ...baseQuery,
-    ...rangeQuery('created_at', window)
+    ...rangeQuery('created_at', effectiveWindow)
   }).catch(() => []);
 }
 
@@ -1482,9 +1486,10 @@ async function getDashboardAnalytics(query = {}) {
   const periods = requestedAnalyticsPeriods(query, customPeriod);
   const trendPeriods = requestedAnalyticsTrendPeriods(query, customPeriod);
   const window = analyticsWindow(mergeAnalyticsPeriodKeys(periods, trendPeriods), keys);
+  const resetAt = await getStatsResetAt();
 
   const [requests, chats, employees, companies, companyMembers, companyInfoCache] = await Promise.all([
-    selectAnalyticsRequests(window, { limit: statsFocus ? '6000' : '10000' }),
+    selectAnalyticsRequests(window, { limit: statsFocus ? '6000' : '10000', resetAt }),
     statsFocus
       ? Promise.resolve([])
       : stats.selectChatStatistics({ select: '*', is_active: 'eq.true', limit: '5000' }).catch(() => []),
@@ -3314,6 +3319,7 @@ async function listRequests(query) {
   // Davr SQL darajasida ham cheklanadi (JS filtri natijasi bilan bir xil,
   // shu bilan har safar butun jadval o'qib olinishi shart bo'lmaydi) — faqat
   // "all" bo'lmagan davrlar uchun, JS filtri xavfsizlik uchun saqlab qolinadi.
+  let dateWindow = null;
   if (periodContext && periodContext.period !== 'all') {
     const pk = periodContext.period;
     const keys = periodContext.keys;
@@ -3321,8 +3327,14 @@ async function listRequests(query) {
     const endDateKey = pk === 'custom' ? keys.customEnd : keys.today;
     const start = isoFromTashkentDateStart(startDateKey);
     const end = isoAfterTashkentDate(endDateKey);
-    if (start && end) Object.assign(params, rangeQuery('created_at', { start, end }));
+    if (start && end) dateWindow = { start, end };
   }
+  // "Statistikani boshidan boshlash" qo'llangan bo'lsa, davr filtridan
+  // qat'i nazar (hatto "Hammasi" bo'lsa ham) shu vaqtdan oldingi ticketlar
+  // bazadan o'chirilmasdan, faqat shu ro'yxatga kirmay qoladi.
+  const resetAt = await getStatsResetAt();
+  const effectiveWindow = clampWindowStart(dateWindow, resetAt);
+  if (effectiveWindow) Object.assign(params, rangeQuery('created_at', effectiveWindow));
   const requests = (await selectPaged('support_requests', params, { maxRows }))
     .filter(request => !periodContext || inCurrentPeriod(request.created_at, periodContext.period, periodContext.keys));
 
@@ -6741,6 +6753,7 @@ async function handleGet(action, query, session) {
     case 'employees': return listEmployees(query);
     case 'employeeActivity': return getEmployeeActivity(query);
     case 'settings': return listSettings();
+    case 'statsResetInfo': return getStatsResetAt().then(reset_at => ({ reset_at }));
     case 'clickupTasks': return listClickUpTasks(query);
     case 'telegramWebhookInfo': return getTelegramWebhookStatus();
     case 'uyqurPermissions': return getPermissionView({ withProgress: true });
@@ -6780,6 +6793,7 @@ async function handlePost(action, body, currentAdmin) {
     case 'sendEmployeesMessage': return sendToEmployees({ ...body, created_by: currentAdmin.username });
     case 'assignChatCompany': return assignChatCompany(body);
     case 'settings': return updateSettings(body);
+    case 'statsResetStart': return setStatsResetAt();
     case 'clickupTask': return updateClickUpTaskRecord(body);
     case 'aiKnowledgeExtract': return extractAiKnowledge(body);
     case 'adminProfile': return updateAdmin(body, currentAdmin);

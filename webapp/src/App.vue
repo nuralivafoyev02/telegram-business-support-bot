@@ -3312,6 +3312,29 @@
                       ? 'Saqlamoqda...' : 'Saqlash' }}</button>
                   </form>
                 </section>
+
+                <section class="card pad settings-card settings-panel">
+                  <div class="settings-head">
+                    <div>
+                      <div class="card-title">Statistikani boshidan boshlash</div>
+                      <div class="card-note" v-if="statsResetAt">
+                        Hozirgi holat: {{ fmtDate(statsResetAt) }} dan boshlab hisoblanmoqda.
+                      </div>
+                      <div class="card-note" v-else>
+                        Hozircha qo‘llanilmagan — barcha ticketlar bo‘yicha hisoblanmoqda.
+                      </div>
+                    </div>
+                  </div>
+                  <p class="muted" style="margin:0 0 12px;">
+                    Bosilsa, "Support faoliyati", "Hodimlar reytingi" va kunlik Telegram hisobotidagi sonlar shu
+                    lahzadan boshlab qayta hisoblana boshlaydi — oldingi ticketlar bazadan o‘chirilmaydi, faqat
+                    hisoblashga kirmay qo‘yadi.
+                  </p>
+                  <button class="btn danger-menu-item" type="button" :disabled="loadingAction === 'statsReset'"
+                    @click="resetStatsFromNow">
+                    {{ loadingAction === 'statsReset' ? 'Bajarilmoqda...' : 'Statistikani hozirdan boshlash' }}
+                  </button>
+                </section>
               </div>
             </div>
           </template>
@@ -6114,6 +6137,7 @@ const customPeriodError = ref('');
 const companyAssignForm = reactive({ companyKey: '', search: '' });
 const employeeForm = reactive({ id: '', tg_user_id: '', full_name: '', username: '', phone: '', role: 'support', clickup_user_id: '', is_active: true, company_id: '', new_password: '' });
 const adminForm = reactive({ username: 'admin', full_name: 'Tizim admini', new_password: '' });
+const statsResetAt = ref('');
 const integrationForm = reactive({
   enabled: true,
   provider: 'openai_compatible',
@@ -12060,6 +12084,7 @@ async function loadSettings() {
     adminForm.username = admin.username || 'admin';
     adminForm.full_name = admin.full_name || 'Tizim admini';
   }
+  api.statsResetInfo().then(info => { statsResetAt.value = info?.reset_at || ''; }).catch(() => null);
   const ai = data.settings?.find(s => s.key === 'ai_mode')?.value;
   const integration = data.settings?.find(s => s.key === 'ai_integration')?.value;
   const clickupIntegration = data.settings?.find(s => s.key === 'clickup_integration')?.value;
@@ -15251,6 +15276,21 @@ async function saveAdmin() {
     showToast(error.message);
   } finally {
     stopLoading('saveAdmin');
+  }
+}
+
+async function resetStatsFromNow() {
+  const ok = window.confirm('Statistika hozirdan boshlab qayta hisoblansinmi? (Eski ticketlar bazada saqlanib qoladi, faqat hisoblashga kirmay qoladi)');
+  if (!ok) return;
+  startLoading('statsReset');
+  try {
+    const result = await api.statsResetStart();
+    statsResetAt.value = result?.reset_at || '';
+    showToast('Statistika hozirdan boshlab qayta hisoblanadi');
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    stopLoading('statsReset');
   }
 }
 

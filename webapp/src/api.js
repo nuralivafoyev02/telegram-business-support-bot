@@ -141,6 +141,8 @@ export const api = {
   telegramFile: mediaOrFileId => requestBlob('telegramFile', { query: telegramFileQuery(mediaOrFileId) }),
   telegramProfilePhoto: tgUserId => requestBlob('telegramProfilePhoto', { query: { tg_user_id: tgUserId } }),
   settings: () => request('settings').then(r => r.data),
+  statsResetInfo: () => request('statsResetInfo').then(r => r.data),
+  statsResetStart: () => request('statsResetStart', { method: 'POST', body: {} }).then(r => r.data),
   sendMessage: payload => request('sendMessage', { method: 'POST', body: payload }).then(r => r.data),
   replyRequest: payload => request('replyRequest', { method: 'POST', body: payload }).then(r => r.data),
   broadcast: payload => request('broadcast', { method: 'POST', body: payload }).then(r => r.data),
