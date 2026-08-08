@@ -613,6 +613,9 @@
                 </div>
               </div>
             </div>
+            <div v-if="myLockedModuleName" class="empty compact" style="background:#fff7ed; color:#9a3412; border:1px solid #fed7aa; border-radius:8px; padding:10px 14px; margin-bottom:12px; text-align:left;">
+              ⚠️ "{{ myLockedModuleName }}" bo‘limidagi funksiyalar hali tasdiqlanmagan — avval shular tasdiqlanishi kerak, keyin boshqa bo‘limni yuborishingiz mumkin.
+            </div>
             <div class="uyqur-functions-groups" ref="permissionGroupsRef"
               v-if="permissionModulesMerged.filter(m => m.submodules.some(sm => isEmployeeFunctionVisible(String(sm.key)))).length">
               <div class="uyqur-functions-group" :class="{ collapsed: !isEmployeeModuleExpanded(module) }"
@@ -638,8 +641,8 @@
                       @click="(submodule.actions || []).length && toggleSubmoduleActionsExpanded(submodule, module, submoduleIndex)">
                       <input type="checkbox" class="row-check" @click.stop
                         :checked="isEmployeeFunctionChecked(String(submodule.key))"
-                        :disabled="isEmployeeFunctionDisabled(String(submodule.key))"
-                        @change="toggleEmployeeFunctionSelected(String(submodule.key))" />
+                        :disabled="isEmployeeFunctionDisabled(String(submodule.key), module.name || module.key)"
+                        @change="toggleEmployeeFunctionSelected(String(submodule.key), module.name || module.key)" />
                       <span>{{ submodule.name || submodule.key }}</span>
                       <span v-if="employeeFunctionRevertReason(submodule.key)" class="revert-reason-badge"
                         :title="`Qaytarish sababi: ${employeeFunctionRevertReason(submodule.key)}`" @click.stop>⚠️</span>
@@ -653,6 +656,7 @@
                         class="uyqur-functions-subaction status-subaction" :class="{ sent: isActionSent(action) }" @click.stop>
                         <input type="checkbox" class="row-check"
                           :checked="isEmployeeActionChecked(submodule, action)"
+                          :disabled="isEmployeeActionDisabledByModuleLock(submodule, module.name || module.key)"
                           @change="toggleEmployeeActionSelected(submodule, action)" />
                         <span class="status-subaction-name" style="flex:1;">{{ action.name || action.key }}</span>
                         <span v-if="employeeActionRevertReason(submodule, action)" class="revert-reason-badge"
@@ -12307,19 +12311,36 @@ function isEmployeeFunctionChecked(key) {
   if (employeeFunctionPending.value.has(key)) return employeeFunctionPending.value.get(key);
   return Boolean(employeeHistoryByKey.value.get(key)?.learned);
 }
-function isEmployeeFunctionDisabled(key) {
+// Support bir vaqtda faqat BITTA bo'limni (masalan "Loyiha") yuborishi
+// mumkin — o'sha bo'limdagi barcha yuborilgan funksiyalar tasdiqlanmaguncha,
+// boshqa bo'limdan yangi funksiya yubora olmaydi (o'sha bo'limning o'zida
+// esa xohlagancha qo'shimcha yuborishi mumkin).
+const myLockedModuleName = computed(() => {
+  const pending = supportHistoryRows.value.find(row => row.learned && !row.confirmed);
+  return pending ? (pending.module_name || '') : '';
+});
+function isEmployeeFunctionDisabled(key, moduleName = '') {
   if (isEmployeeFunctionConfirmed(key)) return true;
   const learned = Boolean(employeeHistoryByKey.value.get(key)?.learned);
-  return employeeRevertMode.value ? !learned : learned;
+  if (employeeRevertMode.value) return !learned;
+  if (!learned && myLockedModuleName.value && moduleName && moduleName !== myLockedModuleName.value) return true;
+  return learned;
 }
-function toggleEmployeeFunctionSelected(key) {
-  if (isEmployeeFunctionDisabled(key)) return;
+function toggleEmployeeFunctionSelected(key, moduleName = '') {
+  if (isEmployeeFunctionDisabled(key, moduleName)) return;
   const serverValue = Boolean(employeeHistoryByKey.value.get(key)?.learned);
   const nextValue = !isEmployeeFunctionChecked(key);
   const next = new Map(employeeFunctionPending.value);
   if (nextValue === serverValue) next.delete(key);
   else next.set(key, nextValue);
   employeeFunctionPending.value = next;
+}
+// Action'lar uchun ham xuddi shu bo'lim-qulfi — faqat "yuborish" rejimida
+// (qaytarishda emas) va faqat boshqa bo'limga tegishli bo'lsa cheklaydi.
+function isEmployeeActionDisabledByModuleLock(submodule, moduleName = '') {
+  if (employeeRevertMode.value) return false;
+  if (!myLockedModuleName.value || !moduleName) return false;
+  return moduleName !== myLockedModuleName.value;
 }
 function employeeActionKey(submodule, action) {
   return `${submodule.key}::${action.key || action.id}`;

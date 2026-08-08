@@ -449,12 +449,48 @@ async function setActionLearned(submoduleKey, actionKey, employeeId, learned = t
   return progress[key][employeeId];
 }
 
+// Support bir vaqtda faqat BITTA bo'limni (masalan "Loyiha") yuborishi
+// mumkin — o'sha bo'limdagi (support yuborgan) barcha funksiyalar
+// tasdiqlanmaguncha, boshqa bo'limdan yangi funksiya yubora olmaydi.
+// "Qulflangan" bo'lim — shu xodimda hali "learned=true, confirmed=false"
+// (Jarayonda) holatidagi submodule bormi, bo'lsa o'shaning moduli.
+async function getEmployeeLockedModuleName(employeeId) {
+  const history = await getSupportEventHistory(employeeId);
+  const pending = history.find(row => row.learned && !row.confirmed);
+  return pending ? String(pending.module_name || '').trim() : '';
+}
+
+function assertModuleLockAllows(lockedModule, moduleNames = []) {
+  if (!lockedModule) return;
+  const violating = moduleNames.find(name => name && name !== lockedModule);
+  if (violating) {
+    throw new Error(`Avval "${lockedModule}" bo'limidagi funksiyalar tasdiqlanishi kerak — shundan keyin "${violating}" bo'limini yuborishingiz mumkin.`);
+  }
+}
+
 // setEventsLearnedBatch bilan bir xil sabab — o'nlab action bir vaqtda
 // belgilanganda, har biri uchun alohida o'qish+yozish o'rniga BITTA o'qish
 // va BITTA yozish bilan hammasi birga saqlanadi.
 async function setActionsLearnedBatch(items = [], employeeId) {
   if (!employeeId || !Array.isArray(items) || !items.length) return [];
   const progress = await getActionLearnedRecord();
+  const newlyLearnedItems = items.filter(item => item.learned !== false);
+  if (newlyLearnedItems.length) {
+    const [lockedModule, viewRecord] = await Promise.all([
+      getEmployeeLockedModuleName(employeeId),
+      getPermissionViewRecord()
+    ]);
+    if (lockedModule) {
+      const moduleBySubmoduleKey = new Map();
+      (Array.isArray(viewRecord.modules) ? viewRecord.modules : []).forEach(module => {
+        (module.submodules || []).forEach(submodule => {
+          moduleBySubmoduleKey.set(String(submodule.key), module.name || module.key || '');
+        });
+      });
+      const moduleNames = newlyLearnedItems.map(item => moduleBySubmoduleKey.get(String(item.submodule_key)) || '');
+      assertModuleLockAllows(lockedModule, moduleNames);
+    }
+  }
   const touchedSubmodules = new Set();
   const results = [];
   items.forEach(({ submodule_key: submoduleKey, action_key: actionKey, learned = true, reason = '' }) => {
@@ -685,6 +721,17 @@ async function setEventLearned(eventId, employeeId, learned = true) {
 async function setEventsLearnedBatch(items = [], employeeId) {
   if (!employeeId || !Array.isArray(items) || !items.length) return [];
   const record = await getNotificationRecord();
+  const newlyLearnedItems = items.filter(item => item.learned !== false);
+  if (newlyLearnedItems.length) {
+    const lockedModule = await getEmployeeLockedModuleName(employeeId);
+    if (lockedModule) {
+      const moduleNames = newlyLearnedItems.map(item => {
+        const event = record.events.find(row => String(row.id) === String(item.event_id));
+        return event ? (event.module_name || '') : '';
+      });
+      assertModuleLockAllows(lockedModule, moduleNames);
+    }
+  }
   const results = [];
   items.forEach(({ event_id: eventId, learned = true, reason = '' }) => {
     if (!eventId) return;
