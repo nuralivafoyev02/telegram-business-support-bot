@@ -1488,7 +1488,7 @@ async function getDashboardAnalytics(query = {}) {
   const window = analyticsWindow(mergeAnalyticsPeriodKeys(periods, trendPeriods), keys);
   const resetAt = await getStatsResetAt();
 
-  const [requests, chats, employees, companies, companyMembers, companyInfoCache] = await Promise.all([
+  const [fetchedRequests, chats, employees, companies, companyMembers, companyInfoCache] = await Promise.all([
     selectAnalyticsRequests(window, { limit: statsFocus ? '6000' : '10000', resetAt }),
     statsFocus
       ? Promise.resolve([])
@@ -1500,6 +1500,12 @@ async function getDashboardAnalytics(query = {}) {
     supabase.select('company_members', { select: 'company_id,employee_id,member_type,is_active', limit: '5000' }).catch(() => []),
     getCachedCompanyInfo().catch(() => null)
   ]);
+  // Zaxira sifatida ham — `selectAnalyticsRequests` ichidagi SQL darajasidagi
+  // "gte" filtridan qat'i nazar, shu yerda ham JS darajasida qayta
+  // filtrlanadi, shunda "Ochiq qolgan" (hozir ochiq turgan, lekin reset
+  // vaqtidan OLDIN yaratilgan) ticketlar ham hech qachon hisobga kirmasligi
+  // KAFOLATLANADI.
+  const requests = resetAt ? fetchedRequests.filter(request => String(request.created_at || '') >= resetAt) : fetchedRequests;
   const companyInfoCompanies = resolveCachedCompanyInfoCompanies(companyInfoCache);
   const requestCompanyIds = [...new Set(requests.map(request => request.company_id).filter(Boolean))];
   const requestCompanies = requestCompanyIds.length
@@ -3336,7 +3342,10 @@ async function listRequests(query) {
   const effectiveWindow = clampWindowStart(dateWindow, resetAt);
   if (effectiveWindow) Object.assign(params, rangeQuery('created_at', effectiveWindow));
   const requests = (await selectPaged('support_requests', params, { maxRows }))
-    .filter(request => !periodContext || inCurrentPeriod(request.created_at, periodContext.period, periodContext.keys));
+    .filter(request => !periodContext || inCurrentPeriod(request.created_at, periodContext.period, periodContext.keys))
+    // Zaxira sifatida ham — SQL darajasidagi cheklovdan qat'i nazar, JS
+    // darajasida ham qayta filtrlanadi.
+    .filter(request => !resetAt || String(request.created_at || '') >= resetAt);
 
   const chatIds = [...new Set(requests.map(request => request.chat_id).filter(value => value !== undefined && value !== null))];
   const requestIds = [...new Set(requests.map(request => request.id).filter(Boolean))];
