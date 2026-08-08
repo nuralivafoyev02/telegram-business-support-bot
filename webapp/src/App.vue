@@ -6142,8 +6142,8 @@ const managementInitials = computed(() => {
   return String(source).split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]?.toUpperCase()).join('') || 'BP';
 });
 const employeeBrandTitle = computed(() => {
-  const firstName = String(account.value?.full_name || '').trim().split(/\s+/).filter(Boolean)[0];
-  return firstName ? `Uyqur ${firstName}` : 'Uyqur Admin';
+  const fullName = String(account.value?.full_name || '').trim();
+  return fullName || 'Uyqur Admin';
 });
 const loginFeedback = computed(() => loginError.value || loginStatus.value);
 const loginButtonText = computed(() => loadingAction.value === 'login' ? 'Tekshirilmoqda...' : 'Kirish');

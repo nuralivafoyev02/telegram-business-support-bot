@@ -706,21 +706,38 @@ async function getSupportEventHistory(employeeId) {
     await saveNotificationRecord(record);
   }
   const actionsBySubmoduleKey = new Map();
+  const submoduleMetaByKey = new Map();
   (Array.isArray(viewRecord.modules) ? viewRecord.modules : []).forEach(module => {
     (module.submodules || []).forEach(submodule => {
-      actionsBySubmoduleKey.set(String(submodule.key), submodule.actions || []);
+      const key = String(submodule.key);
+      actionsBySubmoduleKey.set(key, submodule.actions || []);
+      submoduleMetaByKey.set(key, { submodule_name: submodule.name || key, module_name: module.name || module.key || '' });
     });
   });
-  return record.events.slice().reverse().map(event => {
+
+  function buildRow(event) {
     const progress = progressFor(record, event.id, employeeId);
     const rawActions = actionsBySubmoduleKey.get(String(event.submodule_key)) || [];
     const submoduleKey = String(event.submodule_key);
-    const anyActionTouched = rawActions.some(action => {
+    // Submodule'ning o'z holatini FAQAT saqlangan `progress`dan emas, balki
+    // action'lar yig'indisidan (syncEventStatusWithActions bilan bir xil
+    // qoida) hisoblaymiz — chunki hodisasi umuman yaratilmagan ("action-only")
+    // submodule'lar uchun `progress` doim bo'sh bo'ladi, lekin action'lari
+    // haqiqiy tasdiqlangan bo'lishi mumkin.
+    let anyActionTouched = false;
+    let anyLearned = false;
+    let allConfirmed = true;
+    rawActions.forEach(action => {
       const key = actionCompositeKey(submoduleKey, String(action.key || action.id));
-      return Boolean(actionProgress[key] && actionProgress[key][employeeId]);
+      const entry = (actionProgress[key] && actionProgress[key][employeeId]) || null;
+      if (entry) anyActionTouched = true;
+      const learnedAt = entry && entry.learned_at;
+      const confirmedAt = entry && entry.confirmed_at;
+      if (learnedAt || confirmedAt) anyLearned = true;
+      if (!confirmedAt) allConfirmed = false;
     });
-    const eventLearned = Boolean(progress.learned_at);
-    const eventConfirmed = Boolean(progress.confirmed_at);
+    const eventLearned = anyActionTouched ? (anyLearned || allConfirmed) : Boolean(progress.learned_at);
+    const eventConfirmed = anyActionTouched ? allConfirmed : Boolean(progress.confirmed_at);
     // Ko'pgina fichalar FAQAT butun submodule darajasida ("Papkalar" kabi)
     // belgilanadi — action'larning hech biriga alohida tegilmagan bo'ladi.
     // Bunday holda action'lar submodule'ning o'z holatini meros oladi,
@@ -749,13 +766,42 @@ async function getSupportEventHistory(employeeId) {
       submodule_name: event.submodule_name,
       submodule_key: event.submodule_key,
       created_at: event.created_at,
-      learned: Boolean(progress.learned_at),
-      learned_at: progress.learned_at || null,
-      confirmed: Boolean(progress.confirmed_at),
-      confirmed_at: progress.confirmed_at || null,
+      learned: eventLearned,
+      learned_at: eventLearned ? (progress.learned_at || null) : null,
+      confirmed: eventConfirmed,
+      confirmed_at: eventConfirmed ? (progress.confirmed_at || null) : null,
       actions
     };
+  }
+
+  const rows = record.events.slice().reverse().map(buildRow);
+
+  // Ba'zi funksiyalar hech qachon BUTUN submodule sifatida "yuborilmagan"
+  // (uchun hodisa/event yaratilmagan), lekin support ularning ICHIDAGI
+  // action'larini alohida belgilab, menejer ham tasdiqlagan bo'lishi mumkin
+  // — bunday holda oldin bu progress "Bildirishnomalar tarixi"da UMUMAN
+  // ko'rinmay, mavjud ish yo'qolgandek bo'lib qolardi. Endi shunday
+  // submodule'lar uchun ham (faqat kamida bitta action tegilgan bo'lsa)
+  // sun'iy qator qo'shiladi.
+  const eventSubmoduleKeys = new Set(record.events.map(event => String(event.submodule_key)));
+  actionsBySubmoduleKey.forEach((actions, submoduleKey) => {
+    if (eventSubmoduleKeys.has(submoduleKey)) return;
+    const anyTouched = actions.some(action => {
+      const key = actionCompositeKey(submoduleKey, String(action.key || action.id));
+      return Boolean(actionProgress[key] && actionProgress[key][employeeId]);
+    });
+    if (!anyTouched) return;
+    const meta = submoduleMetaByKey.get(submoduleKey) || {};
+    rows.unshift(buildRow({
+      id: `action-only:${submoduleKey}`,
+      submodule_key: submoduleKey,
+      submodule_name: meta.submodule_name || submoduleKey,
+      module_name: meta.module_name || '',
+      created_at: null
+    }));
   });
+
+  return rows;
 }
 
 async function getManagerReviewQueue() {

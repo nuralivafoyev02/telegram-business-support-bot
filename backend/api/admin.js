@@ -4601,10 +4601,15 @@ async function getEmployeeActivity(query = {}) {
   // cheklanmaydi) — aks holda har safar shu xodimning HAMMA vaqtdagi
   // yozuvlari (minglab qator) to'liq o'qib olinib, keyin JS'da filtrlanardi,
   // bu esa "Mening faoliyatim" sahifasini sekinlashtirar edi.
-  const activityWindow = periodKey === 'all' ? null : { start: isoFromTashkentDateStart(
+  const periodActivityWindow = periodKey === 'all' ? null : { start: isoFromTashkentDateStart(
     periodKey === 'today' ? keys.today : periodKey === 'week' ? keys.weekStart : periodKey === 'month' ? keys.monthStart : keys.customStart
   ), end: isoAfterTashkentDate(periodKey === 'custom' ? keys.customEnd : keys.today) };
-  const createdAtRange = activityWindow && activityWindow.start && activityWindow.end ? rangeQuery('created_at', activityWindow) : {};
+  // "Statistikani boshidan boshlash" qo'llangan bo'lsa, xodimning o'z
+  // "Natijalarim" sahifasi ham shu vaqtdan oldingi ticketlarni hisobga
+  // olmasligi kerak — admin panelidagi bilan bir xil chegara.
+  const resetAt = await getStatsResetAt();
+  const activityWindow = clampWindowStart(periodActivityWindow, resetAt);
+  const createdAtRange = activityWindow && activityWindow.start ? rangeQuery('created_at', activityWindow) : {};
   const [requestsByEmployeeId, requestsByTgId, employeeMessagesById, employeeMessagesByTg, openRequestCandidates] = await Promise.all([
     selectPaged('support_requests', {
       select: requestSelect,
@@ -4638,7 +4643,11 @@ async function getEmployeeActivity(query = {}) {
     }, { maxRows: 20000 })
   ]);
 
-  const requests = uniqueRowsBy([...requestsByEmployeeId, ...requestsByTgId], row => row.id || `${row.chat_id}:${row.initial_message_id || row.closed_at}`);
+  // Zaxira sifatida ham — SQL darajasidagi cheklovdan qat'i nazar, JS
+  // darajasida ham qayta filtrlanadi.
+  const afterReset = row => !resetAt || String(row.created_at || '') >= resetAt;
+  const requests = uniqueRowsBy([...requestsByEmployeeId, ...requestsByTgId], row => row.id || `${row.chat_id}:${row.initial_message_id || row.closed_at}`)
+    .filter(afterReset);
   const closedRequests = requests
     .filter(request => request.status === 'closed')
     .filter(request => inCurrentPeriod(request.created_at, periodKey, keys));
@@ -4753,6 +4762,7 @@ async function getEmployeeActivity(query = {}) {
   // suziladi (superadmin bosh sahifasidagi "Javobsiz" kartasi bilan bir xil
   // qoida) — aks holda ikkalasi turli sonlarni ko'rsatib, chalkashtirardi.
   const periodOpenRequests = openRequestCandidates
+    .filter(afterReset)
     .filter(request => request.status === 'open' && inCurrentPeriod(request.created_at, periodKey, keys))
     .filter(isGroupSourceRequest)
     .filter(requestResponsibleMatchesEmployee);
