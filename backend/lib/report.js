@@ -297,7 +297,10 @@ function buildTodaySupportRows(requests, employees, chatToEmployeeMap) {
   });
 
   return [...grouped.values()]
-    .filter(row => row.incoming || row.closed || row.open)
+    // Hisobot faqat kamida BITTA javob (closed) bergan xodimlarni ko'rsatadi
+    // — "0 javob berdi" bilan qatorda faqat ochiq (qoldi) turgan xodim
+    // ro'yxatda chiqmasin.
+    .filter(row => row.closed > 0)
     .sort((a, b) => b.closed - a.closed || b.incoming - a.incoming || a.full_name.localeCompare(b.full_name));
 }
 
