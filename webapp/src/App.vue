@@ -8424,6 +8424,13 @@ function matchesCompanyModuleFilter(row = {}, filters = []) {
     const matches = usernames.some(username => {
       if (username === rowUsername) return true;
       if (supportIdentitiesMatch(row.uyqur_support_username, username)) return true;
+      // Xodimlar ro'yxati (employees.value) support (employee tipidagi)
+      // sessiyada umuman yuklanmasligi mumkin — shu sabab, agar bu filter
+      // TIZIMGA KIRGAN xodimning o'ziga tegishli bo'lsa, to'g'ridan-to'g'ri
+      // `account.value` (login paytida allaqachon mavjud) orqali ham
+      // (to'liq ismi bilan) tekshiriladi.
+      if (normalizeSupportUsername(account.value?.username) === username
+        && supportIdentitiesMatch(row.uyqur_support_username, account.value?.full_name)) return true;
       const employee = employees.value.find(item => normalizeSupportUsername(item.username) === username);
       if (!employee) return false;
       return supportIdentitiesMatch(row.uyqur_support_username, employee.username)
