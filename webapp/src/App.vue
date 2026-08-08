@@ -12527,6 +12527,14 @@ async function confirmSelectedSupportHistory() {
 // "Jarayonda"ga qaytaradi, buni esa to'g'ridan-to'g'ri nolga tushiradi.
 async function rejectSelectedSupportHistory() {
   if ((!supportHistorySelectedEvents.value.size && !supportHistorySelectedActions.value.size) || !selectedSupportId.value) return;
+  // "Qaytarish"dagi bilan bir xil sabab: bekor qilishdan oldin sababi
+  // so'raladi — support panelda ko'rsatish uchun. Sabab kiritilmasa yoki
+  // bekor qilinsa, amal to'xtatiladi.
+  const input = window.prompt('Nima uchun bekor qilinyapti? Sababini yozing (support panelda ko‘rsatiladi):', '');
+  if (input === null) return;
+  const revertReason = input.trim();
+  if (!revertReason) return showToast('Bekor qilish sababi kiritilishi shart');
+
   startLoading('confirmSupportHistory');
   try {
     const eventIds = Array.from(supportHistorySelectedEvents.value);
@@ -12534,7 +12542,7 @@ async function rejectSelectedSupportHistory() {
     // confirmSelectedSupportHistory'dagi bilan bir xil sabab.
     if (eventIds.length) {
       await api.markUyqurLearnedBatch({
-        items: eventIds.map(eventId => ({ event_id: eventId, learned: false })),
+        items: eventIds.map(eventId => ({ event_id: eventId, learned: false, reason: revertReason })),
         employee_id: selectedSupportId.value
       });
     }
@@ -12543,7 +12551,8 @@ async function rejectSelectedSupportHistory() {
         items: Array.from(supportHistorySelectedActions.value.values()).map(entry => ({
           submodule_key: entry.submodule_key,
           action_key: entry.action_key,
-          learned: false
+          learned: false,
+          reason: revertReason
         })),
         employee_id: selectedSupportId.value
       });

@@ -457,7 +457,7 @@ async function setActionsLearnedBatch(items = [], employeeId) {
   const progress = await getActionLearnedRecord();
   const touchedSubmodules = new Set();
   const results = [];
-  items.forEach(({ submodule_key: submoduleKey, action_key: actionKey, learned = true }) => {
+  items.forEach(({ submodule_key: submoduleKey, action_key: actionKey, learned = true, reason = '' }) => {
     const normalizedSubmoduleKey = String(submoduleKey || '');
     const normalizedActionKey = String(actionKey || '');
     if (!normalizedSubmoduleKey || !normalizedActionKey) return;
@@ -467,7 +467,10 @@ async function setActionsLearnedBatch(items = [], employeeId) {
     progress[key][employeeId] = {
       learned_at: learned ? new Date().toISOString() : null,
       confirmed_at: learned ? current.confirmed_at || null : null,
-      confirmed_by: learned ? current.confirmed_by || null : null
+      confirmed_by: learned ? current.confirmed_by || null : null,
+      // "Bekor qilish" sababi — support panelda ko'rsatish uchun; qayta
+      // "o'rgandim" deb belgilansa eskirgan sabab tozalanadi.
+      revert_reason: learned ? null : (String(reason || '').trim() || current.revert_reason || null)
     };
     touchedSubmodules.add(normalizedSubmoduleKey);
     results.push({ submodule_key: normalizedSubmoduleKey, action_key: normalizedActionKey, ...progress[key][employeeId] });
@@ -683,7 +686,7 @@ async function setEventsLearnedBatch(items = [], employeeId) {
   if (!employeeId || !Array.isArray(items) || !items.length) return [];
   const record = await getNotificationRecord();
   const results = [];
-  items.forEach(({ event_id: eventId, learned = true }) => {
+  items.forEach(({ event_id: eventId, learned = true, reason = '' }) => {
     if (!eventId) return;
     if (!record.progress[eventId]) record.progress[eventId] = {};
     const current = record.progress[eventId][employeeId] || {};
@@ -691,7 +694,8 @@ async function setEventsLearnedBatch(items = [], employeeId) {
       ...current,
       learned_at: learned ? new Date().toISOString() : null,
       confirmed_at: learned ? current.confirmed_at || null : null,
-      confirmed_by: learned ? current.confirmed_by || null : null
+      confirmed_by: learned ? current.confirmed_by || null : null,
+      revert_reason: learned ? null : (String(reason || '').trim() || current.revert_reason || null)
     };
     results.push({ event_id: eventId, ...record.progress[eventId][employeeId] });
   });
