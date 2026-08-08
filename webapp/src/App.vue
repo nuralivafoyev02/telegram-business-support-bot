@@ -641,8 +641,8 @@
                       @click="(submodule.actions || []).length && toggleSubmoduleActionsExpanded(submodule, module, submoduleIndex)">
                       <input type="checkbox" class="row-check" @click.stop
                         :checked="isEmployeeFunctionChecked(String(submodule.key))"
-                        :disabled="isEmployeeFunctionDisabled(String(submodule.key), module.name || module.key)"
-                        @change="toggleEmployeeFunctionSelected(String(submodule.key), module.name || module.key)" />
+                        :disabled="isEmployeeFunctionDisabled(String(submodule.key), module.key || module.name)"
+                        @change="toggleEmployeeFunctionSelected(String(submodule.key), module.key || module.name)" />
                       <span>{{ submodule.name || submodule.key }}</span>
                       <span v-if="employeeFunctionRevertReason(submodule.key)" class="revert-reason-badge"
                         :title="`Qaytarish sababi: ${employeeFunctionRevertReason(submodule.key)}`" @click.stop>⚠️</span>
@@ -656,7 +656,7 @@
                         class="uyqur-functions-subaction status-subaction" :class="{ sent: isActionSent(action) }" @click.stop>
                         <input type="checkbox" class="row-check"
                           :checked="isEmployeeActionChecked(submodule, action)"
-                          :disabled="isEmployeeActionDisabledByModuleLock(submodule, module.name || module.key)"
+                          :disabled="isEmployeeActionDisabledByModuleLock(submodule, module.key || module.name)"
                           @change="toggleEmployeeActionSelected(submodule, action)" />
                         <span class="status-subaction-name" style="flex:1;">{{ action.name || action.key }}</span>
                         <span v-if="employeeActionRevertReason(submodule, action)" class="revert-reason-badge"
@@ -12315,6 +12315,27 @@ function isEmployeeFunctionChecked(key) {
 // mumkin — o'sha bo'limdagi barcha yuborilgan funksiyalar tasdiqlanmaguncha,
 // boshqa bo'limdan yangi funksiya yubora olmaydi (o'sha bo'limning o'zida
 // esa xohlagancha qo'shimcha yuborishi mumkin).
+// DIQQAT: qulflangan bo'limni ANIQLASH uchun supportHistoryRows'dagi
+// module_name (backendda voqea yaratilgan paytdagi "surat") emas, balki
+// permissionModulesMerged daraxti (submodule_key orqali) ishlatiladi —
+// checkboxlarga uzatiladigan module.name/module.key ham AYNAN shu
+// daraxtdan kelgani uchun, taqqoslash bir xil manbadan bo'lishi kerak.
+// Aks holda ikki xil manbadagi nom bir oz farq qilsa (masalan katta-kichik
+// harf yoki bo'sh joy), HAMMA checkbox — hatto qulflangan bo'limning
+// o'zidagilar ham — noto'g'ri "boshqa bo'lim" deb hisoblanib o'chirilib
+// qolardi.
+const myLockedModuleKey = computed(() => {
+  const pending = supportHistoryRows.value.find(row => row.learned && !row.confirmed);
+  if (!pending) return '';
+  const submoduleKey = String(pending.submodule_key || '');
+  for (const module of permissionModulesMerged.value) {
+    if ((module.submodules || []).some(sm => String(sm.key) === submoduleKey)) {
+      return String(module.key || module.name || '');
+    }
+  }
+  return '';
+});
+// Faqat bannerdagi matn uchun — ko'rsatish maqsadida, taqqoslash uchun emas.
 const myLockedModuleName = computed(() => {
   const pending = supportHistoryRows.value.find(row => row.learned && !row.confirmed);
   return pending ? (pending.module_name || '') : '';
@@ -12335,15 +12356,15 @@ watch(myLockedModuleName, value => {
   moduleLockBannerVisible.value = true;
   moduleLockBannerTimer = setTimeout(() => { moduleLockBannerVisible.value = false; }, 10000);
 }, { immediate: true });
-function isEmployeeFunctionDisabled(key, moduleName = '') {
+function isEmployeeFunctionDisabled(key, moduleKey = '') {
   if (isEmployeeFunctionConfirmed(key)) return true;
   const learned = Boolean(employeeHistoryByKey.value.get(key)?.learned);
   if (employeeRevertMode.value) return !learned;
-  if (!learned && myLockedModuleName.value && moduleName && moduleName !== myLockedModuleName.value) return true;
+  if (!learned && myLockedModuleKey.value && moduleKey && moduleKey !== myLockedModuleKey.value) return true;
   return learned;
 }
-function toggleEmployeeFunctionSelected(key, moduleName = '') {
-  if (isEmployeeFunctionDisabled(key, moduleName)) return;
+function toggleEmployeeFunctionSelected(key, moduleKey = '') {
+  if (isEmployeeFunctionDisabled(key, moduleKey)) return;
   const serverValue = Boolean(employeeHistoryByKey.value.get(key)?.learned);
   const nextValue = !isEmployeeFunctionChecked(key);
   const next = new Map(employeeFunctionPending.value);
@@ -12353,10 +12374,10 @@ function toggleEmployeeFunctionSelected(key, moduleName = '') {
 }
 // Action'lar uchun ham xuddi shu bo'lim-qulfi — faqat "yuborish" rejimida
 // (qaytarishda emas) va faqat boshqa bo'limga tegishli bo'lsa cheklaydi.
-function isEmployeeActionDisabledByModuleLock(submodule, moduleName = '') {
+function isEmployeeActionDisabledByModuleLock(submodule, moduleKey = '') {
   if (employeeRevertMode.value) return false;
-  if (!myLockedModuleName.value || !moduleName) return false;
-  return moduleName !== myLockedModuleName.value;
+  if (!myLockedModuleKey.value || !moduleKey) return false;
+  return moduleKey !== myLockedModuleKey.value;
 }
 function employeeActionKey(submodule, action) {
   return `${submodule.key}::${action.key || action.id}`;

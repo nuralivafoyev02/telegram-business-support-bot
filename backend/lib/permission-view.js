@@ -454,17 +454,46 @@ async function setActionLearned(submoduleKey, actionKey, employeeId, learned = t
 // tasdiqlanmaguncha, boshqa bo'limdan yangi funksiya yubora olmaydi.
 // "Qulflangan" bo'lim — shu xodimda hali "learned=true, confirmed=false"
 // (Jarayonda) holatidagi submodule bormi, bo'lsa o'shaning moduli.
-async function getEmployeeLockedModuleName(employeeId) {
+//
+// MUHIM: qulflangan modulni ANIQLASH va YANGI yuborilayotgan
+// submodule'larning moduliga TEGISHLILIGINI tekshirish — IKKALASI HAM
+// bitta manbadan (viewRecord.modules, submodule_key orqali) olinishi
+// SHART. Avval biri record.events[].module_name (voqea yaratilgan
+// paytdagi "surat"), ikkinchisi esa viewRecord.modules'dan (jonli daraxt)
+// olinar edi — bu ikki manbadagi modul nomi bir oz farq qilsa (masalan
+// tashqi Uyqur API'da modul nomi keyinroq o'zgargan bo'lsa), taqqoslash
+// HAR DOIM "boshqa bo'lim" deb noto'g'ri xulosa chiqarardi va hatto BIR
+// XIL bo'limdagi funksiyalar ham bloklanib qolardi.
+async function getEmployeeLockedModuleInfo(employeeId, viewRecord) {
   const history = await getSupportEventHistory(employeeId);
   const pending = history.find(row => row.learned && !row.confirmed);
-  return pending ? String(pending.module_name || '').trim() : '';
+  if (!pending) return null;
+  const submoduleKey = String(pending.submodule_key || '');
+  const modules = Array.isArray(viewRecord && viewRecord.modules) ? viewRecord.modules : [];
+  for (const module of modules) {
+    if ((module.submodules || []).some(sub => String(sub.key) === submoduleKey)) {
+      return { key: String(module.key || module.name || ''), name: module.name || module.key || '' };
+    }
+  }
+  const fallbackName = String(pending.module_name || '').trim();
+  return fallbackName ? { key: fallbackName, name: fallbackName } : null;
 }
 
-function assertModuleLockAllows(lockedModule, moduleNames = []) {
-  if (!lockedModule) return;
-  const violating = moduleNames.find(name => name && name !== lockedModule);
+function buildModuleBySubmoduleKey(viewRecord) {
+  const map = new Map();
+  (Array.isArray(viewRecord && viewRecord.modules) ? viewRecord.modules : []).forEach(module => {
+    (module.submodules || []).forEach(submodule => {
+      map.set(String(submodule.key), { key: String(module.key || module.name || ''), name: module.name || module.key || '' });
+    });
+  });
+  return map;
+}
+
+function assertModuleLockAllows(lockedModule, targets = []) {
+  if (!lockedModule || !lockedModule.key) return;
+  const violating = targets.find(target => target && target.key && target.key !== lockedModule.key);
   if (violating) {
-    throw new Error(`Avval "${lockedModule}" bo'limidagi funksiyalar tasdiqlanishi kerak — shundan keyin "${violating}" bo'limini yuborishingiz mumkin.`);
+    throw new Error(`Avval "${lockedModule.name}" bo'limidagi funksiyalar tasdiqlanishi kerak — shundan keyin "${violating.name || violating.key}" bo'limini yuborishingiz mumkin.`);
   }
 }
 
@@ -476,19 +505,12 @@ async function setActionsLearnedBatch(items = [], employeeId) {
   const progress = await getActionLearnedRecord();
   const newlyLearnedItems = items.filter(item => item.learned !== false);
   if (newlyLearnedItems.length) {
-    const [lockedModule, viewRecord] = await Promise.all([
-      getEmployeeLockedModuleName(employeeId),
-      getPermissionViewRecord()
-    ]);
+    const viewRecord = await getPermissionViewRecord();
+    const lockedModule = await getEmployeeLockedModuleInfo(employeeId, viewRecord);
     if (lockedModule) {
-      const moduleBySubmoduleKey = new Map();
-      (Array.isArray(viewRecord.modules) ? viewRecord.modules : []).forEach(module => {
-        (module.submodules || []).forEach(submodule => {
-          moduleBySubmoduleKey.set(String(submodule.key), module.name || module.key || '');
-        });
-      });
-      const moduleNames = newlyLearnedItems.map(item => moduleBySubmoduleKey.get(String(item.submodule_key)) || '');
-      assertModuleLockAllows(lockedModule, moduleNames);
+      const moduleBySubmoduleKey = buildModuleBySubmoduleKey(viewRecord);
+      const targets = newlyLearnedItems.map(item => moduleBySubmoduleKey.get(String(item.submodule_key)) || null);
+      assertModuleLockAllows(lockedModule, targets);
     }
   }
   const touchedSubmodules = new Set();
@@ -723,13 +745,17 @@ async function setEventsLearnedBatch(items = [], employeeId) {
   const record = await getNotificationRecord();
   const newlyLearnedItems = items.filter(item => item.learned !== false);
   if (newlyLearnedItems.length) {
-    const lockedModule = await getEmployeeLockedModuleName(employeeId);
+    const viewRecord = await getPermissionViewRecord();
+    const lockedModule = await getEmployeeLockedModuleInfo(employeeId, viewRecord);
     if (lockedModule) {
-      const moduleNames = newlyLearnedItems.map(item => {
+      const moduleBySubmoduleKey = buildModuleBySubmoduleKey(viewRecord);
+      const targets = newlyLearnedItems.map(item => {
         const event = record.events.find(row => String(row.id) === String(item.event_id));
-        return event ? (event.module_name || '') : '';
+        const submoduleKey = event ? String(event.submodule_key) : '';
+        return moduleBySubmoduleKey.get(submoduleKey)
+          || (event ? { key: event.module_name || '', name: event.module_name || '' } : null);
       });
-      assertModuleLockAllows(lockedModule, moduleNames);
+      assertModuleLockAllows(lockedModule, targets);
     }
   }
   const results = [];
